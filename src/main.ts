@@ -175,9 +175,10 @@ window.addEventListener("DOMContentLoaded", async () => {
   // Arrastar a janela inteira (data-tauri-drag-region) e duplo clique no núcleo: o Tauri trataria o duplo clique
   // numa região de arraste como "maximizar"; interceptamos antes dele (captura na window) e usamos como liga/desliga.
   window.addEventListener("mousedown", (ev) => {
-    if (ev.target === canvas && ev.detail >= 2) {
+    const alvo = ev.target as Element | null;
+    if (ev.detail >= 2 && alvo && app.contains(alvo) && !alvo.closest("button")) {
       ev.stopImmediatePropagation(); ev.preventDefault();
-      if (ev.detail === 2) void alternarMicrofone();
+      if (ev.detail === 2 && alvo === canvas) void alternarMicrofone();
     }
   }, true);
 
