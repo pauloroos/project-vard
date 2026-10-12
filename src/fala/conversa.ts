@@ -1,16 +1,35 @@
 import { gatilhos, type Config } from "../config/config";
+import { fluxoParaWav } from "../audio/wav";
 import { FALAS, saudacaoPara } from "./falas";
+import { cortarEmFrases } from "./frases";
 import { aPartirDoGatilho, classificar, ehConfirmacao, ehInterrupcao, extrairComando } from "./rotas";
 
 export type Estado = "repouso" | "ouvindo" | "pensando" | "falando" | "jogo" | "erro" | "fora";
 export interface Mensagem { role: "system" | "user" | "assistant"; content: string }
+/** PCM 16 bits mono em fluxo, como o serviço de voz entrega. */
+export interface FalaEmFluxo { corpo: ReadableStream<Uint8Array>; taxa: number }
+/** Uma frase pronta para tocar: em fluxo (voz própria) ou WAV inteiro (reserva no OpenJarvis). */
+type Som = { fluxo: ReadableStream<Uint8Array>; taxa: number } | { wav: ArrayBuffer };
+
+/** Fecha o pedido de uma frase que não vai mais tocar. */
+function descartar(som: Som | null | undefined): void {
+  if (som && "fluxo" in som) void som.fluxo.cancel().catch(() => {});
+}
 
 export interface DepsConversa {
   oj: {
     perguntar(mensagens: Mensagem[], sinal?: AbortSignal): Promise<string>;
     sintetizar(texto: string, voz: string, velocidade: number): Promise<ArrayBuffer>;
   };
-  boca: { falando: boolean; tocar(wav: ArrayBuffer): Promise<void>; parar(): void };
+  boca: {
+    falando: boolean;
+    tocar(wav: ArrayBuffer): Promise<void>;
+    /** Toca PCM conforme chega. Sem isto a frase da voz própria é lida inteira e tocada como WAV. */
+    tocarFluxo?(corpo: ReadableStream<Uint8Array>, taxa: number, sinal?: AbortSignal): Promise<void>;
+    parar(): void;
+  };
+  /** Serviço de voz próprio e opcional (docs/voz-propria.md). Sem ele, ou quando ele falha, a voz é a do OpenJarvis. */
+  voz?: { falar(texto: string, velocidade: number, sinal?: AbortSignal): Promise<FalaEmFluxo> };
   /** Fala fixa já sintetizada (com cache). */
   falas: (texto: string) => Promise<ArrayBuffer>;
   config: Pick<Config, "nome" | "variantes" | "voz" | "velocidade" | "instrucao_formato"> & Partial<Pick<Config, "usuario">>;
@@ -59,10 +78,9 @@ export class Conversa {
     this.d.aoEstado?.(e, detalhe);
   }
 
-  private async tocar(wav: Promise<ArrayBuffer>, mudarEstado = true, sinal?: AbortSignal) {
+  private async tocar(wav: Promise<ArrayBuffer>, mudarEstado = true) {
     try {
       const w = await wav;
-      if (sinal?.aborted) return; // interrompido enquanto sintetizava: resposta tardia não é falada
       if (mudarEstado) this.mudar("falando");
       await this.d.boca.tocar(w);
     } catch (erro) {
@@ -75,8 +93,66 @@ export class Conversa {
     if (mudarEstado && this.estado === "falando") this.mudar("repouso");
   }
 
+  /** Fala a resposta frase a frase: a frase seguinte é pedida antes de a atual começar a tocar. */
+  private async falarEmFrases(texto: string, sinal: AbortSignal): Promise<void> {
+    const frases = cortarEmFrases(texto);
+    if (frases.length === 0) return;
+    const d = this.d;
+    const t0 = performance.now();
+    let soReserva = !d.voz; // depois de um erro de conexão, o resto desta resposta vai pela reserva
+    const sintetizar = async (frase: string): Promise<Som | null> => {
+      if (!soReserva && d.voz) {
+        try {
+          const r = await d.voz.falar(frase, d.config.velocidade, sinal);
+          if (sinal.aborted) { descartar({ fluxo: r.corpo, taxa: r.taxa }); return null; }
+          return { fluxo: r.corpo, taxa: r.taxa };
+        } catch (erro) {
+          if (sinal.aborted) return null;
+          if ((erro as { conexao?: unknown } | null)?.conexao === true) soReserva = true;
+          console.warn("voz própria falhou, usei a reserva", erro);
+        }
+      }
+      if (sinal.aborted) return null;
+      return { wav: await d.oj.sintetizar(frase, d.config.voz, d.config.velocidade) };
+    };
+    const pararBoca = () => d.boca.parar();
+    sinal.addEventListener("abort", pararBoca);
+    let pendente: Promise<Som | null> | null = sintetizar(frases[0]);
+    let primeiro = true;
+    try {
+      for (let i = 0; i < frases.length; i++) {
+        let som: Som | null = null;
+        try { som = await pendente; } catch (erro) { console.warn("falha ao sintetizar a frase", erro); }
+        pendente = null;
+        if (sinal.aborted || this.emJogo()) { descartar(som); return; }
+        if (i + 1 < frases.length) pendente = sintetizar(frases[i + 1]);
+        if (!som) continue;
+        if (primeiro) {
+          primeiro = false;
+          console.info(`voz: 1º áudio em ${Math.round(performance.now() - t0)} ms após a resposta`);
+        }
+        if (this.estado !== "falando") this.mudar("falando");
+        try { await this.tocarSom(som, sinal); } catch (erro) { console.warn("falha ao falar", erro); }
+        if (sinal.aborted) return;
+      }
+    } finally {
+      sinal.removeEventListener("abort", pararBoca);
+      if (pendente) void pendente.then(descartar, () => {}); // interrompido: a frase já pedida não toca
+    }
+  }
+
+  private async tocarSom(som: Som, sinal: AbortSignal): Promise<void> {
+    const boca = this.d.boca;
+    if ("wav" in som) return boca.tocar(som.wav);
+    if (boca.tocarFluxo) return boca.tocarFluxo(som.fluxo, som.taxa, sinal);
+    const wav = await fluxoParaWav(som.fluxo, som.taxa);
+    if (!sinal.aborted) await boca.tocar(wav);
+  }
+
   async aoTextoTranscrito(texto: string, pushToTalk: boolean): Promise<void> {
-    if (this.d.boca.falando) return;
+    // Entre uma frase e outra a boca fica muda por um instante: o estado "falando" segura a vez.
+    if (this.d.boca.falando || this.estado === "falando") return;
+    const inicio = performance.now();
     if (this.estado === "fora" || this.estado === "erro" || this.emJogo()) return;
     const bruto = texto.trim();
     if (!bruto) return;
@@ -136,6 +212,7 @@ export class Conversa {
       }
       if (ac.signal.aborted || this.emJogo()) return;
       if (!resposta) throw new Error("resposta vazia");
+      console.info(`resposta do núcleo em ${Math.round(performance.now() - inicio)} ms`);
     } catch (erro) {
       if (ac.signal.aborted || this.emJogo()) return;
       console.warn(ver ? "olhos falharam" : "agente falhou", erro);
@@ -151,7 +228,7 @@ export class Conversa {
     }
     this.d.aoResposta?.(resposta);
     if (this.emJogo()) return;
-    await this.tocar(this.d.oj.sintetizar(resposta, this.d.config.voz, this.d.config.velocidade), true, ac.signal);
+    await this.falarEmFrases(resposta, ac.signal);
     if (this.pergunta === ac) this.pergunta = null;
     if (!ac.signal.aborted && !this.emJogo()) this.mudar("repouso");
   }

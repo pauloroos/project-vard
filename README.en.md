@@ -18,6 +18,7 @@ Independent project, not affiliated with OpenJarvis or Stanford.
 - Tray icon, settings panel, optional start with Windows.
 - The **Text** button opens OpenJarvis' graphical text interface.
 - Optional: the Vard bridge (the author's private setup, `rdl-vard`) adds screen vision and a game mode. Everything works without it, see [docs/ponte-do-vard.md](docs/ponte-do-vard.md) (Portuguese).
+- Optional: your own voice service (any local TTS engine that follows a small contract) speaks the answer sentence by sentence, starting before the whole answer is synthesized. See [Own voice](#own-voice-optional).
 
 ## Requirements
 
@@ -64,6 +65,7 @@ Use the gear on the HUD or **Configurações** in the tray menu. The panel cover
 | `openjarvis_url` | `http://127.0.0.1:8000` | Where OpenJarvis is |
 | `gui_url` | `http://127.0.0.1:5173` | Text interface (Text button) |
 | `ponte_url` | `http://127.0.0.1:4700` | Optional bridge (empty disables) |
+| `voz_url` | `http://127.0.0.1:4710` | Optional own voice service (empty disables; while it is down, OpenJarvis' voice is used) |
 | `nome`, `variantes` | `vard` and similar spellings | Wake words: `nome` plus `variantes` (with another name the default Vard variants are dropped) |
 | `usuario` | empty | Name used in the greeting ("Oi, Ana."); empty says just "Oi." |
 | `idioma` | `pt` | Recognition language |
@@ -74,6 +76,24 @@ Use the gear on the HUD or **Configurações** in the tray menu. The panel cover
 | `instrucao_formato` | short answers | Instruction sent with every question |
 
 URLs outside `127.0.0.1` or `localhost` raise a warning (the HUD sends what you say and, with the bridge, images of your screen; keep everything on your own machine). **Iniciar com o Windows** creates or removes `openjarvis-hud.lnk` in your user Startup folder. **Testar OpenJarvis** checks the server and speech.
+
+## Own voice (optional)
+
+By default OpenJarvis synthesizes the whole answer before playback starts. With a local voice service at `voz_url`,
+the HUD splits the answer into sentences, plays the first one as soon as its first audio chunk arrives and requests
+the next sentence while the current one is still playing. The fixed phrases ("Voltei." and the others) go through it
+too and are cached.
+
+Any TTS engine works. The service needs two routes on `127.0.0.1`:
+
+- `GET /saude` returns `{"pronta": true, "voz": "voice name", ...}`.
+- `POST /falar` takes `{"texto": "one sentence", "velocidade": 1.05}` (up to 400 characters). With `Accept: audio/pcm`
+  it answers `200` with streamed 16-bit mono little-endian PCM (`Transfer-Encoding: chunked`) at 24 kHz (headers
+  `X-Taxa`, `X-Canais`, `X-Formato`). `400` for empty or too long text, `503 {"erro": "aquecendo"}` while the model loads.
+- CORS open to `http://tauri.localhost` (installed app) and `http://localhost:1420` (`tauri dev`).
+
+If the service is down, takes more than 8 s or rejects a sentence, that sentence is spoken with OpenJarvis' voice and
+nothing changes on screen. The full contract is in [docs/voz-propria.md](docs/voz-propria.md) (Portuguese).
 
 ## Troubleshooting
 

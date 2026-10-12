@@ -1,0 +1,95 @@
+# Voz própria (opcional)
+
+Sem configuração extra, o HUD fala com a voz do OpenJarvis (`POST /v1/speech/synthesize`, Kokoro): a resposta inteira é
+sintetizada e só depois começa a tocar. Para respostas longas isso leva segundos.
+
+A **voz própria** é um serviço local, separado do OpenJarvis, que recebe uma frase e devolve o áudio em fluxo, enquanto
+sintetiza. Com ele no ar o HUD:
+
+1. corta a resposta em frases (`.`, `!`, `?`, `…` e quebras de linha; abreviações como "Dr." e números como "1.200,00"
+   não cortam; pedaços com menos de 12 caracteres vão junto com a frase anterior);
+2. pede a primeira frase e começa a tocar assim que chega o primeiro pedaço de áudio;
+3. pede a frase seguinte enquanto a atual ainda está tocando, e toca uma depois da outra, sempre na ordem.
+
+Qualquer motor de voz serve (XTTS, Piper, F5, outro), desde que siga o contrato abaixo. O endereço fica em `voz_url`
+(padrão `http://127.0.0.1:4710`); vazio desliga e o HUD volta a usar só o OpenJarvis.
+
+## Quando a voz própria falha
+
+A troca é silenciosa: o HUD não muda de estado nem avisa na tela, só registra `voz própria falhou, usei a reserva` no
+console.
+
+- Serviço fora do ar, conexão caindo no meio ou mais de **8 s** sem áudio (até o primeiro pedaço ou entre dois pedaços):
+  aquela frase e o resto da resposta saem pela voz do OpenJarvis. A próxima resposta tenta a voz própria de novo.
+- Qualquer outra recusa (`503` aquecendo, `400` texto inválido): só aquela frase sai pelo OpenJarvis; a seguinte tenta a
+  voz própria outra vez.
+- Interromper (botão, atalho ou push-to-talk) corta a frase que está tocando, cancela os pedidos em andamento e
+  descarta as frases já prontas: nada toca depois.
+
+As falas fixas ("Voltei.", "Não consegui ouvir direito." e as outras) também passam pela voz própria. O HUD guarda o WAV
+de cada uma no cache do navegador (IndexedDB), com a chave `origem|voz|texto` (`origem` é `voz` ou `oj`; `voz` é o nome
+que o serviço informa em `/saude`). Com o serviço fora, a fala fixa sai do cache da voz própria se já estiver lá; se não,
+vai pelo OpenJarvis.
+
+## Contrato
+
+O serviço escuta só em `127.0.0.1`. Duas rotas:
+
+### `GET /saude`
+
+```json
+{ "pronta": true, "voz": "Nome da voz", "device": "cuda", "aquecida": true }
+```
+
+- `pronta`: o modelo está carregado e o `/falar` atende. O HUD consulta a cada 5 s; só o `pronta` e o `voz` importam.
+- `voz`: nome da voz em uso. Entra na chave do cache das falas fixas: trocar de voz no serviço faz o HUD sintetizar as
+  falas fixas de novo.
+
+### `POST /falar`
+
+Corpo JSON:
+
+```json
+{ "texto": "Pronto, o YouTube já está aberto.", "velocidade": 1.05 }
+```
+
+- `texto`: uma frase, até 400 caracteres (o HUD nunca manda mais que isso).
+- `velocidade`: o `velocidade` da configuração do HUD (1 é a velocidade normal).
+
+Respostas:
+
+| Caso | Status | Corpo |
+| --- | --- | --- |
+| Pedido com `Accept: audio/pcm` | `200` | PCM cru em fluxo (`Transfer-Encoding: chunked`), um pedaço por trecho sintetizado |
+| Pedido sem `Accept: audio/pcm` | `200` | `audio/wav` inteiro (não é usado pelo HUD; útil para testar com `curl`) |
+| Texto vazio ou com mais de 400 caracteres | `400` | `{"erro": "..."}` |
+| Modelo ainda carregando | `503` | `{"erro": "aquecendo"}` |
+
+Formato do fluxo (o HUD sempre pede este modo):
+
+- `Content-Type: audio/pcm`
+- PCM de 16 bits com sinal, little-endian, mono. Cabeçalhos `X-Taxa` (Hz), `X-Canais: 1` e `X-Formato: s16le`.
+- Os pedaços podem ter qualquer tamanho, inclusive terminar no meio de uma amostra.
+- O primeiro pedaço deve sair o quanto antes (o HUD toca depois de juntar ~100 ms); a frase inteira não precisa estar
+  pronta.
+
+A taxa padrão é **24000 Hz**. O navegador só deixa o HUD ler `X-Taxa` se o serviço mandar
+`Access-Control-Expose-Headers: X-Taxa, X-Canais, X-Formato`; sem isso o HUD assume 24000. Um motor com outra taxa
+precisa expor o cabeçalho (ou reamostrar para 24 kHz).
+
+### CORS
+
+O HUD instalado chama de `http://tauri.localhost` e o `tauri dev` de `http://localhost:1420`. O serviço precisa
+responder ao preflight (`OPTIONS`) desses dois `Origin` aceitando `POST` e os cabeçalhos `content-type` e `accept`.
+
+## Testar sem um motor de voz
+
+`VOZ=4710 npm run harness` (PowerShell: `$env:VOZ=4710; npm run harness`) sobe uma voz falsa que segue este contrato:
+3 pedaços de 0,1 s de silêncio em PCM, ou um WAV de 0,3 s sem o `Accept`. Não suba a voz falsa com um serviço de voz
+de verdade na mesma porta.
+
+Com um serviço de verdade no ar, um teste rápido (bash):
+
+```
+curl -s -H 'Accept: audio/pcm' -H 'Content-Type: application/json' -d '{"texto":"Teste.","velocidade":1}' -D - -o teste.pcm http://127.0.0.1:4710/falar
+```

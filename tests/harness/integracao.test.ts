@@ -1,9 +1,10 @@
-import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
 import type { AddressInfo } from "node:net";
 // @ts-expect-error módulo .mjs sem tipos
-import { criarServidor, criarPonteFalsa } from "./servidor-falso.mjs";
+import { criarServidor, criarPonteFalsa, criarVozFalsa } from "./servidor-falso.mjs";
 import { OpenJarvis } from "../../src/api/openjarvis";
 import { Ponte } from "../../src/api/ponte";
+import { Voz } from "../../src/api/voz";
 import { Conversa } from "../../src/fala/conversa";
 import { CONFIG_PADRAO } from "../../src/config/config";
 import { pcmParaWav } from "../../src/audio/wav";
@@ -82,5 +83,57 @@ describe("Ponte do Vard contra a ponte falsa", () => {
 
   it("ponte ausente: status null", async () => {
     expect(await new Ponte("http://127.0.0.1:1").status()).toBeNull();
+  });
+});
+
+describe("Voz própria contra a voz falsa", () => {
+  let srv: ReturnType<typeof criarVozFalsa>;
+  let voz: Voz;
+  beforeAll(async () => {
+    srv = criarVozFalsa();
+    await new Promise<void>((r) => srv.listen(0, "127.0.0.1", r));
+    voz = new Voz(`http://127.0.0.1:${(srv.address() as AddressInfo).port}`);
+  });
+  afterAll(() => new Promise<void>((r) => srv.close(() => r())));
+
+  it("saúde, PCM em fluxo e a conversa falando pela voz própria", async () => {
+    expect(await voz.saude()).toBe(true);
+    expect(voz.nome).toBe("Voz Falsa");
+    const { corpo, taxa } = await voz.falar("Teste da voz.", 1.05);
+    expect(taxa).toBe(24000);
+    let bytes = 0;
+    const leitor = corpo.getReader();
+    for (;;) { const { done, value } = await leitor.read(); if (done) break; bytes += value.length; }
+    expect(bytes).toBe(14400); // 3 x 0,1 s a 24 kHz, 16 bits
+
+    // Boca sem tocarFluxo: a conversa lê a frase inteira e toca como WAV.
+    const tocados: ArrayBuffer[] = [];
+    const boca = { falando: false, tocar: async (w: ArrayBuffer) => { tocados.push(w); }, parar() {} };
+    const c = new Conversa({ oj, voz, boca, config: CONFIG_PADRAO, falas: async () => new ArrayBuffer(0) });
+    const info = vi.spyOn(console, "info").mockImplementation(() => {});
+    await c.aoTextoTranscrito("Vard, que horas são", false);
+    info.mockRestore();
+    expect(tocados).toHaveLength(1);
+    expect(tocados[0].byteLength).toBe(44 + 14400);
+    expect(new DataView(tocados[0]).getUint32(24, true)).toBe(24000);
+    expect(srv.estado.pedidos.at(-1)).toEqual({ texto: "Agora são 13h.", velocidade: CONFIG_PADRAO.velocidade, pcm: true });
+  });
+
+  it("voz aquecendo (503): a frase sai pela reserva do OpenJarvis", async () => {
+    srv.estado.aquecendo = true;
+    const tocados: ArrayBuffer[] = [];
+    const boca = { falando: false, tocar: async (w: ArrayBuffer) => { tocados.push(w); }, parar() {} };
+    const c = new Conversa({ oj, voz, boca, config: CONFIG_PADRAO, falas: async () => new ArrayBuffer(0) });
+    const aviso = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const info = vi.spyOn(console, "info").mockImplementation(() => {});
+    try {
+      await c.aoTextoTranscrito("Vard, que horas são", false);
+      expect(aviso).toHaveBeenCalledWith("voz própria falhou, usei a reserva", expect.anything());
+      expect(tocados).toHaveLength(1);
+      expect(new DataView(tocados[0]).getUint32(24, true)).toBe(22050); // a senoide do OpenJarvis falso
+    } finally {
+      aviso.mockRestore(); info.mockRestore();
+      srv.estado.aquecendo = false;
+    }
   });
 });

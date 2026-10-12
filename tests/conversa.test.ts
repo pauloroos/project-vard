@@ -1,8 +1,9 @@
 import { describe, it, expect, vi, beforeEach, type Mock } from "vitest";
-import type { Mensagem } from "../src/fala/conversa";
+import type { FalaEmFluxo, Mensagem } from "../src/fala/conversa";
 import { Conversa } from "../src/fala/conversa";
 import { FALAS } from "../src/fala/falas";
 import { CONFIG_PADRAO } from "../src/config/config";
+import { ErroVoz } from "../src/api/voz";
 
 const WAV = new ArrayBuffer(8);
 
@@ -329,5 +330,158 @@ describe("nome de chamada", () => {
     expect(oj.perguntar).toHaveBeenCalledOnce();
     await c.aoTextoTranscrito("Vard, que horas são", false);
     expect(oj.perguntar).toHaveBeenCalledOnce();
+  });
+});
+
+describe("voz própria frase a frase", () => {
+  const F1 = "Primeira frase da resposta.";
+  const F2 = "Segunda frase da resposta.";
+  const F3 = "Terceira frase da resposta.";
+
+  function adiado<T>() {
+    let resolver!: (v: T) => void;
+    const promessa = new Promise<T>((r) => { resolver = r; });
+    return { promessa, resolver };
+  }
+  const espera = async (cond: () => boolean) => { for (let i = 0; i < 100 && !cond(); i++) await new Promise((r) => setTimeout(r, 0)); };
+
+  /** Voz falsa que devolve um fluxo marcado com o texto; boca falsa que anota o que tocou e só termina quando mandada. */
+  function montar(resposta: string, automatico = false) {
+    const nomes = new Map<ReadableStream<Uint8Array>, string>();
+    const cancelados: string[] = [];
+    const fala = (texto: string): FalaEmFluxo => {
+      const corpo = new ReadableStream<Uint8Array>({ cancel: () => { cancelados.push(texto); } });
+      nomes.set(corpo, texto);
+      return { corpo, taxa: 24000 };
+    };
+    const tocados: string[] = [];
+    const fimDoToque: Array<() => void> = [];
+    const boca = {
+      falando: false,
+      tocar: vi.fn(async (_w: ArrayBuffer) => { tocados.push("reserva"); }),
+      tocarFluxo: vi.fn((corpo: ReadableStream<Uint8Array>, _taxa: number, _sinal?: AbortSignal) => {
+        tocados.push(nomes.get(corpo) ?? "?");
+        return automatico ? Promise.resolve() : new Promise<void>((r) => { fimDoToque.push(r); });
+      }),
+      parar: vi.fn(() => { for (const r of fimDoToque.splice(0)) r(); }),
+    };
+    const oj = { perguntar: vi.fn().mockResolvedValue(resposta), sintetizar: vi.fn().mockResolvedValue(WAV) };
+    const voz = { falar: vi.fn(async (t: string, _v: number, _s?: AbortSignal) => fala(t)) };
+    const estados: string[] = [];
+    const c = new Conversa({ oj, boca, voz, config: CONFIG_PADRAO, falas: async () => WAV, aoEstado: (e) => estados.push(e) });
+    return { c, oj, boca, voz, fala, tocados, fimDoToque, cancelados, estados };
+  }
+
+  beforeEach(() => {
+    vi.spyOn(console, "info").mockImplementation(() => {});
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+  });
+
+  it("ordem_preservada: a 2ª frase pronta antes da 1ª acabar espera a vez", async () => {
+    const m = montar(F1 + " " + F2);
+    const d1 = adiado<FalaEmFluxo>();
+    m.voz.falar.mockImplementationOnce(() => d1.promessa);
+    const p = m.c.aoTextoTranscrito("me conta algo", true);
+    await espera(() => m.voz.falar.mock.calls.length === 1);
+    await new Promise((r) => setTimeout(r, 0));
+    expect(m.voz.falar).toHaveBeenCalledTimes(1); // a 2ª é pedida quando a 1ª começa a chegar
+    d1.resolver(m.fala(F1));
+    await espera(() => m.tocados.length === 1);
+    expect(m.voz.falar).toHaveBeenCalledTimes(2); // pedida antes de a 1ª terminar de tocar
+    expect(m.voz.falar.mock.calls[1][0]).toBe(F2);
+    await new Promise((r) => setTimeout(r, 0));
+    expect(m.tocados).toEqual([F1]); // a 2ª já chegou, mas não atropela a 1ª
+    m.fimDoToque.shift()!();
+    await espera(() => m.tocados.length === 2);
+    expect(m.tocados).toEqual([F1, F2]);
+    m.fimDoToque.shift()!();
+    await p;
+    expect(m.estados).toEqual(["pensando", "falando", "repouso"]);
+    expect(m.oj.sintetizar).not.toHaveBeenCalled();
+  });
+
+  it("interromper_descarta_fila: frase pronta não toca, a seguinte nem é pedida", async () => {
+    const m = montar([F1, F2, F3].join(" "));
+    const p = m.c.aoTextoTranscrito("me conta algo", true);
+    await espera(() => m.tocados.length === 1 && m.voz.falar.mock.calls.length === 2);
+    m.c.interromper();
+    expect(m.boca.parar).toHaveBeenCalled();
+    await p;
+    await new Promise((r) => setTimeout(r, 0));
+    expect(m.tocados).toEqual([F1]);
+    expect(m.cancelados).toEqual([F2]);
+    expect(m.voz.falar).toHaveBeenCalledTimes(2);
+    expect(m.c.estado).toBe("repouso");
+  });
+
+  it("interromper_descarta_fila: frase que chega depois do interromper é fechada e não toca", async () => {
+    const m = montar([F1, F2, F3].join(" "));
+    const d2 = adiado<FalaEmFluxo>();
+    m.voz.falar.mockImplementationOnce(async (t) => m.fala(t)).mockImplementationOnce(() => d2.promessa);
+    const p = m.c.aoTextoTranscrito("me conta algo", true);
+    await espera(() => m.tocados.length === 1 && m.voz.falar.mock.calls.length === 2);
+    const sinal = m.voz.falar.mock.calls[1][2];
+    m.c.interromper();
+    expect(sinal?.aborted).toBe(true); // o pedido em voo recebe o abort
+    d2.resolver(m.fala(F2)); // resposta atrasada de uma voz que não obedeceu ao abort
+    await p;
+    await espera(() => m.cancelados.length > 0);
+    expect(m.tocados).toEqual([F1]);
+    expect(m.cancelados).toEqual([F2]);
+    expect(m.oj.sintetizar).not.toHaveBeenCalled();
+    expect(m.boca.tocar).not.toHaveBeenCalled();
+  });
+
+  it("voz_fora_usa_reserva: erro de conexão manda o resto da resposta para o OpenJarvis", async () => {
+    const m = montar(F1 + " " + F2, true);
+    m.voz.falar.mockRejectedValue(new ErroVoz("sem conexão com a voz", true));
+    await m.c.aoTextoTranscrito("me conta algo", true);
+    expect(m.voz.falar).toHaveBeenCalledTimes(1);
+    expect(m.oj.sintetizar.mock.calls.map((x) => x[0])).toEqual([F1, F2]);
+    expect(m.oj.sintetizar).toHaveBeenCalledWith(F1, CONFIG_PADRAO.voz, CONFIG_PADRAO.velocidade);
+    expect(m.tocados).toEqual(["reserva", "reserva"]);
+    expect(console.warn).toHaveBeenCalledWith("voz própria falhou, usei a reserva", expect.any(ErroVoz));
+    expect(m.c.estado).toBe("repouso");
+  });
+
+  it("voz aquecendo (503) cai na reserva só naquela frase", async () => {
+    const m = montar(F1 + " " + F2, true);
+    m.voz.falar.mockRejectedValueOnce(new ErroVoz("voz HTTP 503", false));
+    await m.c.aoTextoTranscrito("me conta algo", true);
+    expect(m.voz.falar).toHaveBeenCalledTimes(2);
+    expect(m.oj.sintetizar.mock.calls.map((x) => x[0])).toEqual([F1]);
+    expect(m.tocados).toEqual(["reserva", F2]);
+  });
+
+  it("frase_sem_pontuacao_fala", async () => {
+    const m = montar("abri o youtube pra você", true);
+    await m.c.aoTextoTranscrito("abre o youtube", true);
+    expect(m.voz.falar).toHaveBeenCalledOnce();
+    expect(m.voz.falar.mock.calls[0][0]).toBe("abri o youtube pra você");
+    expect(m.voz.falar.mock.calls[0][1]).toBe(CONFIG_PADRAO.velocidade);
+    expect(m.tocados).toEqual(["abri o youtube pra você"]);
+    expect(m.estados).toEqual(["pensando", "falando", "repouso"]);
+  });
+
+  it("sem voz própria: cada frase vai para a reserva, em ordem", async () => {
+    const oj = { perguntar: vi.fn().mockResolvedValue(F1 + " " + F2), sintetizar: vi.fn().mockResolvedValue(WAV) };
+    const boca = { falando: false, tocar: vi.fn().mockResolvedValue(undefined), parar: vi.fn() };
+    const c = new Conversa({ oj, boca, config: CONFIG_PADRAO, falas: async () => WAV });
+    await c.aoTextoTranscrito("me conta algo", true);
+    expect(oj.sintetizar.mock.calls.map((x) => x[0])).toEqual([F1, F2]);
+    expect(boca.tocar).toHaveBeenCalledTimes(2);
+  });
+
+  it("texto que chega entre duas frases não atravessa a resposta", async () => {
+    const m = montar(F1 + " " + F2);
+    const p = m.c.aoTextoTranscrito("me conta algo", true);
+    await espera(() => m.tocados.length === 1);
+    await m.c.aoTextoTranscrito("olha a tela", true); // boca.falando é false no intervalo; o estado segura
+    expect(m.oj.perguntar).toHaveBeenCalledOnce();
+    m.fimDoToque.shift()!();
+    await espera(() => m.tocados.length === 2);
+    m.fimDoToque.shift()!();
+    await p;
+    expect(m.tocados).toEqual([F1, F2]);
   });
 });

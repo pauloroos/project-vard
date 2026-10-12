@@ -54,6 +54,7 @@ export class Configuracoes {
         ${this.campo("openjarvis_url", "OpenJarvis", c.openjarvis_url)}
         ${this.campo("gui_url", "Interface de texto", c.gui_url)}
         ${this.campo("ponte_url", "Ponte do Vard (opcional; vazio desliga)", c.ponte_url)}
+        ${this.campo("voz_url", "Serviço de voz (opcional; vazio desliga)", c.voz_url)}
       </fieldset>
       <fieldset><legend>Voz</legend>
         ${this.campo("nome", "Nome para chamar", c.nome)}
@@ -85,9 +86,10 @@ export class Configuracoes {
     this.painel.querySelector("#cfg-fechar")!.addEventListener("click", () => this.fechar());
     this.painel.querySelector("#cfg-salvar")!.addEventListener("click", () => { void this.salvar(); });
     this.painel.querySelector("#cfg-testar")!.addEventListener("click", () => { void this.testar(); });
-    for (const id of ["openjarvis_url", "gui_url", "ponte_url"]) {
+    for (const id of ["openjarvis_url", "gui_url", "ponte_url", "voz_url"]) {
       const campo = this.el(id);
-      const marcar = () => campo.classList.toggle("aviso", !urlLocal(campo.value));
+      const opcional = id === "ponte_url" || id === "voz_url"; // vazio desliga: não é endereço ruim
+      const marcar = () => campo.classList.toggle("aviso", !(opcional && campo.value.trim() === "") && !urlLocal(campo.value.trim()));
       campo.addEventListener("input", marcar); marcar();
     }
   }
@@ -108,6 +110,7 @@ export class Configuracoes {
     return {
       ...c,
       openjarvis_url: txt("openjarvis_url", c.openjarvis_url), gui_url: txt("gui_url", c.gui_url), ponte_url: opc("ponte_url"),
+      voz_url: opc("voz_url"),
       nome: txt("nome", c.nome), usuario: opc("usuario"),
       variantes: this.el("variantes").value.split(",").map((v) => v.trim()).filter(Boolean),
       idioma: opc("idioma"), voz: txt("voz", c.voz),
@@ -121,7 +124,7 @@ export class Configuracoes {
   private async salvar() {
     const novo = this.lerFormulario();
     if (novo.variantes.length === 0) novo.variantes = [novo.nome];
-    const exigeReinicio = (["openjarvis_url", "ponte_url", "nome", "idioma", "voz", "velocidade", "finish_ms", "limiar_vad", "instrucao_formato"] as const)
+    const exigeReinicio = (["openjarvis_url", "ponte_url", "voz_url", "nome", "idioma", "voz", "velocidade", "finish_ms", "limiar_vad", "instrucao_formato"] as const)
       .some((k) => novo[k] !== this.cfg[k]) || JSON.stringify(novo.variantes) !== JSON.stringify(this.cfg.variantes)
       || JSON.stringify(novo.atalhos) !== JSON.stringify(this.cfg.atalhos);
     try { await salvarConfig(novo); }

@@ -14,8 +14,9 @@ describe("carregarConfig", () => {
   });
 
   it("mescla o padrao com o salvo", async () => {
-    invoke.mockResolvedValue({ nome: "jarvis", velocidade: 1.2 });
+    invoke.mockResolvedValue({ nome: "jarvis", velocidade: 1.2, voz_url: "" });
     const c = await carregarConfig();
+    expect(c.voz_url).toBe(""); // vazio salvo é escolha (voz própria desligada), não volta ao padrão
     expect(c.nome).toBe("jarvis");
     expect(c.velocidade).toBe(1.2);
     expect(c.idioma).toBe(CONFIG_PADRAO.idioma);
@@ -80,5 +81,12 @@ describe("urlLocal", () => {
     expect(a).toHaveLength(1);
     expect(a[0]).toContain("Ponte");
     expect(avisosDeUrl({ ...CONFIG_PADRAO, ponte_url: "" })).toEqual([]); // vazio = ponte desligada
+  });
+  it("serviço de voz: fora da máquina avisa, vazio desliga sem aviso", () => {
+    expect(CONFIG_PADRAO.voz_url).toBe("http://127.0.0.1:4710");
+    const a = avisosDeUrl({ ...CONFIG_PADRAO, voz_url: "http://192.168.0.9:4710" });
+    expect(a).toHaveLength(1);
+    expect(a[0]).toContain("Serviço de voz");
+    expect(avisosDeUrl({ ...CONFIG_PADRAO, voz_url: "" })).toEqual([]);
   });
 });

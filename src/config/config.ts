@@ -2,6 +2,8 @@ import { invoke } from "@tauri-apps/api/core";
 
 export interface Config {
   openjarvis_url: string; gui_url: string; ponte_url: string;
+  /** Serviço de voz próprio (POST /falar); vazio desliga e a voz fica sempre a do OpenJarvis. */
+  voz_url: string;
   nome: string; usuario: string; variantes: string[]; idioma: string; voz: string; velocidade: number;
   finish_ms: number; limiar_vad: number; sempre_no_topo: boolean; click_through: boolean;
   posicao: { x: number; y: number } | null;
@@ -11,6 +13,7 @@ export interface Config {
 
 export const CONFIG_PADRAO: Config = {
   openjarvis_url: "http://127.0.0.1:8000", gui_url: "http://127.0.0.1:5173", ponte_url: "http://127.0.0.1:4700",
+  voz_url: "http://127.0.0.1:4710",
   nome: "vard", usuario: "", variantes: ["vard", "varde", "vardi", "ward", "bard"], idioma: "pt", voz: "pm_alex", velocidade: 1.05,
   finish_ms: 900, limiar_vad: 0.02, sempre_no_topo: true, click_through: false, posicao: null,
   atalhos: { falar: "Ctrl+Alt+Space", parar: "Ctrl+Alt+Period", mostrar: "Ctrl+Alt+V" },
@@ -72,7 +75,9 @@ export function urlLocal(u: string): boolean {
 }
 
 /** Avisos (não bloqueiam o salvamento) para os campos de URL fora da máquina local. */
-export function avisosDeUrl(c: Pick<Config, "openjarvis_url" | "gui_url" | "ponte_url">): string[] {
-  const nomes: [keyof typeof c, string][] = [["openjarvis_url", "OpenJarvis"], ["gui_url", "Interface de texto"], ["ponte_url", "Ponte"]];
+export function avisosDeUrl(c: Pick<Config, "openjarvis_url" | "gui_url" | "ponte_url" | "voz_url">): string[] {
+  const nomes: [keyof typeof c, string][] = [
+    ["openjarvis_url", "OpenJarvis"], ["gui_url", "Interface de texto"], ["ponte_url", "Ponte"], ["voz_url", "Serviço de voz"],
+  ];
   return nomes.filter(([k]) => c[k] !== "" && !urlLocal(c[k])).map(([, n]) => `${n}: o endereço não é 127.0.0.1 nem localhost`);
 }

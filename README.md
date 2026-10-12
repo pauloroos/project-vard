@@ -16,6 +16,7 @@ Projeto independente, sem vínculo com o OpenJarvis nem com a Stanford.
 - Ícone na bandeja, painel de configurações, início opcional com o Windows.
 - Botão **Texto** abre a interface gráfica de texto do OpenJarvis.
 - Opcional: a ponte do Vard (setup privado do autor, `rdl-vard`) dá olhos na tela e modo jogo. Sem ela tudo funciona igual, veja [docs/ponte-do-vard.md](docs/ponte-do-vard.md).
+- Opcional: uma voz própria (qualquer motor de voz local que siga um contrato simples) fala a resposta frase a frase, começando antes de a resposta inteira estar sintetizada. Veja [Voz própria](#voz-própria-opcional).
 
 ## Requisitos
 
@@ -62,6 +63,7 @@ Pela engrenagem do HUD ou pelo item **Configurações** da bandeja. O painel tem
 | `openjarvis_url` | `http://127.0.0.1:8000` | Onde está o OpenJarvis |
 | `gui_url` | `http://127.0.0.1:5173` | Interface de texto (botão Texto) |
 | `ponte_url` | `http://127.0.0.1:4700` | Ponte opcional (vazio desliga) |
+| `voz_url` | `http://127.0.0.1:4710` | Voz própria opcional (vazio desliga; sem o serviço no ar, a voz é a do OpenJarvis) |
 | `nome`, `variantes` | `vard` e grafias parecidas | Palavras que chamam o assistente: o `nome` mais as `variantes` (com outro nome, as variantes padrão do Vard saem) |
 | `usuario` | vazio | Como o assistente te chama na saudação ("Oi, Ana."); vazio diz só "Oi." |
 | `idioma` | `pt` | Idioma do reconhecimento |
@@ -72,6 +74,24 @@ Pela engrenagem do HUD ou pelo item **Configurações** da bandeja. O painel tem
 | `instrucao_formato` | respostas curtas | Instrução enviada junto com cada pergunta |
 
 Endereços fora de `127.0.0.1` ou `localhost` geram um aviso (o HUD manda o que você diz e, com a ponte, imagens da sua tela; mantenha tudo na própria máquina). A caixa **Iniciar com o Windows** cria ou remove `openjarvis-hud.lnk` na pasta Startup do seu usuário. O botão **Testar OpenJarvis** confere o servidor e a fala.
+
+## Voz própria (opcional)
+
+Por padrão a resposta é sintetizada inteira pelo OpenJarvis e só então começa a tocar. Com um serviço de voz local em
+`voz_url`, o HUD corta a resposta em frases, toca a primeira assim que chega o primeiro pedaço de áudio e pede a
+seguinte enquanto a atual ainda toca. As falas fixas ("Voltei." e as outras) também passam por ela e ficam em cache.
+
+O serviço pode usar qualquer motor de voz. Ele precisa de duas rotas em `127.0.0.1`:
+
+- `GET /saude` devolve `{"pronta": true, "voz": "nome da voz", ...}`.
+- `POST /falar` recebe `{"texto": "uma frase", "velocidade": 1.05}` (até 400 caracteres). Com `Accept: audio/pcm`
+  responde `200` com PCM de 16 bits, mono, little-endian, em fluxo (`Transfer-Encoding: chunked`), a 24 kHz
+  (cabeçalhos `X-Taxa`, `X-Canais`, `X-Formato`). `400` para texto vazio ou longo demais, `503 {"erro": "aquecendo"}`
+  enquanto carrega o modelo.
+- CORS liberado para `http://tauri.localhost` (app instalado) e `http://localhost:1420` (`tauri dev`).
+
+Se o serviço estiver fora, demorar mais de 8 s ou recusar uma frase, aquela frase sai pela voz do OpenJarvis sem aviso
+na tela. O contrato completo está em [docs/voz-propria.md](docs/voz-propria.md).
 
 ## Solução de problemas
 

@@ -35,8 +35,11 @@ In `tauri dev` the front end reaches OpenJarvis through a Vite proxy at `/oj` (O
 npm run harness
 ```
 
-Sobe um OpenJarvis falso em `http://127.0.0.1:8765` (transcrição fixa, resposta "Agora são 13h.", senoide de 0,3 s). Use `VITE_OJ_ALVO=http://127.0.0.1:8765 npm run tauri dev` (PowerShell: `$env:VITE_OJ_ALVO="http://127.0.0.1:8765"; npm run tauri dev`), abra o microfone (duplo clique no núcleo) e aperte o push-to-talk por 1 s em silêncio; com o microfone fechado o push-to-talk é ignorado. `PONTE=4700 npm run harness` (PowerShell: `$env:PONTE=4700; npm run harness`) acrescenta uma ponte falsa.
-Starts a fake OpenJarvis at `http://127.0.0.1:8765`. Use it with `VITE_OJ_ALVO`, open the microphone first (double-click the core): push-to-talk is ignored while it is closed. `PONTE=4700` adds a fake bridge.
+Sobe um OpenJarvis falso em `http://127.0.0.1:8765` (transcrição fixa, resposta "Agora são 13h.", senoide de 0,3 s). Use `VITE_OJ_ALVO=http://127.0.0.1:8765 npm run tauri dev` (PowerShell: `$env:VITE_OJ_ALVO="http://127.0.0.1:8765"; npm run tauri dev`), abra o microfone (duplo clique no núcleo) e aperte o push-to-talk por 1 s em silêncio; com o microfone fechado o push-to-talk é ignorado. `PONTE=4700 npm run harness` (PowerShell: `$env:PONTE=4700; npm run harness`) acrescenta uma ponte falsa. `VOZ=4710 npm run harness` (PowerShell: `$env:VOZ=4710; npm run harness`) acrescenta uma voz própria falsa (`/saude` e `/falar`: 3 pedaços de 0,1 s de silêncio em PCM, ou um WAV de 0,3 s); ela só sobe com a variável, para não brigar com um serviço de voz de verdade na 4710. Contrato em [docs/voz-propria.md](docs/voz-propria.md).
+Starts a fake OpenJarvis at `http://127.0.0.1:8765`. Use it with `VITE_OJ_ALVO`, open the microphone first (double-click the core): push-to-talk is ignored while it is closed. `PONTE=4700` adds a fake bridge. `VOZ=4710` adds a fake voice service (only with the variable, so it never collides with a real one on 4710).
+
+No `tauri dev` existe `window.__vardPergunta("que horas são")` (só em desenvolvimento): injeta a pergunta como se viesse do microfone; com o microfone fechado, toca por uma saída de áudio própria. O console mostra `resposta do núcleo em X ms` e `voz: 1º áudio em Y ms após a resposta`.
+In `tauri dev`, `window.__vardPergunta("...")` (development only) injects a question as if it came from the microphone; the console prints both timings.
 
 ## Ícone / Icon
 

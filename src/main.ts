@@ -6,9 +6,10 @@ import { abrirMicrofone, definirMudo, fecharMicrofone, estaMudo, onAmostras, rms
 import { DetectorDeVoz } from "./audio/vad";
 import { pcmParaWav, reamostrar } from "./audio/wav";
 import { Boca } from "./audio/boca";
-import { falaFixa } from "./audio/cache";
+import { falaFixa, type FonteDeFala } from "./audio/cache";
 import { OpenJarvis } from "./api/openjarvis";
 import { Ponte } from "./api/ponte";
+import { Voz } from "./api/voz";
 import { Conversa } from "./fala/conversa";
 import { FALAS, saudacaoPara } from "./fala/falas";
 import { Hud } from "./ui/hud";
@@ -44,6 +45,8 @@ window.addEventListener("DOMContentLoaded", async () => {
   // No `tauri dev` a origem do webview (localhost:1420) é recusada pelo CORS do OpenJarvis; o Vite faz a ponte em /oj.
   const base = import.meta.env.DEV ? `${location.origin}/oj` : cfg.openjarvis_url;
   const oj = new OpenJarvis(base);
+  // Voz própria opcional (docs/voz-propria.md). Vazio desliga: a voz fica sempre a do OpenJarvis.
+  const voz = cfg.voz_url.trim() ? new Voz(cfg.voz_url.trim()) : null;
 
   // Painel de configurações (bandeja ou engrenagem). Com click-through ligado a janela não receberia o clique:
   // ele é suspenso enquanto o painel está aberto.
@@ -70,6 +73,11 @@ window.addEventListener("DOMContentLoaded", async () => {
       if (fimDaFala) { hud.setLatencia(performance.now() - fimDaFala); fimDaFala = 0; }
       await bocaReal.tocar(wav);
     },
+    async tocarFluxo(corpo: ReadableStream<Uint8Array>, taxa: number, sinal?: AbortSignal) {
+      if (!bocaReal) { await corpo.cancel().catch(() => {}); return; }
+      if (fimDaFala) { hud.setLatencia(performance.now() - fimDaFala); fimDaFala = 0; }
+      await bocaReal.tocarFluxo(corpo, taxa, sinal);
+    },
     parar() { bocaReal?.parar(); },
   };
 
@@ -87,10 +95,19 @@ window.addEventListener("DOMContentLoaded", async () => {
   const ponte = new Ponte(cfg.ponte_url);
   let ponteNoAr = true; // desconhecida até a 1ª sondagem (já disparada abaixo): tenta a ponte em vez de dizer que não há
   const espera = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
-  const fixa = (t: string) => falaFixa(t, cfg.voz, () => oj.sintetizar(t, cfg.voz, cfg.velocidade));
+  // Falas fixas: a voz própria primeiro (o cache guarda o WAV dela), o OpenJarvis como reserva.
+  const fixa = async (t: string) => {
+    const fontes: FonteDeFala[] = [];
+    if (voz && (voz.nome || (await voz.saude(), voz.nome))) {
+      fontes.push({ origem: "voz", voz: voz.nome, sintetizar: () => voz.falarWav(t, cfg.velocidade) });
+    }
+    fontes.push({ origem: "oj", voz: cfg.voz, sintetizar: () => oj.sintetizar(t, cfg.voz, cfg.velocidade) });
+    return falaFixa(t, fontes);
+  };
 
   const conversa = new Conversa({
     oj, boca, config: cfg,
+    ...(voz ? { voz } : {}),
     falas: fixa,
     aoEstado: (e, detalhe) => {
       nucleo.setEstado(e); hud.setEstado(e, detalhe);
@@ -121,17 +138,30 @@ window.addEventListener("DOMContentLoaded", async () => {
   void sondarPonte();
   setInterval(() => { void sondarPonte(); }, 10000);
 
-  // Saúde do OpenJarvis a cada 5 s; na primeira vez com fala no ar, aquece o cache das falas fixas.
+  // Saúde do OpenJarvis (e da voz própria) a cada 5 s; com a fala no ar, aquece o cache das falas fixas.
+  // A voz própria fora não muda nada na tela: a reserva entra sozinha. Quando ela fica pronta, aquece de novo na voz dela.
   let aquecido = false;
+  let aquecidoNaVoz = false;
+  let vozPronta: boolean | null = null;
+  const aquecer = async () => {
+    for (const t of [saudacaoPara(cfg.usuario), FALAS.erroModelo, FALAS.erroOuvido, FALAS.openjarvisFora, FALAS.voltei, FALAS.modoJogoAtivado]) {
+      try { await fixa(t); } catch { aquecido = false; } // uma de cada vez: não disputa a GPU com a conversa
+    }
+  };
   const checarSaude = async () => {
     const ok = await oj.saude();
     const falaOk = ok && (await oj.fala());
     await conversa.aoHealth(ok, falaOk);
-    if (falaOk && !aquecido) {
-      aquecido = true;
-      for (const t of [saudacaoPara(cfg.usuario), FALAS.erroModelo, FALAS.erroOuvido, FALAS.openjarvisFora, FALAS.voltei]) {
-        fixa(t).catch(() => { aquecido = false; });
-      }
+    if (voz) {
+      const pronta = await voz.saude();
+      if (pronta !== vozPronta) console.info(pronta ? `voz própria pronta (${voz.nome})` : "voz própria fora ou aquecendo; uso a reserva");
+      vozPronta = pronta;
+    }
+    const novaVoz = vozPronta === true && !aquecidoNaVoz;
+    if ((falaOk && !aquecido) || novaVoz) {
+      aquecido = aquecido || falaOk;
+      aquecidoNaVoz = aquecidoNaVoz || vozPronta === true;
+      void aquecer();
     }
   };
   void checarSaude();
@@ -248,6 +278,27 @@ window.addEventListener("DOMContentLoaded", async () => {
       if (ev.detail === 2 && alvo === canvas) void alternarMicrofone();
     }
   }, true);
+
+  if (import.meta.env.DEV) {
+    // Só em desenvolvimento: injeta uma pergunta como se tivesse vindo do microfone (mede a latência sem voz humana).
+    // Com o microfone fechado, a boca ganha um AudioContext próprio (sem pedir permissão de microfone).
+    (window as unknown as { __vardPergunta?: (t: string) => Promise<void> }).__vardPergunta = async (texto: string) => {
+      if (!bocaReal) {
+        bocaReal = new Boca(new AudioContext());
+        nucleo.setAnalisadores(null, bocaReal.analisador);
+      }
+      ocupado = true;
+      try {
+        console.log("ouvi:", texto);
+        hud.setOuvido(texto);
+        await conversa.aoTextoTranscrito(texto, true);
+      } finally {
+        ocupado = false;
+        detector.reset();
+        nucleo.setEstado(conversa.estado); hud.setEstado(conversa.estado, conversa.detalhe);
+      }
+    };
+  }
 
   await listen("ptt-inicio", () => {
     if (!ligado || estaMudo()) return;
