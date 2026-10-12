@@ -36,6 +36,9 @@ html, body { background: transparent; margin: 0; overflow: hidden; }
 }
 #botoes button svg { width: 13px; height: 13px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; pointer-events: none; }
 #botoes button:hover { background: rgba(0, 240, 255, 0.22); box-shadow: 0 0 8px var(--brilho); }
+#botoes button[hidden] { display: none; }
+#app.capturando::after { content: ""; position: absolute; top: 8px; right: 8px; width: 10px; height: 10px; border-radius: 50%; background: #ff3030; box-shadow: 0 0 10px #ff3030; animation: piscar 0.5s infinite alternate; }
+@keyframes piscar { from { opacity: 0.4; } to { opacity: 1; } }
 #botoes button.ativo { color: #ff6060; border-color: rgba(255, 96, 96, 0.7); }
 
 /* compacto: some o texto, ficam o núcleo e os botões */

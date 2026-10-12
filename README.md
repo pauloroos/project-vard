@@ -20,6 +20,10 @@ No `tauri dev`, o front fala com o OpenJarvis por um proxy do Vite (`/oj`), porq
 
 `npm run harness` sobe um OpenJarvis falso em `http://127.0.0.1:8765` (transcrição fixa, resposta "Agora são 13h.", senoide de 0,3 s). Use `VITE_OJ_ALVO=http://127.0.0.1:8765 npm run tauri dev` e aperte o push-to-talk por 1 s em silêncio.
 
+### Ponte do Vard (opcional)
+
+Com a ponte do Vard no ar (`http://127.0.0.1:4700`) o HUD ganha o botão Tela e o modo jogo. Sem ela funciona igual. Veja [docs/ponte-do-vard.md](docs/ponte-do-vard.md). `PONTE=4700 npm run harness` sobe uma ponte falsa para testar.
+
 ### Testes
 
 - `npm test`: unitários e integração contra o servidor falso (em processo).

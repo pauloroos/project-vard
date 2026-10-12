@@ -113,3 +113,105 @@ describe("interromper cancela a pergunta em voo", () => {
     expect(estados).toEqual(["pensando", "repouso"]);
   });
 });
+
+describe("ponte do Vard (opcional)", () => {
+  function montar(comPonte: boolean) {
+    const oj = { perguntar: vi.fn().mockResolvedValue("x"), sintetizar: vi.fn().mockResolvedValue(WAV) };
+    const boca = { falando: false, tocar: vi.fn().mockResolvedValue(undefined), parar: vi.fn() };
+    const falas: string[] = [];
+    const estados: string[] = [];
+    const ponte = { ver: vi.fn().mockResolvedValue("Um editor de código aberto."), modo: vi.fn().mockResolvedValue(true) };
+    const capturar = vi.fn().mockResolvedValue("QUJD");
+    const abrirMicrofone = vi.fn();
+    const fecharMicrofone = vi.fn();
+    const c = new Conversa({
+      oj, boca, config: CONFIG_PADRAO,
+      falas: async (t: string) => { falas.push(t); return WAV; },
+      aoEstado: (e) => estados.push(e),
+      ...(comPonte ? { ponte, capturar, abrirMicrofone, fecharMicrofone } : {}),
+    });
+    return { c, oj, boca, falas, estados, ponte, capturar, abrirMicrofone, fecharMicrofone };
+  }
+
+  it("sem_ponte: ver vira fala semPonte, sem chamar o agente", async () => {
+    const m = montar(false);
+    await m.c.aoTextoTranscrito("Vard, o que você está vendo", false);
+    expect(m.falas).toEqual([FALAS.semPonte]);
+    expect(m.oj.perguntar).not.toHaveBeenCalled();
+    await m.c.aoTextoTranscrito("Vard, modo jogo", false);
+    expect(m.falas).toEqual([FALAS.semPonte, FALAS.semPonte]);
+  });
+
+  it("com_ponte_ver: captura uma vez, ponte.ver e fala a resposta", async () => {
+    const m = montar(true);
+    await m.c.aoTextoTranscrito("Vard, o que você está vendo", false);
+    expect(m.capturar).toHaveBeenCalledOnce();
+    expect(m.ponte.ver).toHaveBeenCalledWith("QUJD", "o que você está vendo");
+    expect(m.oj.sintetizar).toHaveBeenCalledWith("Um editor de código aberto.", CONFIG_PADRAO.voz, CONFIG_PADRAO.velocidade);
+    expect(m.oj.perguntar).not.toHaveBeenCalled();
+    expect(m.c.estado).toBe("repouso");
+  });
+
+  it("erro 503 da ponte fala a frase fixa do código", async () => {
+    const m = montar(true);
+    m.ponte.ver.mockRejectedValue(Object.assign(new Error("segredos"), { codigo: "segredos" }));
+    await m.c.aoTextoTranscrito("Vard, olha a tela", false);
+    expect(m.falas).toEqual([FALAS.erros.segredos]);
+    expect(m.c.estado).toBe("repouso");
+  });
+
+  it("modo_jogo_fecha_e_reabre", async () => {
+    const m = montar(true);
+    await m.c.aoTextoTranscrito("Vard, modo jogo", false);
+    expect(m.falas).toEqual([FALAS.modoJogoConfirmar]);
+    expect(m.ponte.modo).not.toHaveBeenCalled();
+    await m.c.aoTextoTranscrito("sim", false);
+    expect(m.ponte.modo).toHaveBeenCalledWith("jogo");
+    expect(m.falas).toContain(FALAS.modoJogoAtivado);
+    expect(m.c.estado).toBe("jogo");
+    expect(m.fecharMicrofone).toHaveBeenCalledOnce();
+    await m.c.aoTextoTranscrito("Vard, oi", false); // no jogo ninguém escuta
+    expect(m.oj.perguntar).not.toHaveBeenCalled();
+    await m.c.aoHealth(false, false); // OpenJarvis parado de propósito: não vira "fora"
+    expect(m.c.estado).toBe("jogo");
+    await m.c.aoStatusPonte({ modo: "ligando" });
+    expect(m.c.estado).toBe("jogo");
+    expect(m.abrirMicrofone).not.toHaveBeenCalled();
+    await m.c.aoStatusPonte({ modo: "ligado" });
+    expect(m.abrirMicrofone).toHaveBeenCalledOnce();
+    expect(m.c.estado).toBe("repouso");
+    expect(m.falas[m.falas.length - 1]).toBe(FALAS.voltei);
+  });
+
+  it("jogo com ponte em erro mostra o detalhe e sai quando volta", async () => {
+    const m = montar(true);
+    await m.c.aoTextoTranscrito("Vard, modo jogo", false);
+    await m.c.aoTextoTranscrito("confirmo", false);
+    await m.c.aoStatusPonte({ modo: "erro", detalhe: "LM Studio não respondeu" });
+    expect(m.c.estado).toBe("erro");
+    expect(m.c.detalhe).toBe("LM Studio não respondeu");
+    await m.c.aoStatusPonte({ modo: "ligado" });
+    expect(m.abrirMicrofone).toHaveBeenCalledOnce();
+    expect(m.c.estado).toBe("repouso");
+  });
+
+  it("confirmacao_so_sim: 'simples' não ativa o modo jogo", async () => {
+    const m = montar(true);
+    await m.c.aoTextoTranscrito("Vard, modo jogo", false);
+    await m.c.aoTextoTranscrito("simples", false);
+    expect(m.ponte.modo).not.toHaveBeenCalled();
+    expect(m.c.estado).toBe("repouso");
+    await m.c.aoTextoTranscrito("sim", false); // a confirmação já expirou
+    expect(m.ponte.modo).not.toHaveBeenCalled();
+  });
+
+  it("ponte que falha ao ligar o jogo fala modo_falhou e segue ouvindo", async () => {
+    const m = montar(true);
+    m.ponte.modo.mockResolvedValue(false);
+    await m.c.aoTextoTranscrito("Vard, modo jogo", false);
+    await m.c.aoTextoTranscrito("sim", false);
+    expect(m.falas[m.falas.length - 1]).toBe(FALAS.erros.modo_falhou);
+    expect(m.c.estado).toBe("repouso");
+    expect(m.fecharMicrofone).not.toHaveBeenCalled();
+  });
+});

@@ -61,8 +61,42 @@ export function criarServidor({ log = () => {} } = {}) {
   });
 }
 
+/** Ponte falsa do Vard (porta 4700 no uso real): /status, /see, /modo e /events. Guarda a origem e o modo em `estado`. */
+export function criarPonteFalsa({ estado = { modo: "ligado", pedidos: [] } } = {}) {
+  const srv = http.createServer(async (req, res) => {
+    const caminho = new URL(req.url, "http://x").pathname;
+    const origem = req.headers.origin;
+    const cors = { ...CORS, ...(origem ? { "Access-Control-Allow-Origin": origem } : {}) };
+    const json = (obj, status = 200) => { res.writeHead(status, { "Content-Type": "application/json", ...cors }); res.end(JSON.stringify(obj)); };
+    if (req.method === "OPTIONS") { res.writeHead(204, cors); res.end(); return; }
+    if (caminho === "/status") return json({ openjarvis: true, lmstudio: true, modelo: "falso", modo: estado.modo });
+    if (req.method === "POST" && caminho === "/see") {
+      const corpo = await lerCorpo(req);
+      estado.pedidos.push({ caminho, bytes: corpo.length, jpeg: corpo.includes(Buffer.from([0xff, 0xd8])) });
+      if (estado.erroVer) return json({ erro: estado.erroVer }, 503);
+      return json({ resposta: "Um editor de código aberto.", nuvem: false });
+    }
+    if (req.method === "POST" && caminho === "/modo") {
+      const { modo } = JSON.parse((await lerCorpo(req)).toString("utf8") || "{}");
+      estado.pedidos.push({ caminho, modo, origem });
+      if (modo === "jogo") estado.modo = "jogo";
+      if (modo === "voltar") estado.modo = "ligado";
+      return json({ ok: true, pid: 1 });
+    }
+    if (caminho === "/events") {
+      res.writeHead(200, { "Content-Type": "text/event-stream", ...cors });
+      res.write(["event: ping", "data: {}", "", ""].join(String.fromCharCode(10)));
+      return;
+    }
+    json({ detail: "Not Found" }, 404);
+  });
+  srv.estado = estado;
+  return srv;
+}
+
 if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
   const porta = Number(process.env.PORTA ?? 8765);
+  if (process.env.PONTE) criarPonteFalsa().listen(Number(process.env.PONTE), "127.0.0.1", () => console.log(`ponte falsa em http://127.0.0.1:${process.env.PONTE}`));
   criarServidor({ log: (m, c) => console.log(m, c) }).listen(porta, "127.0.0.1", () => {
     console.log(`servidor falso em http://127.0.0.1:${porta}`);
   });

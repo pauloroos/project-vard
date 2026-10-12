@@ -1,12 +1,14 @@
 /// <reference types="vite/client" />
+import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { carregarConfig } from "./config/config";
-import { abrirMicrofone, definirMudo, estaMudo, onAmostras, rmsAtual, taxaAtual } from "./audio/microfone";
+import { abrirMicrofone, definirMudo, fecharMicrofone, estaMudo, onAmostras, rmsAtual, taxaAtual } from "./audio/microfone";
 import { DetectorDeVoz } from "./audio/vad";
 import { pcmParaWav, reamostrar } from "./audio/wav";
 import { Boca } from "./audio/boca";
 import { falaFixa } from "./audio/cache";
 import { OpenJarvis } from "./api/openjarvis";
+import { Ponte } from "./api/ponte";
 import { Conversa } from "./fala/conversa";
 import { FALAS } from "./fala/falas";
 import { Hud } from "./ui/hud";
@@ -23,9 +25,11 @@ window.addEventListener("DOMContentLoaded", async () => {
   nucleo.iniciar();
   let interromperTudo = () => {};
   let alternarMicrofone: () => Promise<void> = async () => {};
+  let olharTela = () => {};
   const hud = new Hud(cfg, app, {
     aoMudo: () => { void alternarMicrofone(); },
     aoInterromper: () => interromperTudo(),
+    aoTela: () => olharTela(),
   });
   hud.dica("clique para ligar o ouvido");
 
@@ -61,6 +65,10 @@ window.addEventListener("DOMContentLoaded", async () => {
   let ocupado = false; // transcrevendo ou pensando: ignora novos eventos do VAD
   let estavaFalando = false;
 
+  // Ponte opcional do Vard: sem ela o HUD funciona igual, só sem o botão Tela e sem modo jogo.
+  const ponte = new Ponte(cfg.ponte_url);
+  let ponteNoAr = false;
+  const espera = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
   const fixa = (t: string) => falaFixa(t, cfg.voz, () => oj.sintetizar(t, cfg.voz, cfg.velocidade));
 
   const conversa = new Conversa({
@@ -73,7 +81,26 @@ window.addEventListener("DOMContentLoaded", async () => {
       estavaFalando = e === "falando";
     },
     aoResposta: (t) => hud.setResposta(t),
+    ponte, ponteNoAr: () => ponteNoAr,
+    // Indicador vermelho por ~1 s antes de capturar; a captura é direta (sem compartilhamento).
+    antesDaCaptura: async () => { hud.setIndicadorTela(true); await espera(1000); },
+    capturar: async () => {
+      try { return await invoke<string>("capturar_tela"); } finally { hud.setIndicadorTela(false); }
+    },
+    abrirMicrofone: () => alternarMicrofone(),
+    fecharMicrofone: () => fecharTudoDoMicrofone(),
   });
+  olharTela = () => { void conversa.aoTextoTranscrito("olha a tela", true); };
+
+  // Status da ponte a cada 10 s: mostra/esconde o botão Tela e acompanha o modo jogo. Nunca trava a conversa.
+  const sondarPonte = async () => {
+    const st = await ponte.status();
+    ponteNoAr = st !== null;
+    hud.setPonte(ponteNoAr);
+    try { await conversa.aoStatusPonte(st); } catch (erro) { console.warn("status da ponte falhou", erro); }
+  };
+  void sondarPonte();
+  setInterval(() => { void sondarPonte(); }, 10000);
 
   // Saúde do OpenJarvis a cada 5 s; na primeira vez com fala no ar, aquece o cache das falas fixas.
   let aquecido = false;
@@ -146,6 +173,21 @@ window.addEventListener("DOMContentLoaded", async () => {
   };
 
   let ligado = false;
+  let relogioVad = 0;
+  let largarAmostras: (() => void) | null = null;
+  // Modo jogo: solta o microfone de verdade (a GPU e o ouvido ficam livres); alternarMicrofone reabre sozinho depois.
+  const fecharTudoDoMicrofone = () => {
+    if (!ligado) return;
+    clearInterval(relogioVad);
+    largarAmostras?.(); largarAmostras = null;
+    bocaReal?.parar(); bocaReal = null;
+    nucleo.setAnalisadores(null, null);
+    fecharMicrofone();
+    ligado = false;
+    capturando = false; pcm = []; anel = []; anelAmostras = 0; pttSegurado = false;
+    detector.reset();
+    hud.setMudo(true);
+  };
   // Botão Mudo e duplo clique no núcleo: a primeira vez abre o microfone; depois só muda o mudo.
   alternarMicrofone = async () => {
     if (ligado) { const novo = !estaMudo(); definirMudo(novo); hud.setMudo(novo); return; }
@@ -153,13 +195,14 @@ window.addEventListener("DOMContentLoaded", async () => {
       const mic = await abrirMicrofone();
       if (ligado) return;
       ligado = true;
+      definirMudo(false);
       hud.setMudo(false);
       bocaReal = new Boca(mic.contexto);
       hud.setTaxa(mic.contexto.sampleRate);
       hud.setEstado(conversa.estado, conversa.detalhe);
       nucleo.setAnalisadores(mic.analisador, bocaReal.analisador);
-      onAmostras(guardarAmostras);
-      setInterval(() => {
+      largarAmostras = onAmostras(guardarAmostras);
+      relogioVad = window.setInterval(() => {
         if (boca.falando || ocupado || pttSegurado || estaMudo()) { detector.reset(); return; }
         const ev = detector.alimentar(rmsAtual(), performance.now());
         if (ev === "inicio") comecarCaptura();

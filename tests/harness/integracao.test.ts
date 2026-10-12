@@ -1,8 +1,9 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import type { AddressInfo } from "node:net";
 // @ts-expect-error módulo .mjs sem tipos
-import { criarServidor } from "./servidor-falso.mjs";
+import { criarServidor, criarPonteFalsa } from "./servidor-falso.mjs";
 import { OpenJarvis } from "../../src/api/openjarvis";
+import { Ponte } from "../../src/api/ponte";
 import { Conversa } from "../../src/fala/conversa";
 import { CONFIG_PADRAO } from "../../src/config/config";
 import { pcmParaWav } from "../../src/audio/wav";
@@ -53,5 +54,33 @@ describe("Conversa com OpenJarvis contra o servidor falso", () => {
     form.append("file", new Blob([new ArrayBuffer(8)], { type: "audio/wav" }), "fala.wav");
     const r = await fetch(`http://127.0.0.1:${porta}/v1/speech/transcribe`, { method: "POST", body: form, headers: { "X-Texto-Falso": "abre o youtube" } });
     expect((await r.json()).text).toBe("abre o youtube");
+  });
+});
+
+describe("Ponte do Vard contra a ponte falsa", () => {
+  let srv: ReturnType<typeof criarPonteFalsa>;
+  let ponte: Ponte;
+  beforeAll(async () => {
+    srv = criarPonteFalsa();
+    await new Promise<void>((r) => srv.listen(0, "127.0.0.1", r));
+    ponte = new Ponte(`http://127.0.0.1:${(srv.address() as AddressInfo).port}`);
+  });
+  afterAll(() => new Promise<void>((r) => srv.close(() => r())));
+
+  it("status, ver e modo", async () => {
+    expect(await ponte.status()).toEqual({ ok: true, modo: "ligado", detalhe: undefined });
+    expect(await ponte.ver("/9j/4AAQ", "o que está na tela?")).toBe("Um editor de código aberto.");
+    expect(srv.estado.pedidos[0].jpeg).toBe(true);
+    expect(await ponte.modo("jogo")).toBe(true);
+    expect((await ponte.status())?.modo).toBe("jogo");
+  });
+
+  it("503 vira ErroPonte com o código", async () => {
+    srv.estado.erroVer = "modelo_fora";
+    await expect(ponte.ver("/9j/4AAQ", "?")).rejects.toMatchObject({ codigo: "modelo_fora" });
+  });
+
+  it("ponte ausente: status null", async () => {
+    expect(await new Ponte("http://127.0.0.1:1").status()).toBeNull();
   });
 });

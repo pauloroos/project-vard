@@ -5,7 +5,7 @@ import type { Estado } from "../fala/conversa";
 
 const ROTULO: Record<Estado, string> = {
   repouso: "pronto", ouvindo: "ouvindo", pensando: "pensando", falando: "falando",
-  jogo: "modo jogo", erro: "atenção", fora: "núcleo offline",
+  jogo: "MODO JOGO", erro: "atenção", fora: "núcleo offline",
 };
 
 const ICONES = {
@@ -14,6 +14,7 @@ const ICONES = {
   parar: '<svg viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>',
   texto: '<svg viewBox="0 0 24 24"><path d="M4 5h16v11H9l-5 4z"/></svg>',
   topo: '<svg viewBox="0 0 24 24"><path d="M12 21v-9M8 8l4-4 4 4M5 4h14"/></svg>',
+  tela: '<svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg>',
   compacto: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><circle cx="12" cy="12" r="8"/></svg>',
 };
 
@@ -21,6 +22,8 @@ export interface AcoesHud {
   /** Botão do microfone: quem decide se abre ou muda o mudo é o main, que devolve o estado por setMudo. */
   aoMudo?: () => void;
   aoInterromper?: () => void;
+  /** Botão Tela (só existe com a ponte do Vard): pergunta o que está na tela. */
+  aoTela?: () => void;
 }
 
 /** Linha de estado, última resposta e barra de comandos (cinco ícones). Só DOM, sem regra de negócio. */
@@ -40,18 +43,22 @@ export class Hud {
   private botaoMudo: HTMLButtonElement;
   private botaoModo: HTMLButtonElement;
   private botaoTopoEl: HTMLButtonElement;
+  private botaoTela: HTMLButtonElement;
 
   constructor(private cfg: Config, private raiz: HTMLElement, private acoes: AcoesHud = {}) {
     const q = (id: string) => raiz.querySelector<HTMLElement>(`#${id}`)!;
     this.linha = q("dica"); this.botoes = q("botoes"); this.respostaEl = q("resposta");
     this.botaoMudo = this.botao(ICONES.micMudo, "Microfone: ligar ou desligar", () => this.acoes.aoMudo?.());
     this.botaoMudo.classList.add("ativo");
+    this.botaoTela = this.botao(ICONES.tela, "Olhar a tela", () => this.acoes.aoTela?.());
+    this.botaoTela.hidden = true; // aparece quando a ponte responde
     this.botaoModo = this.botao(ICONES.compacto, "Compacto", () => this.alternarModo());
     this.botaoTopoEl = this.botao(ICONES.topo, "", () => { void this.alternarTopo(); });
     this.rotuloTopo();
     this.botoes.append(
       this.botaoMudo,
       this.botao(ICONES.parar, "Interromper a fala", () => this.acoes.aoInterromper?.()),
+      this.botaoTela,
       this.botao(ICONES.texto, "Abrir a conversa em texto", () => { void invoke("abrir_url", { url: cfg.gui_url }); }),
       this.botaoTopoEl,
       this.botaoModo,
@@ -96,6 +103,11 @@ export class Hud {
     this.raiz.classList.toggle("compacto", this.compacto);
     this.botaoModo.title = this.compacto ? "Expandir" : "Compacto";
   }
+
+  /** Mostra ou esconde o botão Tela conforme a ponte do Vard responde. */
+  setPonte(noAr: boolean) { this.botaoTela.hidden = !noAr; }
+  /** Indicador vermelho: a tela está prestes a ser capturada. */
+  setIndicadorTela(ligado: boolean) { this.raiz.classList.toggle("capturando", ligado); }
 
   setEstado(e: Estado, detalhe = "") { this.estado = e; this.detalhe = detalhe; this.pintar(); }
   setOuvido(t: string) { this.ouvido = t; this.pintar(); }
