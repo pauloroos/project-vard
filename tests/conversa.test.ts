@@ -75,7 +75,7 @@ describe("conversa", () => {
   it("fala desligada no OpenJarvis mostra ajuda", async () => {
     await c.aoHealth(true, false);
     expect(c.estado).toBe("erro");
-    expect(c.detalhe).toContain("fala");
+    expect(c.detalhe).toContain("voz");
   });
   it("erro do agente vira fala fixa curta, sem texto técnico", async () => {
     oj.perguntar.mockRejectedValue(new Error("HTTP 500 <html>"));
@@ -87,5 +87,29 @@ describe("conversa", () => {
     c.interromper();
     expect(boca.parar).toHaveBeenCalled();
     expect(c.estado).toBe("repouso");
+  });
+});
+
+describe("interromper cancela a pergunta em voo", () => {
+  it("resposta tardia não é falada nem entra no histórico", async () => {
+    const WAV2 = new ArrayBuffer(8);
+    let liberar!: (t: string) => void;
+    const oj = {
+      perguntar: vi.fn().mockImplementation(() => new Promise<string>((r) => { liberar = r; })),
+      sintetizar: vi.fn().mockResolvedValue(WAV2),
+    };
+    const boca = { falando: false, tocar: vi.fn().mockResolvedValue(undefined), parar: vi.fn() };
+    const estados: string[] = [];
+    const c = new Conversa({ oj, boca, config: CONFIG_PADRAO, falas: async () => WAV2, aoEstado: (e) => estados.push(e) });
+    const p = c.aoTextoTranscrito("Vard, oi", false);
+    await Promise.resolve();
+    c.interromper();
+    liberar("resposta atrasada");
+    await p;
+    expect(boca.tocar).not.toHaveBeenCalled();
+    expect(oj.sintetizar).not.toHaveBeenCalled();
+    expect(c.historico.length).toBe(0);
+    expect(c.estado).toBe("repouso");
+    expect(estados).toEqual(["pensando", "repouso"]);
   });
 });

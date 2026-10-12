@@ -1,7 +1,42 @@
+:root {
+  --ciano: #00f0ff;
+  --brilho: #00a2ff;
+  --mono: "JetBrains Mono", Consolas, monospace;
+}
 html, body { background: transparent; margin: 0; overflow: hidden; }
-#app { width: 320px; height: 360px; display: flex; flex-direction: column; align-items: center; justify-content: flex-start; }
-#nucleo { display: block; cursor: pointer; }
-#dica { font: 12px system-ui, sans-serif; color: #f2b134; opacity: 0.85; margin-top: 2px; width: 300px; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-#botoes { display: flex; gap: 6px; margin-top: 4px; }
-#botoes button { font: 11px system-ui, sans-serif; color: #f2b134; background: rgba(20, 20, 20, 0.7); border: 1px solid #f2b134; border-radius: 10px; padding: 1px 8px; cursor: pointer; }
-#botoes button:hover { background: rgba(242, 177, 52, 0.2); }
+
+/* Sem painel, sem vidro: só o vórtice flutuando. A janela inteira (inclusive a parte vazia) arrasta. */
+#app {
+  position: relative; width: 320px; height: 360px; background: transparent;
+  font-family: var(--mono); text-transform: uppercase; letter-spacing: 0.14em; color: var(--ciano);
+  user-select: none;
+}
+#nucleo { position: absolute; left: 0; top: 0; display: block; cursor: move; }
+
+#dica {
+  position: absolute; left: 12px; right: 12px; top: 282px; text-align: center;
+  font-size: 8px; line-height: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  text-shadow: 0 0 6px var(--brilho), 0 0 12px var(--brilho); opacity: 0.9;
+}
+#resposta {
+  position: absolute; left: 24px; right: 24px; top: 297px; text-align: center;
+  font-size: 7px; line-height: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  letter-spacing: 0.08em; opacity: 0; transition: opacity 1.2s ease;
+}
+#resposta.visivel { opacity: 0.6; transition: opacity 0.2s ease; }
+
+#botoes {
+  position: absolute; left: 0; right: 0; top: 322px; display: flex; justify-content: center; gap: 6px;
+  opacity: 0.4; transition: opacity 0.2s ease;
+}
+#app:hover #botoes { opacity: 1; }
+#botoes button {
+  width: 24px; height: 24px; padding: 0; display: flex; align-items: center; justify-content: center; cursor: pointer;
+  color: var(--ciano); background: rgba(0, 240, 255, 0.06); border: 1px solid rgba(0, 240, 255, 0.35); border-radius: 50%;
+}
+#botoes button svg { width: 13px; height: 13px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; pointer-events: none; }
+#botoes button:hover { background: rgba(0, 240, 255, 0.22); box-shadow: 0 0 8px var(--brilho); }
+#botoes button.ativo { color: #ff6060; border-color: rgba(255, 96, 96, 0.7); }
+
+/* compacto: some o texto, ficam o núcleo e os botões */
+#app.compacto #dica, #app.compacto #resposta { display: none; }

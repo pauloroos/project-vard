@@ -73,6 +73,7 @@ async function abrirDeVerdade(): Promise<Microfone> {
   analisador.smoothingTimeConstant = 0.8;
   fonte.connect(analisador);
   atual = { contexto, analisador, fonte, stream };
+  if (mudoPedido) stream.getAudioTracks().forEach((t) => { t.enabled = false; });
   bufferRms = new Float32Array(analisador.fftSize);
   await ligarGravador(atual);
   return atual;
@@ -103,3 +104,13 @@ export function rmsAtual(): number {
   for (let i = 0; i < bufferRms.length; i++) soma += bufferRms[i] * bufferRms[i];
   return Math.sqrt(soma / bufferRms.length);
 }
+
+let mudoPedido = false;
+
+/** Mudo: desliga as faixas do microfone (o contexto e a boca continuam vivos). Vale também para um microfone aberto depois. */
+export function definirMudo(mudo: boolean): void {
+  mudoPedido = mudo;
+  atual?.stream.getAudioTracks().forEach((t) => { t.enabled = !mudo; });
+}
+
+export function estaMudo(): boolean { return mudoPedido; }

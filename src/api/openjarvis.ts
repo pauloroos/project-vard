@@ -1,9 +1,11 @@
 import type { Mensagem } from "../fala/conversa";
 
-async function comTimeout<T>(ms: number, f: (sinal: AbortSignal) => Promise<T>): Promise<T> {
+async function comTimeout<T>(ms: number, f: (sinal: AbortSignal) => Promise<T>, externo?: AbortSignal): Promise<T> {
   const ac = new AbortController();
   const t = setTimeout(() => ac.abort(), ms);
-  try { return await f(ac.signal); } finally { clearTimeout(t); }
+  const repassar = () => ac.abort();
+  if (externo?.aborted) ac.abort(); else externo?.addEventListener("abort", repassar);
+  try { return await f(ac.signal); } finally { clearTimeout(t); externo?.removeEventListener("abort", repassar); }
 }
 
 export class OpenJarvis {
@@ -50,7 +52,7 @@ export class OpenJarvis {
     return this.modelo;
   }
 
-  async perguntar(mensagens: Mensagem[]): Promise<string> {
+  async perguntar(mensagens: Mensagem[], externo?: AbortSignal): Promise<string> {
     const model = await this.idModelo();
     return comTimeout(90000, async (signal) => {
       const r = await fetch(`${this.base}/v1/chat/completions`, {
@@ -60,7 +62,7 @@ export class OpenJarvis {
       if (!r.ok) throw new Error(`perguntar HTTP ${r.status}`);
       const j = await r.json();
       return String(j?.choices?.[0]?.message?.content ?? "");
-    });
+    }, externo);
   }
 
   async sintetizar(texto: string, voz: string, velocidade: number): Promise<ArrayBuffer> {

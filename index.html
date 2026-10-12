@@ -4,14 +4,15 @@
     <meta charset="UTF-8" />
     <link rel="stylesheet" href="/src/styles.css" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>OpenJarvis HUD</title>
+    <title>Vard</title>
     <script type="module" src="/src/main.ts" defer></script>
   </head>
   <body>
     <div id="app" data-tauri-drag-region>
-      <canvas id="nucleo"></canvas>
-      <div id="dica">clique para ligar o ouvido</div>
-      <div id="botoes"></div>
+      <canvas id="nucleo" data-tauri-drag-region></canvas>
+      <div id="dica" data-tauri-drag-region>toque duas vezes no núcleo para ouvir</div>
+      <div id="resposta" data-tauri-drag-region></div>
+      <div id="botoes" data-tauri-drag-region></div>
     </div>
   </body>
 </html>
