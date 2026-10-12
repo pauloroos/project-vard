@@ -1,0 +1,3 @@
+html, body { background: transparent; margin: 0; overflow: hidden; }
+#app { width: 320px; height: 360px; display: flex; align-items: center; justify-content: center; }
+.provisorio { width: 120px; height: 120px; background: #f5a524; border-radius: 16px; pointer-events: none; }
