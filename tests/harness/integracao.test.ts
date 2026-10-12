@@ -2,9 +2,9 @@ import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
 import type { AddressInfo } from "node:net";
 // @ts-expect-error módulo .mjs sem tipos
 import { criarServidor, criarPonteFalsa, criarVozFalsa } from "./servidor-falso.mjs";
-import { OpenJarvis } from "../../src/api/openjarvis";
-import { Ponte } from "../../src/api/ponte";
-import { Voz } from "../../src/api/voz";
+import { OpenJarvis } from "../../src/conectores/openjarvis/cliente";
+import { Ponte } from "../../src/conectores/ponte/cliente";
+import { Voz } from "../../src/conectores/voz/cliente";
 import { Conversa } from "../../src/fala/conversa";
 import { CONFIG_PADRAO } from "../../src/config/config";
 import { pcmParaWav } from "../../src/audio/wav";

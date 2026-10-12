@@ -73,7 +73,7 @@ fn criar_bandeja(app: &AppHandle, no_topo: bool) -> tauri::Result<()> {
 
     let topo_ref = topo.clone();
     let mut b = TrayIconBuilder::with_id("hud")
-        .tooltip("OpenJarvis HUD")
+        .tooltip("Vard")
         .menu(&menu)
         .on_menu_event(move |app, ev| match ev.id().as_ref() {
             "mostrar" => alternar_visibilidade(app),
@@ -130,5 +130,5 @@ pub fn run() {
             Ok(())
         })
         .run(tauri::generate_context!())
-        .expect("erro ao executar o openjarvis-hud");
+        .expect("erro ao executar o Vard");
 }

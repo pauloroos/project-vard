@@ -1,7 +1,7 @@
 [package]
-name = "openjarvis-hud"
+name = "vard"
 version = "0.1.0"
-description = "Widget de voz flutuante para o OpenJarvis"
+description = "Vard: interface de voz local para assistentes"
 authors = ["Paulo Roos"]
 edition = "2024"
 

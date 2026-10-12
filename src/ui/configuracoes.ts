@@ -1,7 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import type { Config } from "../config/config";
 import { avisosDeUrl, salvarConfig, urlLocal } from "../config/config";
-import type { OpenJarvis } from "../api/openjarvis";
+import type { OpenJarvis } from "../conectores/openjarvis/cliente";
 
 export interface DepsConfiguracoes {
   /** Cria um cliente do OpenJarvis para o endereço digitado (o main decide se passa pelo proxy do dev). */

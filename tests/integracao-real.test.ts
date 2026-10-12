@@ -2,7 +2,7 @@
 // Opcionais: HUD_REAL_URL (padrão http://127.0.0.1:8000) e HUD_REAL_WAV (um WAV falado dizendo "Preflight").
 import { describe, it, expect } from "vitest";
 import { readFileSync, existsSync } from "node:fs";
-import { OpenJarvis } from "../src/api/openjarvis";
+import { OpenJarvis } from "../src/conectores/openjarvis/cliente";
 
 const real = process.env.HUD_REAL === "1";
 const url = process.env.HUD_REAL_URL ?? "http://127.0.0.1:8000";

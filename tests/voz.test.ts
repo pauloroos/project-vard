@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { ErroVoz, Voz } from "../src/api/voz";
+import { ErroVoz, Voz } from "../src/conectores/voz/cliente";
 
 type Init = RequestInit;
 

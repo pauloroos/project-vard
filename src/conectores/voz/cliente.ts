@@ -1,5 +1,5 @@
 // Serviço de voz próprio e opcional (contrato em docs/voz-propria.md): POST /falar devolve PCM 16 bits em fluxo.
-import { fluxoParaWav } from "../audio/wav";
+import { fluxoParaWav } from "../../audio/wav";
 
 /** Falha do serviço de voz. `conexao` = nem respondeu (fora do ar, caiu no meio ou passou do prazo). */
 export class ErroVoz extends Error {

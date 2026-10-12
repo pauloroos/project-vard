@@ -3,7 +3,7 @@ import type { FalaEmFluxo, Mensagem } from "../src/fala/conversa";
 import { Conversa } from "../src/fala/conversa";
 import { FALAS } from "../src/fala/falas";
 import { CONFIG_PADRAO } from "../src/config/config";
-import { ErroVoz } from "../src/api/voz";
+import { ErroVoz } from "../src/conectores/voz/cliente";
 
 const WAV = new ArrayBuffer(8);
 

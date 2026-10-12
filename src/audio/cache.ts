@@ -1,6 +1,6 @@
-// Falas fixas: IndexedDB "openjarvis-hud" / store "falas", chave "origem|voz|texto" (origem "voz" ou "oj").
+// Falas fixas: IndexedDB "vard" / store "falas", chave "origem|voz|texto" (origem "voz" ou "oj").
 // Qualquer erro do IndexedDB cai para sintetizar sem cache; nunca derruba o ciclo.
-const BANCO = "openjarvis-hud";
+const BANCO = "vard";
 const LOJA = "falas";
 
 function abrir(): Promise<IDBDatabase> {

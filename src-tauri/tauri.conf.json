@@ -1,8 +1,9 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "openjarvis-hud",
+  "productName": "Vard",
+  "mainBinaryName": "vard",
   "version": "0.1.0",
-  "identifier": "io.github.openjarvishud",
+  "identifier": "io.github.pauloroos.vard",
   "build": {
     "beforeDevCommand": "npm run dev",
     "devUrl": "http://localhost:1420",
@@ -14,7 +15,7 @@
     "windows": [
       {
         "label": "hud",
-        "title": "OpenJarvis HUD",
+        "title": "Vard",
         "width": 320,
         "height": 360,
         "decorations": false,
@@ -31,8 +32,8 @@
   },
   "bundle": {
     "active": true,
-    "publisher": "openjarvis-hud contributors",
-    "copyright": "Copyright (c) 2026 openjarvis-hud contributors",
+    "publisher": "Project Vard",
+    "copyright": "Copyright (c) 2026 Project Vard",
     "targets": ["msi", "nsis"],
     "icon": ["icons/32x32.png", "icons/128x128.png", "icons/128x128@2x.png", "icons/icon.icns", "icons/icon.ico"],
     "windows": {

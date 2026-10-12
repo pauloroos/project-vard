@@ -1,8 +1,8 @@
-# openjarvis-hud
+# Vard
 
-[Leia em português](README.md)
+[Leia em português](README.md) · [Repository](https://github.com/pauloroos/project-vard)
 
-A floating voice widget for [OpenJarvis](https://github.com/open-jarvis/OpenJarvis), built with Tauri 2. A transparent, frameless, always-on-top window with a cyan core that reacts to your voice: you speak, it transcribes, OpenJarvis answers and the answer is spoken back.
+Vard is a local voice interface (floating widget) for assistants; the first connector is [OpenJarvis](https://github.com/open-jarvis/OpenJarvis). Built with Tauri 2. A transparent, frameless, always-on-top window with a cyan core that reacts to your voice: you speak, it transcribes, OpenJarvis answers and the answer is spoken back.
 
 ![HUD idle](docs/captura-repouso.png) ![HUD speaking](docs/captura-falando.png)
 
@@ -31,8 +31,8 @@ Independent project, not affiliated with OpenJarvis or Stanford.
 
 Download the installer from the releases page and run one of them:
 
-- `openjarvis-hud_0.1.0_x64-setup.exe` (NSIS): per-user, no administrator needed. Silent: `openjarvis-hud_0.1.0_x64-setup.exe /S`. Installs to `%LOCALAPPDATA%\openjarvis-hud\`.
-- `openjarvis-hud_0.1.0_x64_en-US.msi` (WiX): per-machine, needs administrator. Silent: `msiexec /i openjarvis-hud_0.1.0_x64_en-US.msi /qn`.
+- `Vard_0.1.0_x64-setup.exe` (NSIS): per-user, no administrator needed. Silent: `Vard_0.1.0_x64-setup.exe /S`. Installs to `%LOCALAPPDATA%\Vard\`.
+- `Vard_0.1.0_x64_en-US.msi` (WiX): per-machine, needs administrator. Silent: `msiexec /i Vard_0.1.0_x64_en-US.msi /qn`.
 
 To build it yourself: `npm install` and `npm run tauri build` (installers land in `src-tauri/target/release/bundle/`).
 
@@ -58,7 +58,7 @@ Microphone mute, stop, look at the screen (bridge only), open the text conversat
 
 ## Configure
 
-Use the gear on the HUD or **Configurações** in the tray menu. The panel covers every field of `hud.config.json` (if the file becomes unreadable the HUD starts with the defaults and keeps the original as `hud.config.json.invalido`; in `%APPDATA%\io.github.openjarvishud\`):
+Use the gear on the HUD or **Configurações** in the tray menu. The panel covers every field of `hud.config.json` (if the file becomes unreadable the HUD starts with the defaults and keeps the original as `hud.config.json.invalido`; in `%APPDATA%\io.github.pauloroos.vard\`):
 
 | Field | Default | Purpose |
 | --- | --- | --- |
@@ -75,7 +75,7 @@ Use the gear on the HUD or **Configurações** in the tray menu. The panel cover
 | `atalhos` | see above | Global shortcuts |
 | `instrucao_formato` | short answers | Instruction sent with every question |
 
-URLs outside `127.0.0.1` or `localhost` raise a warning (the HUD sends what you say and, with the bridge, images of your screen; keep everything on your own machine). **Iniciar com o Windows** creates or removes `openjarvis-hud.lnk` in your user Startup folder. **Testar OpenJarvis** checks the server and speech.
+URLs outside `127.0.0.1` or `localhost` raise a warning (the HUD sends what you say and, with the bridge, images of your screen; keep everything on your own machine). **Iniciar com o Windows** creates or removes `Vard.lnk` in your user Startup folder. **Testar OpenJarvis** checks the server and speech.
 
 ## Own voice (optional)
 
@@ -102,6 +102,10 @@ nothing changes on screen. The full contract is in [docs/voz-propria.md](docs/vo
 - **Microphone**: if the HUD says the microphone is blocked, allow it under Windows Settings, Privacy, Microphone, then double-click the core again. If it clips the start of sentences or picks up noise, tune `limiar_vad`.
 - **The Text button shows nothing useful**: OpenJarvis' text interface is not running at `gui_url`. Start it with `jarvis gui --no-server --no-browser`.
 - **A shortcut does nothing**: another program already owns the combination. Change it in the panel and restart the HUD.
+
+## Connectors
+
+Vard talks to assistants through connectors. Today there is only one, OpenJarvis (`src/conectores/openjarvis/cliente.ts`). Others are welcome: implement the `Conector` interface in `src/conectores/conector.ts` (`saude`, `modelos`, `transcrever`, `perguntar`, `sintetizar`).
 
 ## Development
 

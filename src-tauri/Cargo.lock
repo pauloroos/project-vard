@@ -3281,21 +3281,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "openjarvis-hud"
-version = "0.1.0"
-dependencies = [
- "base64 0.23.1",
- "image",
- "serde",
- "serde_json",
- "tauri",
- "tauri-build",
- "tauri-plugin-global-shortcut",
- "tauri-plugin-opener",
- "xcap",
-]
-
-[[package]]
 name = "option-ext"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5318,6 +5303,21 @@ dependencies = [
  "aligned-vec",
  "num-traits",
  "wasm-bindgen",
+]
+
+[[package]]
+name = "vard"
+version = "0.1.0"
+dependencies = [
+ "base64 0.23.1",
+ "image",
+ "serde",
+ "serde_json",
+ "tauri",
+ "tauri-build",
+ "tauri-plugin-global-shortcut",
+ "tauri-plugin-opener",
+ "xcap",
 ]
 
 [[package]]

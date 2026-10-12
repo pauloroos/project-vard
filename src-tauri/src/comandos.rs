@@ -81,7 +81,7 @@ pub fn atalho_logon_em(appdata: &Path) -> PathBuf {
         .join("Start Menu")
         .join("Programs")
         .join("Startup")
-        .join("openjarvis-hud.lnk")
+        .join("Vard.lnk")
 }
 
 fn atalho_logon() -> Result<PathBuf, String> {
@@ -95,7 +95,7 @@ pub fn inicio_no_logon_ativo() -> bool {
     atalho_logon().map(|p| p.exists()).unwrap_or(false)
 }
 
-/// Cria ou remove o atalho `openjarvis-hud.lnk` na pasta Startup (WScript.Shell via PowerShell, sem janela).
+/// Cria ou remove o atalho `Vard.lnk` na pasta Startup (WScript.Shell via PowerShell, sem janela).
 #[tauri::command]
 pub fn definir_inicio_no_logon(ligado: bool) -> Result<(), String> {
     let lnk = atalho_logon()?;
@@ -170,7 +170,7 @@ mod testes {
     #[test]
     fn atalho_logon_fica_na_pasta_startup() {
         let p = atalho_logon_em(Path::new("/dados"));
-        assert_eq!(p.file_name().unwrap(), "openjarvis-hud.lnk");
-        assert!(p.ends_with("Programs/Startup/openjarvis-hud.lnk"));
+        assert_eq!(p.file_name().unwrap(), "Vard.lnk");
+        assert!(p.ends_with("Programs/Startup/Vard.lnk"));
     }
 }

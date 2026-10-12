@@ -1,4 +1,5 @@
-import type { Mensagem } from "../fala/conversa";
+import type { Mensagem } from "../../fala/conversa";
+import type { Conector } from "../conector";
 
 async function comTimeout<T>(ms: number, f: (sinal: AbortSignal) => Promise<T>, externo?: AbortSignal): Promise<T> {
   const ac = new AbortController();
@@ -8,7 +9,7 @@ async function comTimeout<T>(ms: number, f: (sinal: AbortSignal) => Promise<T>, 
   try { return await f(ac.signal); } finally { clearTimeout(t); externo?.removeEventListener("abort", repassar); }
 }
 
-export class OpenJarvis {
+export class OpenJarvis implements Conector {
   private modelo: string | null = null;
   private base: string;
 
@@ -39,6 +40,13 @@ export class OpenJarvis {
       const j = await r.json();
       return String(j.text ?? "").trim();
     });
+  }
+
+  async modelos(): Promise<string[]> {
+    const r = await comTimeout(5000, (signal) => fetch(`${this.base}/v1/models`, { signal }));
+    if (!r.ok) throw new Error(`modelos HTTP ${r.status}`);
+    const j = await r.json();
+    return ((j?.data ?? []) as { id?: string }[]).map((m) => String(m.id ?? "")).filter(Boolean);
   }
 
   private async idModelo(): Promise<string> {
