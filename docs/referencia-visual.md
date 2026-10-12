@@ -1,4 +1,4 @@
-# Referência visual do openjarvis-hud (prompt do Paulo, 12/10/2026)
+# Referência visual do autor do openjarvis-hud (12/10/2026)
 
 Atue como um Engenheiro Frontend Sênior e UI/UX Designer especializado em interfaces de ficção científica (FUI/HUD).
 

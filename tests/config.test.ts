@@ -47,5 +47,6 @@ describe("urlLocal", () => {
     const a = avisosDeUrl({ ...CONFIG_PADRAO, ponte_url: "http://10.0.0.5:4700" });
     expect(a).toHaveLength(1);
     expect(a[0]).toContain("Ponte");
+    expect(avisosDeUrl({ ...CONFIG_PADRAO, ponte_url: "" })).toEqual([]); // vazio = ponte desligada
   });
 });

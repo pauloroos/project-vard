@@ -1,6 +1,6 @@
 // ÚNICA tabela de falas fixas. Nada técnico vai para a boca sem passar por aqui ou pela resposta do próprio Vard.
 export const FALAS = {
-  saudacao: "Oi, Paulo.",
+  saudacao: "Oi.",
   pensando: "Um momento.",
   telaNaoCompartilhada: "A tela não está compartilhada.",
   erroModelo: "Não consegui pensar nisso agora.",
@@ -25,3 +25,9 @@ export const FALAS = {
     origem_recusada: "Recusei um pedido estranho.",
   },
 };
+
+/** Saudação com o nome de quem usa (`usuario` da config); sem nome, só "Oi.". */
+export function saudacaoPara(usuario?: string): string {
+  const nome = (usuario ?? "").trim();
+  return nome ? `Oi, ${nome}.` : FALAS.saudacao;
+}

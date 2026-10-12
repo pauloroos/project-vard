@@ -61,8 +61,9 @@ Use the gear on the HUD or **Configurações** in the tray menu. The panel cover
 | --- | --- | --- |
 | `openjarvis_url` | `http://127.0.0.1:8000` | Where OpenJarvis is |
 | `gui_url` | `http://127.0.0.1:5173` | Text interface (Text button) |
-| `ponte_url` | `http://127.0.0.1:4700` | Optional bridge |
+| `ponte_url` | `http://127.0.0.1:4700` | Optional bridge (empty disables) |
 | `nome`, `variantes` | `vard` and similar spellings | Wake word |
+| `usuario` | empty | Name used in the greeting ("Oi, Ana."); empty says just "Oi." |
 | `idioma` | `pt` | Recognition language |
 | `voz`, `velocidade` | `pm_alex`, `1.05` | Speech voice and speed |
 | `finish_ms`, `limiar_vad` | `900`, `0.02` | Silence that ends an utterance and microphone sensitivity |

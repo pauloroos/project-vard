@@ -25,6 +25,7 @@ export class Ponte {
 
   /** null = ponte ausente (não respondeu em 5 s). `ok` = OpenJarvis e LM Studio no ar. */
   async status(): Promise<StatusPonte | null> {
+    if (!this.base) return null; // ponte_url vazio = ponte desligada
     try {
       return await comTimeout(5000, async (signal) => {
         const r = await fetch(`${this.base}/status`, { signal });

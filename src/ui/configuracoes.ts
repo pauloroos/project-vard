@@ -19,6 +19,7 @@ export class Configuracoes {
   private painel: HTMLElement;
   private msg!: HTMLElement;
   private logon!: HTMLInputElement;
+  private logonGuardado = false;
 
   constructor(private cfg: Config, painel: HTMLElement, private deps: DepsConfiguracoes) {
     this.painel = painel;
@@ -31,7 +32,8 @@ export class Configuracoes {
     this.desenhar();
     this.painel.hidden = false;
     this.deps.aoAlternar?.(true);
-    try { this.logon.checked = await invoke<boolean>("inicio_no_logon_ativo"); } catch { /* fora do Tauri */ }
+    try { this.logonGuardado = await invoke<boolean>("inicio_no_logon_ativo"); } catch { this.logonGuardado = false; /* fora do Tauri */ }
+    this.logon.checked = this.logonGuardado;
   }
 
   fechar() { this.painel.hidden = true; this.deps.aoAlternar?.(false); }
@@ -51,10 +53,11 @@ export class Configuracoes {
       <fieldset><legend>Endereços</legend>
         ${this.campo("openjarvis_url", "OpenJarvis", c.openjarvis_url)}
         ${this.campo("gui_url", "Interface de texto", c.gui_url)}
-        ${this.campo("ponte_url", "Ponte do Vard (opcional)", c.ponte_url)}
+        ${this.campo("ponte_url", "Ponte do Vard (opcional; vazio desliga)", c.ponte_url)}
       </fieldset>
       <fieldset><legend>Voz</legend>
         ${this.campo("nome", "Nome para chamar", c.nome)}
+        ${this.campo("usuario", "Como te chamar (opcional)", c.usuario)}
         ${this.campo("variantes", "Variantes (separadas por vírgula)", c.variantes.join(", "))}
         ${this.campo("idioma", "Idioma do reconhecimento", c.idioma)}
         ${this.campo("voz", "Voz da fala", c.voz)}
@@ -99,13 +102,15 @@ export class Configuracoes {
       return bruto !== "" && Number.isFinite(n) ? n : atual;
     };
     const txt = (id: string, atual: string) => this.el(id).value.trim() || atual;
+    // Campos opcionais: vazio é um valor válido (desliga a ponte, tira o nome, idioma automático).
+    const opc = (id: string) => this.el(id).value.trim();
     const c = this.cfg;
     return {
       ...c,
-      openjarvis_url: txt("openjarvis_url", c.openjarvis_url), gui_url: txt("gui_url", c.gui_url), ponte_url: txt("ponte_url", c.ponte_url),
-      nome: txt("nome", c.nome),
+      openjarvis_url: txt("openjarvis_url", c.openjarvis_url), gui_url: txt("gui_url", c.gui_url), ponte_url: opc("ponte_url"),
+      nome: txt("nome", c.nome), usuario: opc("usuario"),
       variantes: this.el("variantes").value.split(",").map((v) => v.trim()).filter(Boolean),
-      idioma: txt("idioma", c.idioma), voz: txt("voz", c.voz),
+      idioma: opc("idioma"), voz: txt("voz", c.voz),
       velocidade: num("velocidade", c.velocidade), finish_ms: num("finish_ms", c.finish_ms), limiar_vad: num("limiar_vad", c.limiar_vad),
       instrucao_formato: txt("instrucao_formato", c.instrucao_formato),
       sempre_no_topo: this.el("sempre_no_topo").checked, click_through: this.el("click_through").checked,
@@ -119,17 +124,21 @@ export class Configuracoes {
     const exigeReinicio = (["openjarvis_url", "ponte_url", "nome", "idioma", "voz", "velocidade", "finish_ms", "limiar_vad", "instrucao_formato"] as const)
       .some((k) => novo[k] !== this.cfg[k]) || JSON.stringify(novo.variantes) !== JSON.stringify(this.cfg.variantes)
       || JSON.stringify(novo.atalhos) !== JSON.stringify(this.cfg.atalhos);
-    try {
-      await salvarConfig(novo);
-      await invoke("definir_inicio_no_logon", { ligado: this.logon.checked });
-    } catch (erro) { this.dizer(`Não consegui salvar: ${String(erro)}`, true); return; }
+    try { await salvarConfig(novo); }
+    catch (erro) { this.dizer(`Não consegui salvar: ${String(erro)}`, true); return; }
     Object.assign(this.cfg, novo);
+    // O atalho de início só é mexido quando a caixa mudou (evita regravar o .lnk a cada Salvar).
+    let falhouAtalho = false;
+    if (this.logon.checked !== this.logonGuardado) {
+      try { await invoke("definir_inicio_no_logon", { ligado: this.logon.checked }); this.logonGuardado = this.logon.checked; }
+      catch { falhouAtalho = true; this.logon.checked = this.logonGuardado; }
+    }
     this.deps.aoSalvar?.(this.cfg);
     const avisos = avisosDeUrl(novo);
-    const partes = ["Salvo."];
+    const partes = [falhouAtalho ? "Configuração salva, mas não consegui criar o atalho de início." : "Salvo."];
     if (exigeReinicio) partes.push("Reinicie o HUD para aplicar endereços, voz e atalhos.");
     if (avisos.length) partes.push(`Atenção: ${avisos.join("; ")}.`);
-    this.dizer(partes.join(" "), avisos.length > 0);
+    this.dizer(partes.join(" "), avisos.length > 0 || falhouAtalho);
   }
 
   private async testar() {

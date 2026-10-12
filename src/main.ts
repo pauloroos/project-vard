@@ -10,7 +10,7 @@ import { falaFixa } from "./audio/cache";
 import { OpenJarvis } from "./api/openjarvis";
 import { Ponte } from "./api/ponte";
 import { Conversa } from "./fala/conversa";
-import { FALAS } from "./fala/falas";
+import { FALAS, saudacaoPara } from "./fala/falas";
 import { Hud } from "./ui/hud";
 import { Configuracoes } from "./ui/configuracoes";
 import { Nucleo } from "./ui/nucleo";
@@ -128,7 +128,7 @@ window.addEventListener("DOMContentLoaded", async () => {
     await conversa.aoHealth(ok, falaOk);
     if (falaOk && !aquecido) {
       aquecido = true;
-      for (const t of [FALAS.saudacao, FALAS.erroModelo, FALAS.erroOuvido, FALAS.openjarvisFora, FALAS.voltei]) {
+      for (const t of [saudacaoPara(cfg.usuario), FALAS.erroModelo, FALAS.erroOuvido, FALAS.openjarvisFora, FALAS.voltei]) {
         fixa(t).catch(() => { aquecido = false; });
       }
     }

@@ -59,8 +59,9 @@ Pela engrenagem do HUD ou pelo item **Configurações** da bandeja. O painel tem
 | --- | --- | --- |
 | `openjarvis_url` | `http://127.0.0.1:8000` | Onde está o OpenJarvis |
 | `gui_url` | `http://127.0.0.1:5173` | Interface de texto (botão Texto) |
-| `ponte_url` | `http://127.0.0.1:4700` | Ponte opcional |
+| `ponte_url` | `http://127.0.0.1:4700` | Ponte opcional (vazio desliga) |
 | `nome`, `variantes` | `vard` e grafias parecidas | Palavra que chama o assistente |
+| `usuario` | vazio | Como o assistente te chama na saudação ("Oi, Ana."); vazio diz só "Oi." |
 | `idioma` | `pt` | Idioma do reconhecimento |
 | `voz`, `velocidade` | `pm_alex`, `1.05` | Voz e velocidade da fala |
 | `finish_ms`, `limiar_vad` | `900`, `0.02` | Silêncio que encerra a fala e sensibilidade do microfone |

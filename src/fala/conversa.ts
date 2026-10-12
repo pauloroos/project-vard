@@ -1,5 +1,5 @@
 import type { Config } from "../config/config";
-import { FALAS } from "./falas";
+import { FALAS, saudacaoPara } from "./falas";
 import { aPartirDoGatilho, classificar, ehConfirmacao, ehInterrupcao, extrairComando } from "./rotas";
 
 export type Estado = "repouso" | "ouvindo" | "pensando" | "falando" | "jogo" | "erro" | "fora";
@@ -13,7 +13,7 @@ export interface DepsConversa {
   boca: { falando: boolean; tocar(wav: ArrayBuffer): Promise<void>; parar(): void };
   /** Fala fixa já sintetizada (com cache). */
   falas: (texto: string) => Promise<ArrayBuffer>;
-  config: Pick<Config, "variantes" | "voz" | "velocidade" | "instrucao_formato">;
+  config: Pick<Config, "variantes" | "voz" | "velocidade" | "instrucao_formato"> & Partial<Pick<Config, "usuario">>;
   /** Ponte opcional do Vard: olhos na tela e modo jogo. */
   ponte?: {
     ver(jpegB64: string, pergunta: string): Promise<string>;
@@ -93,7 +93,7 @@ export class Conversa {
       if (apartir === null) return;
       comando = extrairComando(apartir, v) ?? apartir;
     }
-    if (comando === "") { await this.falarFixa(FALAS.saudacao); return; }
+    if (comando === "") { await this.falarFixa(saudacaoPara(this.d.config.usuario)); return; }
     if (ehInterrupcao(comando)) return;
 
     const rota = classificar(comando);
