@@ -48,10 +48,11 @@ export class Voz {
   }
 
   /**
-   * Pede a fala de um trecho e resolve quando o primeiro pedaço de áudio chega (prazo de 8 s).
+   * Pede a fala de um trecho e resolve quando o primeiro pedaço de áudio chega (prazo de 8 s, ou `prazoMs`).
    * O corpo devolvido entrega o PCM conforme o serviço sintetiza; cancelar o corpo ou abortar `sinal` encerra o pedido.
    */
-  async falar(texto: string, velocidade: number, sinal?: AbortSignal): Promise<FalaEmFluxo> {
+  async falar(texto: string, velocidade: number, sinal?: AbortSignal, prazoMs?: number): Promise<FalaEmFluxo> {
+    const prazo = prazoMs ?? this.prazo;
     if (sinal?.aborted) throw new ErroVoz("interrompido", false);
     const ac = new AbortController();
     let estourou = false;
@@ -59,7 +60,7 @@ export class Voz {
     let leitor: ReadableStreamDefaultReader<Uint8Array> | undefined;
     // Abortar o pedido também solta a leitura do corpo (um corpo que não obedece ao abort não pendura a fila).
     const encerrar = () => { ac.abort(); void leitor?.cancel().catch(() => {}); };
-    const armar = () => { clearTimeout(relogio); relogio = setTimeout(() => { estourou = true; encerrar(); }, this.prazo); };
+    const armar = () => { clearTimeout(relogio); relogio = setTimeout(() => { estourou = true; encerrar(); }, prazo); };
     const repassar = () => encerrar();
     sinal?.addEventListener("abort", repassar);
     const soltar = () => { clearTimeout(relogio); sinal?.removeEventListener("abort", repassar); };
@@ -125,8 +126,8 @@ export class Voz {
   }
 
   /** A fala inteira como WAV (para as falas fixas, que vão para o cache). */
-  async falarWav(texto: string, velocidade: number): Promise<ArrayBuffer> {
-    const { corpo, taxa } = await this.falar(texto, velocidade);
+  async falarWav(texto: string, velocidade: number, prazoMs?: number): Promise<ArrayBuffer> {
+    const { corpo, taxa } = await this.falar(texto, velocidade, undefined, prazoMs);
     return fluxoParaWav(corpo, taxa);
   }
 }

@@ -50,6 +50,7 @@ export class Boca {
   /**
    * Toca PCM 16 bits mono conforme chega: cada pedaço vira um AudioBuffer agendado logo depois do anterior.
    * Resolve quando o último trecho termina; parar() ou `sinal` cortam o som e cancelam a leitura.
+   * Se o fluxo falhar no meio, corta o som e rejeita com o erro do fluxo.
    */
   async tocarFluxo(corpo: ReadableStream<Uint8Array>, taxa: number, sinal?: AbortSignal): Promise<void> {
     this.parar();
@@ -118,7 +119,11 @@ export class Boca {
       }
       if (!acabou && emEspera > 0) soltarEspera(); // fala mais curta que o pre-buffer
     } catch (erro) {
-      if (!acabou) console.warn("fluxo de voz interrompido", erro);
+      if (!acabou) {
+        // O fluxo caiu no meio: corta o que já estava agendado e avisa quem tocou, para refazer a frase por outra voz.
+        terminar();
+        throw erro;
+      }
     }
     fluxoNoFim = true;
     if (fontes.size === 0) terminar();

@@ -75,6 +75,23 @@ describe("Voz", () => {
     expect(cancelado).toHaveBeenCalled();
   });
 
+  it("prazoMs por pedido vale no lugar do padrão (falas fixas: 2 s em vez de 8 s)", async () => {
+    const voz = new Voz("http://x", { fetch: pendurado, prazoMs: 5000 });
+    const t0 = Date.now();
+    await expect(voz.falar("Oi.", 1, undefined, 30)).rejects.toMatchObject({ conexao: true, message: "a voz passou do prazo" });
+    expect(Date.now() - t0).toBeLessThan(2000);
+    await expect(voz.falarWav("Oi.", 1, 30)).rejects.toMatchObject({ conexao: true });
+  });
+
+  it("silêncio entre dois pedaços passa do prazo: o corpo falha como erro de conexão", async () => {
+    const { corpo } = fluxo([new Uint8Array([1, 2])], true); // 1º pedaço chega, o resto nunca
+    const voz = new Voz("http://x", { prazoMs: 30, fetch: async () => new Response(corpo, { status: 200 }) });
+    const r = await voz.falar("Oi.", 1);
+    const leitor = r.corpo.getReader();
+    expect((await leitor.read()).value).toEqual(new Uint8Array([1, 2]));
+    await expect(leitor.read()).rejects.toMatchObject({ conexao: true, message: "a voz passou do prazo" });
+  });
+
   it("corpo vazio rejeita", async () => {
     const voz = new Voz("http://x", { fetch: async () => new Response(fluxo([]).corpo, { status: 200 }) });
     await expect(voz.falar("Oi.", 1)).rejects.toMatchObject({ message: "voz sem áudio" });

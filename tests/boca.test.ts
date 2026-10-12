@@ -117,4 +117,20 @@ describe("Boca.tocarFluxo", () => {
     fontes[0].onended?.();
     await p;
   });
+
+  it("fluxo que cai no meio: corta o som já agendado e rejeita com o erro", async () => {
+    const { ctx, fontes } = contextoFalso();
+    const boca = new Boca(ctx);
+    let c!: ReadableStreamDefaultController<Uint8Array>;
+    const corpo = new ReadableStream<Uint8Array>({ start(x) { c = x; } });
+    const p = boca.tocarFluxo(corpo, 24000);
+    const resultado = p.then(() => "ok", (e: Error) => e.message);
+    c.enqueue(new Uint8Array(4800));
+    await tique();
+    expect(fontes).toHaveLength(1);
+    c.error(new Error("caiu"));
+    expect(await resultado).toBe("caiu");
+    expect(fontes[0].parada).toBe(true);
+    expect(boca.falando).toBe(false);
+  });
 });

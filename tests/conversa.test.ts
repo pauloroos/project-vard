@@ -369,7 +369,7 @@ describe("voz própria frase a frase", () => {
     const voz = { falar: vi.fn(async (t: string, _v: number, _s?: AbortSignal) => fala(t)) };
     const estados: string[] = [];
     const c = new Conversa({ oj, boca, voz, config: CONFIG_PADRAO, falas: async () => WAV, aoEstado: (e) => estados.push(e) });
-    return { c, oj, boca, voz, fala, tocados, fimDoToque, cancelados, estados };
+    return { c, oj, boca, voz, fala, tocados, fimDoToque, cancelados, estados, nomeDe: (c: ReadableStream<Uint8Array>) => nomes.get(c) ?? "?" };
   }
 
   beforeEach(() => {
@@ -441,6 +441,19 @@ describe("voz própria frase a frase", () => {
     expect(m.oj.sintetizar).toHaveBeenCalledWith(F1, CONFIG_PADRAO.voz, CONFIG_PADRAO.velocidade);
     expect(m.tocados).toEqual(["reserva", "reserva"]);
     expect(console.warn).toHaveBeenCalledWith("voz própria falhou, usei a reserva", expect.any(ErroVoz));
+    expect(m.c.estado).toBe("repouso");
+  });
+
+  it("fluxo cai no meio da frase: ela é falada de novo pela reserva, e o resto também", async () => {
+    const m = montar(F1 + " " + F2, true);
+    m.boca.tocarFluxo.mockImplementationOnce((corpo: ReadableStream<Uint8Array>) => {
+      m.tocados.push(m.nomeDe(corpo));
+      return Promise.reject(new ErroVoz("sem conexão com a voz", true));
+    });
+    await m.c.aoTextoTranscrito("me conta algo", true);
+    expect(m.tocados).toEqual([F1, "reserva", "reserva"]); // F1 cortada, F1 pela reserva, F2 pela reserva
+    expect(m.oj.sintetizar.mock.calls.map((x) => x[0])).toEqual([F1, F2]);
+    expect(m.cancelados).toEqual([F2]); // a F2 já pedida à voz foi descartada
     expect(m.c.estado).toBe("repouso");
   });
 

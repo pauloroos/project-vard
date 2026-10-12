@@ -20,7 +20,8 @@ A troca é silenciosa: o HUD não muda de estado nem avisa na tela, só registra
 console.
 
 - Serviço fora do ar, conexão caindo no meio ou mais de **8 s** sem áudio (até o primeiro pedaço ou entre dois pedaços):
-  aquela frase e o resto da resposta saem pela voz do OpenJarvis. A próxima resposta tenta a voz própria de novo.
+  aquela frase (refeita do começo se já tinha começado a tocar) e o resto da resposta saem pela voz do OpenJarvis. A próxima resposta tenta a voz própria de novo.
+  Nas falas fixas que ainda não estão no cache o prazo é de **2 s**, para uma voz pendurada não atrasar o "Oi.".
 - Qualquer outra recusa (`503` aquecendo, `400` texto inválido): só aquela frase sai pelo OpenJarvis; a seguinte tenta a
   voz própria outra vez.
 - Interromper (botão, atalho ou push-to-talk) corta a frase que está tocando, cancela os pedidos em andamento e

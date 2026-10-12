@@ -17,6 +17,8 @@ import { Configuracoes } from "./ui/configuracoes";
 import { Nucleo } from "./ui/nucleo";
 
 const PRE_ROLL_MS = 300;
+/** Prazo da voz própria numa fala fixa que não está no cache (o aquecimento usa o prazo normal). */
+const PRAZO_FALA_FIXA_MS = 2000;
 const MIN_FALA_MS = 300;
 
 window.addEventListener("DOMContentLoaded", async () => {
@@ -96,10 +98,11 @@ window.addEventListener("DOMContentLoaded", async () => {
   let ponteNoAr = true; // desconhecida até a 1ª sondagem (já disparada abaixo): tenta a ponte em vez de dizer que não há
   const espera = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
   // Falas fixas: a voz própria primeiro (o cache guarda o WAV dela), o OpenJarvis como reserva.
-  const fixa = async (t: string) => {
+  const fixa = async (t: string, rapido = true) => {
     const fontes: FonteDeFala[] = [];
     if (voz && (voz.nome || (await voz.saude(), voz.nome))) {
-      fontes.push({ origem: "voz", voz: voz.nome, sintetizar: () => voz.falarWav(t, cfg.velocidade) });
+      // Prazo curto: uma voz pendurada não segura "Oi." por 8 s antes da reserva. O aquecimento, que não tem pressa, usa o prazo normal.
+      fontes.push({ origem: "voz", voz: voz.nome, sintetizar: () => voz.falarWav(t, cfg.velocidade, rapido ? PRAZO_FALA_FIXA_MS : undefined) });
     }
     fontes.push({ origem: "oj", voz: cfg.voz, sintetizar: () => oj.sintetizar(t, cfg.voz, cfg.velocidade) });
     return falaFixa(t, fontes);
@@ -143,9 +146,14 @@ window.addEventListener("DOMContentLoaded", async () => {
   let aquecido = false;
   let aquecidoNaVoz = false;
   let vozPronta: boolean | null = null;
-  const aquecer = async () => {
+  let aquecendo: Promise<void> | null = null; // um aquecimento por vez: dois laços sintetizariam as mesmas falas duas vezes
+  const aquecer = (): Promise<void> => {
+    aquecendo ??= aquecerFalas().finally(() => { aquecendo = null; });
+    return aquecendo;
+  };
+  const aquecerFalas = async () => {
     for (const t of [saudacaoPara(cfg.usuario), FALAS.erroModelo, FALAS.erroOuvido, FALAS.openjarvisFora, FALAS.voltei, FALAS.modoJogoAtivado]) {
-      try { await fixa(t); } catch { aquecido = false; } // uma de cada vez: não disputa a GPU com a conversa
+      try { await fixa(t, false); } catch { aquecido = false; } // uma de cada vez: não disputa a GPU com a conversa
     }
   };
   const checarSaude = async () => {

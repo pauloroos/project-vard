@@ -113,8 +113,10 @@ export class Conversa {
         }
       }
       if (sinal.aborted) return null;
-      return { wav: await d.oj.sintetizar(frase, d.config.voz, d.config.velocidade) };
+      return { wav: await reserva(frase) };
     };
+    const reserva = (frase: string) => d.oj.sintetizar(frase, d.config.voz, d.config.velocidade);
+    let caiuNoMeio = false; // a voz caiu no meio de uma frase: o resto da resposta nem tenta a voz
     const pararBoca = () => d.boca.parar();
     sinal.addEventListener("abort", pararBoca);
     let pendente: Promise<Som | null> | null = sintetizar(frases[0]);
@@ -127,12 +129,31 @@ export class Conversa {
         if (sinal.aborted || this.emJogo()) { descartar(som); return; }
         if (i + 1 < frases.length) pendente = sintetizar(frases[i + 1]);
         if (!som) continue;
+        if (caiuNoMeio && "fluxo" in som) { // pedida antes da queda: refaz pela reserva
+          descartar(som);
+          try { som = { wav: await reserva(frases[i]) }; } catch (erro) { console.warn("falha ao sintetizar a frase", erro); continue; }
+          if (sinal.aborted) return;
+        }
         if (primeiro) {
           primeiro = false;
           console.info(`voz: 1º áudio em ${Math.round(performance.now() - t0)} ms após a resposta`);
         }
         if (this.estado !== "falando") this.mudar("falando");
-        try { await this.tocarSom(som, sinal); } catch (erro) { console.warn("falha ao falar", erro); }
+        try {
+          await this.tocarSom(som, sinal);
+        } catch (erro) {
+          if (sinal.aborted) return;
+          console.warn("falha ao falar", erro);
+          if ("fluxo" in som) {
+            // A voz própria caiu no meio da frase: ela é falada de novo, inteira, pela reserva, e o resto da resposta também.
+            soReserva = true;
+            caiuNoMeio = true;
+            try {
+              const wav = await reserva(frases[i]);
+              if (!sinal.aborted) await d.boca.tocar(wav);
+            } catch (erro2) { console.warn("falha ao falar pela reserva", erro2); }
+          }
+        }
         if (sinal.aborted) return;
       }
     } finally {
