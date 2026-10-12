@@ -1,4 +1,5 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, type Mock } from "vitest";
+import type { Mensagem } from "../src/fala/conversa";
 import { Conversa } from "../src/fala/conversa";
 import { FALAS } from "../src/fala/falas";
 import { CONFIG_PADRAO } from "../src/config/config";
@@ -6,8 +7,8 @@ import { CONFIG_PADRAO } from "../src/config/config";
 const WAV = new ArrayBuffer(8);
 
 describe("conversa", () => {
-  let oj: { perguntar: ReturnType<typeof vi.fn>; sintetizar: ReturnType<typeof vi.fn> };
-  let boca: { falando: boolean; tocar: ReturnType<typeof vi.fn>; parar: ReturnType<typeof vi.fn> };
+  let oj: { perguntar: Mock<(m: Mensagem[], s?: AbortSignal) => Promise<string>>; sintetizar: Mock<(t: string, v: string, x: number) => Promise<ArrayBuffer>> };
+  let boca: { falando: boolean; tocar: Mock<(w: ArrayBuffer) => Promise<void>>; parar: Mock<() => void> };
   let estados: string[];
   let ultimaFala: string | null;
   let c: Conversa;
@@ -83,7 +84,11 @@ describe("conversa", () => {
     expect(ultimaFala).toBe(FALAS.erroModelo);
     expect(c.estado).toBe("repouso");
   });
-  it("interromper para a boca e volta ao repouso", () => {
+  it("interromper com pergunta em voo para a boca e volta ao repouso", async () => {
+    oj.perguntar.mockImplementation(() => new Promise<string>(() => {}));
+    void c.aoTextoTranscrito("Vard, oi", false);
+    await Promise.resolve();
+    expect(c.estado).toBe("pensando");
     c.interromper();
     expect(boca.parar).toHaveBeenCalled();
     expect(c.estado).toBe("repouso");
@@ -258,5 +263,71 @@ describe("ponte do Vard (opcional)", () => {
       await m.c.aoTextoTranscrito("sim", false);
       expect(m.ponte.modo).toHaveBeenCalledWith("jogo");
     } finally { vi.useRealTimers(); }
+  });
+});
+
+describe("corridas do modo jogo", () => {
+  function montarJogo() {
+    const oj = { perguntar: vi.fn().mockResolvedValue("x"), sintetizar: vi.fn().mockResolvedValue(WAV) };
+    const boca = { falando: false, tocar: vi.fn().mockResolvedValue(undefined), parar: vi.fn() };
+    const estados: string[] = [];
+    const ponte = { ver: vi.fn().mockResolvedValue("x"), modo: vi.fn().mockResolvedValue(true) };
+    const abrirMicrofone = vi.fn();
+    const fecharMicrofone = vi.fn().mockReturnValue(true);
+    const c = new Conversa({
+      oj, boca, config: CONFIG_PADRAO, falas: async () => WAV, aoEstado: (e) => estados.push(e),
+      ponte, abrirMicrofone, fecharMicrofone,
+    });
+    return { c, oj, boca, estados, ponte, abrirMicrofone, fecharMicrofone };
+  }
+
+  it("sondagem 'jogo' durante o aviso não corta o aviso nem perde o microfone fechado", async () => {
+    const m = montarJogo();
+    let terminarAviso!: () => void;
+    await m.c.aoTextoTranscrito("Vard, modo jogo", false);
+    m.boca.tocar.mockClear();
+    m.boca.tocar.mockImplementation(() => new Promise<void>((r) => { terminarAviso = r; }));
+    const ativando = m.c.aoTextoTranscrito("sim", false);
+    for (let i = 0; i < 50 && m.boca.tocar.mock.calls.length === 0; i++) await new Promise((r) => setTimeout(r, 0));
+    expect(m.boca.tocar).toHaveBeenCalledOnce(); // aviso tocando
+    await m.c.aoStatusPonte({ modo: "jogo" }); // a sondagem de 10 s cai aqui
+    expect(m.fecharMicrofone).not.toHaveBeenCalled();
+    expect(m.boca.parar).not.toHaveBeenCalled();
+    terminarAviso();
+    await ativando;
+    expect(m.c.estado).toBe("jogo");
+    expect(m.fecharMicrofone).toHaveBeenCalledOnce();
+    m.boca.tocar.mockResolvedValue(undefined);
+    await m.c.aoStatusPonte({ modo: "ligado" });
+    expect(m.abrirMicrofone).toHaveBeenCalledOnce(); // na volta o microfone reabre
+  });
+
+  it("pergunta em voo não tira o HUD do jogo pedido por fora", async () => {
+    const m = montarJogo();
+    let liberar!: (t: string) => void;
+    m.oj.perguntar.mockImplementation(() => new Promise<string>((r) => { liberar = r; }));
+    const p = m.c.aoTextoTranscrito("Vard, oi", false);
+    await Promise.resolve();
+    await m.c.aoStatusPonte({ modo: "jogo" });
+    expect(m.c.estado).toBe("jogo");
+    liberar("resposta tardia");
+    await p;
+    expect(m.c.estado).toBe("jogo");
+    expect(m.boca.tocar).not.toHaveBeenCalled();
+    expect(m.estados[m.estados.length - 1]).toBe("jogo");
+    await m.c.aoStatusPonte({ modo: "ligado" });
+    expect(m.abrirMicrofone).toHaveBeenCalledOnce();
+  });
+});
+
+describe("nome de chamada", () => {
+  it("nome configurado chama o assistente e o nome padrão deixa de chamar", async () => {
+    const oj = { perguntar: vi.fn().mockResolvedValue("Agora são 13h."), sintetizar: vi.fn().mockResolvedValue(WAV) };
+    const boca = { falando: false, tocar: vi.fn().mockResolvedValue(undefined), parar: vi.fn() };
+    const c = new Conversa({ oj, boca, config: { ...CONFIG_PADRAO, nome: "Jarvis" }, falas: async () => WAV });
+    await c.aoTextoTranscrito("Jarvis, que horas são", false);
+    expect(oj.perguntar).toHaveBeenCalledOnce();
+    await c.aoTextoTranscrito("Vard, que horas são", false);
+    expect(oj.perguntar).toHaveBeenCalledOnce();
   });
 });

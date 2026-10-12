@@ -13,11 +13,12 @@ npm install
 
 ```
 npm test                  # unitários e integração contra o servidor falso (em processo)
-npx tsc --noEmit          # tipos
+npx tsc --noEmit          # tipos (src/)
+npx tsc -p tsconfig.test.json   # tipos dos testes
 cargo test --manifest-path src-tauri/Cargo.toml
 ```
 
-`HUD_REAL=1 HUD_REAL_WAV=<um WAV dizendo "Preflight"> npm run test:real` prova contra um OpenJarvis de verdade (transcrever, perguntar, sintetizar).
+`HUD_REAL=1 HUD_REAL_WAV=<um WAV dizendo "Preflight"> npm run test:real` (PowerShell: `$env:HUD_REAL=1; $env:HUD_REAL_WAV="<wav>"; npm run test:real`) prova contra um OpenJarvis de verdade (transcrever, perguntar, sintetizar).
 
 ## Rodar em desenvolvimento / Run in development
 
@@ -34,8 +35,8 @@ In `tauri dev` the front end reaches OpenJarvis through a Vite proxy at `/oj` (O
 npm run harness
 ```
 
-Sobe um OpenJarvis falso em `http://127.0.0.1:8765` (transcrição fixa, resposta "Agora são 13h.", senoide de 0,3 s). Use `VITE_OJ_ALVO=http://127.0.0.1:8765 npm run tauri dev` e aperte o push-to-talk por 1 s em silêncio. `PONTE=4700 npm run harness` acrescenta uma ponte falsa.
-Starts a fake OpenJarvis at `http://127.0.0.1:8765`. Use it with `VITE_OJ_ALVO`. `PONTE=4700` adds a fake bridge.
+Sobe um OpenJarvis falso em `http://127.0.0.1:8765` (transcrição fixa, resposta "Agora são 13h.", senoide de 0,3 s). Use `VITE_OJ_ALVO=http://127.0.0.1:8765 npm run tauri dev` (PowerShell: `$env:VITE_OJ_ALVO="http://127.0.0.1:8765"; npm run tauri dev`), abra o microfone (duplo clique no núcleo) e aperte o push-to-talk por 1 s em silêncio; com o microfone fechado o push-to-talk é ignorado. `PONTE=4700 npm run harness` (PowerShell: `$env:PONTE=4700; npm run harness`) acrescenta uma ponte falsa.
+Starts a fake OpenJarvis at `http://127.0.0.1:8765`. Use it with `VITE_OJ_ALVO`, open the microphone first (double-click the core): push-to-talk is ignored while it is closed. `PONTE=4700` adds a fake bridge.
 
 ## Ícone / Icon
 

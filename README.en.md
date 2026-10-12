@@ -8,6 +8,8 @@ A floating voice widget for [OpenJarvis](https://github.com/open-jarvis/OpenJarv
 
 The interface text is in Portuguese (the author's language); the code and this README are open to anyone.
 
+Independent project, not affiliated with OpenJarvis or Stanford.
+
 ## What it does
 
 - Listens through the microphone (automatic voice detection) or through a global push-to-talk shortcut.
@@ -35,9 +37,9 @@ To build it yourself: `npm install` and `npm run tauri build` (installers land i
 
 ## Use
 
-1. Start OpenJarvis with speech on, then the HUD. The status line says "pronto" (ready).
+1. Start OpenJarvis with speech on, then the HUD. The status line asks you to double-click the core.
 2. **Double-click the core** (or click the microphone button) to open the microphone. Windows may ask for permission the first time.
-3. Say "Vard, que horas são". The core turns amber while listening, blue while thinking, and the answer is spoken.
+3. Say "Vard, que horas são". The core turns cyan while listening, amber while thinking, and the answer is spoken.
 
 ### Shortcuts
 
@@ -55,14 +57,14 @@ Microphone mute, stop, look at the screen (bridge only), open the text conversat
 
 ## Configure
 
-Use the gear on the HUD or **Configurações** in the tray menu. The panel covers every field of `hud.config.json` (in `%APPDATA%\dev.openjarvis.hud\`):
+Use the gear on the HUD or **Configurações** in the tray menu. The panel covers every field of `hud.config.json` (if the file becomes unreadable the HUD starts with the defaults and keeps the original as `hud.config.json.invalido`; in `%APPDATA%\io.github.openjarvishud\`):
 
 | Field | Default | Purpose |
 | --- | --- | --- |
 | `openjarvis_url` | `http://127.0.0.1:8000` | Where OpenJarvis is |
 | `gui_url` | `http://127.0.0.1:5173` | Text interface (Text button) |
 | `ponte_url` | `http://127.0.0.1:4700` | Optional bridge (empty disables) |
-| `nome`, `variantes` | `vard` and similar spellings | Wake word |
+| `nome`, `variantes` | `vard` and similar spellings | Wake words: `nome` plus `variantes` (with another name the default Vard variants are dropped) |
 | `usuario` | empty | Name used in the greeting ("Oi, Ana."); empty says just "Oi." |
 | `idioma` | `pt` | Recognition language |
 | `voz`, `velocidade` | `pm_alex`, `1.05` | Speech voice and speed |

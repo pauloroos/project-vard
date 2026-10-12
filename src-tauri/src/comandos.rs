@@ -25,7 +25,15 @@ pub fn ler_config_valor(app: &tauri::AppHandle) -> Result<Value, String> {
         return Ok(Value::Null);
     }
     let txt = fs::read_to_string(&p).map_err(|e| e.to_string())?;
-    serde_json::from_str(&txt).map_err(|e| e.to_string())
+    match serde_json::from_str(&txt) {
+        Ok(v) => Ok(v),
+        Err(e) => {
+            // Guarda o arquivo ilegível para o usuário e deixa o HUD subir com o padrão.
+            let guardado = p.with_extension("json.invalido");
+            let _ = fs::rename(&p, &guardado);
+            Err(format!("hud.config.json inválido (guardado como {}): {e}", guardado.display()))
+        }
+    }
 }
 
 #[tauri::command]
@@ -36,11 +44,13 @@ pub fn ler_config(app: tauri::AppHandle) -> Result<Value, String> {
 #[tauri::command]
 pub fn gravar_config(app: tauri::AppHandle, config: Value) -> Result<(), String> {
     let p = caminho_config(&app);
+    let tmp = p.with_extension("json.tmp");
     fs::write(
-        &p,
+        &tmp,
         serde_json::to_string_pretty(&config).map_err(|e| e.to_string())?,
     )
-    .map_err(|e| e.to_string())
+    .map_err(|e| e.to_string())?;
+    fs::rename(&tmp, &p).map_err(|e| e.to_string())
 }
 
 #[tauri::command]

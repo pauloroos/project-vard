@@ -19,7 +19,7 @@ const PRE_ROLL_MS = 300;
 const MIN_FALA_MS = 300;
 
 window.addEventListener("DOMContentLoaded", async () => {
-  const cfg = await carregarConfig();
+  const cfg = await carregarConfig(); // nunca lança: arquivo ruim cai para o padrão
   const canvas = document.getElementById("nucleo") as HTMLCanvasElement;
   const app = document.getElementById("app") as HTMLElement;
   const nucleo = new Nucleo(canvas);
@@ -80,6 +80,7 @@ window.addEventListener("DOMContentLoaded", async () => {
   let capturando = false;
   let pttSegurado = false;
   let ocupado = false; // transcrevendo ou pensando: ignora novos eventos do VAD
+  let pttPendente = false; // push-to-talk apertado durante a resposta: começa a capturar quando o ciclo terminar
   let estavaFalando = false;
 
   // Ponte opcional do Vard: sem ela o HUD funciona igual, só sem o botão Tela e sem modo jogo.
@@ -105,7 +106,7 @@ window.addEventListener("DOMContentLoaded", async () => {
     capturar: async () => {
       try { return await invoke<string>("capturar_tela"); } finally { hud.setIndicadorTela(false); }
     },
-    abrirMicrofone: () => alternarMicrofone(),
+    abrirMicrofone: () => abrirSeFechado(),
     fecharMicrofone: () => fecharTudoDoMicrofone(),
   });
   olharTela = () => { void conversa.aoTextoTranscrito("olha a tela", true); };
@@ -187,6 +188,8 @@ window.addEventListener("DOMContentLoaded", async () => {
       ocupado = false;
       detector.reset();
       nucleo.setEstado(conversa.estado); hud.setEstado(conversa.estado, conversa.detalhe);
+      if (pttPendente && pttSegurado && ligado && !capturando) comecarCaptura();
+      pttPendente = false;
     }
   };
 
@@ -207,6 +210,8 @@ window.addEventListener("DOMContentLoaded", async () => {
     hud.setMudo(true);
     return true;
   };
+  // Volta do modo jogo: abre se estiver fechado e não mexe no mudo se já estiver aberto.
+  const abrirSeFechado = async () => { if (!ligado) await alternarMicrofone(); };
   // Botão Mudo e duplo clique no núcleo: a primeira vez abre o microfone; depois só muda o mudo.
   alternarMicrofone = async () => {
     if (ligado) { const novo = !estaMudo(); definirMudo(novo); hud.setMudo(novo); return; }
@@ -245,14 +250,18 @@ window.addEventListener("DOMContentLoaded", async () => {
   }, true);
 
   await listen("ptt-inicio", () => {
-    if (!ligado || ocupado || estaMudo()) return;
-    if (boca.falando) conversa.interromper(); // apertar para falar corta a fala em curso
+    if (!ligado || estaMudo()) return;
+    // Apertar para falar corta a resposta em curso (mesmo caminho do botão Interromper) e depois captura.
+    const respondendo = boca.falando || ocupado;
+    if (respondendo) conversa.interromper();
     pttSegurado = true;
+    if (ocupado) { pttPendente = true; return; } // encerrar() inicia a captura no finally
     if (!capturando) comecarCaptura(); // se o VAD já estava capturando, segue acumulando o mesmo PCM
   });
   await listen("ptt-fim", () => {
     if (!pttSegurado) return;
     pttSegurado = false;
+    pttPendente = false;
     if (capturando) void encerrar(true);
   });
   await listen("parar", () => { conversa.interromper(); });

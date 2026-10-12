@@ -14,7 +14,7 @@ sem ela, nada quebra, só faltam as três coisas abaixo.
   derruba o OpenJarvis para liberar a GPU (`POST /modo`). O HUD fica cinza, escrito MODO JOGO, e fecha o microfone.
   Ele sonda `GET /status` a cada 10 s e, quando o modo volta a `ligado`, reabre o microfone sozinho e diz "Voltei."
 - **Eventos.** `GET /events` (SSE, com ping a cada 15 s) é o canal por onde a ponte vai avisar o HUD de coisas que
-  acontecem fora da conversa. O cliente já reconecta com espera exponencial de até 30 s.
+  acontecem fora da conversa. O cliente (`Ponte.eventos`) existe, mas o HUD ainda não o usa: reconexão e consumo dos eventos não estão implementados.
 
 ## Como o HUD sabe que a ponte existe
 

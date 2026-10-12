@@ -17,9 +17,49 @@ export const CONFIG_PADRAO: Config = {
   instrucao_formato: "Responda em até duas frases, para ser lido em voz alta.",
 };
 
+/** Mescla o salvo com o padrão descartando o que tem tipo errado (arquivo editado à mão). */
+function mesclar(salvo: unknown): Config {
+  if (typeof salvo !== "object" || salvo === null || Array.isArray(salvo)) return { ...CONFIG_PADRAO, atalhos: { ...CONFIG_PADRAO.atalhos } };
+  const s = salvo as Record<string, unknown>;
+  const saida: Record<string, unknown> = { ...CONFIG_PADRAO, atalhos: { ...CONFIG_PADRAO.atalhos } };
+  for (const [k, padrao] of Object.entries(CONFIG_PADRAO)) {
+    const v = s[k];
+    if (k === "atalhos") {
+      if (typeof v === "object" && v !== null && !Array.isArray(v)) {
+        for (const a of Object.keys(CONFIG_PADRAO.atalhos)) {
+          const x = (v as Record<string, unknown>)[a];
+          if (typeof x === "string") (saida.atalhos as Record<string, string>)[a] = x;
+        }
+      }
+    } else if (k === "posicao") {
+      const p = v as { x?: unknown; y?: unknown } | null;
+      if (p === null || (typeof p === "object" && typeof p.x === "number" && typeof p.y === "number")) saida[k] = v;
+    } else if (k === "variantes") {
+      if (Array.isArray(v) && v.every((x) => typeof x === "string")) saida[k] = v;
+    } else if (typeof v === typeof padrao) {
+      saida[k] = v;
+    }
+  }
+  return saida as unknown as Config;
+}
+
+/** Nunca lança: arquivo ausente, JSON inválido ou comando falhando devolvem o padrão. */
 export async function carregarConfig(): Promise<Config> {
-  const salvo = (await invoke<Partial<Config> | null>("ler_config")) ?? {};
-  return { ...CONFIG_PADRAO, ...salvo, atalhos: { ...CONFIG_PADRAO.atalhos, ...(salvo.atalhos ?? {}) } };
+  try {
+    const salvo = await invoke<unknown>("ler_config");
+    return mesclar(salvo ?? {});
+  } catch (erro) {
+    console.warn("config ilegível, usando o padrão", erro);
+    return mesclar({});
+  }
+}
+
+/** Palavras que chamam o assistente: o nome mais as variantes. Com outro nome, as variantes padrão do Vard saem. */
+export function gatilhos(c: Pick<Config, "nome" | "variantes">): string[] {
+  const nome = c.nome.trim().toLowerCase();
+  const extras = nome === "vard" ? c.variantes : c.variantes.filter((v) => !CONFIG_PADRAO.variantes.includes(v.toLowerCase()));
+  const todos = [nome, ...extras.map((v) => v.trim().toLowerCase())].filter(Boolean);
+  return [...new Set(todos)];
 }
 export async function salvarConfig(c: Config): Promise<void> { await invoke("gravar_config", { config: c }); }
 

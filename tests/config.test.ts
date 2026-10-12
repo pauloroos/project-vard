@@ -3,7 +3,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 const invoke = vi.fn();
 vi.mock("@tauri-apps/api/core", () => ({ invoke: (...a: unknown[]) => invoke(...a) }));
 
-import { carregarConfig, CONFIG_PADRAO, urlLocal, avisosDeUrl } from "../src/config/config";
+import { carregarConfig, CONFIG_PADRAO, urlLocal, avisosDeUrl, gatilhos } from "../src/config/config";
 
 describe("carregarConfig", () => {
   beforeEach(() => invoke.mockReset());
@@ -27,6 +27,38 @@ describe("carregarConfig", () => {
     expect(c.atalhos.falar).toBe("Ctrl+Shift+F");
     expect(c.atalhos.parar).toBe(CONFIG_PADRAO.atalhos.parar);
     expect(c.atalhos.mostrar).toBe(CONFIG_PADRAO.atalhos.mostrar);
+  });
+});
+
+describe("carregarConfig com arquivo ruim", () => {
+  beforeEach(() => { invoke.mockReset(); vi.spyOn(console, "warn").mockImplementation(() => {}); });
+
+  it("invoke rejeitando (JSON inválido) cai para o padrão", async () => {
+    invoke.mockRejectedValue("expected value at line 1 column 1");
+    expect(await carregarConfig()).toEqual(CONFIG_PADRAO);
+  });
+  it("lixo no lugar do objeto cai para o padrão", async () => {
+    invoke.mockResolvedValue("lixo");
+    expect(await carregarConfig()).toEqual(CONFIG_PADRAO);
+    invoke.mockResolvedValue([1, 2]);
+    expect(await carregarConfig()).toEqual(CONFIG_PADRAO);
+  });
+  it("tipos errados são descartados chave a chave", async () => {
+    invoke.mockResolvedValue({ variantes: "vard", velocidade: "rápido", nome: "jarvis", atalhos: { falar: 3 } });
+    const c = await carregarConfig();
+    expect(c.variantes).toEqual(CONFIG_PADRAO.variantes);
+    expect(c.velocidade).toBe(CONFIG_PADRAO.velocidade);
+    expect(c.nome).toBe("jarvis");
+    expect(c.atalhos).toEqual(CONFIG_PADRAO.atalhos);
+  });
+});
+
+describe("gatilhos", () => {
+  it("com o nome padrão mantém as variantes", () => {
+    expect(gatilhos(CONFIG_PADRAO)).toEqual(CONFIG_PADRAO.variantes);
+  });
+  it("com outro nome usa o nome e só as variantes próprias", () => {
+    expect(gatilhos({ nome: "Jarvis", variantes: [...CONFIG_PADRAO.variantes, "jarvi"] })).toEqual(["jarvis", "jarvi"]);
   });
 });
 

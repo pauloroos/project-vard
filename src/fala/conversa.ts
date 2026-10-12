@@ -1,4 +1,4 @@
-import type { Config } from "../config/config";
+import { gatilhos, type Config } from "../config/config";
 import { FALAS, saudacaoPara } from "./falas";
 import { aPartirDoGatilho, classificar, ehConfirmacao, ehInterrupcao, extrairComando } from "./rotas";
 
@@ -13,7 +13,7 @@ export interface DepsConversa {
   boca: { falando: boolean; tocar(wav: ArrayBuffer): Promise<void>; parar(): void };
   /** Fala fixa já sintetizada (com cache). */
   falas: (texto: string) => Promise<ArrayBuffer>;
-  config: Pick<Config, "variantes" | "voz" | "velocidade" | "instrucao_formato"> & Partial<Pick<Config, "usuario">>;
+  config: Pick<Config, "nome" | "variantes" | "voz" | "velocidade" | "instrucao_formato"> & Partial<Pick<Config, "usuario">>;
   /** Ponte opcional do Vard: olhos na tela e modo jogo. */
   ponte?: {
     ver(jpegB64: string, pergunta: string): Promise<string>;
@@ -46,8 +46,12 @@ export class Conversa {
   private microfoneFechado = false;
   private erroPonte = false;
   private pergunta: AbortController | null = null;
+  private entrandoEmJogo = false; // aviso do modo jogo tocando: a sondagem da ponte não mexe no estado
 
   constructor(private d: DepsConversa) {}
+
+  /** Método (não comparação direta) para o TypeScript não estreitar `estado` através dos await. */
+  private emJogo(): boolean { return this.estado === "jogo"; }
 
   private mudar(e: Estado, detalhe = "") {
     this.estado = e;
@@ -73,10 +77,10 @@ export class Conversa {
 
   async aoTextoTranscrito(texto: string, pushToTalk: boolean): Promise<void> {
     if (this.d.boca.falando) return;
-    if (this.estado === "fora" || this.estado === "erro" || this.estado === "jogo") return;
+    if (this.estado === "fora" || this.estado === "erro" || this.emJogo()) return;
     const bruto = texto.trim();
     if (!bruto) return;
-    const v = this.d.config.variantes;
+    const v = gatilhos(this.d.config);
 
     // Confirmação do modo jogo: vale só a próxima frase; "sim" ou "confirmo" sozinhos (com ou sem o nome).
     if (this.aguardaConfirmacao) {
@@ -130,10 +134,10 @@ export class Conversa {
           { role: "user", content: comando },
         ], ac.signal)).trim();
       }
-      if (ac.signal.aborted) return;
+      if (ac.signal.aborted || this.emJogo()) return;
       if (!resposta) throw new Error("resposta vazia");
     } catch (erro) {
-      if (ac.signal.aborted) return;
+      if (ac.signal.aborted || this.emJogo()) return;
       console.warn(ver ? "olhos falharam" : "agente falhou", erro);
       const codigo = (erro as { codigo?: string } | null)?.codigo;
       const fala = (codigo && (FALAS.erros as Record<string, string>)[codigo]) || FALAS.erroModelo;
@@ -146,9 +150,10 @@ export class Conversa {
       if (this.historico.length > MAX_MENSAGENS) this.historico = this.historico.slice(-MAX_MENSAGENS);
     }
     this.d.aoResposta?.(resposta);
+    if (this.emJogo()) return;
     await this.tocar(this.d.oj.sintetizar(resposta, this.d.config.voz, this.d.config.velocidade), true, ac.signal);
     if (this.pergunta === ac) this.pergunta = null;
-    if (!ac.signal.aborted) this.mudar("repouso");
+    if (!ac.signal.aborted && !this.emJogo()) this.mudar("repouso");
   }
 
   private async ativarJogo(): Promise<void> {
@@ -157,15 +162,26 @@ export class Conversa {
     // Sintetiza o aviso antes: o modo jogo derruba o OpenJarvis (e a voz) logo em seguida.
     const aviso = this.d.falas(FALAS.modoJogoAtivado);
     aviso.catch(() => {});
-    if (!(await ponte.modo("jogo"))) { await this.falarFixa(FALAS.erros.modo_falhou); return; }
-    await this.tocar(aviso, false);
+    this.entrandoEmJogo = true;
+    try {
+      if (!(await ponte.modo("jogo"))) { this.entrandoEmJogo = false; await this.falarFixa(FALAS.erros.modo_falhou); return; }
+      await this.tocar(aviso, false);
+      this.entrarNoJogo();
+      this.microfoneFechado = (await this.d.fecharMicrofone?.()) !== false || this.microfoneFechado;
+    } finally { this.entrandoEmJogo = false; }
+  }
+
+  /** Muda para o jogo e cancela a pergunta em voo (a resposta tardia não tira o HUD do jogo). */
+  private entrarNoJogo() {
+    this.pergunta?.abort();
+    this.pergunta = null;
     this.mudar("jogo");
-    this.microfoneFechado = (await this.d.fecharMicrofone?.()) !== false;
   }
 
   /** Resultado da sondagem da ponte (a cada 10 s). null = ponte ausente. Cuida de entrar e sair do modo jogo. */
   async aoStatusPonte(s: { modo: string; detalhe?: string } | null): Promise<void> {
     if (!s) return;
+    if (this.entrandoEmJogo) return; // o aviso está tocando: ativarJogo termina a transição sozinha
     const emJogo = this.estado === "jogo";
     if (s.modo === "ligado" && (emJogo || this.erroPonte)) {
       this.erroPonte = false;
@@ -180,13 +196,13 @@ export class Conversa {
       if (this.estado !== "erro" || this.detalhe !== d) this.mudar("erro", d);
     } else if (s.modo === "jogo" && !emJogo && !this.erroPonte) {
       // Jogo pedido por fora (bandeja, atalho): o HUD acompanha, fica cinza e solta o microfone.
-      this.mudar("jogo");
-      this.microfoneFechado = (await this.d.fecharMicrofone?.()) !== false;
+      this.entrarNoJogo();
+      this.microfoneFechado = (await this.d.fecharMicrofone?.()) !== false || this.microfoneFechado;
     }
   }
 
   async aoHealth(ok: boolean, falaOk: boolean): Promise<void> {
-    if (this.estado === "jogo" || this.erroPonte) return; // com o jogo ou a ponte em erro quem manda é o status da ponte
+    if (this.estado === "jogo" || this.entrandoEmJogo || this.erroPonte) return; // com o jogo ou a ponte em erro quem manda é o status da ponte
     if (!ok) {
       if (this.estado !== "fora") {
         this.mudar("fora", "sem conexão com o núcleo");

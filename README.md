@@ -6,6 +6,8 @@ Widget de voz flutuante para o [OpenJarvis](https://github.com/open-jarvis/OpenJ
 
 ![HUD em repouso](docs/captura-repouso.png) ![HUD falando](docs/captura-falando.png)
 
+Projeto independente, sem vínculo com o OpenJarvis nem com a Stanford.
+
 ## O que ele faz
 
 - Escuta pelo microfone (detecção de voz automática) ou por push-to-talk com atalho global.
@@ -33,9 +35,9 @@ Para gerar você mesmo: `npm install` e `npm run tauri build` (os instaladores s
 
 ## Usar
 
-1. Abra o OpenJarvis com a fala ligada e depois o HUD. A linha de estado diz "pronto".
+1. Abra o OpenJarvis com a fala ligada e depois o HUD. A linha de estado pede para tocar duas vezes no núcleo.
 2. Dê **dois cliques no núcleo** (ou clique no botão do microfone) para abrir o microfone. O Windows pode pedir permissão na primeira vez.
-3. Diga "Vard, que horas são". O núcleo fica âmbar ouvindo, azul pensando, e a resposta sai em voz alta.
+3. Diga "Vard, que horas são". O núcleo fica ciano ouvindo, âmbar pensando, e a resposta sai em voz alta.
 
 ### Atalhos
 
@@ -53,14 +55,14 @@ Mudo do microfone, interromper, olhar a tela (só com a ponte), abrir a conversa
 
 ## Configurar
 
-Pela engrenagem do HUD ou pelo item **Configurações** da bandeja. O painel tem todos os campos do arquivo `hud.config.json` (em `%APPDATA%\dev.openjarvis.hud\`):
+Pela engrenagem do HUD ou pelo item **Configurações** da bandeja. O painel tem todos os campos do arquivo `hud.config.json` (se ele ficar ilegível, o HUD sobe com o padrão e guarda o original como `hud.config.json.invalido`; em `%APPDATA%\io.github.openjarvishud\`):
 
 | Campo | Padrão | Para quê |
 | --- | --- | --- |
 | `openjarvis_url` | `http://127.0.0.1:8000` | Onde está o OpenJarvis |
 | `gui_url` | `http://127.0.0.1:5173` | Interface de texto (botão Texto) |
 | `ponte_url` | `http://127.0.0.1:4700` | Ponte opcional (vazio desliga) |
-| `nome`, `variantes` | `vard` e grafias parecidas | Palavra que chama o assistente |
+| `nome`, `variantes` | `vard` e grafias parecidas | Palavras que chamam o assistente: o `nome` mais as `variantes` (com outro nome, as variantes padrão do Vard saem) |
 | `usuario` | vazio | Como o assistente te chama na saudação ("Oi, Ana."); vazio diz só "Oi." |
 | `idioma` | `pt` | Idioma do reconhecimento |
 | `voz`, `velocidade` | `pm_alex`, `1.05` | Voz e velocidade da fala |

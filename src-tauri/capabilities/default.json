@@ -5,10 +5,6 @@
   "windows": ["hud"],
   "permissions": [
     "core:default",
-    "core:window:allow-set-always-on-top",
-    "core:window:allow-set-ignore-cursor-events",
-    "core:window:allow-start-dragging",
-    "global-shortcut:default",
-    "opener:default"
+    "core:window:allow-start-dragging"
   ]
 }
