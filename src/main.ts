@@ -12,6 +12,7 @@ import { Ponte } from "./api/ponte";
 import { Conversa } from "./fala/conversa";
 import { FALAS } from "./fala/falas";
 import { Hud } from "./ui/hud";
+import { Configuracoes } from "./ui/configuracoes";
 import { Nucleo } from "./ui/nucleo";
 
 const PRE_ROLL_MS = 300;
@@ -26,7 +27,9 @@ window.addEventListener("DOMContentLoaded", async () => {
   let interromperTudo = () => {};
   let alternarMicrofone: () => Promise<void> = async () => {};
   let olharTela = () => {};
+  let abrirConfig = () => {};
   const hud = new Hud(cfg, app, {
+    aoConfig: () => abrirConfig(),
     aoMudo: () => { void alternarMicrofone(); },
     aoInterromper: () => interromperTudo(),
     aoTela: () => olharTela(),
@@ -41,6 +44,20 @@ window.addEventListener("DOMContentLoaded", async () => {
   // No `tauri dev` a origem do webview (localhost:1420) é recusada pelo CORS do OpenJarvis; o Vite faz a ponte em /oj.
   const base = import.meta.env.DEV ? `${location.origin}/oj` : cfg.openjarvis_url;
   const oj = new OpenJarvis(base);
+
+  // Painel de configurações (bandeja ou engrenagem). Com click-through ligado a janela não receberia o clique:
+  // ele é suspenso enquanto o painel está aberto.
+  const aplicarClickThrough = (ligado: boolean) => { void invoke("definir_click_through", { ligado }).catch(() => {}); };
+  const painel = new Configuracoes(cfg, document.getElementById("config") as HTMLElement, {
+    criarOj: (url) => new OpenJarvis(import.meta.env.DEV ? `${location.origin}/oj` : url),
+    aoSalvar: (c) => {
+      void invoke("definir_sempre_no_topo", { ligado: c.sempre_no_topo }).catch(() => {});
+      hud.atualizarTopo();
+    },
+    aoAlternar: (aberto) => { if (cfg.click_through) aplicarClickThrough(!aberto); },
+  });
+  abrirConfig = () => { void painel.abrir(); };
+  if (cfg.click_through) aplicarClickThrough(true);
 
   // A boca só existe depois que o microfone abre (usa o mesmo AudioContext).
   let bocaReal: Boca | null = null;
@@ -239,4 +256,6 @@ window.addEventListener("DOMContentLoaded", async () => {
     if (capturando) void encerrar(true);
   });
   await listen("parar", () => { conversa.interromper(); });
+  await listen("abrir-configuracoes", () => { void painel.abrir(); });
+  await listen<boolean>("sempre-no-topo", (ev) => { cfg.sempre_no_topo = ev.payload; hud.atualizarTopo(); });
 });

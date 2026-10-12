@@ -111,7 +111,9 @@ pub fn run() {
             comandos::definir_sempre_no_topo,
             comandos::definir_click_through,
             comandos::capturar_tela,
-            comandos::abrir_url
+            comandos::abrir_url,
+            comandos::inicio_no_logon_ativo,
+            comandos::definir_inicio_no_logon
         ])
         .setup(|app| {
             let handle = app.handle().clone();

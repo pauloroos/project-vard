@@ -15,6 +15,7 @@ const ICONES = {
   texto: '<svg viewBox="0 0 24 24"><path d="M4 5h16v11H9l-5 4z"/></svg>',
   topo: '<svg viewBox="0 0 24 24"><path d="M12 21v-9M8 8l4-4 4 4M5 4h14"/></svg>',
   tela: '<svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg>',
+  config: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2"/></svg>',
   compacto: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><circle cx="12" cy="12" r="8"/></svg>',
 };
 
@@ -24,6 +25,8 @@ export interface AcoesHud {
   aoInterromper?: () => void;
   /** Botão Tela (só existe com a ponte do Vard): pergunta o que está na tela. */
   aoTela?: () => void;
+  /** Engrenagem: abre o painel de configurações. */
+  aoConfig?: () => void;
 }
 
 /** Linha de estado, última resposta e barra de comandos (cinco ícones). Só DOM, sem regra de negócio. */
@@ -61,6 +64,7 @@ export class Hud {
       this.botaoTela,
       this.botao(ICONES.texto, "Abrir a conversa em texto", () => { void invoke("abrir_url", { url: cfg.gui_url }); }),
       this.botaoTopoEl,
+      this.botao(ICONES.config, "Configurações", () => this.acoes.aoConfig?.()),
       this.botaoModo,
     );
     this.pintar();
@@ -73,6 +77,9 @@ export class Hud {
     b.addEventListener("click", aoClicar);
     return b;
   }
+
+  /** Reaplica o rótulo do topo depois que o painel de configurações mudou o valor. */
+  atualizarTopo() { this.rotuloTopo(); }
 
   private rotuloTopo() {
     const sim = this.cfg.sempre_no_topo;

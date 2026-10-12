@@ -43,3 +43,30 @@ html, body { background: transparent; margin: 0; overflow: hidden; }
 
 /* compacto: some o texto, ficam o núcleo e os botões */
 #app.compacto #dica, #app.compacto #resposta { display: none; }
+
+/* painel de configurações: cobre o widget, rola por dentro */
+#config {
+  position: absolute; inset: 0; box-sizing: border-box; padding: 10px 12px 8px; overflow-y: auto; z-index: 5;
+  background: rgba(4, 14, 22, 0.96); border: 1px solid rgba(0, 240, 255, 0.35); border-radius: 10px;
+  font-size: 8px; letter-spacing: 0.06em; text-transform: none; user-select: text;
+}
+#config[hidden] { display: none; }
+#config h2 { margin: 0 0 6px; font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase; }
+#config fieldset { margin: 0 0 6px; padding: 4px 6px 6px; border: 1px solid rgba(0, 240, 255, 0.25); border-radius: 6px; }
+#config legend { padding: 0 4px; text-transform: uppercase; opacity: 0.8; }
+#config label { display: block; margin-top: 4px; opacity: 0.9; }
+#config label.marca { display: flex; align-items: center; gap: 5px; }
+#config input[type="text"], #config input[type="number"] {
+  display: block; width: 100%; box-sizing: border-box; margin-top: 2px; padding: 3px 5px; color: var(--ciano);
+  background: rgba(0, 240, 255, 0.07); border: 1px solid rgba(0, 240, 255, 0.35); border-radius: 4px; font: inherit;
+}
+#config input.aviso { border-color: #ffb020; color: #ffd070; }
+#config input[type="checkbox"] { accent-color: var(--ciano); margin: 0; }
+#cfg-msg { min-height: 20px; margin: 4px 0; line-height: 10px; opacity: 0.95; }
+#cfg-msg.ruim { color: #ffb020; }
+#config .acoes { display: flex; gap: 6px; justify-content: flex-end; padding-bottom: 4px; }
+#config .acoes button {
+  padding: 4px 8px; color: var(--ciano); background: rgba(0, 240, 255, 0.08); border: 1px solid rgba(0, 240, 255, 0.45);
+  border-radius: 4px; font: inherit; cursor: pointer;
+}
+#config .acoes button:hover { background: rgba(0, 240, 255, 0.24); }

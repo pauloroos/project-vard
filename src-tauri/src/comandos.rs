@@ -63,6 +63,62 @@ pub fn abrir_url(url: String) -> Result<(), String> {
     tauri_plugin_opener::open_url(url, None::<&str>).map_err(|e| e.to_string())
 }
 
+/// Pasta Startup do usuario (separada para ser testavel).
+pub fn atalho_logon_em(appdata: &Path) -> PathBuf {
+    appdata
+        .join("Microsoft")
+        .join("Windows")
+        .join("Start Menu")
+        .join("Programs")
+        .join("Startup")
+        .join("openjarvis-hud.lnk")
+}
+
+fn atalho_logon() -> Result<PathBuf, String> {
+    let appdata = std::env::var("APPDATA").map_err(|_| "APPDATA nao definido".to_string())?;
+    Ok(atalho_logon_em(Path::new(&appdata)))
+}
+
+/// Informa se o HUD abre sozinho no logon (existe o .lnk na pasta Startup).
+#[tauri::command]
+pub fn inicio_no_logon_ativo() -> bool {
+    atalho_logon().map(|p| p.exists()).unwrap_or(false)
+}
+
+/// Cria ou remove o atalho `openjarvis-hud.lnk` na pasta Startup (WScript.Shell via PowerShell, sem janela).
+#[tauri::command]
+pub fn definir_inicio_no_logon(ligado: bool) -> Result<(), String> {
+    let lnk = atalho_logon()?;
+    if !ligado {
+        if lnk.exists() {
+            fs::remove_file(&lnk).map_err(|e| e.to_string())?;
+        }
+        return Ok(());
+    }
+    let exe = std::env::current_exe().map_err(|e| e.to_string())?;
+    let dir = exe.parent().map(|p| p.to_path_buf()).unwrap_or_default();
+    // Caminhos entram por variavel de ambiente: nada de aspas ou escapes na linha de comando.
+    let script = "$s = (New-Object -ComObject WScript.Shell).CreateShortcut($env:HUD_LNK);         $s.TargetPath = $env:HUD_EXE; $s.WorkingDirectory = $env:HUD_DIR;         $s.Description = 'OpenJarvis HUD'; $s.Save()";
+    let mut cmd = std::process::Command::new("powershell");
+    cmd.args(["-NoProfile", "-NonInteractive", "-Command", script])
+        .env("HUD_LNK", &lnk)
+        .env("HUD_EXE", &exe)
+        .env("HUD_DIR", &dir);
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        cmd.creation_flags(0x0800_0000); // CREATE_NO_WINDOW
+    }
+    if let Some(pai) = lnk.parent() {
+        fs::create_dir_all(pai).ok();
+    }
+    let saida = cmd.output().map_err(|e| e.to_string())?;
+    if !saida.status.success() || !lnk.exists() {
+        return Err(String::from_utf8_lossy(&saida.stderr).trim().to_string());
+    }
+    Ok(())
+}
+
 /// Captura o monitor onde a janela está e devolve JPEG (qualidade 85) em base64.
 #[tauri::command]
 pub fn capturar_tela(window: tauri::Window) -> Result<String, String> {
@@ -99,5 +155,12 @@ mod testes {
         let p = caminho_em(Path::new("/tmp/qualquer"));
         assert_eq!(p.file_name().unwrap(), "hud.config.json");
         assert!(p.starts_with("/tmp/qualquer"));
+    }
+
+    #[test]
+    fn atalho_logon_fica_na_pasta_startup() {
+        let p = atalho_logon_em(Path::new("/dados"));
+        assert_eq!(p.file_name().unwrap(), "openjarvis-hud.lnk");
+        assert!(p.ends_with("Programs/Startup/openjarvis-hud.lnk"));
     }
 }

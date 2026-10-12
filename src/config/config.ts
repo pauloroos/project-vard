@@ -22,3 +22,17 @@ export async function carregarConfig(): Promise<Config> {
   return { ...CONFIG_PADRAO, ...salvo, atalhos: { ...CONFIG_PADRAO.atalhos, ...(salvo.atalhos ?? {}) } };
 }
 export async function salvarConfig(c: Config): Promise<void> { await invoke("gravar_config", { config: c }); }
+
+/** true só para http(s) em 127.0.0.1 ou localhost: o HUD fala com serviços da própria máquina. */
+export function urlLocal(u: string): boolean {
+  try {
+    const x = new URL(u);
+    return (x.protocol === "http:" || x.protocol === "https:") && (x.hostname === "127.0.0.1" || x.hostname === "localhost");
+  } catch { return false; }
+}
+
+/** Avisos (não bloqueiam o salvamento) para os campos de URL fora da máquina local. */
+export function avisosDeUrl(c: Pick<Config, "openjarvis_url" | "gui_url" | "ponte_url">): string[] {
+  const nomes: [keyof typeof c, string][] = [["openjarvis_url", "OpenJarvis"], ["gui_url", "Interface de texto"], ["ponte_url", "Ponte"]];
+  return nomes.filter(([k]) => !urlLocal(c[k])).map(([, n]) => `${n}: o endereço não é 127.0.0.1 nem localhost`);
+}

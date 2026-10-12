@@ -3,7 +3,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 const invoke = vi.fn();
 vi.mock("@tauri-apps/api/core", () => ({ invoke: (...a: unknown[]) => invoke(...a) }));
 
-import { carregarConfig, CONFIG_PADRAO } from "../src/config/config";
+import { carregarConfig, CONFIG_PADRAO, urlLocal, avisosDeUrl } from "../src/config/config";
 
 describe("carregarConfig", () => {
   beforeEach(() => invoke.mockReset());
@@ -27,5 +27,25 @@ describe("carregarConfig", () => {
     expect(c.atalhos.falar).toBe("Ctrl+Shift+F");
     expect(c.atalhos.parar).toBe(CONFIG_PADRAO.atalhos.parar);
     expect(c.atalhos.mostrar).toBe(CONFIG_PADRAO.atalhos.mostrar);
+  });
+});
+
+describe("urlLocal", () => {
+  it("aceita 127.0.0.1 e localhost", () => {
+    expect(urlLocal("http://127.0.0.1:8000")).toBe(true);
+    expect(urlLocal("http://localhost:5173/")).toBe(true);
+  });
+  it("recusa outros hosts, esquemas e lixo", () => {
+    expect(urlLocal("http://10.0.0.5:8000")).toBe(false);
+    expect(urlLocal("http://127.0.0.1.evil.com")).toBe(false);
+    expect(urlLocal("ftp://127.0.0.1")).toBe(false);
+    expect(urlLocal("isto nao e url")).toBe(false);
+    expect(urlLocal("")).toBe(false);
+  });
+  it("avisosDeUrl lista só os campos fora da máquina", () => {
+    expect(avisosDeUrl(CONFIG_PADRAO)).toEqual([]);
+    const a = avisosDeUrl({ ...CONFIG_PADRAO, ponte_url: "http://10.0.0.5:4700" });
+    expect(a).toHaveLength(1);
+    expect(a[0]).toContain("Ponte");
   });
 });
