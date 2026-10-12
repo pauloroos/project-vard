@@ -25,20 +25,24 @@ export interface DepsConversa {
   capturar?: () => Promise<string>;
   /** Acende o indicador vermelho e espera ~1 s antes da captura. */
   antesDaCaptura?: () => Promise<void>;
+  /** Apaga o indicador vermelho: chamado sempre que a captura termina, falha ou é interrompida. */
+  depoisDaCaptura?: () => void;
   abrirMicrofone?: () => void | Promise<void>;
-  fecharMicrofone?: () => void | Promise<void>;
+  /** Devolve false se o microfone nem estava aberto (então a volta do jogo não o abre). */
+  fecharMicrofone?: () => boolean | void | Promise<boolean | void>;
   aoEstado?: (e: Estado, detalhe: string) => void;
   aoResposta?: (texto: string) => void;
 }
 
 const MAX_MENSAGENS = 20; // 10 trocas
+const PRAZO_CONFIRMACAO_MS = 15000;
 
 export class Conversa {
   estado: Estado = "repouso";
   detalhe = "";
   historico: Mensagem[] = [];
   private foraAvisado = false;
-  private aguardaConfirmacao = false;
+  private aguardaConfirmacao = 0; // instante em que o modo jogo foi pedido; 0 = nada a confirmar
   private microfoneFechado = false;
   private erroPonte = false;
   private pergunta: AbortController | null = null;
@@ -76,8 +80,9 @@ export class Conversa {
 
     // Confirmação do modo jogo: vale só a próxima frase; "sim" ou "confirmo" sozinhos (com ou sem o nome).
     if (this.aguardaConfirmacao) {
-      this.aguardaConfirmacao = false;
-      if (ehConfirmacao(extrairComando(bruto, v) ?? bruto)) { await this.ativarJogo(); return; }
+      const dentroDoPrazo = Date.now() - this.aguardaConfirmacao <= PRAZO_CONFIRMACAO_MS;
+      this.aguardaConfirmacao = 0;
+      if (dentroDoPrazo && ehConfirmacao(extrairComando(bruto, v) ?? bruto)) { await this.ativarJogo(); return; }
     }
 
     let comando: string;
@@ -96,7 +101,7 @@ export class Conversa {
       const d = this.d;
       if (!d.ponte || d.ponteNoAr?.() === false) { await this.falarFixa(FALAS.semPonte); return; }
       if (rota === "modo") {
-        this.aguardaConfirmacao = true;
+        this.aguardaConfirmacao = Date.now();
         await this.falarFixa(FALAS.modoJogoConfirmar);
         return;
       }
@@ -111,9 +116,12 @@ export class Conversa {
     try {
       if (ver) {
         if (!this.d.capturar || !this.d.ponte) throw new Error("sem captura");
-        await this.d.antesDaCaptura?.();
-        if (ac.signal.aborted) return;
-        const jpeg = await this.d.capturar();
+        let jpeg: string;
+        try {
+          await this.d.antesDaCaptura?.();
+          if (ac.signal.aborted) return;
+          jpeg = await this.d.capturar();
+        } finally { this.d.depoisDaCaptura?.(); }
         resposta = (await this.d.ponte.ver(jpeg, comando)).trim();
       } else {
         resposta = (await this.d.oj.perguntar([
@@ -152,8 +160,7 @@ export class Conversa {
     if (!(await ponte.modo("jogo"))) { await this.falarFixa(FALAS.erros.modo_falhou); return; }
     await this.tocar(aviso, false);
     this.mudar("jogo");
-    this.microfoneFechado = true;
-    await this.d.fecharMicrofone?.();
+    this.microfoneFechado = (await this.d.fecharMicrofone?.()) !== false;
   }
 
   /** Resultado da sondagem da ponte (a cada 10 s). null = ponte ausente. Cuida de entrar e sair do modo jogo. */
@@ -174,8 +181,7 @@ export class Conversa {
     } else if (s.modo === "jogo" && !emJogo && !this.erroPonte) {
       // Jogo pedido por fora (bandeja, atalho): o HUD acompanha, fica cinza e solta o microfone.
       this.mudar("jogo");
-      this.microfoneFechado = true;
-      await this.d.fecharMicrofone?.();
+      this.microfoneFechado = (await this.d.fecharMicrofone?.()) !== false;
     }
   }
 

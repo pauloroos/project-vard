@@ -214,4 +214,49 @@ describe("ponte do Vard (opcional)", () => {
     expect(m.c.estado).toBe("repouso");
     expect(m.fecharMicrofone).not.toHaveBeenCalled();
   });
+
+  it("abort durante a espera do indicador apaga o ponto vermelho e não captura", async () => {
+    const m = montar(true);
+    let liberar!: () => void;
+    const depois = vi.fn();
+    const c = new Conversa({
+      oj: m.oj, boca: m.boca, config: CONFIG_PADRAO, falas: async () => WAV,
+      ponte: m.ponte, capturar: m.capturar, depoisDaCaptura: depois,
+      antesDaCaptura: () => new Promise<void>((r) => { liberar = r; }),
+    });
+    const p = c.aoTextoTranscrito("Vard, olha a tela", false);
+    await Promise.resolve();
+    c.interromper();
+    liberar();
+    await p;
+    expect(depois).toHaveBeenCalledOnce();
+    expect(m.capturar).not.toHaveBeenCalled();
+    expect(m.ponte.ver).not.toHaveBeenCalled();
+  });
+
+  it("microfone que nunca foi aberto não é aberto na volta do jogo", async () => {
+    const m = montar(true);
+    m.fecharMicrofone.mockReturnValue(false);
+    await m.c.aoTextoTranscrito("Vard, modo jogo", false);
+    await m.c.aoTextoTranscrito("sim", false);
+    expect(m.c.estado).toBe("jogo");
+    await m.c.aoStatusPonte({ modo: "ligado" });
+    expect(m.abrirMicrofone).not.toHaveBeenCalled();
+    expect(m.c.estado).toBe("repouso");
+  });
+
+  it("confirmação do modo jogo expira em 15 s", async () => {
+    vi.useFakeTimers();
+    try {
+      const m = montar(true);
+      await m.c.aoTextoTranscrito("Vard, modo jogo", false);
+      vi.advanceTimersByTime(16000);
+      await m.c.aoTextoTranscrito("sim", false);
+      expect(m.ponte.modo).not.toHaveBeenCalled();
+      await m.c.aoTextoTranscrito("Vard, modo jogo", false);
+      vi.advanceTimersByTime(5000);
+      await m.c.aoTextoTranscrito("sim", false);
+      expect(m.ponte.modo).toHaveBeenCalledWith("jogo");
+    } finally { vi.useRealTimers(); }
+  });
 });

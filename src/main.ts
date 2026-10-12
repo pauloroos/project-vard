@@ -67,7 +67,7 @@ window.addEventListener("DOMContentLoaded", async () => {
 
   // Ponte opcional do Vard: sem ela o HUD funciona igual, só sem o botão Tela e sem modo jogo.
   const ponte = new Ponte(cfg.ponte_url);
-  let ponteNoAr = false;
+  let ponteNoAr = true; // desconhecida até a 1ª sondagem (já disparada abaixo): tenta a ponte em vez de dizer que não há
   const espera = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
   const fixa = (t: string) => falaFixa(t, cfg.voz, () => oj.sintetizar(t, cfg.voz, cfg.velocidade));
 
@@ -84,6 +84,7 @@ window.addEventListener("DOMContentLoaded", async () => {
     ponte, ponteNoAr: () => ponteNoAr,
     // Indicador vermelho por ~1 s antes de capturar; a captura é direta (sem compartilhamento).
     antesDaCaptura: async () => { hud.setIndicadorTela(true); await espera(1000); },
+    depoisDaCaptura: () => hud.setIndicadorTela(false),
     capturar: async () => {
       try { return await invoke<string>("capturar_tela"); } finally { hud.setIndicadorTela(false); }
     },
@@ -176,8 +177,8 @@ window.addEventListener("DOMContentLoaded", async () => {
   let relogioVad = 0;
   let largarAmostras: (() => void) | null = null;
   // Modo jogo: solta o microfone de verdade (a GPU e o ouvido ficam livres); alternarMicrofone reabre sozinho depois.
-  const fecharTudoDoMicrofone = () => {
-    if (!ligado) return;
+  const fecharTudoDoMicrofone = (): boolean => {
+    if (!ligado) return false; // nunca foi aberto: a volta do jogo não abre sozinha
     clearInterval(relogioVad);
     largarAmostras?.(); largarAmostras = null;
     bocaReal?.parar(); bocaReal = null;
@@ -187,6 +188,7 @@ window.addEventListener("DOMContentLoaded", async () => {
     capturando = false; pcm = []; anel = []; anelAmostras = 0; pttSegurado = false;
     detector.reset();
     hud.setMudo(true);
+    return true;
   };
   // Botão Mudo e duplo clique no núcleo: a primeira vez abre o microfone; depois só muda o mudo.
   alternarMicrofone = async () => {
