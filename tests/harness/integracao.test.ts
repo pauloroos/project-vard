@@ -1,0 +1,57 @@
+import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import type { AddressInfo } from "node:net";
+// @ts-expect-error módulo .mjs sem tipos
+import { criarServidor } from "./servidor-falso.mjs";
+import { OpenJarvis } from "../../src/api/openjarvis";
+import { Conversa } from "../../src/fala/conversa";
+import { CONFIG_PADRAO } from "../../src/config/config";
+import { pcmParaWav } from "../../src/audio/wav";
+
+let servidor: ReturnType<typeof criarServidor>;
+let oj: OpenJarvis;
+let porta = 0;
+
+beforeAll(async () => {
+  servidor = criarServidor();
+  await new Promise<void>((r) => servidor.listen(0, "127.0.0.1", r));
+  porta = (servidor.address() as AddressInfo).port;
+  oj = new OpenJarvis(`http://127.0.0.1:${porta}`);
+});
+afterAll(() => new Promise<void>((r) => servidor.close(() => r())));
+
+describe("Conversa com OpenJarvis contra o servidor falso", () => {
+  it("saúde e fala no ar", async () => {
+    expect(await oj.saude()).toBe(true);
+    expect(await oj.fala()).toBe(true);
+  });
+
+  it("transcrever, perguntar e sintetizar de ponta a ponta", async () => {
+    const tocados: ArrayBuffer[] = [];
+    const boca = { falando: false, tocar: async (w: ArrayBuffer) => { tocados.push(w); }, parar() {} };
+    const estados: string[] = [];
+    const c = new Conversa({
+      oj, boca, config: CONFIG_PADRAO,
+      falas: (t) => oj.sintetizar(t, CONFIG_PADRAO.voz, CONFIG_PADRAO.velocidade),
+      aoEstado: (e) => estados.push(e),
+    });
+
+    const wav = pcmParaWav(new Float32Array(16000), 16000);
+    const texto = await oj.transcrever(wav, "pt");
+    expect(texto).toBe("Vard, que horas são");
+
+    await c.aoTextoTranscrito(texto, false);
+    expect(estados).toEqual(["pensando", "falando", "repouso"]);
+    expect(tocados).toHaveLength(1);
+    const v = new DataView(tocados[0]);
+    expect(String.fromCharCode(v.getUint8(0), v.getUint8(1), v.getUint8(2), v.getUint8(3))).toBe("RIFF");
+    expect(tocados[0].byteLength).toBeGreaterThan(10000);
+    expect(c.historico[1]).toEqual({ role: "assistant", content: "Agora são 13h." });
+  });
+
+  it("o texto da transcrição vem do header X-Texto-Falso", async () => {
+    const form = new FormData();
+    form.append("file", new Blob([new ArrayBuffer(8)], { type: "audio/wav" }), "fala.wav");
+    const r = await fetch(`http://127.0.0.1:${porta}/v1/speech/transcribe`, { method: "POST", body: form, headers: { "X-Texto-Falso": "abre o youtube" } });
+    expect((await r.json()).text).toBe("abre o youtube");
+  });
+});

@@ -23,6 +23,14 @@ class Gravador extends AudioWorkletProcessor {
 registerProcessor("gravador", Gravador);
 `;
 
+/** Dá ao nó um caminho até o destino (ganho 0) para o Chromium continuar processando-o. */
+function ligarMudo(m: Microfone, no: AudioNode): void {
+  const mudo = m.contexto.createGain();
+  mudo.gain.value = 0;
+  no.connect(mudo);
+  mudo.connect(m.contexto.destination);
+}
+
 async function ligarGravador(m: Microfone): Promise<void> {
   const emitir = (a: Float32Array) => { for (const cb of ouvintes) cb(a); };
   try {
@@ -32,19 +40,28 @@ async function ligarGravador(m: Microfone): Promise<void> {
     const no = new AudioWorkletNode(m.contexto, "gravador");
     no.port.onmessage = (e) => emitir(e.data as Float32Array);
     m.fonte.connect(no);
+    ligarMudo(m, no);
     gravador = no;
   } catch (erro) {
     console.warn("AudioWorklet indisponível, usando ScriptProcessorNode", erro);
     const no = m.contexto.createScriptProcessor(4096, 1, 1);
     no.onaudioprocess = (e) => emitir(new Float32Array(e.inputBuffer.getChannelData(0)));
     m.fonte.connect(no);
-    no.connect(m.contexto.destination); // a saída fica em silêncio (buffer de saída não é preenchido)
+    ligarMudo(m, no);
     gravador = no;
   }
 }
 
-export async function abrirMicrofone(): Promise<Microfone> {
-  if (atual) return atual;
+let abrindo: Promise<Microfone> | null = null;
+
+/** Abre o microfone uma só vez: chamadas simultâneas (duplo clique) dividem a mesma Promise. */
+export function abrirMicrofone(): Promise<Microfone> {
+  if (atual) return Promise.resolve(atual);
+  abrindo ??= abrirDeVerdade().catch((e) => { abrindo = null; throw e; });
+  return abrindo;
+}
+
+async function abrirDeVerdade(): Promise<Microfone> {
   const stream = await navigator.mediaDevices.getUserMedia({
     audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
   });
@@ -68,6 +85,7 @@ export function fecharMicrofone(): void {
   atual.stream.getTracks().forEach((t) => t.stop());
   void atual.contexto.close();
   atual = null;
+  abrindo = null;
 }
 
 /** Assina os blocos de PCM (Float32, taxa do contexto). Retorna a função de cancelamento. */

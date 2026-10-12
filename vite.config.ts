@@ -22,6 +22,16 @@ export default defineConfig(() => ({
           port: 1421,
         }
       : undefined,
+    // So no `tauri dev`: o CORS do OpenJarvis recusa a origem localhost:1420, entao o front fala por /oj.
+    proxy: {
+      "/oj": {
+        target: process.env.VITE_OJ_ALVO || "http://127.0.0.1:8000",
+        changeOrigin: true,
+        rewrite: (caminho: string) => caminho.replace(/^\/oj/, ""),
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        configure: (proxy: any) => { proxy.on("proxyReq", (req: any) => req.removeHeader("origin")); },
+      },
+    },
     watch: {
       // 3. tell Vite to ignore watching `src-tauri`
       ignored: ["**/src-tauri/**"],

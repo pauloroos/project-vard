@@ -8,7 +8,9 @@
     "build": "tsc && vite build",
     "preview": "vite preview",
     "test": "vitest run",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "harness": "node tests/harness/servidor-falso.mjs",
+    "test:real": "vitest run tests/integracao-real.test.ts"
   },
   "dependencies": {
     "@tauri-apps/api": "^2",

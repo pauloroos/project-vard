@@ -1,0 +1,26 @@
+// ÚNICA tabela de falas fixas. Nada técnico vai para a boca sem passar por aqui ou pelo modelo.
+export const FALAS = {
+  saudacao: "Olá, senhor.",
+  pensando: "Um momento, senhor.",
+  telaNaoCompartilhada: "A tela não está compartilhada, senhor.",
+  erroModelo: "Não consegui falar com o cérebro, senhor.",
+  erroOuvido: "Não consegui ouvir direito, senhor.",
+  modoJogoConfirmar: "Ativar o modo jogo, senhor? Diga sim.",
+  modoJogoAtivado: "Modo jogo ativado. Até mais, senhor.",
+  semPonte: "Essa função precisa da ponte, que não está ligada, senhor.",
+  openjarvisFora: "O OpenJarvis saiu do ar, senhor.",
+  falaDesligada: "A fala está desligada no OpenJarvis.",
+  microfoneBloqueado: "O microfone está bloqueado, senhor.",
+  erros: {
+    modelo_fora: "O cérebro não está no ar, senhor.",
+    modelo_demorou: "O cérebro demorou demais, senhor.",
+    modelo_http: "O cérebro recusou o pedido, senhor.",
+    modelo_vazio: "O cérebro não chegou a responder, senhor.",
+    rede: "Falha de rede ao falar com o cérebro.",
+    nao_json: "O cérebro respondeu algo que não entendi.",
+    segredos: "Falta o arquivo de segredos, senhor.",
+    modo_script: "Não achei o script do modo, senhor.",
+    modo_falhou: "O modo não respondeu, senhor.",
+    origem_recusada: "Pedido de origem estranha recusado.",
+  },
+};
