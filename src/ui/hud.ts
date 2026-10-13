@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import type { Config } from "../config/config";
-import { salvarConfig } from "../config/config";
+import { atualizarConfig } from "../config/config";
 import type { Estado } from "../fala/conversa";
 import { Revelador } from "./revelador";
 
@@ -99,7 +99,7 @@ export class Hud {
     try {
       await invoke("definir_sempre_no_topo", { ligado: novo });
       this.cfg.sempre_no_topo = novo;
-      await salvarConfig(this.cfg);
+      await atualizarConfig({ sempre_no_topo: novo });
       this.acoes.aoConfigMudou?.(this.cfg);
       this.rotuloTopo();
     } catch (erro) { console.warn("não consegui alternar o topo", erro); }
@@ -123,7 +123,7 @@ export class Hud {
   private async alternarCompacto() {
     this.cfg.compacto = !this.cfg.compacto;
     this.setCompacto(this.cfg.compacto);
-    try { await salvarConfig(this.cfg); } catch (erro) { console.warn("não consegui gravar o compacto", erro); }
+    try { await atualizarConfig({ compacto: this.cfg.compacto }); } catch (erro) { console.warn("não consegui gravar o compacto", erro); }
     this.acoes.aoConfigMudou?.(this.cfg);
   }
 
@@ -142,6 +142,14 @@ export class Hud {
     this.timerResposta = window.setTimeout(() => this.respostaEl.classList.remove("visivel"), 9000);
   }
   dica(t: string) { this.linha.textContent = t; }
+  /** Aviso que precisa ser visto mesmo no compacto (onde a linha de estado some): aparece por 10 s. */
+  avisar(t: string) {
+    this.dica(t);
+    this.linha.classList.add("avisando");
+    clearTimeout(this.relogioAviso);
+    this.relogioAviso = setTimeout(() => this.linha.classList.remove("avisando"), 10000);
+  }
+  private relogioAviso: ReturnType<typeof setTimeout> | undefined;
   setLatencia(ms: number) { this.latenciaMs = Math.round(ms); this.pintar(); }
   setTaxa(hz: number) { this.taxaHz = hz; this.pintar(); }
 

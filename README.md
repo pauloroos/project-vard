@@ -13,7 +13,7 @@ Projeto independente, sem vínculo com o OpenJarvis nem com a Stanford.
 - Escuta pelo microfone (detecção de voz automática) ou por push-to-talk com atalho global.
 - Chama o assistente pelo nome ("Vard, que horas são"); com push-to-talk o nome é dispensado.
 - Transcreve, pergunta e sintetiza a resposta no próprio OpenJarvis (`/v1/speech/transcribe`, `/v1/chat/completions`, `/v1/speech/synthesize`).
-- Ícone na bandeja, painel de configurações em janela própria (abas Geral, Voz, Atalhos, Ponte e Modelos), início opcional com o Windows.
+- Ícone na bandeja, painel de configurações em janela própria (abas Geral, Voz, Atalhos, Modelos e Ponte), início opcional com o Windows.
 - Três tamanhos (ou o lado em pixels, de 160 a 800) e um modo compacto que deixa só o holograma.
 - Tela cheia ("sala") num monitor à escolha: vórtice grande, o que você disse, a resposta em letra grande e um relógio.
 - Escolha do modelo entre os que o OpenJarvis expõe.
@@ -48,7 +48,7 @@ Para gerar você mesmo: `npm install` e `npm run tauri build` (os instaladores s
 | Atalho | O que faz |
 | --- | --- |
 | `Ctrl+Alt+Space` (segurar) | Push-to-talk: fale enquanto segura; o nome "Vard" é dispensado |
-| `Ctrl+Alt+Period` | Interrompe a fala em curso |
+| `Ctrl+Alt+.` | Interrompe a fala em curso |
 | `Ctrl+Alt+V` | Mostra ou oculta o widget |
 | `Ctrl+Alt+P` | Abre ou fecha as configurações |
 | `Ctrl+Alt+L` | Liga a escuta (abre o microfone) ou alterna o mudo |
@@ -64,7 +64,7 @@ Mudo do microfone, interromper, olhar a tela (só com a ponte), abrir a conversa
 
 ## Configurar
 
-Pela engrenagem, pelo item **Configurações** da bandeja ou por `Ctrl+Alt+P`. O painel abre numa janela própria com as abas Geral, Voz, Atalhos, Ponte e Modelos. Salvar aplica na hora o tamanho, o compacto, sempre no topo, o clique atravessando, o seu nome e o modelo; endereços, voz, ouvido e atalhos valem depois de reiniciar (o painel diz quais). Os campos são os do arquivo `hud.config.json` (se ele ficar ilegível, o HUD sobe com o padrão e guarda o original como `hud.config.json.invalido`; em `%APPDATA%\io.github.pauloroos.vard\`):
+Pela engrenagem, pelo item **Configurações** da bandeja ou por `Ctrl+Alt+P`. O painel abre numa janela própria com as abas Geral, Voz, Atalhos, Modelos e Ponte. Salvar aplica na hora o tamanho, o compacto, sempre no topo, o clique atravessando, o seu nome e o modelo; endereços, voz, nome de chamada, idioma, instrução de formato, ouvido e atalhos valem depois de reiniciar (o painel diz quais). No arquivo, os atalhos usam os nomes de tecla `Period` e `Comma` (a tela mostra `.` e `,`). Os campos são os do arquivo `hud.config.json` (se ele ficar ilegível, o HUD sobe com o padrão e guarda o original como `hud.config.json.invalido`; em `%APPDATA%\io.github.pauloroos.vard\`):
 
 | Campo | Padrão | Para quê |
 | --- | --- | --- |
@@ -97,7 +97,7 @@ O widget fica sempre no topo e pode cobrir a sala se estiver no mesmo monitor: u
 
 ## Modelos
 
-A aba **Modelos** lista os modelos que o OpenJarvis expõe (`/v1/models`) e deixa escolher o principal; "Automático" usa o primeiro da lista. Se a ponte do Vard informar um modelo de reserva, ele aparece ali. **Testar** faz uma pergunta curta e mostra quanto tempo levou. Trocar de provedor (OmniRouter, assinaturas, LM Studio) é configuração do OpenJarvis: o Vard só escolhe entre o que ele oferece. Se o modelo escolhido sumir do OpenJarvis, o Vard usa o primeiro da lista.
+A aba **Modelos** lista os modelos que o OpenJarvis expõe (`/v1/models`) e deixa escolher o principal; "Automático" usa o primeiro da lista. Se a ponte do Vard informar um modelo de reserva, ele aparece ali. **Testar** faz uma pergunta curta e mostra quanto tempo levou. Trocar de provedor (OmniRouter, assinaturas, LM Studio) é configuração do OpenJarvis: o Vard só escolhe entre o que ele oferece. Se o modelo escolhido sumir do OpenJarvis, o Vard usa o primeiro da lista. Atenção: escolher um modelo diferente do automático, ou clicar em Testar nele, pode fazer o servidor de LLM (por exemplo o LM Studio) carregar um segundo modelo na GPU e consumir memória.
 
 ## Voz própria (opcional)
 

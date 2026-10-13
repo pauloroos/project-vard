@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { AcaoAtalho } from "./atalhos";
+import { normalizarAtalho, type AcaoAtalho } from "./atalhos";
 
 export const TAMANHOS = ["pequeno", "medio", "grande", "personalizado"] as const;
 
@@ -88,6 +88,12 @@ export function gatilhos(c: Pick<Config, "nome" | "variantes">): string[] {
 }
 export async function salvarConfig(c: Config): Promise<void> { await invoke("gravar_config", { config: c }); }
 
+/** Lê o que está no disco, troca só as chaves de `parcial` e grava: quem tem uma cópia velha (o widget) não desfaz o que o painel salvou. */
+export async function atualizarConfig(parcial: Partial<Config>): Promise<void> {
+  const atual = mesclar((await invoke<unknown>("ler_config")) ?? {});
+  await salvarConfig({ ...atual, ...parcial });
+}
+
 /** true só para http(s) em 127.0.0.1 ou localhost: o HUD fala com serviços da própria máquina. */
 export function urlLocal(u: string): boolean {
   try {
@@ -127,9 +133,15 @@ const REINICIO: [keyof Config, string][] = [
 /** O que mudou e só vale depois de reiniciar o Vard, em palavras do painel e sem repetição. */
 export function mudancasQueExigemReinicio(antes: Config, depois: Config): string[] {
   const r = new Set<string>();
-  for (const [k, rotulo] of REINICIO) if (JSON.stringify(antes[k]) !== JSON.stringify(depois[k])) r.add(rotulo);
+  const igual = (k: keyof Config) => k === "atalhos"
+    ? (Object.keys(depois.atalhos) as AcaoAtalho[]).every((a) => (normalizarAtalho(antes.atalhos[a]) ?? antes.atalhos[a]) === (normalizarAtalho(depois.atalhos[a]) ?? depois.atalhos[a]))
+    : JSON.stringify(antes[k]) === JSON.stringify(depois[k]);
+  for (const [k, rotulo] of REINICIO) if (!igual(k)) r.add(rotulo);
   return [...r];
 }
+
+/** Lado personalizado do widget em px lógicos: 160 a 800, inteiro. */
+export function limitarLado(px: number): number { return Math.min(800, Math.max(160, Math.round(px))); }
 
 /** Valida o payload de config-salva (vem de outra janela): só as chaves ao vivo, com tipo e faixa; inválido devolve null. */
 export function lerConfigAoVivo(x: unknown): Pick<Config, ChaveAoVivo> | null {
@@ -137,10 +149,10 @@ export function lerConfigAoVivo(x: unknown): Pick<Config, ChaveAoVivo> | null {
   const o = x as Record<string, unknown>;
   const px = o.tamanho_px;
   if (!(TAMANHOS as readonly unknown[]).includes(o.tamanho)) return null;
-  if (typeof px !== "number" || !Number.isFinite(px) || px < 160 || px > 800) return null;
+  if (typeof px !== "number" || !Number.isFinite(px)) return null;
   if (typeof o.compacto !== "boolean" || typeof o.sempre_no_topo !== "boolean" || typeof o.click_through !== "boolean") return null;
   if (typeof o.usuario !== "string" || typeof o.modelo !== "string") return null;
-  return { tamanho: o.tamanho as Config["tamanho"], tamanho_px: px, compacto: o.compacto, sempre_no_topo: o.sempre_no_topo, click_through: o.click_through, usuario: o.usuario, modelo: o.modelo };
+  return { tamanho: o.tamanho as Config["tamanho"], tamanho_px: limitarLado(px), compacto: o.compacto, sempre_no_topo: o.sempre_no_topo, click_through: o.click_through, usuario: o.usuario, modelo: o.modelo };
 }
 
 /** Valida o payload de config-mudou-no-widget (topo e compacto); inválido devolve null. */

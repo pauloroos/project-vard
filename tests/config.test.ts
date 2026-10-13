@@ -3,7 +3,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 const invoke = vi.fn();
 vi.mock("@tauri-apps/api/core", () => ({ invoke: (...a: unknown[]) => invoke(...a) }));
 
-import { lerConfigAoVivo, lerTopoCompacto, aplicarAoVivo, carregarConfig, CONFIG_PADRAO, mudancasQueExigemReinicio, urlLocal, avisosDeUrl, gatilhos } from "../src/config/config";
+import { lerConfigAoVivo, lerTopoCompacto, aplicarAoVivo, carregarConfig, CONFIG_PADRAO, mudancasQueExigemReinicio, atualizarConfig, limitarLado, urlLocal, avisosDeUrl, gatilhos } from "../src/config/config";
 
 describe("carregarConfig", () => {
   beforeEach(() => invoke.mockReset());
@@ -138,9 +138,14 @@ describe("salvar no painel", () => {
 
 describe("payloads entre janelas", () => {
   const ok = { tamanho: "grande", tamanho_px: 480, compacto: false, sempre_no_topo: true, click_through: false, usuario: "Ana", modelo: "" };
+  it("lado fora de 160..800 é limitado, não recusado", () => {
+    expect(lerConfigAoVivo({ ...ok, tamanho_px: 1000 })).toEqual({ ...ok, tamanho_px: 800 });
+    expect(lerConfigAoVivo({ ...ok, tamanho_px: 100 })).toEqual({ ...ok, tamanho_px: 160 });
+    expect(limitarLado(333.4)).toBe(333);
+  });
   it("aceita_payload_valido", () => { expect(lerConfigAoVivo({ ...ok, extra: 1 })).toEqual(ok); });
   it("recusa_tipos_e_faixas_ruins", () => {
-    for (const ruim of [null, "x", 3, { ...ok, tamanho: "enorme" }, { ...ok, tamanho_px: 100 }, { ...ok, tamanho_px: 900 },
+    for (const ruim of [null, "x", 3, { ...ok, tamanho: "enorme" }, 
       { ...ok, tamanho_px: "320" }, { ...ok, tamanho_px: NaN }, { ...ok, compacto: "sim" }, { ...ok, sempre_no_topo: 1 },
       { ...ok, click_through: null }, { ...ok, usuario: 5 }, { ...ok, modelo: 7 }]) expect(lerConfigAoVivo(ruim)).toBeNull();
   });
@@ -148,5 +153,29 @@ describe("payloads entre janelas", () => {
     expect(lerTopoCompacto({ sempre_no_topo: true, compacto: false })).toEqual({ sempre_no_topo: true, compacto: false });
     expect(lerTopoCompacto({ sempre_no_topo: "1", compacto: false })).toBeNull();
     expect(lerTopoCompacto(undefined)).toBeNull();
+  });
+});
+
+describe("atualizarConfig", () => {
+  beforeEach(() => invoke.mockReset());
+  it("grava só a chave mudada e mantém o que o painel salvou no disco", async () => {
+    const disco = { ...CONFIG_PADRAO, atalhos: { ...CONFIG_PADRAO.atalhos, escuta: "Ctrl+Shift+K" }, ponte_url: "http://127.0.0.1:9999", sala_monitor: "DISPLAY2" };
+    let gravado: unknown = null;
+    invoke.mockImplementation(async (cmd: string, args?: { config: unknown }) => {
+      if (cmd === "ler_config") return JSON.parse(JSON.stringify(disco));
+      if (cmd === "gravar_config") { gravado = args?.config; return; }
+    });
+    await atualizarConfig({ compacto: true });
+    expect(gravado).toEqual({ ...disco, compacto: true });
+    await atualizarConfig({ sempre_no_topo: false });
+    expect((gravado as typeof disco).atalhos.escuta).toBe("Ctrl+Shift+K");
+  });
+});
+
+describe("reinício e atalhos normalizados", () => {
+  it("o mesmo atalho escrito de outro jeito não pede reinício; um diferente pede", () => {
+    const a = { ...CONFIG_PADRAO, atalhos: { ...CONFIG_PADRAO.atalhos, mostrar: "ctrl + alt + v" } };
+    expect(mudancasQueExigemReinicio(a, CONFIG_PADRAO)).toEqual([]);
+    expect(mudancasQueExigemReinicio(CONFIG_PADRAO, { ...CONFIG_PADRAO, atalhos: { ...CONFIG_PADRAO.atalhos, mostrar: "Ctrl+Alt+J" } })).toEqual(["atalhos"]);
   });
 });

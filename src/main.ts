@@ -65,7 +65,7 @@ window.addEventListener("DOMContentLoaded", async () => {
   // Atalhos que o Windows recusou no arranque (outro programa já usa): avisa uma vez na linha de estado.
   try {
     const falhas = await invoke<FalhaAtalho[]>("falhas_de_atalho");
-    if (falhas.length) hud.dica(`atalho ${falhas.map((f) => f.combinacao).join(", ")} não registrou; veja Configurações`);
+    if (falhas.length) hud.avisar(`atalho ${falhas.map((f) => f.combinacao).join(", ")} não registrou; veja Configurações`);
   } catch { /* fora do Tauri */ }
 
   if (import.meta.env.DEV && import.meta.env.VITE_PROVA) {
@@ -363,7 +363,7 @@ window.addEventListener("DOMContentLoaded", async () => {
   await listen("sala-fechada", () => { salaAberta = false; clearInterval(relogioSala); });
   await listen<unknown>("aviso", (ev) => {
     if (typeof ev.payload !== "string") { console.warn("aviso ignorado: payload inválido"); return; }
-    hud.dica(ev.payload);
+    hud.avisar(ev.payload);
   });
   await listen<unknown>("sempre-no-topo", (ev) => {
     if (typeof ev.payload !== "boolean") { console.warn("sempre-no-topo ignorado: payload inválido"); return; }

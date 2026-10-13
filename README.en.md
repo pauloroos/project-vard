@@ -15,7 +15,7 @@ Independent project, not affiliated with OpenJarvis or Stanford.
 - Listens through the microphone (automatic voice detection) or through a global push-to-talk shortcut.
 - Wake word: say the assistant's name ("Vard, what time is it"); with push-to-talk the name is not needed.
 - Transcription, chat and speech synthesis all go to OpenJarvis (`/v1/speech/transcribe`, `/v1/chat/completions`, `/v1/speech/synthesize`).
-- Tray icon, settings panel in its own window (tabs Geral, Voz, Atalhos, Ponte and Modelos), optional start with Windows.
+- Tray icon, settings panel in its own window (tabs Geral, Voz, Atalhos, Modelos and Ponte), optional start with Windows.
 - Three sizes (or the side in pixels, 160 to 800) and a compact mode that leaves only the hologram.
 - Full screen ("sala") on a monitor of your choice: a large vortex, what you said, the answer in large type and a clock.
 - Pick the model among the ones OpenJarvis exposes.
@@ -50,7 +50,7 @@ To build it yourself: `npm install` and `npm run tauri build` (installers land i
 | Shortcut | Action |
 | --- | --- |
 | `Ctrl+Alt+Space` (hold) | Push-to-talk: speak while holding; the name "Vard" is not required |
-| `Ctrl+Alt+Period` | Stop the current speech |
+| `Ctrl+Alt+.` | Stop the current speech |
 | `Ctrl+Alt+V` | Show or hide the widget |
 | `Ctrl+Alt+P` | Open or close the settings |
 | `Ctrl+Alt+L` | Start listening (opens the microphone) or toggle mute |
@@ -66,7 +66,7 @@ Microphone mute, stop, look at the screen (bridge only), open the text conversat
 
 ## Configure
 
-Use the gear, **Configurações** in the tray menu or `Ctrl+Alt+P`. The panel opens in its own window with the tabs Geral, Voz, Atalhos, Ponte and Modelos. Saving applies size, compact mode, always on top, click-through, your name and the model right away; addresses, voice, listening and shortcuts apply after a restart (the panel says which). The fields are those of `hud.config.json` (if the file becomes unreadable the HUD starts with the defaults and keeps the original as `hud.config.json.invalido`; in `%APPDATA%\io.github.pauloroos.vard\`):
+Use the gear, **Configurações** in the tray menu or `Ctrl+Alt+P`. The panel opens in its own window with the tabs Geral, Voz, Atalhos, Modelos and Ponte. Saving applies size, compact mode, always on top, click-through, your name and the model right away; addresses, voice, call name, language, format instruction, listening and shortcuts apply after a restart (the panel says which). In the file, shortcuts use the key names `Period` and `Comma` (the screen shows `.` and `,`). The fields are those of `hud.config.json` (if the file becomes unreadable the HUD starts with the defaults and keeps the original as `hud.config.json.invalido`; in `%APPDATA%\io.github.pauloroos.vard\`):
 
 | Field | Default | Purpose |
 | --- | --- | --- |
@@ -99,7 +99,7 @@ The widget is always on top and may cover the sala if both are on the same monit
 
 ## Models
 
-The **Modelos** tab lists the models OpenJarvis exposes (`/v1/models`) and lets you pick the main one; "Automático" uses the first one. If the Vard bridge reports a fallback model, it shows there. **Testar** asks a short question and shows how long it took. Switching providers (OmniRouter, subscriptions, LM Studio) is OpenJarvis configuration: Vard only picks among what it offers. If the chosen model disappears from OpenJarvis, Vard uses the first one.
+The **Modelos** tab lists the models OpenJarvis exposes (`/v1/models`) and lets you pick the main one; "Automático" uses the first one. If the Vard bridge reports a fallback model, it shows there. **Testar** asks a short question and shows how long it took. Switching providers (OmniRouter, subscriptions, LM Studio) is OpenJarvis configuration: Vard only picks among what it offers. If the chosen model disappears from OpenJarvis, Vard uses the first one. Warning: picking a non-default model, or pressing Testar on it, may make the LLM server (for example LM Studio) load a second model into the GPU and use its memory.
 
 ## Own voice (optional)
 

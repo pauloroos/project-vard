@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import type { Config } from "../config/config";
-import { avisosDeUrl, mudancasQueExigemReinicio, salvarConfig, urlLocal } from "../config/config";
+import { avisosDeUrl, limitarLado, mudancasQueExigemReinicio, salvarConfig, urlLocal } from "../config/config";
 import { ACOES_ATALHO, ROTULOS_ATALHO, avisoAltGr, validarAtalhos, type AcaoAtalho, type FalhaAtalho } from "../config/atalhos";
 import { campoAtalho } from "./campo-atalho";
 import type { OpenJarvis } from "../conectores/openjarvis/cliente";
@@ -215,7 +215,7 @@ export class Configuracoes {
       idioma: opc("idioma"), voz: txt("voz", c.voz),
       velocidade: num("velocidade", c.velocidade), finish_ms: num("finish_ms", c.finish_ms), limiar_vad: num("limiar_vad", c.limiar_vad),
       instrucao_formato: txt("instrucao_formato", c.instrucao_formato),
-      tamanho: this.sel("tamanho").value as Config["tamanho"], tamanho_px: num("tamanho_px", c.tamanho_px),
+      tamanho: this.sel("tamanho").value as Config["tamanho"], tamanho_px: limitarLado(num("tamanho_px", c.tamanho_px)),
       compacto: this.el("compacto").checked,
       sempre_no_topo: this.el("sempre_no_topo").checked, click_through: this.el("click_through").checked,
       atalhos: { ...this.atalhos },
