@@ -306,8 +306,8 @@ pub fn marcar_invisivel_na_bandeja(estado: tauri::State<'_, crate::Bandeja>, lig
     Ok(())
 }
 
-/// Texto da dica da bandeja: as duas marcas viram o parêntese depois do nome.
-pub fn texto_da_dica(nao_ouvir: bool, nao_falar: bool) -> String {
+/// Texto da dica da bandeja: as duas marcas viram o parêntese depois do nome; tarefas em andamento entram no fim.
+pub fn texto_da_dica(nao_ouvir: bool, nao_falar: bool, tarefas: u32) -> String {
     let mut partes = Vec::new();
     if nao_ouvir {
         partes.push("não ouvindo");
@@ -315,10 +315,16 @@ pub fn texto_da_dica(nao_ouvir: bool, nao_falar: bool) -> String {
     if nao_falar {
         partes.push("não falando");
     }
-    if partes.is_empty() {
+    let base = if partes.is_empty() {
         "Vard".to_string()
     } else {
         format!("Vard ({})", partes.join(", "))
+    };
+    if tarefas == 0 {
+        base
+    } else {
+        let s = if tarefas == 1 { "tarefa" } else { "tarefas" };
+        format!("{base} | {tarefas} {s} em andamento")
     }
 }
 
@@ -331,13 +337,27 @@ fn marcado(item: &Mutex<Option<tauri::menu::CheckMenuItem<tauri::Wry>>>) -> bool
 
 /// Reescreve a dica da bandeja a partir das marcas atuais (no modo invisível ela é o único sinal).
 pub fn atualizar_dica_bandeja(app: &tauri::AppHandle) {
-    let (ouvir, falar) = {
+    let (ouvir, falar, tarefas) = {
         let estado = app.state::<crate::Bandeja>();
-        (marcado(&estado.nao_ouvir), marcado(&estado.nao_falar))
+        (
+            marcado(&estado.nao_ouvir),
+            marcado(&estado.nao_falar),
+            estado.tarefas.lock().map(|g| *g).unwrap_or(0),
+        )
     };
     if let Some(icone) = app.tray_by_id("hud") {
-        let _ = icone.set_tooltip(Some(texto_da_dica(ouvir, falar)));
+        let _ = icone.set_tooltip(Some(texto_da_dica(ouvir, falar, tarefas)));
     }
+}
+
+/// O widget mudou o número de tarefas em andamento: guarda e a dica da bandeja acompanha.
+#[tauri::command]
+pub fn definir_tarefas_bandeja(app: tauri::AppHandle, n: u32) -> Result<(), String> {
+    if let Ok(mut g) = app.state::<crate::Bandeja>().tarefas.lock() {
+        *g = n;
+    }
+    atualizar_dica_bandeja(&app);
+    Ok(())
 }
 
 /// O widget mudou "não ouvir"/"não falar": as marcas da bandeja e a dica acompanham.
@@ -602,10 +622,17 @@ mod testes {
 
     #[test]
     fn dica_da_bandeja_reflete_as_marcas() {
-        assert_eq!(texto_da_dica(false, false), "Vard");
-        assert_eq!(texto_da_dica(true, false), "Vard (não ouvindo)");
-        assert_eq!(texto_da_dica(false, true), "Vard (não falando)");
-        assert_eq!(texto_da_dica(true, true), "Vard (não ouvindo, não falando)");
+        assert_eq!(texto_da_dica(false, false, 0), "Vard");
+        assert_eq!(texto_da_dica(true, false, 0), "Vard (não ouvindo)");
+        assert_eq!(texto_da_dica(false, true, 0), "Vard (não falando)");
+        assert_eq!(texto_da_dica(true, true, 0), "Vard (não ouvindo, não falando)");
+    }
+
+    #[test]
+    fn dica_da_bandeja_mostra_tarefas_em_andamento() {
+        assert_eq!(texto_da_dica(false, false, 1), "Vard | 1 tarefa em andamento");
+        assert_eq!(texto_da_dica(false, false, 3), "Vard | 3 tarefas em andamento");
+        assert_eq!(texto_da_dica(true, false, 2), "Vard (não ouvindo) | 2 tarefas em andamento");
     }
 
     #[test]

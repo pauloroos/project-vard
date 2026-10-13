@@ -17,6 +17,8 @@ pub struct Bandeja {
     pub invisivel: Mutex<Option<CheckMenuItem<tauri::Wry>>>,
     pub nao_ouvir: Mutex<Option<CheckMenuItem<tauri::Wry>>>,
     pub nao_falar: Mutex<Option<CheckMenuItem<tauri::Wry>>>,
+    /// Tarefas em andamento (o widget avisa): entra na dica da bandeja.
+    pub tarefas: Mutex<u32>,
 }
 
 fn alternar_visibilidade(app: &AppHandle) {
@@ -113,7 +115,7 @@ fn criar_bandeja(app: &AppHandle, no_topo: bool, invisivel_ligado: bool, nao_ouv
         }
     }
     let mut b = TrayIconBuilder::with_id("hud")
-        .tooltip(comandos::texto_da_dica(nao_ouvir_ligado, nao_falar_ligado))
+        .tooltip(comandos::texto_da_dica(nao_ouvir_ligado, nao_falar_ligado, 0))
         .menu(&menu)
         .on_menu_event(move |app, ev| match ev.id().as_ref() {
             "mostrar" => alternar_visibilidade(app),
@@ -184,6 +186,7 @@ pub fn run() {
             invisivel: Mutex::new(None),
             nao_ouvir: Mutex::new(None),
             nao_falar: Mutex::new(None),
+            tarefas: Mutex::new(0),
         })
         .invoke_handler(tauri::generate_handler![
             comandos::ler_config,
@@ -206,7 +209,8 @@ pub fn run() {
             comandos::listar_monitores,
             comandos::definir_invisivel,
             comandos::marcar_invisivel_na_bandeja,
-            comandos::sincronizar_bandeja
+            comandos::sincronizar_bandeja,
+            comandos::definir_tarefas_bandeja
         ])
         .setup(|app| {
             let handle = app.handle().clone();

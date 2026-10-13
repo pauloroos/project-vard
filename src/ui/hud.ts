@@ -60,6 +60,7 @@ export class Hud {
   private botaoTela: HTMLButtonElement;
   private contadorAvisos: HTMLButtonElement;
   private chipReuniao: HTMLElement;
+  private indicadorAndamento: HTMLElement;
 
   constructor(private cfg: Config, private raiz: HTMLElement, private acoes: AcoesHud = {}) {
     const q = (id: string) => raiz.querySelector<HTMLElement>(`#${id}`)!;
@@ -96,6 +97,11 @@ export class Hud {
     this.chipReuniao = document.createElement("div");
     this.chipReuniao.id = "chip-reuniao"; this.chipReuniao.hidden = true; this.chipReuniao.textContent = "reunião";
     raiz.append(this.chipReuniao);
+    // Bolinha de tarefas em andamento (canto superior esquerdo, abaixo do chip quando os dois aparecem).
+    // Fica dentro do #app: no modo invisível some com o resto (só a dica da bandeja sinaliza).
+    this.indicadorAndamento = document.createElement("div");
+    this.indicadorAndamento.id = "andamento"; this.indicadorAndamento.hidden = true;
+    raiz.append(this.indicadorAndamento);
     this.setNaoFalar(cfg.nao_falar);
     this.setCompacto(cfg.compacto);
     this.pintar();
@@ -171,6 +177,14 @@ export class Hud {
 
   /** Reunião em andamento (a ponte avisa): chip discreto no HUD; no modo invisível ele some com o resto do #app. */
   setReuniao(ativa: boolean) { this.chipReuniao.hidden = !ativa; }
+
+  /** Tarefas em andamento da ponte: bolinha girando + contador (separado dos avisos e do "pensando"); some com zero. */
+  setEmAndamento(n: number, textoDaDica: string) {
+    const v = Number.isFinite(n) ? Math.max(0, Math.round(n)) : 0;
+    this.indicadorAndamento.hidden = v === 0;
+    this.indicadorAndamento.textContent = v ? String(v) : "";
+    this.indicadorAndamento.title = textoDaDica;
+  }
 
   /** Contador de avisos não lidos: some com zero. */
   setNaoLidos(n: number) {

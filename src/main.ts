@@ -14,6 +14,7 @@ import { falaFixa, type FonteDeFala } from "./audio/cache";
 import { OpenJarvis } from "./conectores/openjarvis/cliente";
 import { Ponte } from "./conectores/ponte/cliente";
 import { CentralAvisos } from "./avisos/central";
+import { EmAndamento, textoDaDica as dicaDeAndamento } from "./avisos/andamento";
 import { deveFalarAviso } from "./avisos/fala";
 import { EstadoReuniao } from "./reuniao/estado";
 import { criarFonteDeVoz } from "./conectores/voz/escolher";
@@ -187,12 +188,19 @@ window.addEventListener("DOMContentLoaded", async () => {
   // Central de avisos: lista a cada status (10 s) e os eventos ao vivo entram sozinhos.
   const avisos = new CentralAvisos(ponte);
   avisos.aoMudar = () => hud.setNaoLidos(avisos.naoLidos);
+  // Tarefas em andamento: sinal discreto no HUD e na dica da bandeja (o indicador some no modo invisível).
+  const emAndamento = new EmAndamento(ponte);
+  emAndamento.aoMudar = () => {
+    hud.setEmAndamento(emAndamento.total, dicaDeAndamento(emAndamento.tarefas));
+    void invoke("definir_tarefas_bandeja", { n: emAndamento.total }).catch(() => {});
+  };
   // Reunião: o widget fica mudo enquanto ela corre (o serviço da reunião é quem manda; aqui só escutamos).
   let reuniaoAtiva = false;
   let aoReuniao: (ativa: boolean) => void = () => {};
   const estadoReuniao = new EstadoReuniao((ativa) => aoReuniao(ativa));
   if (cfg.ponte_url) ponte.eventos((tipo, dados) => {
     if (tipo === "oficina" || tipo === "reuniao") { avisos.aplicarEvento(tipo, dados); void falarAviso(tipo, dados); }
+    if (tipo === "oficina") void emAndamento.aplicarEvento(tipo); // qualquer estado recarrega a lista
     if (tipo === "reuniao") estadoReuniao.aplicarEvento(dados);
   });
   let ponteNoAr = true; // desconhecida até a 1ª sondagem (já disparada abaixo): tenta a ponte em vez de dizer que não há
@@ -257,6 +265,7 @@ window.addEventListener("DOMContentLoaded", async () => {
     hud.setPonte(ponteNoAr);
     estadoReuniao.atualizarStatus(st ? st.reuniao ?? "ausente" : null);
     void avisos.carregar(); // falha em silêncio com a ponte fora
+    void emAndamento.carregar(); // falha em silêncio com a ponte fora
     try { await conversa.aoStatusPonte(st); } catch (erro) { console.warn("status da ponte falhou", erro); }
   };
   void sondarPonte();

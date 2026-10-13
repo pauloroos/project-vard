@@ -19,6 +19,9 @@ export interface Aviso { id: number; hora: string; tipo: string; resumo: string;
 /** Resultado de uma tarefa da ponte. */
 export interface ResultadoTarefa { n: number; estado: string; resumo: string; texto: string }
 
+/** Uma tarefa em andamento segundo o /tarefas/andamento da ponte (só as que estão rodando). */
+export interface TarefaAndamento { n: number; ferramenta: string; quem: string; estado: string; resumo: string; segundos: number }
+
 /** Um aviso vindo da rede, com os campos frouxos: id obrigatório, o resto com padrão. */
 export function normalizarAviso(a: unknown): Aviso | null {
   if (typeof a !== "object" || a === null) return null;
@@ -184,6 +187,30 @@ export class Ponte {
         if (!r.ok) return null;
         const j = await r.json();
         return { n: typeof j.n === "number" ? j.n : n, estado: String(j.estado ?? ""), resumo: String(j.resumo ?? ""), texto: String(j.texto ?? "") };
+      });
+    } catch { return null; }
+  }
+
+  /** Tarefas em andamento (só as rodando; as que aguardam aprovação não entram). null = ponte ausente. */
+  async andamento(): Promise<{ total: number; tarefas: TarefaAndamento[] } | null> {
+    if (!this.base) return null;
+    try {
+      return await comTimeout(5000, async (signal) => {
+        const r = await fetch(`${this.base}/tarefas/andamento`, { signal });
+        if (!r.ok) return null;
+        const j = await r.json();
+        const bruto: unknown[] = Array.isArray(j.tarefas) ? j.tarefas : [];
+        const tarefas = bruto
+          .filter((x): x is Record<string, unknown> => typeof x === "object" && x !== null)
+          .map((o) => ({
+            n: typeof o.n === "number" ? o.n : 0,
+            ferramenta: typeof o.ferramenta === "string" ? o.ferramenta : "",
+            quem: typeof o.quem === "string" ? o.quem : "",
+            estado: typeof o.estado === "string" ? o.estado : "",
+            resumo: typeof o.resumo === "string" ? o.resumo : "",
+            segundos: typeof o.segundos === "number" ? o.segundos : 0,
+          }));
+        return { total: typeof j.total === "number" ? j.total : tarefas.length, tarefas };
       });
     } catch { return null; }
   }

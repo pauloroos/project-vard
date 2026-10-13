@@ -75,6 +75,22 @@ html, body { background: transparent; margin: 0; overflow: hidden; }
 #chip-reuniao::before { content: ""; width: calc(5px * var(--escala)); height: calc(5px * var(--escala)); border-radius: 50%; background: #ff3030; box-shadow: 0 0 6px #ff3030; }
 #chip-reuniao[hidden] { display: none; }
 
+/* Bolinha de tarefas em andamento (canto superior esquerdo): girando suave + contador; some com zero. O mouse mostra a dica (title). */
+#andamento {
+  position: absolute; top: calc(8px * var(--escala)); left: calc(8px * var(--escala)); z-index: 5;
+  min-width: calc(14px * var(--escala)); height: calc(14px * var(--escala)); padding: 0 calc(4px * var(--escala));
+  display: flex; align-items: center; justify-content: center; gap: calc(3px * var(--escala));
+  background: rgba(0, 240, 255, 0.08); border: 1px solid rgba(0, 240, 255, 0.4); border-radius: calc(7px * var(--escala));
+  color: var(--ciano); font-size: calc(8px * var(--escala)); line-height: 1; letter-spacing: 0; text-transform: none;
+}
+#andamento::before {
+  content: ""; width: calc(6px * var(--escala)); height: calc(6px * var(--escala)); border-radius: 50%;
+  border: 1px solid var(--ciano); border-top-color: transparent; animation: girar 1.2s linear infinite;
+}
+@keyframes girar { to { transform: rotate(360deg); } }
+#andamento[hidden] { display: none; }
+#chip-reuniao:not([hidden]) ~ #andamento { top: calc(26px * var(--escala)); } /* não embaixo do chip "reunião" */
+
 /* Compacto: só o holograma. O texto some; a barra aparece com o mouse em cima e some 2 s depois (Revelador). */
 #app.compacto #dica, #app.compacto #resposta { display: none; }
 #app.compacto #dica.avisando { display: block; }
