@@ -28,6 +28,8 @@ export interface AcoesHud {
   aoTela?: () => void;
   /** Engrenagem: abre o painel de configurações. */
   aoConfig?: () => void;
+  /** Bolinha de avisos não lidos: abre o painel já na aba Avisos. */
+  aoAvisos?: () => void;
   /** O widget gravou topo ou compacto pelos próprios botões (o main avisa o painel). */
   aoConfigMudou?: (c: Config) => void;
 }
@@ -50,6 +52,7 @@ export class Hud {
   private botaoModo: HTMLButtonElement;
   private botaoTopoEl: HTMLButtonElement;
   private botaoTela: HTMLButtonElement;
+  private contadorAvisos: HTMLButtonElement;
 
   constructor(private cfg: Config, private raiz: HTMLElement, private acoes: AcoesHud = {}) {
     const q = (id: string) => raiz.querySelector<HTMLElement>(`#${id}`)!;
@@ -73,6 +76,13 @@ export class Hud {
     this.revelador = new Revelador(2000, (v) => this.raiz.classList.toggle("revelado", v));
     raiz.addEventListener("mouseenter", () => this.revelador.entrou());
     raiz.addEventListener("mouseleave", () => this.revelador.saiu());
+    // Bolinha de avisos não lidos no canto superior direito (fora da barra: fica visível também no compacto).
+    this.contadorAvisos = document.createElement("button");
+    this.contadorAvisos.id = "cont-avisos"; this.contadorAvisos.type = "button";
+    this.contadorAvisos.hidden = true;
+    this.contadorAvisos.addEventListener("click", () => this.acoes.aoAvisos?.());
+    this.rotularContador(0);
+    raiz.append(this.contadorAvisos);
     this.setCompacto(cfg.compacto);
     this.pintar();
   }
@@ -132,6 +142,20 @@ export class Hud {
 
   /** Mostra ou esconde o botão Tela conforme a ponte do Vard responde. */
   setPonte(noAr: boolean) { this.botaoTela.hidden = !noAr; }
+
+  /** Contador de avisos não lidos: some com zero. */
+  setNaoLidos(n: number) {
+    const v = Number.isFinite(n) ? Math.max(0, Math.round(n)) : 0;
+    this.contadorAvisos.hidden = v === 0;
+    this.rotularContador(v);
+  }
+
+  private rotularContador(n: number) {
+    const dica = n === 1 ? "1 aviso não lido; clique para ver" : `${n} avisos não lidos; clique para ver`;
+    this.contadorAvisos.textContent = String(n);
+    this.contadorAvisos.title = dica;
+    this.contadorAvisos.setAttribute("aria-label", dica);
+  }
   /** Indicador vermelho: a tela está prestes a ser capturada. */
   setIndicadorTela(ligado: boolean) { this.raiz.classList.toggle("capturando", ligado); }
 

@@ -13,6 +13,7 @@ import { Boca } from "./audio/boca";
 import { falaFixa, type FonteDeFala } from "./audio/cache";
 import { OpenJarvis } from "./conectores/openjarvis/cliente";
 import { Ponte } from "./conectores/ponte/cliente";
+import { CentralAvisos } from "./avisos/central";
 import { criarFonteDeVoz } from "./conectores/voz/escolher";
 import type { FonteDeVoz } from "./conectores/voz/fonte";
 import { Conversa, type Estado } from "./fala/conversa";
@@ -59,6 +60,11 @@ window.addEventListener("DOMContentLoaded", async () => {
   let abrirConfig = () => {};
   const hud = new Hud(cfg, app, {
     aoConfig: () => abrirConfig(),
+    aoAvisos: () => {
+      abrirConfig();
+      // A janela do painel pode estar sendo criada agora: repete o pedido da aba até o painel ouvir.
+      for (const atraso of [300, 1000, 2500]) setTimeout(() => { void emitTo("configuracoes", "abrir-aba", "avisos").catch(() => {}); }, atraso);
+    },
     aoMudo: () => { void alternarMicrofone(); },
     aoInterromper: () => interromperTudo(),
     aoTela: () => olharTela(),
@@ -135,6 +141,10 @@ window.addEventListener("DOMContentLoaded", async () => {
 
   // Ponte opcional do Vard: sem ela o HUD funciona igual, só sem o botão Tela e sem modo jogo.
   const ponte = new Ponte(cfg.ponte_url);
+  // Central de avisos: lista a cada status (10 s) e os eventos ao vivo entram sozinhos.
+  const avisos = new CentralAvisos(ponte);
+  avisos.aoMudar = () => hud.setNaoLidos(avisos.naoLidos);
+  if (cfg.ponte_url) ponte.eventos((tipo, dados) => { if (tipo === "oficina" || tipo === "reuniao") avisos.aplicarEvento(tipo, dados); });
   let ponteNoAr = true; // desconhecida até a 1ª sondagem (já disparada abaixo): tenta a ponte em vez de dizer que não há
   const espera = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
   // Falas fixas: a voz própria primeiro (o cache guarda o WAV dela), o OpenJarvis como reserva.
@@ -178,6 +188,7 @@ window.addEventListener("DOMContentLoaded", async () => {
     const st = await ponte.status();
     ponteNoAr = st !== null;
     hud.setPonte(ponteNoAr);
+    void avisos.carregar(); // falha em silêncio com a ponte fora
     try { await conversa.aoStatusPonte(st); } catch (erro) { console.warn("status da ponte falhou", erro); }
   };
   void sondarPonte();

@@ -5,7 +5,9 @@ import { ACOES_ATALHO, ROTULOS_ATALHO, avisoAltGr, validarAtalhos, type AcaoAtal
 import { campoAtalho } from "./campo-atalho";
 import type { OpenJarvis } from "../conectores/openjarvis/cliente";
 import type { StatusPonte } from "../conectores/ponte/cliente";
+import type { PonteAvisos } from "../avisos/central";
 import { AbaAtualizacao } from "./aba-atualizacao";
+import { AbaAvisos } from "./aba-avisos";
 import { AbaModelos } from "./aba-modelos";
 import { AbaSistema } from "./aba-sistema";
 import { AbaVoz } from "./aba-voz";
@@ -17,6 +19,8 @@ export interface DepsConfiguracoes {
   statusPonte: (url: string) => Promise<StatusPonte | null>;
   /** Dispara um verbo do ciclo da ponte no endereço dado (true = aceitou). */
   modoPonte: (url: string, verbo: string) => Promise<boolean>;
+  /** Cliente da ponte no endereço dado (avisos, tarefas e eventos ao vivo). */
+  ponte: (url: string) => PonteAvisos;
   /** Depois de gravar: o main avisa o widget (evento config-salva). */
   aoSalvar?: (c: Config) => void;
   /** Fecha a janela do painel. */
@@ -28,8 +32,8 @@ export interface DepsConfiguracoes {
 /** Monitor como o comando listar_monitores devolve (pixels físicos). */
 export interface MonitorInfo { nome: string; x: number; y: number; largura: number; altura: number; escala: number; principal: boolean }
 
-export type Aba = "geral" | "voz" | "atalhos" | "modelos" | "sistema" | "atualizacao";
-const ABAS: [Aba, string][] = [["geral", "Geral"], ["voz", "Voz"], ["atalhos", "Atalhos"], ["modelos", "Modelos"], ["sistema", "Sistema"], ["atualizacao", "Atualização"]];
+export type Aba = "geral" | "voz" | "atalhos" | "modelos" | "sistema" | "avisos" | "atualizacao";
+const ABAS: [Aba, string][] = [["geral", "Geral"], ["voz", "Voz"], ["atalhos", "Atalhos"], ["modelos", "Modelos"], ["sistema", "Sistema"], ["avisos", "Avisos"], ["atualizacao", "Atualização"]];
 const OPCOES_TAMANHO: [Config["tamanho"], string][] = [
   ["pequeno", "Pequeno (240 px)"], ["medio", "Médio (320 px)"], ["grande", "Grande (480 px)"], ["personalizado", "Personalizado"],
 ];
@@ -45,6 +49,7 @@ export class Configuracoes {
   private falhas: FalhaAtalho[] = [];
   private modelos: AbaModelos | null = null;
   private sistema: AbaSistema | null = null;
+  private avisos: AbaAvisos | null = null;
   private atualizacao: AbaAtualizacao | null = null;
   private abaVoz!: AbaVoz;
   private linhasAtalho = new Map<AcaoAtalho, { campo: HTMLButtonElement; motivo: HTMLElement }>();
@@ -74,6 +79,13 @@ export class Configuracoes {
       modo: (v) => this.deps.modoPonte(urlPonte(), v),
     });
     this.sistema.montar();
+    this.avisos = new AbaAvisos(this.raiz.querySelector<HTMLElement>("#cfg-avisos")!, {
+      avisos: () => this.deps.ponte(urlPonte()).avisos(),
+      marcarLidos: (ids) => this.deps.ponte(urlPonte()).marcarLidos(ids),
+      resultadoTarefa: (n) => this.deps.ponte(urlPonte()).resultadoTarefa(n),
+      eventos: (cb) => this.deps.ponte(urlPonte()).eventos(cb),
+    });
+    this.avisos.montar();
     this.atualizacao = new AbaAtualizacao(this.raiz.querySelector<HTMLElement>("#cfg-atualizacao")!, this.deps.atualizacao);
     this.atualizacao.montar();
     this.abrirAba("geral");
@@ -89,6 +101,7 @@ export class Configuracoes {
     for (const s of this.raiz.querySelectorAll<HTMLElement>("section[data-aba]")) s.hidden = s.dataset.aba !== aba;
     for (const b of this.raiz.querySelectorAll<HTMLButtonElement>("nav button")) b.classList.toggle("ativa", b.dataset.aba === aba);
     if (aba === "sistema") this.sistema?.ativar(); else this.sistema?.desativar();
+    if (aba === "avisos") this.avisos?.ativar(); else this.avisos?.desativar();
     if (aba === "atualizacao" && this.cfg.atualizacao_ao_abrir) this.atualizacao?.aoAbrir();
   }
 
@@ -167,6 +180,7 @@ export class Configuracoes {
         ${this.campo("ponte_url", "Ponte do Vard (opcional; vazio desliga)", c.ponte_url)}
         <div id="cfg-sistema"></div>
       </section>
+      <section data-aba="avisos"><div id="cfg-avisos"></div></section>
       <section data-aba="atualizacao">
         <div id="cfg-atualizacao"></div>
         ${this.marca("atualizacao_ao_abrir", "Verificar ao abrir a aba Atualização", c.atualizacao_ao_abrir)}

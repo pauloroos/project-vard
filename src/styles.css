@@ -53,6 +53,17 @@ html, body { background: transparent; margin: 0; overflow: hidden; }
 @keyframes piscar { from { opacity: 0.4; } to { opacity: 1; } }
 #botoes button.ativo { color: #ff6060; border-color: rgba(255, 96, 96, 0.7); }
 
+/* Bolinha de avisos não lidos (canto superior direito; some com zero, escondida no modo invisível junto com o resto). */
+#cont-avisos {
+  position: absolute; top: calc(8px * var(--escala)); right: calc(8px * var(--escala)); z-index: 5;
+  min-width: calc(14px * var(--escala)); height: calc(14px * var(--escala)); padding: 0 calc(3px * var(--escala));
+  margin: 0; display: flex; align-items: center; justify-content: center; cursor: pointer;
+  background: #ff6060; color: #fff; border: none; border-radius: calc(7px * var(--escala));
+  font-family: var(--mono); font-size: calc(8px * var(--escala)); line-height: 1; letter-spacing: 0; text-transform: none;
+}
+#cont-avisos[hidden] { display: none; }
+#app.capturando #cont-avisos { right: calc(26px * var(--escala)); } /* o ponto vermelho de captura fica no mesmo canto */
+
 /* Compacto: só o holograma. O texto some; a barra aparece com o mouse em cima e some 2 s depois (Revelador). */
 #app.compacto #dica, #app.compacto #resposta { display: none; }
 #app.compacto #dica.avisando { display: block; }

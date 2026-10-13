@@ -1,6 +1,28 @@
 // Cliente da ponte opcional do Vard (127.0.0.1:4700). Sem ponte o HUD funciona igual: tudo aqui falha em silêncio.
 export interface StatusPonte { ok: boolean; modo: string; detalhe?: string; reserva?: string; tarefas_abertas?: number; modelos_lmstudio?: string[] }
 
+/** Um aviso da central da ponte. `n` só existe nos do tipo tarefa. */
+export interface Aviso { id: number; hora: string; tipo: string; resumo: string; n?: number; estado?: string; lido: boolean }
+
+/** Resultado de uma tarefa da ponte. */
+export interface ResultadoTarefa { n: number; estado: string; resumo: string; texto: string }
+
+/** Um aviso vindo da rede, com os campos frouxos: id obrigatório, o resto com padrão. */
+export function normalizarAviso(a: unknown): Aviso | null {
+  if (typeof a !== "object" || a === null) return null;
+  const o = a as Record<string, unknown>;
+  if (typeof o.id !== "number") return null;
+  return {
+    id: o.id,
+    hora: typeof o.hora === "string" ? o.hora : "",
+    tipo: typeof o.tipo === "string" ? o.tipo : "",
+    resumo: typeof o.resumo === "string" ? o.resumo : "",
+    ...(typeof o.n === "number" ? { n: o.n } : {}),
+    ...(typeof o.estado === "string" ? { estado: o.estado } : {}),
+    lido: o.lido === true,
+  };
+}
+
 /** Erro da ponte com o código curto (`modelo_fora`, `segredos`...) que vira fala fixa em FALAS.erros. */
 export class ErroPonte extends Error {
   constructor(public codigo: string) { super(codigo); }
@@ -93,10 +115,54 @@ export class Ponte {
         try { dados = JSON.parse((ev as MessageEvent).data); } catch { /* ping ou texto puro */ }
         cb(tipo, dados);
       });
-      ouvir("ping"); ouvir("oficina");
+      ouvir("ping"); ouvir("oficina"); ouvir("reuniao");
       es.onmessage = (ev) => { try { cb("message", JSON.parse(ev.data)); } catch { cb("message", null); } };
     };
     abrir();
     return () => { parado = true; clearTimeout(timer); fonte?.close(); };
+  }
+
+  /** Central de avisos: lista e total de não lidos. null = ponte ausente. */
+  async avisos(): Promise<{ avisos: Aviso[]; nao_lidos: number } | null> {
+    if (!this.base) return null;
+    try {
+      return await comTimeout(5000, async (signal) => {
+        const r = await fetch(`${this.base}/avisos`, { signal });
+        if (!r.ok) return null;
+        const j = await r.json();
+        const bruto: unknown[] = Array.isArray(j.avisos) ? j.avisos : [];
+        const lista = bruto.map(normalizarAviso).filter((a): a is Aviso => a !== null);
+        return { avisos: lista, nao_lidos: typeof j.nao_lidos === "number" ? j.nao_lidos : lista.filter((a) => !a.lido).length };
+      });
+    } catch { return null; }
+  }
+
+  /** Marca avisos como lidos (ids dados ou todos). null = ponte ausente. */
+  async marcarLidos(ids?: number[]): Promise<{ ok: boolean; nao_lidos: number } | null> {
+    if (!this.base) return null;
+    try {
+      return await comTimeout(10000, async (signal) => {
+        const r = await fetch(`${this.base}/avisos/lidos`, {
+          method: "POST", headers: { "Content-Type": "application/json" }, signal,
+          body: JSON.stringify(ids ? { ids } : {}),
+        });
+        if (!r.ok) return null;
+        const j = await r.json();
+        return { ok: j.ok === true, nao_lidos: typeof j.nao_lidos === "number" ? j.nao_lidos : 0 };
+      });
+    } catch { return null; }
+  }
+
+  /** Texto do resultado de uma tarefa. null = ponte ausente ou tarefa não existe (404). */
+  async resultadoTarefa(n: number): Promise<ResultadoTarefa | null> {
+    if (!this.base) return null;
+    try {
+      return await comTimeout(10000, async (signal) => {
+        const r = await fetch(`${this.base}/tarefas/${n}/resultado`, { signal });
+        if (!r.ok) return null;
+        const j = await r.json();
+        return { n: typeof j.n === "number" ? j.n : n, estado: String(j.estado ?? ""), resumo: String(j.resumo ?? ""), texto: String(j.texto ?? "") };
+      });
+    } catch { return null; }
   }
 }

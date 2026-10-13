@@ -42,3 +42,11 @@ section .acoes { display: flex; gap: 8px; }
 
 #atu-resultado { margin: 10px 0; }
 #atu-notas { white-space: pre-wrap; max-height: 260px; overflow: auto; background: rgba(0,240,255,0.05); padding: 8px; border-radius: 4px; }
+
+#avi-lista .aviso-linha { display: flex; gap: 8px; align-items: baseline; margin-top: 6px; padding: 6px 8px; border: 1px solid rgba(0,240,255,0.2); border-radius: 4px; }
+#avi-lista .aviso-linha.novo { border-color: #ffb020; background: rgba(255,176,32,0.08); }
+#avi-lista .hora { opacity: 0.7; }
+#avi-lista .resumo { flex: 1; opacity: 0.9; }
+#avi-lista button { margin-top: 0; }
+#avi-resultado { white-space: pre-wrap; max-height: 200px; overflow: auto; margin: 10px 0; padding: 8px; background: rgba(0,240,255,0.05); border-radius: 4px; }
+#avi-msg { min-height: 20px; margin-top: 8px; opacity: 0.8; }
