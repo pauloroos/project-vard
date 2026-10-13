@@ -7,15 +7,17 @@ use std::{
     path::{Path, PathBuf},
     sync::Mutex,
 };
+use tauri::Manager;
 
 /// Ações com atalho global: chave em `atalhos` na config e o padrão. Mesma ordem de ACOES_ATALHO no front.
-pub const ATALHOS: [(&str, &str); 6] = [
+pub const ATALHOS: [(&str, &str); 7] = [
     ("falar", "Ctrl+Alt+Space"),
     ("parar", "Ctrl+Alt+Period"),
     ("mostrar", "Ctrl+Alt+V"),
     ("config", "Ctrl+Alt+P"),
     ("escuta", "Ctrl+Alt+L"),
     ("sala", "Ctrl+Alt+F"),
+    ("naofalar", "Ctrl+Alt+N"),
 ];
 
 #[derive(Serialize, Clone, Debug, PartialEq)]
@@ -296,11 +298,69 @@ pub fn definir_invisivel(window: tauri::Window, ligado: bool) -> Result<(), Stri
 /// O painel mudou "invisivel": a marca da bandeja acompanha.
 #[tauri::command]
 pub fn marcar_invisivel_na_bandeja(estado: tauri::State<'_, crate::Bandeja>, ligado: bool) -> Result<(), String> {
-    if let Ok(g) = estado.0.lock() {
+    if let Ok(g) = estado.invisivel.lock() {
         if let Some(item) = g.as_ref() {
             item.set_checked(ligado).map_err(|e| e.to_string())?;
         }
     }
+    Ok(())
+}
+
+/// Texto da dica da bandeja: as duas marcas viram o parêntese depois do nome.
+pub fn texto_da_dica(nao_ouvir: bool, nao_falar: bool) -> String {
+    let mut partes = Vec::new();
+    if nao_ouvir {
+        partes.push("não ouvindo");
+    }
+    if nao_falar {
+        partes.push("não falando");
+    }
+    if partes.is_empty() {
+        "Vard".to_string()
+    } else {
+        format!("Vard ({})", partes.join(", "))
+    }
+}
+
+fn marcado(item: &Mutex<Option<tauri::menu::CheckMenuItem<tauri::Wry>>>) -> bool {
+    item.lock()
+        .ok()
+        .and_then(|g| g.as_ref().and_then(|i| i.is_checked().ok()))
+        .unwrap_or(false)
+}
+
+/// Reescreve a dica da bandeja a partir das marcas atuais (no modo invisível ela é o único sinal).
+pub fn atualizar_dica_bandeja(app: &tauri::AppHandle) {
+    let (ouvir, falar) = {
+        let estado = app.state::<crate::Bandeja>();
+        (marcado(&estado.nao_ouvir), marcado(&estado.nao_falar))
+    };
+    if let Some(icone) = app.tray_by_id("hud") {
+        let _ = icone.set_tooltip(Some(texto_da_dica(ouvir, falar)));
+    }
+}
+
+/// O widget mudou "não ouvir"/"não falar": as marcas da bandeja e a dica acompanham.
+#[tauri::command]
+pub fn sincronizar_bandeja(
+    app: tauri::AppHandle,
+    nao_ouvir: bool,
+    nao_falar: bool,
+) -> Result<(), String> {
+    {
+        let estado = app.state::<crate::Bandeja>();
+        if let Ok(g) = estado.nao_ouvir.lock() {
+            if let Some(item) = g.as_ref() {
+                item.set_checked(nao_ouvir).map_err(|e| e.to_string())?;
+            }
+        }
+        if let Ok(g) = estado.nao_falar.lock() {
+            if let Some(item) = g.as_ref() {
+                item.set_checked(nao_falar).map_err(|e| e.to_string())?;
+            }
+        }
+    }
+    atualizar_dica_bandeja(&app);
     Ok(())
 }
 
@@ -538,6 +598,19 @@ mod testes {
             let esperado = format!("{chave}: \"{padrao}\"");
             assert!(ts.contains(&esperado), "CONFIG_PADRAO.atalhos sem {esperado}");
         }
+    }
+
+    #[test]
+    fn dica_da_bandeja_reflete_as_marcas() {
+        assert_eq!(texto_da_dica(false, false), "Vard");
+        assert_eq!(texto_da_dica(true, false), "Vard (não ouvindo)");
+        assert_eq!(texto_da_dica(false, true), "Vard (não falando)");
+        assert_eq!(texto_da_dica(true, true), "Vard (não ouvindo, não falando)");
+    }
+
+    #[test]
+    fn atalho_do_nao_falar_e_ctrl_alt_n_por_ultimo() {
+        assert_eq!(*ATALHOS.last().unwrap(), ("naofalar", "Ctrl+Alt+N"));
     }
 
     #[test]

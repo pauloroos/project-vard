@@ -12,8 +12,12 @@ use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
 
 const JANELA: &str = janelas::HUD;
 
-/// Item "Modo invisível" da bandeja, guardado para o painel poder mudar a marca.
-pub struct Bandeja(pub Mutex<Option<CheckMenuItem<tauri::Wry>>>);
+/// Itens de marca da bandeja, guardados para o painel poder mudar as marcas.
+pub struct Bandeja {
+    pub invisivel: Mutex<Option<CheckMenuItem<tauri::Wry>>>,
+    pub nao_ouvir: Mutex<Option<CheckMenuItem<tauri::Wry>>>,
+    pub nao_falar: Mutex<Option<CheckMenuItem<tauri::Wry>>>,
+}
 
 fn alternar_visibilidade(app: &AppHandle) {
     // Com o modo invisível ligado, o atalho e a bandeja só revelam ou escondem (o widget nunca é escondido de verdade).
@@ -60,6 +64,7 @@ fn acionar(app: &AppHandle, chave: &str, estado: ShortcutState) {
         ("parar", _) => { let _ = app.emit_to(JANELA, "parar", ()); }
         ("mostrar", _) => alternar_visibilidade(app),
         ("escuta", _) => { let _ = app.emit_to(JANELA, "alternar-escuta", ()); }
+        ("naofalar", _) => { let _ = app.emit_to(JANELA, "alternar-fala", ()); }
         ("config", _) => janelas::alternar_configuracoes(app),
         ("sala", _) => alternar_sala_e_avisar(app),
         _ => {}
@@ -80,25 +85,56 @@ fn registrar_atalhos(app: &AppHandle, config: &Value) {
     }
 }
 
-fn criar_bandeja(app: &AppHandle, no_topo: bool, invisivel_ligado: bool) -> tauri::Result<()> {
+fn criar_bandeja(app: &AppHandle, no_topo: bool, invisivel_ligado: bool, nao_ouvir_ligado: bool, nao_falar_ligado: bool) -> tauri::Result<()> {
     let mostrar = MenuItem::with_id(app, "mostrar", "Mostrar/ocultar", true, None::<&str>)?;
+    let nao_ouvir = CheckMenuItem::with_id(app, "nao_ouvir", "Não ouvir", true, nao_ouvir_ligado, None::<&str>)?;
+    let nao_falar = CheckMenuItem::with_id(app, "nao_falar", "Não falar", true, nao_falar_ligado, None::<&str>)?;
     let topo = CheckMenuItem::with_id(app, "topo", "Sempre no topo", true, no_topo, None::<&str>)?;
     let invisivel = CheckMenuItem::with_id(app, "invisivel", "Modo invisível", true, invisivel_ligado, None::<&str>)?;
     let config = MenuItem::with_id(app, "config", "Configurações", true, None::<&str>)?;
     let sala = MenuItem::with_id(app, "sala", "Tela cheia", true, None::<&str>)?;
     let sair = MenuItem::with_id(app, "sair", "Sair", true, None::<&str>)?;
-    let menu = Menu::with_items(app, &[&mostrar, &topo, &invisivel, &config, &sala, &sair])?;
+    let menu = Menu::with_items(app, &[&mostrar, &nao_ouvir, &nao_falar, &topo, &invisivel, &config, &sala, &sair])?;
 
     let topo_ref = topo.clone();
     let inv_ref = invisivel.clone();
-    if let Ok(mut g) = app.state::<Bandeja>().0.lock() {
-        *g = Some(invisivel);
+    let ouvir_ref = nao_ouvir.clone();
+    let falar_ref = nao_falar.clone();
+    {
+        let estado = app.state::<Bandeja>();
+        if let Ok(mut g) = estado.invisivel.lock() {
+            *g = Some(invisivel);
+        }
+        if let Ok(mut g) = estado.nao_ouvir.lock() {
+            *g = Some(nao_ouvir);
+        }
+        if let Ok(mut g) = estado.nao_falar.lock() {
+            *g = Some(nao_falar);
+        }
     }
     let mut b = TrayIconBuilder::with_id("hud")
-        .tooltip("Vard")
+        .tooltip(comandos::texto_da_dica(nao_ouvir_ligado, nao_falar_ligado))
         .menu(&menu)
         .on_menu_event(move |app, ev| match ev.id().as_ref() {
             "mostrar" => alternar_visibilidade(app),
+            "nao_ouvir" => {
+                let ligado = ouvir_ref.is_checked().unwrap_or(false);
+                if let Err(e) = comandos::mesclar_config(app, serde_json::json!({ "nao_ouvir": ligado })) {
+                    eprintln!("não ouvir: {e}");
+                }
+                let _ = app.emit_to(JANELA, "nao-ouvir", ligado);
+                let _ = app.emit_to(janelas::CONFIG, "nao-ouvir", ligado);
+                comandos::atualizar_dica_bandeja(app);
+            }
+            "nao_falar" => {
+                let ligado = falar_ref.is_checked().unwrap_or(false);
+                if let Err(e) = comandos::mesclar_config(app, serde_json::json!({ "nao_falar": ligado })) {
+                    eprintln!("não falar: {e}");
+                }
+                let _ = app.emit_to(JANELA, "nao-falar", ligado);
+                let _ = app.emit_to(janelas::CONFIG, "nao-falar", ligado);
+                comandos::atualizar_dica_bandeja(app);
+            }
             "topo" => {
                 let ligado = topo_ref.is_checked().unwrap_or(true);
                 if let Some(w) = app.get_webview_window(JANELA) {
@@ -144,7 +180,11 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .manage(comandos::FalhasDeAtalho::default())
-        .manage(Bandeja(Mutex::new(None)))
+        .manage(Bandeja {
+            invisivel: Mutex::new(None),
+            nao_ouvir: Mutex::new(None),
+            nao_falar: Mutex::new(None),
+        })
         .invoke_handler(tauri::generate_handler![
             comandos::ler_config,
             comandos::versao_do_app,
@@ -165,7 +205,8 @@ pub fn run() {
             comandos::alternar_sala,
             comandos::listar_monitores,
             comandos::definir_invisivel,
-            comandos::marcar_invisivel_na_bandeja
+            comandos::marcar_invisivel_na_bandeja,
+            comandos::sincronizar_bandeja
         ])
         .setup(|app| {
             let handle = app.handle().clone();
@@ -181,7 +222,15 @@ pub fn run() {
                 .get("invisivel")
                 .and_then(|v| v.as_bool())
                 .unwrap_or(false);
-            criar_bandeja(&handle, no_topo, invisivel)?;
+            let nao_ouvir = config
+                .get("nao_ouvir")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false);
+            let nao_falar = config
+                .get("nao_falar")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false);
+            criar_bandeja(&handle, no_topo, invisivel, nao_ouvir, nao_falar)?;
             registrar_atalhos(&handle, &config);
             Ok(())
         })
