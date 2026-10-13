@@ -1,7 +1,7 @@
 /// <reference types="vite/client" />
 import { invoke } from "@tauri-apps/api/core";
 import { emitTo, listen } from "@tauri-apps/api/event";
-import { aplicarAoVivo, carregarConfig, type Config } from "./config/config";
+import { aplicarAoVivo, carregarConfig, lerConfigAoVivo } from "./config/config";
 import type { FalhaAtalho } from "./config/atalhos";
 import { abrirMicrofone, definirMudo, fecharMicrofone, estaMudo, onAmostras, rmsAtual, taxaAtual } from "./audio/microfone";
 import { DetectorDeVoz } from "./audio/vad";
@@ -15,7 +15,7 @@ import { Conversa } from "./fala/conversa";
 import { FALAS, saudacaoPara } from "./fala/falas";
 import { Hud } from "./ui/hud";
 import { Nucleo } from "./ui/nucleo";
-import { ladoDoTamanho, medidasDoWidget } from "./ui/tamanho";
+import { ladoDoTamanho, ladoMudou, medidasDoWidget } from "./ui/tamanho";
 
 const PRE_ROLL_MS = 300;
 /** Prazo da voz própria numa fala fixa que não está no cache (o aquecimento usa o prazo normal). */
@@ -332,13 +332,18 @@ window.addEventListener("DOMContentLoaded", async () => {
   });
   await listen("parar", () => { conversa.interromper(); });
   await listen("alternar-escuta", () => { void alternarMicrofone(); });
-  await listen<boolean>("sempre-no-topo", (ev) => { cfg.sempre_no_topo = ev.payload; hud.atualizarTopo(); });
+  await listen<unknown>("sempre-no-topo", (ev) => {
+    if (typeof ev.payload !== "boolean") { console.warn("sempre-no-topo ignorado: payload inválido"); return; }
+    cfg.sempre_no_topo = ev.payload; hud.atualizarTopo();
+  });
 
   // Painel salvou (janela configuracoes): aplica na hora só o que o widget sabe aplicar; o resto espera o reinício.
-  const aplicarConfigSalva = async (novo: Config) => {
-    const ladoAntes = ladoDoTamanho(cfg);
+  const aplicarConfigSalva = async (payload: unknown) => {
+    const novo = lerConfigAoVivo(payload);
+    if (!novo) { console.warn("config-salva ignorada: payload inválido"); return; }
+    const antes = { tamanho: cfg.tamanho, tamanho_px: cfg.tamanho_px };
     const mudou = aplicarAoVivo(cfg, novo);
-    if (ladoDoTamanho(cfg) !== ladoAntes) await aplicarTamanho(); // só quando o lado de fato mudou
+    if (ladoMudou(antes, cfg)) await aplicarTamanho(); // só quando o lado de fato mudou
     if (mudou.includes("compacto")) hud.setCompacto(cfg.compacto);
     if (mudou.includes("sempre_no_topo")) {
       try { await invoke("definir_sempre_no_topo", { ligado: cfg.sempre_no_topo }); } catch (erro) { console.warn("topo", erro); }
@@ -347,5 +352,5 @@ window.addEventListener("DOMContentLoaded", async () => {
     if (mudou.includes("click_through")) aplicarClickThrough(cfg.click_through);
     if (mudou.includes("usuario")) void fixa(saudacaoPara(cfg.usuario), false).catch(() => {}); // aquece a saudação nova
   };
-  await listen<Config>("config-salva", (ev) => { void aplicarConfigSalva(ev.payload); });
+  await listen<unknown>("config-salva", (ev) => { void aplicarConfigSalva(ev.payload); });
 });

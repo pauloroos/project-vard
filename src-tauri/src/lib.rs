@@ -68,6 +68,7 @@ fn criar_bandeja(app: &AppHandle, no_topo: bool) -> tauri::Result<()> {
                     let _ = w.set_always_on_top(ligado);
                 }
                 let _ = app.emit_to(JANELA, "sempre-no-topo", ligado);
+                let _ = app.emit_to(janelas::CONFIG, "sempre-no-topo", ligado);
             }
             "config" => {
                 if let Err(e) = janelas::abrir_configuracoes(app) {

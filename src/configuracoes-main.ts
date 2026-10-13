@@ -1,7 +1,7 @@
 /// <reference types="vite/client" />
 import { emitTo, listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { carregarConfig, type Config } from "./config/config";
+import { carregarConfig, lerTopoCompacto } from "./config/config";
 import { OpenJarvis } from "./conectores/openjarvis/cliente";
 import { Configuracoes } from "./ui/configuracoes";
 
@@ -14,5 +14,13 @@ window.addEventListener("DOMContentLoaded", async () => {
     fechar: () => { void getCurrentWindow().close(); },
   });
   await painel.montar();
-  await listen<Pick<Config, "sempre_no_topo" | "compacto">>("config-mudou-no-widget", (ev) => painel.mudouNoWidget(ev.payload));
+  await listen<unknown>("config-mudou-no-widget", (ev) => {
+    const v = lerTopoCompacto(ev.payload);
+    if (!v) { console.warn("config-mudou-no-widget ignorado: payload inválido"); return; }
+    painel.mudouNoWidget(v);
+  });
+  await listen<unknown>("sempre-no-topo", (ev) => {
+    if (typeof ev.payload !== "boolean") { console.warn("sempre-no-topo ignorado: payload inválido"); return; }
+    painel.mudouTopo(ev.payload);
+  });
 });

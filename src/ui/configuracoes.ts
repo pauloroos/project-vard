@@ -59,6 +59,12 @@ export class Configuracoes {
     this.el("compacto").checked = c.compacto;
   }
 
+  /** A bandeja mudou "Sempre no topo": reflete no painel sem mexer no resto do formulário. */
+  mudouTopo(ligado: boolean) {
+    this.cfg.sempre_no_topo = ligado;
+    this.el("sempre_no_topo").checked = ligado;
+  }
+
   private campo(id: string, rotulo: string, valor: string | number, tipo = "text", extra = ""): string {
     return `<label>${rotulo}<input id="cfg-${id}" type="${tipo}" value="${esc(String(valor))}" ${extra}></label>`;
   }

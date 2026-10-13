@@ -100,7 +100,7 @@ export const CHAVES_AO_VIVO = ["tamanho", "tamanho_px", "compacto", "sempre_no_t
 export type ChaveAoVivo = (typeof CHAVES_AO_VIVO)[number];
 
 /** Copia para a config viva do widget só as chaves ao vivo; devolve as que mudaram. */
-export function aplicarAoVivo(vivo: Config, novo: Config): ChaveAoVivo[] {
+export function aplicarAoVivo(vivo: Config, novo: Pick<Config, ChaveAoVivo>): ChaveAoVivo[] {
   const mudou: ChaveAoVivo[] = [];
   for (const k of CHAVES_AO_VIVO) {
     if (JSON.stringify(vivo[k]) !== JSON.stringify(novo[k])) { Object.assign(vivo, { [k]: novo[k] }); mudou.push(k); }
@@ -120,4 +120,24 @@ export function mudancasQueExigemReinicio(antes: Config, depois: Config): string
   const r = new Set<string>();
   for (const [k, rotulo] of REINICIO) if (JSON.stringify(antes[k]) !== JSON.stringify(depois[k])) r.add(rotulo);
   return [...r];
+}
+
+/** Valida o payload de config-salva (vem de outra janela): só as chaves ao vivo, com tipo e faixa; inválido devolve null. */
+export function lerConfigAoVivo(x: unknown): Pick<Config, ChaveAoVivo> | null {
+  if (typeof x !== "object" || x === null) return null;
+  const o = x as Record<string, unknown>;
+  const px = o.tamanho_px;
+  if (!(TAMANHOS as readonly unknown[]).includes(o.tamanho)) return null;
+  if (typeof px !== "number" || !Number.isFinite(px) || px < 160 || px > 800) return null;
+  if (typeof o.compacto !== "boolean" || typeof o.sempre_no_topo !== "boolean" || typeof o.click_through !== "boolean") return null;
+  if (typeof o.usuario !== "string") return null;
+  return { tamanho: o.tamanho as Config["tamanho"], tamanho_px: px, compacto: o.compacto, sempre_no_topo: o.sempre_no_topo, click_through: o.click_through, usuario: o.usuario };
+}
+
+/** Valida o payload de config-mudou-no-widget (topo e compacto); inválido devolve null. */
+export function lerTopoCompacto(x: unknown): Pick<Config, "sempre_no_topo" | "compacto"> | null {
+  if (typeof x !== "object" || x === null) return null;
+  const o = x as Record<string, unknown>;
+  if (typeof o.sempre_no_topo !== "boolean" || typeof o.compacto !== "boolean") return null;
+  return { sempre_no_topo: o.sempre_no_topo, compacto: o.compacto };
 }

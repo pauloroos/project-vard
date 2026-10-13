@@ -22,3 +22,8 @@ export interface Medidas { lado: number; largura: number; altura: number; escala
 export function medidasDoWidget(lado: number): Medidas {
   return { lado, largura: lado, altura: Math.round((lado * ALTURA_BASE) / LADO_BASE), escala: lado / LADO_BASE };
 }
+
+/** O lado do widget mudou de fato? Só então vale redimensionar a janela. */
+export function ladoMudou(antes: Pick<Config, "tamanho" | "tamanho_px">, depois: Pick<Config, "tamanho" | "tamanho_px">): boolean {
+  return ladoDoTamanho(antes) !== ladoDoTamanho(depois);
+}

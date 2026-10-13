@@ -3,7 +3,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 const invoke = vi.fn();
 vi.mock("@tauri-apps/api/core", () => ({ invoke: (...a: unknown[]) => invoke(...a) }));
 
-import { aplicarAoVivo, carregarConfig, CONFIG_PADRAO, mudancasQueExigemReinicio, urlLocal, avisosDeUrl, gatilhos } from "../src/config/config";
+import { lerConfigAoVivo, lerTopoCompacto, aplicarAoVivo, carregarConfig, CONFIG_PADRAO, mudancasQueExigemReinicio, urlLocal, avisosDeUrl, gatilhos } from "../src/config/config";
 
 describe("carregarConfig", () => {
   beforeEach(() => invoke.mockReset());
@@ -124,5 +124,20 @@ describe("salvar no painel", () => {
     const novo = { ...copia(), openjarvis_url: "http://127.0.0.1:9000", ponte_url: "", compacto: true, atalhos: { ...CONFIG_PADRAO.atalhos, escuta: "Ctrl+Alt+N" } };
     expect(mudancasQueExigemReinicio(CONFIG_PADRAO, novo)).toEqual(["endereços", "atalhos"]);
     expect(mudancasQueExigemReinicio(CONFIG_PADRAO, copia())).toEqual([]);
+  });
+});
+
+describe("payloads entre janelas", () => {
+  const ok = { tamanho: "grande", tamanho_px: 480, compacto: false, sempre_no_topo: true, click_through: false, usuario: "Ana" };
+  it("aceita_payload_valido", () => { expect(lerConfigAoVivo({ ...ok, extra: 1 })).toEqual(ok); });
+  it("recusa_tipos_e_faixas_ruins", () => {
+    for (const ruim of [null, "x", 3, { ...ok, tamanho: "enorme" }, { ...ok, tamanho_px: 100 }, { ...ok, tamanho_px: 900 },
+      { ...ok, tamanho_px: "320" }, { ...ok, tamanho_px: NaN }, { ...ok, compacto: "sim" }, { ...ok, sempre_no_topo: 1 },
+      { ...ok, click_through: null }, { ...ok, usuario: 5 }]) expect(lerConfigAoVivo(ruim)).toBeNull();
+  });
+  it("topo_e_compacto", () => {
+    expect(lerTopoCompacto({ sempre_no_topo: true, compacto: false })).toEqual({ sempre_no_topo: true, compacto: false });
+    expect(lerTopoCompacto({ sempre_no_topo: "1", compacto: false })).toBeNull();
+    expect(lerTopoCompacto(undefined)).toBeNull();
   });
 });
