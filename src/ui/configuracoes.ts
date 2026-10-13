@@ -2,6 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import type { Config } from "../config/config";
 import { avisosDeUrl, limitarLado, mudancasQueExigemReinicio, salvarConfig, urlLocal } from "../config/config";
 import { ACOES_ATALHO, ROTULOS_ATALHO, avisoAltGr, validarAtalhos, type AcaoAtalho, type FalhaAtalho } from "../config/atalhos";
+import { campoIdioma } from "../config/idiomas";
 import { campoAtalho } from "./campo-atalho";
 import type { OpenJarvis } from "../conectores/openjarvis/cliente";
 import type { StatusPonte } from "../conectores/ponte/cliente";
@@ -9,6 +10,7 @@ import type { PonteAvisos } from "../avisos/central";
 import { AbaAtualizacao } from "./aba-atualizacao";
 import { AbaAvisos } from "./aba-avisos";
 import { AbaModelos } from "./aba-modelos";
+import { AbaSaber } from "./aba-saber";
 import { AbaSistema } from "./aba-sistema";
 import { AbaVoz } from "./aba-voz";
 
@@ -32,8 +34,8 @@ export interface DepsConfiguracoes {
 /** Monitor como o comando listar_monitores devolve (pixels físicos). */
 export interface MonitorInfo { nome: string; x: number; y: number; largura: number; altura: number; escala: number; principal: boolean }
 
-export type Aba = "geral" | "voz" | "atalhos" | "modelos" | "sistema" | "avisos" | "atualizacao";
-const ABAS: [Aba, string][] = [["geral", "Geral"], ["voz", "Voz"], ["atalhos", "Atalhos"], ["modelos", "Modelos"], ["sistema", "Sistema"], ["avisos", "Avisos"], ["atualizacao", "Atualização"]];
+export type Aba = "geral" | "voz" | "atalhos" | "saber" | "modelos" | "sistema" | "avisos" | "atualizacao";
+const ABAS: [Aba, string][] = [["geral", "Geral"], ["voz", "Voz"], ["atalhos", "Atalhos"], ["saber", "O que eu sei fazer"], ["modelos", "Modelos"], ["sistema", "Sistema"], ["avisos", "Avisos"], ["atualizacao", "Atualização"]];
 const OPCOES_TAMANHO: [Config["tamanho"], string][] = [
   ["pequeno", "Pequeno (240 px)"], ["medio", "Médio (320 px)"], ["grande", "Grande (480 px)"], ["personalizado", "Personalizado"],
 ];
@@ -50,6 +52,7 @@ export class Configuracoes {
   private modelos: AbaModelos | null = null;
   private sistema: AbaSistema | null = null;
   private avisos: AbaAvisos | null = null;
+  private saber: AbaSaber | null = null;
   private atualizacao: AbaAtualizacao | null = null;
   private abaVoz!: AbaVoz;
   private linhasAtalho = new Map<AcaoAtalho, { campo: HTMLButtonElement; motivo: HTMLElement }>();
@@ -86,6 +89,11 @@ export class Configuracoes {
       eventos: (cb) => this.deps.ponte(urlPonte()).eventos(cb),
     });
     this.avisos.montar();
+    this.saber = new AbaSaber(this.raiz.querySelector<HTMLElement>("#cfg-saber")!, {
+      statusPonte: () => this.deps.statusPonte(urlPonte()),
+      nome: () => this.cfg.nome,
+    });
+    this.saber.montar();
     this.atualizacao = new AbaAtualizacao(this.raiz.querySelector<HTMLElement>("#cfg-atualizacao")!, this.deps.atualizacao);
     this.atualizacao.montar();
     this.abrirAba("geral");
@@ -102,6 +110,7 @@ export class Configuracoes {
     for (const b of this.raiz.querySelectorAll<HTMLButtonElement>("nav button")) b.classList.toggle("ativa", b.dataset.aba === aba);
     if (aba === "sistema") this.sistema?.ativar(); else this.sistema?.desativar();
     if (aba === "avisos") this.avisos?.ativar(); else this.avisos?.desativar();
+    if (aba === "saber") this.saber?.ativar(); else this.saber?.desativar();
     if (aba === "atualizacao" && this.cfg.atualizacao_ao_abrir) this.atualizacao?.aoAbrir();
   }
 
@@ -147,7 +156,7 @@ export class Configuracoes {
           ${this.campo("nome", "Nome para chamar", c.nome)}
           ${this.campo("variantes", "Variantes (separadas por vírgula)", c.variantes.join(", "))}
           ${this.campo("usuario", "Como te chamar (opcional)", c.usuario)}
-          ${this.campo("idioma", "Idioma do reconhecimento", c.idioma)}
+          ${campoIdioma(c.idioma)}
         </fieldset>
         <fieldset id="cfg-janela"><legend>Janela</legend>
           <label>Tamanho do widget<select id="cfg-tamanho">${OPCOES_TAMANHO.map(([v, r]) => `<option value="${v}" ${v === c.tamanho ? "selected" : ""}>${r}</option>`).join("")}</select></label>
@@ -180,6 +189,7 @@ export class Configuracoes {
         ${this.campo("ponte_url", "Ponte do Vard (opcional; vazio desliga)", c.ponte_url)}
         <div id="cfg-sistema"></div>
       </section>
+      <section data-aba="saber"><div id="cfg-saber"></div></section>
       <section data-aba="avisos"><div id="cfg-avisos"></div></section>
       <section data-aba="atualizacao">
         <div id="cfg-atualizacao"></div>
@@ -267,7 +277,7 @@ export class Configuracoes {
       ...this.abaVoz.ler(), voz_url: this.abaVoz.vozUrl(),
       nome: txt("nome", c.nome), usuario: opc("usuario"),
       variantes: this.el("variantes").value.split(",").map((v) => v.trim()).filter(Boolean),
-      idioma: opc("idioma"),
+      idioma: this.sel("idioma").value,
       velocidade: num("velocidade", c.velocidade), finish_ms: num("finish_ms", c.finish_ms), limiar_vad: num("limiar_vad", c.limiar_vad),
       conversa_ms: Math.round(Math.max(0, num("conversa_s", c.conversa_ms / 1000)) * 1000),
       instrucao_formato: txt("instrucao_formato", c.instrucao_formato),
