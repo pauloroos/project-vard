@@ -1,7 +1,7 @@
 /// <reference types="vite/client" />
 import { invoke } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
-import { carregarConfig } from "./config/config";
+import { emitTo, listen } from "@tauri-apps/api/event";
+import { aplicarAoVivo, carregarConfig, type Config } from "./config/config";
 import type { FalhaAtalho } from "./config/atalhos";
 import { abrirMicrofone, definirMudo, fecharMicrofone, estaMudo, onAmostras, rmsAtual, taxaAtual } from "./audio/microfone";
 import { DetectorDeVoz } from "./audio/vad";
@@ -14,7 +14,6 @@ import { Voz } from "./conectores/voz/cliente";
 import { Conversa } from "./fala/conversa";
 import { FALAS, saudacaoPara } from "./fala/falas";
 import { Hud } from "./ui/hud";
-import { Configuracoes } from "./ui/configuracoes";
 import { Nucleo } from "./ui/nucleo";
 import { ladoDoTamanho, medidasDoWidget } from "./ui/tamanho";
 
@@ -42,13 +41,12 @@ window.addEventListener("DOMContentLoaded", async () => {
   let alternarMicrofone: () => Promise<void> = async () => {};
   let olharTela = () => {};
   let abrirConfig = () => {};
-  let atualizarPainel = () => {};
   const hud = new Hud(cfg, app, {
     aoConfig: () => abrirConfig(),
     aoMudo: () => { void alternarMicrofone(); },
     aoInterromper: () => interromperTudo(),
     aoTela: () => olharTela(),
-    aoConfigMudou: () => atualizarPainel(),
+    aoConfigMudou: (c) => { void emitTo("configuracoes", "config-mudou-no-widget", { sempre_no_topo: c.sempre_no_topo, compacto: c.compacto }).catch(() => {}); },
   });
   hud.dica("clique para ligar o ouvido");
   // Atalhos que o Windows recusou no arranque (outro programa já usa): avisa uma vez na linha de estado.
@@ -68,21 +66,9 @@ window.addEventListener("DOMContentLoaded", async () => {
   // Voz própria opcional (docs/voz-propria.md). Vazio desliga: a voz fica sempre a do OpenJarvis.
   const voz = cfg.voz_url.trim() ? new Voz(cfg.voz_url.trim()) : null;
 
-  // Painel de configurações (bandeja ou engrenagem). Com click-through ligado a janela não receberia o clique:
-  // ele é suspenso enquanto o painel está aberto.
+  // Painel de configurações: janela própria (engrenagem, bandeja ou atalho). Aqui só o clique atravessando a janela.
   const aplicarClickThrough = (ligado: boolean) => { void invoke("definir_click_through", { ligado }).catch(() => {}); };
-  const painel = new Configuracoes(cfg, document.getElementById("config") as HTMLElement, {
-    criarOj: (url) => new OpenJarvis(import.meta.env.DEV ? `${location.origin}/oj` : url),
-    aoSalvar: (c) => {
-      void invoke("definir_sempre_no_topo", { ligado: c.sempre_no_topo }).catch(() => {});
-      hud.atualizarTopo();
-      hud.setCompacto(c.compacto);
-      void aplicarTamanho();
-    },
-    aoAlternar: (aberto) => { if (cfg.click_through) aplicarClickThrough(!aberto); },
-  });
-  abrirConfig = () => { void painel.abrir(); };
-  atualizarPainel = () => painel.atualizarCampos();
+  abrirConfig = () => { void invoke("abrir_configuracoes").catch((erro) => console.warn("não abri o painel", erro)); };
   if (cfg.click_through) aplicarClickThrough(true);
 
   // A boca só existe depois que o microfone abre (usa o mesmo AudioContext).
@@ -345,8 +331,21 @@ window.addEventListener("DOMContentLoaded", async () => {
     if (capturando) void encerrar(true);
   });
   await listen("parar", () => { conversa.interromper(); });
-  await listen("abrir-configuracoes", () => { void painel.abrir(); });
   await listen("alternar-escuta", () => { void alternarMicrofone(); });
-  await listen("alternar-configuracoes", () => { if (painel.aberto()) painel.fechar(); else void painel.abrir(); });
   await listen<boolean>("sempre-no-topo", (ev) => { cfg.sempre_no_topo = ev.payload; hud.atualizarTopo(); });
+
+  // Painel salvou (janela configuracoes): aplica na hora só o que o widget sabe aplicar; o resto espera o reinício.
+  const aplicarConfigSalva = async (novo: Config) => {
+    const ladoAntes = ladoDoTamanho(cfg);
+    const mudou = aplicarAoVivo(cfg, novo);
+    if (ladoDoTamanho(cfg) !== ladoAntes) await aplicarTamanho(); // só quando o lado de fato mudou
+    if (mudou.includes("compacto")) hud.setCompacto(cfg.compacto);
+    if (mudou.includes("sempre_no_topo")) {
+      try { await invoke("definir_sempre_no_topo", { ligado: cfg.sempre_no_topo }); } catch (erro) { console.warn("topo", erro); }
+      hud.atualizarTopo();
+    }
+    if (mudou.includes("click_through")) aplicarClickThrough(cfg.click_through);
+    if (mudou.includes("usuario")) void fixa(saudacaoPara(cfg.usuario), false).catch(() => {}); // aquece a saudação nova
+  };
+  await listen<Config>("config-salva", (ev) => { void aplicarConfigSalva(ev.payload); });
 });

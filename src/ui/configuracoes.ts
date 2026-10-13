@@ -1,53 +1,63 @@
 import { invoke } from "@tauri-apps/api/core";
 import type { Config } from "../config/config";
-import { TAMANHOS, avisosDeUrl, salvarConfig, urlLocal } from "../config/config";
-import type { OpenJarvis } from "../conectores/openjarvis/cliente";
-import { ACOES_ATALHO, ROTULOS_ATALHO, normalizarAtalho, validarAtalhos, type AcaoAtalho, type FalhaAtalho } from "../config/atalhos";
+import { avisosDeUrl, mudancasQueExigemReinicio, salvarConfig, urlLocal } from "../config/config";
+import { ACOES_ATALHO, ROTULOS_ATALHO, validarAtalhos, type AcaoAtalho, type FalhaAtalho } from "../config/atalhos";
 import { campoAtalho } from "./campo-atalho";
+import type { OpenJarvis } from "../conectores/openjarvis/cliente";
 
 export interface DepsConfiguracoes {
-  /** Cria um cliente do OpenJarvis para o endereço digitado (o main decide se passa pelo proxy do dev). */
+  /** Cliente do OpenJarvis para o endereço dado (o main decide se passa pelo proxy do dev). */
   criarOj: (url: string) => OpenJarvis;
-  /** Chamado depois de salvar, com a config já gravada (o main reaplica o que dá para aplicar sem reiniciar). */
+  /** Depois de gravar: o main avisa o widget (evento config-salva). */
   aoSalvar?: (c: Config) => void;
-  /** Chamado ao abrir/fechar: o main tira o click-through enquanto o painel está aberto. */
-  aoAlternar?: (aberto: boolean) => void;
+  /** Fecha a janela do painel. */
+  fechar?: () => void;
 }
 
-const ROTULOS_TAMANHO: Record<(typeof TAMANHOS)[number], string> = {
-  pequeno: "Pequeno (240 px)", medio: "Médio (320 px)", grande: "Grande (480 px)", personalizado: "Personalizado",
-};
+export type Aba = "geral" | "voz" | "atalhos" | "ponte";
+const ABAS: [Aba, string][] = [["geral", "Geral"], ["voz", "Voz"], ["atalhos", "Atalhos"], ["ponte", "Ponte"]];
+const OPCOES_TAMANHO: [Config["tamanho"], string][] = [
+  ["pequeno", "Pequeno (240 px)"], ["medio", "Médio (320 px)"], ["grande", "Grande (480 px)"], ["personalizado", "Personalizado"],
+];
 
 const esc = (t: string) => t.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
 
-/** Painel de configurações: uma sobreposição dentro do widget, sem framework. Um campo por chave editável do Config. */
+/** Painel de configurações na janela própria "configuracoes": abas e um campo por chave editável do Config. */
 export class Configuracoes {
-  private painel: HTMLElement;
   private msg!: HTMLElement;
   private logon!: HTMLInputElement;
   private logonGuardado = false;
-  private atalhos!: Config["atalhos"];
+  private atalhos: Config["atalhos"];
   private falhas: FalhaAtalho[] = [];
   private linhasAtalho = new Map<AcaoAtalho, { campo: HTMLButtonElement; motivo: HTMLElement }>();
 
-  constructor(private cfg: Config, painel: HTMLElement, private deps: DepsConfiguracoes) {
-    this.painel = painel;
-    window.addEventListener("keydown", (ev) => { if (ev.key === "Escape" && this.aberto()) this.fechar(); });
+  constructor(private cfg: Config, private raiz: HTMLElement, private deps: DepsConfiguracoes) {
+    this.atalhos = { ...cfg.atalhos };
   }
 
-  aberto(): boolean { return !this.painel.hidden; }
-
-  async abrir() {
+  /** Desenha as abas e lê o que só o Rust sabe (início no logon, atalhos que não registraram). */
+  async montar() {
     this.desenhar();
-    this.painel.hidden = false;
-    this.deps.aoAlternar?.(true);
-    try { this.logonGuardado = await invoke<boolean>("inicio_no_logon_ativo"); } catch { this.logonGuardado = false; /* fora do Tauri */ }
+    this.abrirAba("geral");
+    try { this.logonGuardado = await invoke<boolean>("inicio_no_logon_ativo"); } catch { this.logonGuardado = false; }
     this.logon.checked = this.logonGuardado;
     try { this.falhas = await invoke<FalhaAtalho[]>("falhas_de_atalho"); } catch { this.falhas = []; }
     this.marcarAtalhos({});
+    if (this.falhas.length) this.dizer("Há atalhos que o Windows não aceitou: veja a aba Atalhos.", true);
   }
 
-  fechar() { this.painel.hidden = true; this.deps.aoAlternar?.(false); }
+  abrirAba(aba: Aba) {
+    for (const s of this.raiz.querySelectorAll<HTMLElement>("section[data-aba]")) s.hidden = s.dataset.aba !== aba;
+    for (const b of this.raiz.querySelectorAll<HTMLButtonElement>("nav button")) b.classList.toggle("ativa", b.dataset.aba === aba);
+  }
+
+  /** O widget gravou topo ou compacto pelos próprios botões: acompanha sem perder o resto do formulário. */
+  mudouNoWidget(c: Pick<Config, "sempre_no_topo" | "compacto">) {
+    this.cfg.sempre_no_topo = c.sempre_no_topo;
+    this.cfg.compacto = c.compacto;
+    this.el("sempre_no_topo").checked = c.sempre_no_topo;
+    this.el("compacto").checked = c.compacto;
+  }
 
   private campo(id: string, rotulo: string, valor: string | number, tipo = "text", extra = ""): string {
     return `<label>${rotulo}<input id="cfg-${id}" type="${tipo}" value="${esc(String(valor))}" ${extra}></label>`;
@@ -55,64 +65,71 @@ export class Configuracoes {
   private marca(id: string, rotulo: string, valor: boolean): string {
     return `<label class="marca"><input id="cfg-${id}" type="checkbox" ${valor ? "checked" : ""}> ${rotulo}</label>`;
   }
-  /** O widget mudou topo ou compacto sozinho: reflete no painel aberto. */
-  atualizarCampos() {
-    if (!this.aberto()) return;
-    this.el("sempre_no_topo").checked = this.cfg.sempre_no_topo;
-    this.el("compacto").checked = this.cfg.compacto;
-  }
-  private el(id: string): HTMLInputElement { return this.painel.querySelector<HTMLInputElement>(`#cfg-${id}`)!; }
+  private el(id: string): HTMLInputElement { return this.raiz.querySelector<HTMLInputElement>(`#cfg-${id}`)!; }
+  private sel(id: string): HTMLSelectElement { return this.raiz.querySelector<HTMLSelectElement>(`#cfg-${id}`)!; }
 
   private desenhar() {
     const c = this.cfg;
-    this.painel.innerHTML = `
-      <h2>Configurações</h2>
-      <fieldset><legend>Endereços</legend>
-        ${this.campo("openjarvis_url", "OpenJarvis", c.openjarvis_url)}
-        ${this.campo("gui_url", "Interface de texto", c.gui_url)}
-        ${this.campo("ponte_url", "Ponte do Vard (opcional; vazio desliga)", c.ponte_url)}
-        ${this.campo("voz_url", "Serviço de voz (opcional; vazio desliga)", c.voz_url)}
-      </fieldset>
-      <fieldset><legend>Voz</legend>
-        ${this.campo("nome", "Nome para chamar", c.nome)}
-        ${this.campo("usuario", "Como te chamar (opcional)", c.usuario)}
-        ${this.campo("variantes", "Variantes (separadas por vírgula)", c.variantes.join(", "))}
-        ${this.campo("idioma", "Idioma do reconhecimento", c.idioma)}
-        ${this.campo("voz", "Voz da fala", c.voz)}
-        ${this.campo("velocidade", "Velocidade da fala", c.velocidade, "number", 'step="0.05" min="0.5" max="2"')}
-        ${this.campo("finish_ms", "Silêncio para encerrar a fala (ms)", c.finish_ms, "number", 'step="50" min="200" max="3000"')}
-        ${this.campo("limiar_vad", "Limiar do microfone", c.limiar_vad, "number", 'step="0.005" min="0.001" max="0.5"')}
-        ${this.campo("instrucao_formato", "Instrução de formato", c.instrucao_formato)}
-      </fieldset>
-      <fieldset><legend>Janela e atalhos</legend>
-        ${this.marca("sempre_no_topo", "Sempre no topo", c.sempre_no_topo)}
-        ${this.marca("click_through", "Clique atravessa a janela", c.click_through)}
-        ${this.marca("compacto", "Compacto (só o holograma; a barra aparece com o mouse)", c.compacto)}
-        <label>Tamanho do widget<select id="cfg-tamanho">${TAMANHOS.map((t) => `<option value="${t}"${t === c.tamanho ? " selected" : ""}>${ROTULOS_TAMANHO[t]}</option>`).join("")}</select></label>
-        ${this.campo("tamanho_px", "Lado personalizado (px, 160 a 800)", c.tamanho_px, "number", 'step="10" min="160" max="800"')}
-        ${this.marca("logon", "Iniciar com o Windows", false)}
-        <div id="cfg-atalhos"></div>
+    this.raiz.innerHTML = `
+      <nav>${ABAS.map(([id, nome]) => `<button type="button" data-aba="${id}">${nome}</button>`).join("")}</nav>
+      <section data-aba="geral">
+        <fieldset><legend>Endereços</legend>
+          ${this.campo("openjarvis_url", "OpenJarvis", c.openjarvis_url)}
+          ${this.campo("gui_url", "Interface de texto", c.gui_url)}
+          <button id="cfg-testar" type="button">Testar OpenJarvis</button>
+        </fieldset>
+        <fieldset><legend>Chamada</legend>
+          ${this.campo("nome", "Nome para chamar", c.nome)}
+          ${this.campo("variantes", "Variantes (separadas por vírgula)", c.variantes.join(", "))}
+          ${this.campo("usuario", "Como te chamar (opcional)", c.usuario)}
+          ${this.campo("idioma", "Idioma do reconhecimento", c.idioma)}
+        </fieldset>
+        <fieldset id="cfg-janela"><legend>Janela</legend>
+          <label>Tamanho do widget<select id="cfg-tamanho">${OPCOES_TAMANHO.map(([v, r]) => `<option value="${v}" ${v === c.tamanho ? "selected" : ""}>${r}</option>`).join("")}</select></label>
+          ${this.campo("tamanho_px", "Lado em px (personalizado, 160 a 800)", c.tamanho_px, "number", 'step="10" min="160" max="800"')}
+          ${this.marca("compacto", "Compacto (só o holograma)", c.compacto)}
+          ${this.marca("sempre_no_topo", "Sempre no topo", c.sempre_no_topo)}
+          ${this.marca("click_through", "Clique atravessa a janela", c.click_through)}
+          ${this.marca("logon", "Iniciar com o Windows", false)}
+        </fieldset>
+      </section>
+      <section data-aba="voz">
+        <fieldset><legend>Fala</legend>
+          ${this.campo("voz", "Voz da fala (OpenJarvis)", c.voz)}
+          ${this.campo("velocidade", "Velocidade da fala", c.velocidade, "number", 'step="0.05" min="0.5" max="2"')}
+          ${this.campo("voz_url", "Serviço de voz (opcional; vazio desliga)", c.voz_url)}
+          ${this.campo("instrucao_formato", "Instrução de formato", c.instrucao_formato)}
+        </fieldset>
+        <fieldset><legend>Ouvido</legend>
+          ${this.campo("finish_ms", "Silêncio para encerrar a fala (ms)", c.finish_ms, "number", 'step="50" min="200" max="3000"')}
+          ${this.campo("limiar_vad", "Limiar do microfone", c.limiar_vad, "number", 'step="0.005" min="0.001" max="0.5"')}
+        </fieldset>
+      </section>
+      <section data-aba="atalhos">
         <p class="nota">Clique num atalho e pressione a nova combinação (Ctrl, Alt ou Win mais uma tecla). Esc cancela. Valem depois de reiniciar o Vard.</p>
-      </fieldset>
-      <div id="cfg-msg" role="status"></div>
-      <div class="acoes">
-        <button id="cfg-testar" type="button">Testar OpenJarvis</button>
-        <button id="cfg-salvar" type="button">Salvar</button>
-        <button id="cfg-fechar" type="button">Fechar</button>
-      </div>`;
-    this.msg = this.painel.querySelector<HTMLElement>("#cfg-msg")!;
+        <div id="cfg-atalhos"></div>
+      </section>
+      <section data-aba="ponte">
+        ${this.campo("ponte_url", "Ponte do Vard (opcional; vazio desliga)", c.ponte_url)}
+        <p class="nota">A ponte dá olhos na tela e modo jogo. Sem ela o widget funciona igual. Veja docs/ponte-do-vard.md.</p>
+      </section>
+      <footer>
+        <div id="cfg-msg" role="status"></div>
+        <div class="acoes"><button id="cfg-salvar" type="button">Salvar</button><button id="cfg-fechar" type="button">Fechar</button></div>
+      </footer>`;
+    this.msg = this.raiz.querySelector<HTMLElement>("#cfg-msg")!;
     this.logon = this.el("logon");
-    this.painel.querySelector("#cfg-fechar")!.addEventListener("click", () => this.fechar());
-    this.painel.querySelector("#cfg-salvar")!.addEventListener("click", () => { void this.salvar(); });
-    this.painel.querySelector("#cfg-testar")!.addEventListener("click", () => { void this.testar(); });
+    for (const b of this.raiz.querySelectorAll<HTMLButtonElement>("nav button")) b.addEventListener("click", () => this.abrirAba(b.dataset.aba as Aba));
+    this.raiz.querySelector("#cfg-fechar")!.addEventListener("click", () => this.deps.fechar?.());
+    this.raiz.querySelector("#cfg-salvar")!.addEventListener("click", () => { void this.salvar(); });
+    this.raiz.querySelector("#cfg-testar")!.addEventListener("click", () => { void this.testar(); });
+    this.montarAtalhos(this.raiz.querySelector<HTMLElement>("#cfg-atalhos")!);
     for (const id of ["openjarvis_url", "gui_url", "ponte_url", "voz_url"]) {
       const campo = this.el(id);
       const opcional = id === "ponte_url" || id === "voz_url"; // vazio desliga: não é endereço ruim
       const marcar = () => campo.classList.toggle("aviso", !(opcional && campo.value.trim() === "") && !urlLocal(campo.value.trim()));
       campo.addEventListener("input", marcar); marcar();
     }
-    this.atalhos = { ...this.cfg.atalhos };
-    this.montarAtalhos(this.painel.querySelector<HTMLElement>("#cfg-atalhos")!);
   }
 
   private montarAtalhos(caixa: HTMLElement) {
@@ -141,9 +158,10 @@ export class Configuracoes {
     }
   }
 
+
   private dizer(t: string, ruim = false) { this.msg.textContent = t; this.msg.classList.toggle("ruim", ruim); }
 
-  /** Lê o formulário; números inválidos e textos vazios mantêm o valor atual. */
+  /** Lê o formulário; números inválidos e textos obrigatórios vazios mantêm o valor atual. */
   lerFormulario(): Config {
     const num = (id: string, atual: number) => {
       const bruto = this.el(id).value.trim().replace(",", ".");
@@ -151,8 +169,7 @@ export class Configuracoes {
       return bruto !== "" && Number.isFinite(n) ? n : atual;
     };
     const txt = (id: string, atual: string) => this.el(id).value.trim() || atual;
-    // Campos opcionais: vazio é um valor válido (desliga a ponte, tira o nome, idioma automático).
-    const opc = (id: string) => this.el(id).value.trim();
+    const opc = (id: string) => this.el(id).value.trim(); // vazio é valor válido (desliga, tira o nome, idioma automático)
     const c = this.cfg;
     return {
       ...c,
@@ -163,11 +180,10 @@ export class Configuracoes {
       idioma: opc("idioma"), voz: txt("voz", c.voz),
       velocidade: num("velocidade", c.velocidade), finish_ms: num("finish_ms", c.finish_ms), limiar_vad: num("limiar_vad", c.limiar_vad),
       instrucao_formato: txt("instrucao_formato", c.instrucao_formato),
+      tamanho: this.sel("tamanho").value as Config["tamanho"], tamanho_px: num("tamanho_px", c.tamanho_px),
+      compacto: this.el("compacto").checked,
       sempre_no_topo: this.el("sempre_no_topo").checked, click_through: this.el("click_through").checked,
       atalhos: { ...this.atalhos },
-      compacto: this.el("compacto").checked,
-      tamanho: (TAMANHOS as readonly string[]).includes(this.el("tamanho").value) ? (this.el("tamanho").value as Config["tamanho"]) : c.tamanho,
-      tamanho_px: num("tamanho_px", c.tamanho_px),
     };
   }
 
@@ -181,25 +197,23 @@ export class Configuracoes {
       catch (e) { erros[acao] = `O Windows não aceita essa combinação (${String(e)}).`; }
     }
     this.marcarAtalhos(erros);
-    if (Object.keys(erros).length) { this.dizer("Corrija os atalhos marcados antes de salvar.", true); return; }
-    const exigeReinicio = (["openjarvis_url", "ponte_url", "voz_url", "nome", "idioma", "voz", "velocidade", "finish_ms", "limiar_vad", "instrucao_formato"] as const)
-      .some((k) => novo[k] !== this.cfg[k]) || JSON.stringify(novo.variantes) !== JSON.stringify(this.cfg.variantes)
-      || ACOES_ATALHO.some((a) => (normalizarAtalho(novo.atalhos[a]) ?? novo.atalhos[a]) !== (normalizarAtalho(this.cfg.atalhos[a]) ?? this.cfg.atalhos[a]));
+    if (Object.keys(erros).length) { this.abrirAba("atalhos"); this.dizer("Corrija os atalhos marcados antes de salvar.", true); return; }
+    const reiniciar = mudancasQueExigemReinicio(this.cfg, novo);
     try { await salvarConfig(novo); }
     catch (erro) { this.dizer(`Não consegui salvar: ${String(erro)}`, true); return; }
     Object.assign(this.cfg, novo);
     // O atalho de início só é mexido quando a caixa mudou (evita regravar o .lnk a cada Salvar).
-    let falhouAtalho = false;
+    let falhouLogon = false;
     if (this.logon.checked !== this.logonGuardado) {
       try { await invoke("definir_inicio_no_logon", { ligado: this.logon.checked }); this.logonGuardado = this.logon.checked; }
-      catch { falhouAtalho = true; this.logon.checked = this.logonGuardado; }
+      catch { falhouLogon = true; this.logon.checked = this.logonGuardado; }
     }
     this.deps.aoSalvar?.(this.cfg);
     const avisos = avisosDeUrl(novo);
-    const partes = [falhouAtalho ? "Configuração salva, mas não consegui criar o atalho de início." : "Salvo."];
-    if (exigeReinicio) partes.push("Reinicie o HUD para aplicar endereços, voz e atalhos.");
+    const partes = [falhouLogon ? "Configuração salva, mas não consegui criar o atalho de início." : "Salvo; tamanho, janela e usuário já valem no widget."];
+    if (reiniciar.length) partes.push(`Reinicie o Vard para aplicar: ${reiniciar.join(", ")}.`);
     if (avisos.length) partes.push(`Atenção: ${avisos.join("; ")}.`);
-    this.dizer(partes.join(" "), avisos.length > 0 || falhouAtalho);
+    this.dizer(partes.join(" "), avisos.length > 0 || falhouLogon);
   }
 
   private async testar() {

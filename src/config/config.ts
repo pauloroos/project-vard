@@ -94,3 +94,30 @@ export function avisosDeUrl(c: Pick<Config, "openjarvis_url" | "gui_url" | "pont
   ];
   return nomes.filter(([k]) => c[k] !== "" && !urlLocal(c[k])).map(([, n]) => `${n}: o endereço não é 127.0.0.1 nem localhost`);
 }
+
+/** Chaves que o widget aplica na hora (evento config-salva). O resto só vale depois de reiniciar. */
+export const CHAVES_AO_VIVO = ["tamanho", "tamanho_px", "compacto", "sempre_no_topo", "click_through", "usuario"] as const satisfies readonly (keyof Config)[];
+export type ChaveAoVivo = (typeof CHAVES_AO_VIVO)[number];
+
+/** Copia para a config viva do widget só as chaves ao vivo; devolve as que mudaram. */
+export function aplicarAoVivo(vivo: Config, novo: Config): ChaveAoVivo[] {
+  const mudou: ChaveAoVivo[] = [];
+  for (const k of CHAVES_AO_VIVO) {
+    if (JSON.stringify(vivo[k]) !== JSON.stringify(novo[k])) { Object.assign(vivo, { [k]: novo[k] }); mudou.push(k); }
+  }
+  return mudou;
+}
+
+const REINICIO: [keyof Config, string][] = [
+  ["openjarvis_url", "endereços"], ["gui_url", "endereços"], ["ponte_url", "endereços"], ["voz_url", "endereços"],
+  ["nome", "nome de chamada"], ["variantes", "nome de chamada"], ["idioma", "idioma"],
+  ["voz", "voz"], ["velocidade", "voz"], ["instrucao_formato", "instrução de formato"],
+  ["finish_ms", "ouvido"], ["limiar_vad", "ouvido"], ["atalhos", "atalhos"],
+];
+
+/** O que mudou e só vale depois de reiniciar o Vard, em palavras do painel e sem repetição. */
+export function mudancasQueExigemReinicio(antes: Config, depois: Config): string[] {
+  const r = new Set<string>();
+  for (const [k, rotulo] of REINICIO) if (JSON.stringify(antes[k]) !== JSON.stringify(depois[k])) r.add(rotulo);
+  return [...r];
+}

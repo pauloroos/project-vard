@@ -3,7 +3,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 const invoke = vi.fn();
 vi.mock("@tauri-apps/api/core", () => ({ invoke: (...a: unknown[]) => invoke(...a) }));
 
-import { carregarConfig, CONFIG_PADRAO, urlLocal, avisosDeUrl, gatilhos } from "../src/config/config";
+import { aplicarAoVivo, carregarConfig, CONFIG_PADRAO, mudancasQueExigemReinicio, urlLocal, avisosDeUrl, gatilhos } from "../src/config/config";
 
 describe("carregarConfig", () => {
   beforeEach(() => invoke.mockReset());
@@ -104,5 +104,25 @@ describe("urlLocal", () => {
     expect(a).toHaveLength(1);
     expect(a[0]).toContain("Serviço de voz");
     expect(avisosDeUrl({ ...CONFIG_PADRAO, voz_url: "" })).toEqual([]);
+  });
+});
+
+describe("salvar no painel", () => {
+  const copia = () => ({ ...CONFIG_PADRAO, atalhos: { ...CONFIG_PADRAO.atalhos } });
+
+  it("aplica_ao_vivo_so_o_seguro", () => {
+    const vivo = copia();
+    const novo = { ...copia(), tamanho: "grande" as const, usuario: "Ana", openjarvis_url: "http://127.0.0.1:9000", voz: "pf_dora" };
+    expect(aplicarAoVivo(vivo, novo)).toEqual(["tamanho", "usuario"]);
+    expect(vivo.tamanho).toBe("grande");
+    expect(vivo.usuario).toBe("Ana");
+    expect(vivo.openjarvis_url).toBe(CONFIG_PADRAO.openjarvis_url);
+    expect(vivo.voz).toBe(CONFIG_PADRAO.voz);
+  });
+
+  it("lista_o_que_exige_reinicio", () => {
+    const novo = { ...copia(), openjarvis_url: "http://127.0.0.1:9000", ponte_url: "", compacto: true, atalhos: { ...CONFIG_PADRAO.atalhos, escuta: "Ctrl+Alt+N" } };
+    expect(mudancasQueExigemReinicio(CONFIG_PADRAO, novo)).toEqual(["endereços", "atalhos"]);
+    expect(mudancasQueExigemReinicio(CONFIG_PADRAO, copia())).toEqual([]);
   });
 });

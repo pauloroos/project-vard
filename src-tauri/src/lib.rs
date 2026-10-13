@@ -30,11 +30,7 @@ fn acionar(app: &AppHandle, chave: &str, estado: ShortcutState) {
         ("parar", _) => { let _ = app.emit_to(JANELA, "parar", ()); }
         ("mostrar", _) => alternar_visibilidade(app),
         ("escuta", _) => { let _ = app.emit_to(JANELA, "alternar-escuta", ()); }
-        ("config", _) => {
-            // Provisório: a Tarefa 3 troca por janelas::alternar_configuracoes (janela própria).
-            if let Some(w) = app.get_webview_window(JANELA) { let _ = w.show(); }
-            let _ = app.emit_to(JANELA, "alternar-configuracoes", ());
-        }
+        ("config", _) => janelas::alternar_configuracoes(app),
         _ => {}
     }
 }
@@ -74,10 +70,9 @@ fn criar_bandeja(app: &AppHandle, no_topo: bool) -> tauri::Result<()> {
                 let _ = app.emit_to(JANELA, "sempre-no-topo", ligado);
             }
             "config" => {
-                if let Some(w) = app.get_webview_window(JANELA) {
-                    let _ = w.show();
+                if let Err(e) = janelas::abrir_configuracoes(app) {
+                    eprintln!("painel de configurações: {e}");
                 }
-                let _ = app.emit_to(JANELA, "abrir-configuracoes", ());
             }
             "sair" => app.exit(0),
             _ => {}
@@ -106,7 +101,8 @@ pub fn run() {
             comandos::definir_inicio_no_logon,
             comandos::validar_atalho,
             comandos::falhas_de_atalho,
-            comandos::redimensionar_janela
+            comandos::redimensionar_janela,
+            comandos::abrir_configuracoes
         ])
         .setup(|app| {
             let handle = app.handle().clone();

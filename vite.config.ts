@@ -5,6 +5,13 @@ const host = process.env.TAURI_DEV_HOST;
 
 // https://vite.dev/config/
 export default defineConfig(() => ({
+  // Três páginas: o widget, o painel de configurações e a sala (Tarefa 5).
+  build: {
+    rollupOptions: {
+      input: { hud: "index.html", configuracoes: "configuracoes.html" },
+    },
+  },
+
 
   // Vite options tailored for Tauri development and only applied in `tauri dev` or `tauri build`
   //

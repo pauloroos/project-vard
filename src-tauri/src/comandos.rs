@@ -226,6 +226,12 @@ pub fn redimensionar_janela(window: tauri::Window, largura: f64, altura: f64) ->
     Ok(())
 }
 
+/// Engrenagem do widget: abre o painel ou foca o existente. Assíncrono: criar janela em comando síncrono trava no Windows.
+#[tauri::command]
+pub async fn abrir_configuracoes(app: tauri::AppHandle) -> Result<(), String> {
+    crate::janelas::abrir_configuracoes(&app).map_err(|e| e.to_string())
+}
+
 #[cfg(test)]
 mod testes {
     use super::*;

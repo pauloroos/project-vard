@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "configuracoes",
+  "description": "Permissoes da janela do painel de configuracoes",
+  "windows": ["configuracoes"],
+  "permissions": ["core:default", "core:window:allow-close"]
+}
