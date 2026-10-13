@@ -2,7 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import type { Config } from "../config/config";
 import { avisosDeUrl, salvarConfig, urlLocal } from "../config/config";
 import type { OpenJarvis } from "../conectores/openjarvis/cliente";
-import { ACOES_ATALHO, ROTULOS_ATALHO, validarAtalhos, type AcaoAtalho, type FalhaAtalho } from "../config/atalhos";
+import { ACOES_ATALHO, ROTULOS_ATALHO, normalizarAtalho, validarAtalhos, type AcaoAtalho, type FalhaAtalho } from "../config/atalhos";
 import { campoAtalho } from "./campo-atalho";
 
 export interface DepsConfiguracoes {
@@ -168,7 +168,7 @@ export class Configuracoes {
     if (Object.keys(erros).length) { this.dizer("Corrija os atalhos marcados antes de salvar.", true); return; }
     const exigeReinicio = (["openjarvis_url", "ponte_url", "voz_url", "nome", "idioma", "voz", "velocidade", "finish_ms", "limiar_vad", "instrucao_formato"] as const)
       .some((k) => novo[k] !== this.cfg[k]) || JSON.stringify(novo.variantes) !== JSON.stringify(this.cfg.variantes)
-      || JSON.stringify(novo.atalhos) !== JSON.stringify(this.cfg.atalhos);
+      || ACOES_ATALHO.some((a) => (normalizarAtalho(novo.atalhos[a]) ?? novo.atalhos[a]) !== (normalizarAtalho(this.cfg.atalhos[a]) ?? this.cfg.atalhos[a]));
     try { await salvarConfig(novo); }
     catch (erro) { this.dizer(`Não consegui salvar: ${String(erro)}`, true); return; }
     Object.assign(this.cfg, novo);

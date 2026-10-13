@@ -35,7 +35,7 @@ describe("carregarConfig", () => {
     const c = await carregarConfig();
     expect(c.atalhos.falar).toBe("Ctrl+Shift+F");
     expect(c.atalhos.config).toBe("Ctrl+Alt+Comma");
-    expect(c.atalhos.escuta).toBe("Ctrl+Alt+M");
+    expect(c.atalhos.escuta).toBe("Ctrl+Alt+E");
   });
 });
 

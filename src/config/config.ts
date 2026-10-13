@@ -19,7 +19,7 @@ export const CONFIG_PADRAO: Config = {
   finish_ms: 900, limiar_vad: 0.02, sempre_no_topo: true, click_through: false, posicao: null,
   atalhos: {
     falar: "Ctrl+Alt+Space", parar: "Ctrl+Alt+Period", mostrar: "Ctrl+Alt+V",
-    config: "Ctrl+Alt+Comma", escuta: "Ctrl+Alt+M",
+    config: "Ctrl+Alt+Comma", escuta: "Ctrl+Alt+E",
   },
   instrucao_formato: "Responda em até duas frases, para ser lido em voz alta.",
 };

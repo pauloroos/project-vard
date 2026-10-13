@@ -13,7 +13,7 @@ pub const ATALHOS: [(&str, &str); 5] = [
     ("parar", "Ctrl+Alt+Period"),
     ("mostrar", "Ctrl+Alt+V"),
     ("config", "Ctrl+Alt+Comma"),
-    ("escuta", "Ctrl+Alt+M"),
+    ("escuta", "Ctrl+Alt+E"),
 ];
 
 #[derive(Serialize, Clone, Debug, PartialEq)]
@@ -218,6 +218,37 @@ mod testes {
     }
 
     #[test]
+    fn teclas_que_o_front_gera_sao_aceitas_pelo_plugin() {
+        // Saídas de normalizarAtalho (src/config/atalhos.ts): letras, dígitos, F1-F24, Numpad, nomeadas e sinais.
+        let mut teclas: Vec<String> = ('A'..='Z').map(|c| c.to_string()).collect();
+        teclas.extend(('0'..='9').map(|c| c.to_string()));
+        teclas.extend((1..=24).map(|n| format!("F{n}")));
+        teclas.extend((0..=9).map(|n| format!("Numpad{n}")));
+        for t in [
+            "Space", "Enter", "Tab", "Insert", "Delete", "Home", "End", "PageUp", "PageDown",
+            "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Period", "Comma", "Minus", "Equal",
+            "Slash", "Semicolon", "Quote", "Backquote", "BracketLeft", "BracketRight", "Backslash",
+        ] {
+            teclas.push(t.to_string());
+        }
+        for t in &teclas {
+            for mods in ["Ctrl+Alt", "Shift+Super", "Ctrl+Alt+Shift+Super"] {
+                let c = format!("{mods}+{t}");
+                assert!(validar_combinacao(&c).is_ok(), "{c}");
+            }
+        }
+    }
+
+    #[test]
+    fn padroes_do_rust_iguais_aos_do_front() {
+        let ts = include_str!("../../src/config/config.ts");
+        for (chave, padrao) in ATALHOS {
+            let esperado = format!("{chave}: \"{padrao}\"");
+            assert!(ts.contains(&esperado), "CONFIG_PADRAO.atalhos sem {esperado}");
+        }
+    }
+
+    #[test]
     fn combinacao_invalida_e_recusada() {
         assert!(validar_combinacao("Ctrl+Alt+Banana").is_err());
         assert!(validar_combinacao("").is_err());
@@ -225,8 +256,8 @@ mod testes {
 
     #[test]
     fn atalho_da_config_usa_salvo_ou_padrao() {
-        let c = serde_json::json!({ "atalhos": { "escuta": "Ctrl+Shift+E" } });
-        assert_eq!(atalho_da_config(&c, "escuta", "Ctrl+Alt+M"), "Ctrl+Shift+E");
+        let c = serde_json::json!({ "atalhos": { "escuta": "Ctrl+Shift+L" } });
+        assert_eq!(atalho_da_config(&c, "escuta", "Ctrl+Alt+E"), "Ctrl+Shift+L");
         assert_eq!(atalho_da_config(&c, "config", "Ctrl+Alt+Comma"), "Ctrl+Alt+Comma");
         assert_eq!(atalho_da_config(&Value::Null, "falar", "Ctrl+Alt+Space"), "Ctrl+Alt+Space");
     }
