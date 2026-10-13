@@ -1,6 +1,8 @@
 /// <reference types="vite/client" />
 import { invoke } from "@tauri-apps/api/core";
 import { emitTo, listen } from "@tauri-apps/api/event";
+import { getCurrentWindow } from "@tauri-apps/api/window";
+import { PhysicalPosition } from "@tauri-apps/api/dpi";
 import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { aplicarAoVivo, carregarConfig, lerConfigAoVivo } from "./config/config";
 import type { FalhaAtalho } from "./config/atalhos";
@@ -15,6 +17,7 @@ import { criarFonteDeVoz } from "./conectores/voz/escolher";
 import type { FonteDeVoz } from "./conectores/voz/fonte";
 import { Conversa, type Estado } from "./fala/conversa";
 import { FALAS, saudacaoPara } from "./fala/falas";
+import { Adiador } from "./ui/dock";
 import { Hud } from "./ui/hud";
 import { Nucleo } from "./ui/nucleo";
 import { ladoDoTamanho, ladoMudou, medidasDoWidget } from "./ui/tamanho";
@@ -31,6 +34,11 @@ window.addEventListener("DOMContentLoaded", async () => {
   const canvas = document.getElementById("nucleo") as HTMLCanvasElement;
   const app = document.getElementById("app") as HTMLElement;
   const nucleo = new Nucleo(canvas, ladoDoTamanho(cfg));
+  // Dock: a barra de botões abre do lado oposto à borda do monitor em que o widget está. Decidido pelo Rust 200 ms depois de parar de arrastar.
+  const aplicarDock = async () => {
+    try { app.classList.toggle("dock-cima", await invoke<boolean>("dock_em_cima")); } catch { /* fora do Tauri */ }
+  };
+  const dock = new Adiador(200, () => { void aplicarDock(); });
   // Tamanho do widget: uma escala para o CSS, o núcleo no lado real e a janela do mesmo tamanho (canto superior esquerdo fixo).
   const aplicarTamanho = async () => {
     const m = medidasDoWidget(ladoDoTamanho(cfg));
@@ -38,8 +46,11 @@ window.addEventListener("DOMContentLoaded", async () => {
     nucleo.redimensionar(m.lado);
     try { await invoke("redimensionar_janela", { largura: m.largura, altura: m.altura }); }
     catch (erro) { console.warn("não consegui redimensionar a janela", erro); }
+    dock.pedir();
   };
   await aplicarTamanho();
+  await aplicarDock();
+  try { await getCurrentWindow().onMoved(() => dock.pedir()); } catch { /* fora do Tauri */ }
   nucleo.iniciar();
   let interromperTudo = () => {};
   let alternarMicrofone: () => Promise<void> = async () => {};
@@ -335,6 +346,8 @@ window.addEventListener("DOMContentLoaded", async () => {
     (window as unknown as { __vardPergunta?: (t: string) => Promise<void> }).__vardPergunta = (texto: string) => injetar(texto, true);
     // Pelo caminho do VAD (sem push-to-talk): exige o nome, a menos que o modo conversa esteja aberto.
     (window as unknown as { __vardOuvido?: (t: string) => Promise<void> }).__vardOuvido = (texto: string) => injetar(texto, false);
+    // Prova do dock: move a janela para uma posição física.
+    (window as unknown as { __vardMover?: (x: number, y: number) => Promise<void> }).__vardMover = (x: number, y: number) => getCurrentWindow().setPosition(new PhysicalPosition(x, y));
   }
 
   await listen("ptt-inicio", () => {

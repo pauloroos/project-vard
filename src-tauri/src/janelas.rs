@@ -195,6 +195,13 @@ pub fn alternar_sala(app: &AppHandle) -> Result<Option<String>, String> {
     Ok(caiu.then(|| format!("O monitor escolhido não está conectado; a sala abriu no Monitor {}.", i + 1)))
 }
 
+/// Dock: a barra de botões fica em cima quando o centro da janela está abaixo do centro do monitor (pixels físicos).
+pub fn metade_inferior(y: i32, altura: u32, mon_y: i32, mon_altura: u32) -> bool {
+    let centro_janela = y as i64 * 2 + altura as i64; // 2 × centro, sem divisão
+    let centro_monitor = mon_y as i64 * 2 + mon_altura as i64;
+    centro_janela > centro_monitor
+}
+
 #[cfg(test)]
 mod testes {
     use super::*;
@@ -249,5 +256,14 @@ mod testes {
         assert_eq!(acao_do_atalho(true, true, true), AcaoJanela::Fechar);
         assert_eq!(acao_do_atalho(true, true, false), AcaoJanela::Focar);
         assert_eq!(acao_do_atalho(true, false, false), AcaoJanela::Focar);
+    }
+
+    #[test]
+    fn metade_inferior_pelo_centro_da_janela() {
+        // monitor 0..1080: centro em 540. Janela 360 de altura.
+        assert!(!metade_inferior(0, 360, 0, 1080));      // centro 180
+        assert!(metade_inferior(700, 360, 0, 1080));     // centro 880
+        assert!(!metade_inferior(360, 360, 0, 1080));    // centro 540 = empate: em cima
+        assert!(metade_inferior(-200, 360, -1080, 1080)); // monitor acima do principal
     }
 }

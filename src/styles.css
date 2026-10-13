@@ -57,3 +57,10 @@ html, body { background: transparent; margin: 0; overflow: hidden; }
 #app.compacto #dica.avisando { display: block; }
 #app.compacto #botoes { opacity: 0; pointer-events: none; }
 #app.compacto.revelado #botoes { opacity: 1; pointer-events: auto; }
+
+/* Dock em cima: widget na metade de baixo do monitor; botões acima do holograma, textos abaixo. Mesma altura de janela. */
+#app.dock-cima #botoes { top: calc(6px * var(--escala)); }
+#app.dock-cima #nucleo { top: calc(40px * var(--escala)); }
+#app.dock-cima #dica { top: calc(322px * var(--escala)); }
+#app.dock-cima #resposta { top: calc(337px * var(--escala)); }
+#app.dock-cima.capturando::after { top: calc(48px * var(--escala)); }

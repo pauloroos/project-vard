@@ -211,6 +211,17 @@ pub fn capturar_tela(window: tauri::Window) -> Result<String, String> {
     Ok(base64::engine::general_purpose::STANDARD.encode(buf.into_inner()))
 }
 
+/// true quando o widget está na metade de baixo do monitor em que está (a barra de botões vai para cima).
+#[tauri::command]
+pub fn dock_em_cima(window: tauri::Window) -> Result<bool, String> {
+    let pos = window.outer_position().map_err(|e| e.to_string())?;
+    let tam = window.outer_size().map_err(|e| e.to_string())?;
+    Ok(match window.current_monitor().map_err(|e| e.to_string())? {
+        Some(m) => crate::janelas::metade_inferior(pos.y, tam.height, m.position().y, m.size().height),
+        None => false,
+    })
+}
+
 /// Redimensiona o widget (tamanho da config) mantendo o canto superior esquerdo; se passar da borda do monitor, encosta nela.
 #[tauri::command]
 pub fn redimensionar_janela(window: tauri::Window, largura: f64, altura: f64) -> Result<(), String> {

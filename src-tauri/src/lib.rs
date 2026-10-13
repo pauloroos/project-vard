@@ -117,6 +117,7 @@ pub fn run() {
             comandos::validar_atalho,
             comandos::falhas_de_atalho,
             comandos::redimensionar_janela,
+            comandos::dock_em_cima,
             comandos::abrir_configuracoes,
             comandos::alternar_sala,
             comandos::listar_monitores
