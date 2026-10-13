@@ -22,6 +22,12 @@ fn alternar_visibilidade(app: &AppHandle) {
         .and_then(|c| c.get("invisivel").and_then(|v| v.as_bool()))
         .unwrap_or(false);
     if invisivel {
+        // Janela escondida por um hide() anterior: primeiro volta a existir, senão a revelação não se vê.
+        if let Some(w) = app.get_webview_window(JANELA) {
+            if !w.is_visible().unwrap_or(true) {
+                let _ = w.show();
+            }
+        }
         let _ = app.emit_to(JANELA, "alternar-revelacao", ());
         return;
     }
