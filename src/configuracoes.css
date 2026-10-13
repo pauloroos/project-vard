@@ -9,7 +9,7 @@ nav button {
 }
 nav button.ativa { opacity: 1; border-color: rgba(0, 240, 255, 0.35); background: rgba(0, 240, 255, 0.08); }
 section { flex: 1; overflow-y: auto; padding: 12px 14px; }
-section[hidden] { display: none; }
+section[hidden], div[hidden], label[hidden] { display: none; }
 fieldset { margin: 0 0 12px; padding: 8px 10px 10px; border: 1px solid rgba(0, 240, 255, 0.25); border-radius: 6px; }
 legend { padding: 0 6px; text-transform: uppercase; letter-spacing: 0.14em; opacity: 0.8; }
 label { display: block; margin-top: 8px; }

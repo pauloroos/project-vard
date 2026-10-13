@@ -26,6 +26,11 @@ const OUTRO = "__outro__";
 
 const esc = (t: string) => t.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
 
+/** Opções de um select de voz; a voz atual que não está na lista é acrescentada (não se perde em silêncio). */
+export function opcoesDeVoz(base: [string, string][], atual: string, rotuloAusente: (v: string) => string = (v) => v): [string, string][] {
+  return atual && !base.some(([v]) => v === atual) ? [...base, [atual, rotuloAusente(atual)]] : base;
+}
+
 /** Toca um WAV no painel (a janela de configurações tem o próprio AudioContext). */
 async function tocarWav(wav: ArrayBuffer): Promise<void> {
   const ctx = new AudioContext();
@@ -70,10 +75,13 @@ export class AbaVoz {
       </div>
       <div data-prov="gemini">
         <label>Chave da API<input id="cfg-gemini_chave" type="password" autocomplete="off" value="${esc(c.gemini_chave)}"></label>
-        <label>Voz<select id="cfg-gemini_voz">${VOZES_GEMINI.map((v) => `<option value="${v}" ${v === c.gemini_voz ? "selected" : ""}>${v}</option>`).join("")}</select></label>
+        <label>Voz<select id="cfg-gemini_voz"></select></label>
         <p class="nota">Só fala com o Google quando este provedor está escolhido; o Gemini ignora a velocidade.</p>
       </div>
       <button id="cfg-ouvir" type="button">Ouvir</button>`;
+    // Semeia já na montagem: um Salvar antes de o /vozes responder não apaga a escolha.
+    this.preencher(this.sel("voz_propria"), opcoesDeVoz([["", "A voz atual do serviço"]], c.voz_propria), c.voz_propria);
+    this.preencher(this.sel("gemini_voz"), opcoesDeVoz(VOZES_GEMINI.map((v): [string, string] => [v, v]), c.gemini_voz, (v) => `${v} (fora da lista)`), c.gemini_voz);
     for (const r of this.raiz.querySelectorAll<HTMLInputElement>('input[name="voz_provedor"]')) r.addEventListener("change", () => this.mostrar());
     this.sel("voz_kokoro").addEventListener("change", () => this.mostrar());
     this.sel("elevenlabs_voz").addEventListener("change", () => { const v = this.sel("elevenlabs_voz").value; if (v) this.el("elevenlabs_voz_id").value = v; });
@@ -82,6 +90,10 @@ export class AbaVoz {
     this.raiz.querySelector("#cfg-ouvir")!.addEventListener("click", () => { void this.ouvir(); });
     this.mostrar();
     void this.carregarPropria();
+  }
+
+  private preencher(sel: HTMLSelectElement, opcoes: [string, string][], marcada: string) {
+    sel.replaceChildren(...opcoes.map(([valor, rotulo]) => new Option(rotulo, valor, false, valor === marcada)));
   }
 
   /** Endereço do serviço de voz como está no formulário. */
@@ -105,9 +117,7 @@ export class AbaVoz {
     const escolhida = sel.options.length ? sel.value : this.cfg.voz_propria;
     const url = this.vozUrl();
     const { vozes, atual } = url ? await new Voz(url).vozes() : { vozes: [], atual: "" };
-    const opcoes: [string, string][] = [["", atual ? `A voz atual do serviço (${atual})` : "A voz atual do serviço"], ...vozes.map((v): [string, string] => [v, v])];
-    if (escolhida && !vozes.includes(escolhida)) opcoes.push([escolhida, escolhida]);
-    sel.replaceChildren(...opcoes.map(([valor, rotulo]) => new Option(rotulo, valor, false, valor === escolhida)));
+    this.preencher(sel, opcoesDeVoz([["", atual ? `A voz atual do serviço (${atual})` : "A voz atual do serviço"], ...vozes.map((v): [string, string] => [v, v])], escolhida), escolhida);
     nota.textContent = vozes.length ? "" : "Voz própria fora do ar; a lista aparece quando ela subir.";
   }
 
