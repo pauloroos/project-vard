@@ -3,6 +3,7 @@ use serde::Serialize;
 use serde_json::Value;
 use std::{
     fs,
+    io::Read,
     path::{Path, PathBuf},
     sync::Mutex,
 };
@@ -303,7 +304,11 @@ pub fn marcar_invisivel_na_bandeja(estado: tauri::State<'_, crate::Bandeja>, lig
     Ok(())
 }
 
-const HOSTS_RELEASE: [&str; 3] = ["api.github.com", "github.com", "objects.githubusercontent.com"];
+const HOSTS_RELEASE: [&str; 2] = ["api.github.com", "github.com"];
+
+fn host_do_github(host: &str) -> bool {
+    HOSTS_RELEASE.contains(&host) || host.strip_suffix(".githubusercontent.com").is_some_and(|p| !p.is_empty())
+}
 
 /// Só https nos hosts do GitHub (e, em build de desenvolvimento, http em 127.0.0.1/localhost para o harness).
 pub fn host_permitido(url: &str, dev: bool) -> bool {
@@ -317,10 +322,16 @@ pub fn host_permitido(url: &str, dev: bool) -> bool {
     }
     let host = autoridade.split(':').next().unwrap_or("").to_ascii_lowercase();
     match esquema {
-        "https" => HOSTS_RELEASE.contains(&host.as_str()),
+        "https" => host_do_github(&host),
         "http" => dev && (host == "127.0.0.1" || host == "localhost"),
         _ => false,
     }
+}
+
+/// Decide se um redirecionamento pode ser seguido: mesma regra do endereço inicial (https só em hosts do GitHub, incluindo
+/// *.githubusercontent.com onde ficam os assets; em debug, também http local do harness).
+pub fn host_de_redirect_permitido(url: &str, dev: bool) -> bool {
+    host_permitido(url, dev)
 }
 
 /// Nome de arquivo simples (sem caminho) terminando em -setup.exe.
@@ -335,6 +346,15 @@ fn cliente_http() -> Result<reqwest::blocking::Client, String> {
     reqwest::blocking::Client::builder()
         .user_agent(format!("Vard/{}", env!("CARGO_PKG_VERSION")))
         .timeout(std::time::Duration::from_secs(60))
+        .redirect(reqwest::redirect::Policy::custom(|tentativa| {
+            if tentativa.previous().len() >= 5 {
+                tentativa.error("redirecionamentos demais")
+            } else if host_de_redirect_permitido(tentativa.url().as_str(), cfg!(debug_assertions)) {
+                tentativa.follow()
+            } else {
+                tentativa.error("redirecionamento para endereço fora da lista permitida")
+            }
+        }))
         .build()
         .map_err(|e| e.to_string())
 }
@@ -370,6 +390,16 @@ pub async fn buscar_release(url: String) -> Result<String, String> {
     .map_err(|e| e.to_string())?
 }
 
+/// Remove o arquivo no Drop enquanto o segundo campo for true (desarmado no sucesso).
+struct ApagarSeFalhar(PathBuf, bool);
+impl Drop for ApagarSeFalhar {
+    fn drop(&mut self) {
+        if self.1 {
+            let _ = fs::remove_file(&self.0);
+        }
+    }
+}
+
 /// Baixa o -setup.exe da release para a pasta temporária, confere o tamanho, roda o instalador e fecha o Vard.
 #[tauri::command]
 pub async fn instalar_atualizacao(app: tauri::AppHandle, url: String, nome: String, bytes: u64) -> Result<(), String> {
@@ -387,13 +417,17 @@ pub async fn instalar_atualizacao(app: tauri::AppHandle, url: String, nome: Stri
         if !r.status().is_success() {
             return Err(format!("download respondeu {}", r.status().as_u16()));
         }
-        let mut f = fs::File::create(&caminho).map_err(|e| e.to_string())?;
-        let copiados = std::io::copy(&mut r, &mut f).map_err(|e| e.to_string())?;
+        let f = fs::File::create(&caminho).map_err(|e| e.to_string())?;
+        // Apaga o arquivo parcial em qualquer saída com erro depois de criado.
+        let mut guarda = ApagarSeFalhar(caminho.clone(), true);
+        let mut f = f;
+        // take(bytes + 1): um servidor que manda mais que o anunciado não enche o disco; o excesso aparece como diferença.
+        let copiados = std::io::copy(&mut (&mut r).take(bytes.saturating_add(1)), &mut f).map_err(|e| e.to_string())?;
         drop(f);
         if copiados != bytes {
-            let _ = fs::remove_file(&caminho);
-            return Err("o download veio incompleto; tente de novo".into());
+            return Err("o download veio incompleto ou maior que o anunciado; tente de novo".into());
         }
+        guarda.1 = false;
         Ok(caminho)
     })
     .await
@@ -512,6 +546,25 @@ mod testes {
         assert!(host_permitido("http://127.0.0.1:8765/repos/x", true));
         assert!(host_permitido("http://localhost:8765/x", true));
         assert!(!host_permitido("http://127.0.0.1:8765/repos/x", false));
+    }
+
+    #[test]
+    fn host_de_redirect_so_github_em_https() {
+        assert!(host_de_redirect_permitido("https://release-assets.githubusercontent.com/x", false));
+        assert!(host_de_redirect_permitido("https://objects.githubusercontent.com/abc", false));
+        assert!(host_de_redirect_permitido("https://github.com/x/y", false));
+        assert!(!host_de_redirect_permitido("https://evil.com/", false));
+        assert!(!host_de_redirect_permitido("http://github.com/", false));
+        assert!(!host_de_redirect_permitido("https://githubusercontent.com.evil.com/", false));
+        assert!(!host_de_redirect_permitido("https://.githubusercontent.com/", false));
+        assert!(!host_de_redirect_permitido("https://evilgithubusercontent.com/", false));
+        assert!(!host_de_redirect_permitido("http://127.0.0.1:1/x", false));
+        assert!(host_de_redirect_permitido("http://127.0.0.1:1/x", true));
+    }
+
+    #[test]
+    fn host_permitido_aceita_subdominio_de_githubusercontent() {
+        assert!(host_permitido("https://release-assets.githubusercontent.com/x", false));
     }
 
     #[test]

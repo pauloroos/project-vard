@@ -1,3 +1,4 @@
+import { invoke } from "@tauri-apps/api/core";
 import { interpretarRelease, type Release } from "../atualizacao/release";
 
 export interface DepsAbaAtualizacao {
@@ -53,7 +54,8 @@ export class AbaAtualizacao {
     this.notas.hidden = true; this.botaoInstalar.hidden = true; this.botaoVerificar.disabled = true;
     this.resultado.replaceChildren(); this.resultado.textContent = "Consultando...";
     try {
-      if (!this.instalada) { try { this.instalada = await this.deps.versao(); } catch { /* sem versão, tudo parece mais novo; segue */ } }
+      if (!this.instalada) { try { this.instalada = await this.deps.versao(); } catch { this.instalada = ""; } }
+      if (!this.instalada) { this.resultado.textContent = "Não consegui ler a versão instalada."; return; }
       const rel = interpretarRelease(JSON.parse(await this.deps.buscar(this.deps.url)), this.instalada);
       if (!rel) { this.resultado.textContent = "Resposta inesperada do GitHub."; return; }
       this.mostrar(rel);
@@ -75,7 +77,9 @@ export class AbaAtualizacao {
       const p = document.createElement("p");
       p.append("Baixe pela página da release: ");
       const a = document.createElement("a");
-      a.textContent = rel.url; a.href = rel.url; a.target = "_blank"; a.rel = "noopener noreferrer";
+      a.textContent = rel.url; a.href = rel.url;
+      // O painel não tem permissão do opener: abre pelo comando abrir_url (só http/https).
+      a.addEventListener("click", (ev) => { ev.preventDefault(); void invoke("abrir_url", { url: rel.url }).catch(() => {}); });
       p.append(a);
       this.resultado.append(p);
     }
