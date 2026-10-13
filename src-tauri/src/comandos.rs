@@ -303,6 +303,106 @@ pub fn marcar_invisivel_na_bandeja(estado: tauri::State<'_, crate::Bandeja>, lig
     Ok(())
 }
 
+const HOSTS_RELEASE: [&str; 3] = ["api.github.com", "github.com", "objects.githubusercontent.com"];
+
+/// Só https nos hosts do GitHub (e, em build de desenvolvimento, http em 127.0.0.1/localhost para o harness).
+pub fn host_permitido(url: &str, dev: bool) -> bool {
+    let (esquema, resto) = match url.split_once("://") {
+        Some(x) => x,
+        None => return false,
+    };
+    let autoridade = resto.split(['/', '?', '#']).next().unwrap_or("");
+    if autoridade.contains('@') {
+        return false;
+    }
+    let host = autoridade.split(':').next().unwrap_or("").to_ascii_lowercase();
+    match esquema {
+        "https" => HOSTS_RELEASE.contains(&host.as_str()),
+        "http" => dev && (host == "127.0.0.1" || host == "localhost"),
+        _ => false,
+    }
+}
+
+/// Nome de arquivo simples (sem caminho) terminando em -setup.exe.
+pub fn nome_de_instalador_valido(nome: &str) -> bool {
+    !nome.is_empty()
+        && nome.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-'))
+        && !nome.contains("..")
+        && nome.to_ascii_lowercase().ends_with("-setup.exe")
+}
+
+fn cliente_http() -> Result<reqwest::blocking::Client, String> {
+    reqwest::blocking::Client::builder()
+        .user_agent(format!("Vard/{}", env!("CARGO_PKG_VERSION")))
+        .timeout(std::time::Duration::from_secs(60))
+        .build()
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn versao_do_app(app: tauri::AppHandle) -> String {
+    app.package_info().version.to_string()
+}
+
+/// GET da API de releases. Só por ação do usuário (botão ou caixa "ao abrir"). Corpo limitado a 1 MB.
+#[tauri::command]
+pub async fn buscar_release(url: String) -> Result<String, String> {
+    if !host_permitido(&url, cfg!(debug_assertions)) {
+        return Err("endereço fora da lista permitida".into());
+    }
+    tauri::async_runtime::spawn_blocking(move || {
+        let r = cliente_http()?
+            .get(&url)
+            .header("Accept", "application/vnd.github+json")
+            .timeout(std::time::Duration::from_secs(10))
+            .send()
+            .map_err(|e| e.to_string())?;
+        if !r.status().is_success() {
+            return Err(format!("GitHub respondeu {}", r.status().as_u16()));
+        }
+        let corpo = r.bytes().map_err(|e| e.to_string())?;
+        if corpo.len() > 1_000_000 {
+            return Err("resposta grande demais".into());
+        }
+        String::from_utf8(corpo.to_vec()).map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// Baixa o -setup.exe da release para a pasta temporária, confere o tamanho, roda o instalador e fecha o Vard.
+#[tauri::command]
+pub async fn instalar_atualizacao(app: tauri::AppHandle, url: String, nome: String, bytes: u64) -> Result<(), String> {
+    if !host_permitido(&url, cfg!(debug_assertions)) {
+        return Err("endereço fora da lista permitida".into());
+    }
+    if !nome_de_instalador_valido(&nome) {
+        return Err("nome de instalador inválido".into());
+    }
+    let caminho = tauri::async_runtime::spawn_blocking(move || -> Result<PathBuf, String> {
+        let dir = std::env::temp_dir().join("Vard");
+        fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+        let caminho = dir.join(&nome);
+        let mut r = cliente_http()?.get(&url).send().map_err(|e| e.to_string())?;
+        if !r.status().is_success() {
+            return Err(format!("download respondeu {}", r.status().as_u16()));
+        }
+        let mut f = fs::File::create(&caminho).map_err(|e| e.to_string())?;
+        let copiados = std::io::copy(&mut r, &mut f).map_err(|e| e.to_string())?;
+        drop(f);
+        if copiados != bytes {
+            let _ = fs::remove_file(&caminho);
+            return Err("o download veio incompleto; tente de novo".into());
+        }
+        Ok(caminho)
+    })
+    .await
+    .map_err(|e| e.to_string())??;
+    std::process::Command::new(&caminho).spawn().map_err(|e| e.to_string())?;
+    app.exit(0);
+    Ok(())
+}
+
 #[cfg(test)]
 mod testes {
     use super::*;
@@ -393,5 +493,33 @@ mod testes {
         let p = atalho_logon_em(Path::new("/dados"));
         assert_eq!(p.file_name().unwrap(), "Vard.lnk");
         assert!(p.ends_with("Programs/Startup/Vard.lnk"));
+    }
+
+    #[test]
+    fn host_permitido_so_github_em_https() {
+        assert!(host_permitido("https://api.github.com/repos/x/y/releases/latest", false));
+        assert!(host_permitido("https://github.com/x/y/releases/download/v1/a-setup.exe", false));
+        assert!(host_permitido("https://objects.githubusercontent.com/abc", false));
+        assert!(!host_permitido("http://api.github.com/x", false));
+        assert!(!host_permitido("https://evil.com/api.github.com/", false));
+        assert!(!host_permitido("https://api.github.com.evil.com/", false));
+        assert!(!host_permitido("https://user@api.github.com/", false));
+        assert!(!host_permitido("ftp://github.com/", false));
+    }
+
+    #[test]
+    fn host_permitido_local_so_em_dev() {
+        assert!(host_permitido("http://127.0.0.1:8765/repos/x", true));
+        assert!(host_permitido("http://localhost:8765/x", true));
+        assert!(!host_permitido("http://127.0.0.1:8765/repos/x", false));
+    }
+
+    #[test]
+    fn nome_do_instalador() {
+        assert!(nome_de_instalador_valido("Vard_0.4.0_x64-setup.exe"));
+        assert!(!nome_de_instalador_valido("..\\x-setup.exe"));
+        assert!(!nome_de_instalador_valido("x.msi"));
+        assert!(!nome_de_instalador_valido("x-setup.exe.bat"));
+        assert!(!nome_de_instalador_valido(""));
     }
 }

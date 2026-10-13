@@ -5,6 +5,7 @@ import { ACOES_ATALHO, ROTULOS_ATALHO, avisoAltGr, validarAtalhos, type AcaoAtal
 import { campoAtalho } from "./campo-atalho";
 import type { OpenJarvis } from "../conectores/openjarvis/cliente";
 import type { StatusPonte } from "../conectores/ponte/cliente";
+import { AbaAtualizacao } from "./aba-atualizacao";
 import { AbaModelos } from "./aba-modelos";
 import { AbaSistema } from "./aba-sistema";
 import { AbaVoz } from "./aba-voz";
@@ -20,13 +21,15 @@ export interface DepsConfiguracoes {
   aoSalvar?: (c: Config) => void;
   /** Fecha a janela do painel. */
   fechar?: () => void;
+  /** Release do GitHub: endereço da consulta, GET pelo Rust, instalação do setup e versão instalada. */
+  atualizacao: { url: string; buscar: (url: string) => Promise<string>; instalar: (setup: { nome: string; url: string; bytes: number }) => Promise<void>; versao: () => Promise<string> };
 }
 
 /** Monitor como o comando listar_monitores devolve (pixels físicos). */
 export interface MonitorInfo { nome: string; x: number; y: number; largura: number; altura: number; escala: number; principal: boolean }
 
-export type Aba = "geral" | "voz" | "atalhos" | "modelos" | "sistema";
-const ABAS: [Aba, string][] = [["geral", "Geral"], ["voz", "Voz"], ["atalhos", "Atalhos"], ["modelos", "Modelos"], ["sistema", "Sistema"]];
+export type Aba = "geral" | "voz" | "atalhos" | "modelos" | "sistema" | "atualizacao";
+const ABAS: [Aba, string][] = [["geral", "Geral"], ["voz", "Voz"], ["atalhos", "Atalhos"], ["modelos", "Modelos"], ["sistema", "Sistema"], ["atualizacao", "Atualização"]];
 const OPCOES_TAMANHO: [Config["tamanho"], string][] = [
   ["pequeno", "Pequeno (240 px)"], ["medio", "Médio (320 px)"], ["grande", "Grande (480 px)"], ["personalizado", "Personalizado"],
 ];
@@ -42,6 +45,7 @@ export class Configuracoes {
   private falhas: FalhaAtalho[] = [];
   private modelos: AbaModelos | null = null;
   private sistema: AbaSistema | null = null;
+  private atualizacao: AbaAtualizacao | null = null;
   private abaVoz!: AbaVoz;
   private linhasAtalho = new Map<AcaoAtalho, { campo: HTMLButtonElement; motivo: HTMLElement }>();
 
@@ -70,6 +74,8 @@ export class Configuracoes {
       modo: (v) => this.deps.modoPonte(urlPonte(), v),
     });
     this.sistema.montar();
+    this.atualizacao = new AbaAtualizacao(this.raiz.querySelector<HTMLElement>("#cfg-atualizacao")!, this.deps.atualizacao);
+    this.atualizacao.montar();
     this.abrirAba("geral");
     try { this.logonGuardado = await invoke<boolean>("inicio_no_logon_ativo"); } catch { this.logonGuardado = false; }
     this.logon.checked = this.logonGuardado;
@@ -83,6 +89,7 @@ export class Configuracoes {
     for (const s of this.raiz.querySelectorAll<HTMLElement>("section[data-aba]")) s.hidden = s.dataset.aba !== aba;
     for (const b of this.raiz.querySelectorAll<HTMLButtonElement>("nav button")) b.classList.toggle("ativa", b.dataset.aba === aba);
     if (aba === "sistema") this.sistema?.ativar(); else this.sistema?.desativar();
+    if (aba === "atualizacao" && this.cfg.atualizacao_ao_abrir) this.atualizacao?.aoAbrir();
   }
 
   /** O widget gravou topo ou compacto pelos próprios botões: acompanha sem perder o resto do formulário. */
@@ -159,6 +166,11 @@ export class Configuracoes {
       <section data-aba="sistema">
         ${this.campo("ponte_url", "Ponte do Vard (opcional; vazio desliga)", c.ponte_url)}
         <div id="cfg-sistema"></div>
+      </section>
+      <section data-aba="atualizacao">
+        <div id="cfg-atualizacao"></div>
+        ${this.marca("atualizacao_ao_abrir", "Verificar ao abrir o painel", c.atualizacao_ao_abrir)}
+        <p class="nota">A consulta vai ao GitHub (api.github.com) só quando você clica em Verificar ou marca esta caixa.</p>
       </section>
       <section data-aba="modelos" id="cfg-modelos"></section>
       <footer>
@@ -248,6 +260,7 @@ export class Configuracoes {
       tamanho: this.sel("tamanho").value as Config["tamanho"], tamanho_px: limitarLado(num("tamanho_px", c.tamanho_px)),
       compacto: this.el("compacto").checked,
       sempre_no_topo: this.el("sempre_no_topo").checked, click_through: this.el("click_through").checked, invisivel: this.el("invisivel").checked,
+      atualizacao_ao_abrir: this.el("atualizacao_ao_abrir").checked,
       atalhos: { ...this.atalhos },
       modelo: this.modelos?.escolhido ?? c.modelo,
       sala_monitor: this.sel("sala_monitor").options.length ? this.sel("sala_monitor").value : c.sala_monitor, // lista ainda não chegou: mantém

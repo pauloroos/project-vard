@@ -56,6 +56,14 @@ describe("carregarConfig", () => {
     expect((await carregarConfig()).invisivel).toBe(true);
   });
 
+  it("atualizacao_ao_abrir: padrão false; texto vira padrão; true vale", async () => {
+    expect(CONFIG_PADRAO.atualizacao_ao_abrir).toBe(false);
+    invoke.mockResolvedValue({ atualizacao_ao_abrir: "sim" });
+    expect((await carregarConfig()).atualizacao_ao_abrir).toBe(false);
+    invoke.mockResolvedValue({ atualizacao_ao_abrir: true });
+    expect((await carregarConfig()).atualizacao_ao_abrir).toBe(true);
+  });
+
   it("atalhos novos têm padrão e o salvo antigo (só três) continua valendo", async () => {
     invoke.mockResolvedValue({ atalhos: { falar: "Ctrl+Shift+F", parar: "Ctrl+Alt+Period", mostrar: "Ctrl+Alt+V" } });
     const c = await carregarConfig();

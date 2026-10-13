@@ -29,6 +29,8 @@ export interface Config {
   voz_propria: string;
   elevenlabs_chave: string; elevenlabs_voz: string;
   gemini_chave: string; gemini_voz: string;
+  /** Consulta a release mais nova ao abrir a aba Atualização do painel (só então; nunca em segundo plano). */
+  atualizacao_ao_abrir: boolean;
 }
 
 export const CONFIG_PADRAO: Config = {
@@ -46,6 +48,7 @@ export const CONFIG_PADRAO: Config = {
   sala_monitor: "",
   conversa_ms: 20000,
   voz_provedor: "propria", voz_propria: "", elevenlabs_chave: "", elevenlabs_voz: "", gemini_chave: "", gemini_voz: "Kore",
+  atualizacao_ao_abrir: false,
 };
 
 /** Mescla o salvo com o padrão descartando o que tem tipo errado (arquivo editado à mão). */

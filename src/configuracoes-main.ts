@@ -1,6 +1,8 @@
 /// <reference types="vite/client" />
+import { invoke } from "@tauri-apps/api/core";
 import { emitTo, listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { URL_RELEASE } from "./atualizacao/release";
 import { carregarConfig, lerTopoCompacto } from "./config/config";
 import { OpenJarvis } from "./conectores/openjarvis/cliente";
 import { Ponte } from "./conectores/ponte/cliente";
@@ -15,6 +17,13 @@ window.addEventListener("DOMContentLoaded", async () => {
     modoPonte: (url, verbo) => new Ponte(url).modo(verbo),
     aoSalvar: (c) => { void emitTo("hud", "config-salva", c).catch((erro) => console.warn("não avisei o widget", erro)); },
     fechar: () => { void getCurrentWindow().close(); },
+    atualizacao: {
+      // Só o build de desenvolvimento aceita outro endereço (harness); o instalado consulta sempre o GitHub oficial.
+      url: import.meta.env.DEV ? (import.meta.env.VITE_RELEASE_URL ?? URL_RELEASE) : URL_RELEASE,
+      buscar: (url) => invoke<string>("buscar_release", { url }),
+      instalar: (s) => invoke<void>("instalar_atualizacao", { url: s.url, nome: s.nome, bytes: s.bytes }),
+      versao: () => invoke<string>("versao_do_app"),
+    },
   });
   await painel.montar();
   await listen<unknown>("config-mudou-no-widget", (ev) => {

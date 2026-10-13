@@ -1,7 +1,7 @@
 // Servidor falso do OpenJarvis para provar o ciclo sem voz humana. Node >= 20, sem dependências.
 // Uso: npm run harness  (porta 8765; mude com PORTA=...). Aponte o HUD para ele com VITE_OJ_ALVO.
 // PONTE=4700 acrescenta a ponte falsa; VOZ=4710 acrescenta a voz própria falsa (só com a variável, para não
-// brigar com um serviço de voz de verdade na mesma porta).
+// brigar com um serviço de voz de verdade na mesma porta). RELEASE=1 liga a release falsa do GitHub (aba Atualização).
 import http from "node:http";
 import { pathToFileURL } from "node:url";
 
@@ -39,7 +39,7 @@ function lerCorpo(req) {
   });
 }
 
-export function criarServidor({ log = () => {} } = {}) {
+export function criarServidor({ log = () => {}, release = false } = {}) {
   return http.createServer(async (req, res) => {
     const caminho = new URL(req.url, "http://x").pathname;
     const json = (obj, status = 200) => {
@@ -48,6 +48,19 @@ export function criarServidor({ log = () => {} } = {}) {
     };
     log(req.method, caminho);
     if (req.method === "OPTIONS") { res.writeHead(204, CORS); res.end(); return; }
+    if (release && req.method === "GET" && caminho === "/repos/pauloroos/project-vard/releases/latest") {
+      const base = `http://${req.headers.host ?? "127.0.0.1"}`;
+      return json({
+        tag_name: "v9.9.9", name: "Vard 9.9.9", body: "Release falsa do harness.\n- só para teste", published_at: "2026-11-01T10:00:00Z",
+        html_url: `${base}/release-falsa`,
+        assets: [{ name: "Vard_9.9.9_x64-setup.exe", browser_download_url: `${base}/download/Vard_9.9.9_x64-setup.exe`, size: 1234 }],
+      });
+    }
+    if (release && req.method === "GET" && caminho === "/download/Vard_9.9.9_x64-setup.exe") {
+      res.writeHead(200, { "Content-Type": "application/octet-stream", ...CORS });
+      res.end(Buffer.alloc(1234));
+      return;
+    }
     if (caminho === "/health") return json({ status: "ok" });
     if (caminho === "/v1/speech/health") return json({ available: true, backend: "harness" });
     if (caminho === "/v1/models") return json({ object: "list", data: [{ id: "modelo-falso", object: "model" }] });
@@ -152,7 +165,7 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
   const porta = Number(process.env.PORTA ?? 8765);
   if (process.env.PONTE) criarPonteFalsa().listen(Number(process.env.PONTE), "127.0.0.1", () => console.log(`ponte falsa em http://127.0.0.1:${process.env.PONTE}`));
   if (process.env.VOZ) criarVozFalsa().listen(Number(process.env.VOZ), "127.0.0.1", () => console.log(`voz falsa em http://127.0.0.1:${process.env.VOZ}`));
-  criarServidor({ log: (m, c) => console.log(m, c) }).listen(porta, "127.0.0.1", () => {
+  criarServidor({ log: (m, c) => console.log(m, c), release: Boolean(process.env.RELEASE) }).listen(porta, "127.0.0.1", () => {
     console.log(`servidor falso em http://127.0.0.1:${porta}`);
   });
 }

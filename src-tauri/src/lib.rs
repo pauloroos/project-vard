@@ -134,6 +134,9 @@ pub fn run() {
         .manage(Bandeja(Mutex::new(None)))
         .invoke_handler(tauri::generate_handler![
             comandos::ler_config,
+            comandos::versao_do_app,
+            comandos::buscar_release,
+            comandos::instalar_atualizacao,
             comandos::gravar_config,
             comandos::definir_sempre_no_topo,
             comandos::definir_click_through,
