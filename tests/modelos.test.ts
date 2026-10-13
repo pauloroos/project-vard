@@ -48,6 +48,13 @@ describe("modelos", () => {
     expect(sem?.modelos_lmstudio).toBeUndefined();
     expect(sem?.tarefas_abertas).toBeUndefined();
   });
+  it("ponte_sem_endereco_nao_faz_rede", async () => {
+    const f = vi.fn(async () => resposta({ ok: true }));
+    vi.stubGlobal("fetch", f);
+    expect(await new Ponte("").status()).toBeNull();
+    expect(await new Ponte("").modo("jogo")).toBe(false);
+    expect(f).not.toHaveBeenCalled();
+  });
   it("formatar_segundos", () => {
     expect(formatarSegundos(1830)).toBe("1,8 s");
   });

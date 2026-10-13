@@ -55,7 +55,7 @@ export class Configuracoes {
       statusPonte: () => this.deps.statusPonte(this.cfg.ponte_url),
     });
     void this.modelos.carregar();
-    const urlPonte = () => this.el("ponte_url").value.trim() || this.cfg.ponte_url;
+    const urlPonte = () => this.el("ponte_url").value.trim(); // vazio = sem ponte (desliga), não "usar a salva"
     this.sistema = new AbaSistema(this.raiz.querySelector<HTMLElement>("#cfg-sistema")!, {
       statusPonte: () => this.deps.statusPonte(urlPonte()),
       modo: (v) => this.deps.modoPonte(urlPonte(), v),

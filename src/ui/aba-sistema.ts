@@ -80,6 +80,7 @@ export class AbaSistema {
   }
 
   private async clicar(verbo: string) {
+    if (verbo === "voltar") this.confirmacao.cancelar();
     if (verbo !== "voltar" && !this.confirmacao.pedir(verbo)) { this.rotular(); return; }
     this.msg.textContent = "Enviando...";
     const ok = await this.deps.modo(verbo);

@@ -59,6 +59,7 @@ export class Ponte {
 
   /** Dispara um verbo do ciclo (`jogo`, `voltar`...). true = a ponte aceitou. */
   async modo(verbo: string): Promise<boolean> {
+    if (!this.base) return false; // ponte_url vazio = ponte desligada: nada de rede
     try {
       return await comTimeout(10000, async (signal) => {
         const r = await fetch(`${this.base}/modo`, {
