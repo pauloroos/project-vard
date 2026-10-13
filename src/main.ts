@@ -1,6 +1,7 @@
 /// <reference types="vite/client" />
 import { invoke } from "@tauri-apps/api/core";
 import { emitTo, listen } from "@tauri-apps/api/event";
+import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { aplicarAoVivo, carregarConfig, lerConfigAoVivo } from "./config/config";
 import type { FalhaAtalho } from "./config/atalhos";
 import { abrirMicrofone, definirMudo, fecharMicrofone, estaMudo, onAmostras, rmsAtual, taxaAtual } from "./audio/microfone";
@@ -16,7 +17,7 @@ import { FALAS, saudacaoPara } from "./fala/falas";
 import { Hud } from "./ui/hud";
 import { Nucleo } from "./ui/nucleo";
 import { ladoDoTamanho, ladoMudou, medidasDoWidget } from "./ui/tamanho";
-import { ESPELHO_INICIAL, reduzir, type Espelho, type EventoEspelho } from "./sala/espelho";
+import { ESPELHO_INICIAL, reduzir, salaExiste, type Espelho, type EventoEspelho } from "./sala/espelho";
 import { lerNiveis } from "./sala/espectro";
 
 const PRE_ROLL_MS = 300;
@@ -348,14 +349,17 @@ window.addEventListener("DOMContentLoaded", async () => {
   await listen("alternar-escuta", () => { void alternarMicrofone(); });
   // Sala aberta: retrato na hora e níveis a 20 Hz (o vórtice dela reage como o daqui). Fechada: nada vai para lá.
   let relogioSala = 0;
-  await listen("sala:pronta", () => {
+  const retomarSala = () => {
     salaAberta = true;
     void emitTo("sala", "sala:espelho", { tipo: "retrato", espelho }).catch(() => {});
     clearInterval(relogioSala);
     relogioSala = window.setInterval(() => {
       void emitTo("sala", "sala:niveis", { entrada: lerNiveis(analisadorEntrada), saida: lerNiveis(bocaReal?.analisador ?? null) }).catch(() => {});
     }, 50);
-  });
+  };
+  await listen("sala:pronta", retomarSala);
+  // Widget recarregado com a sala já aberta: ela não avisa de novo, então pergunta se existe.
+  try { if (salaExiste(await WebviewWindow.getByLabel("sala"))) retomarSala(); } catch { /* sem sala */ }
   await listen("sala-fechada", () => { salaAberta = false; clearInterval(relogioSala); });
   await listen<unknown>("aviso", (ev) => {
     if (typeof ev.payload !== "string") { console.warn("aviso ignorado: payload inválido"); return; }

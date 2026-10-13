@@ -13,7 +13,10 @@ Projeto independente, sem vínculo com o OpenJarvis nem com a Stanford.
 - Escuta pelo microfone (detecção de voz automática) ou por push-to-talk com atalho global.
 - Chama o assistente pelo nome ("Vard, que horas são"); com push-to-talk o nome é dispensado.
 - Transcreve, pergunta e sintetiza a resposta no próprio OpenJarvis (`/v1/speech/transcribe`, `/v1/chat/completions`, `/v1/speech/synthesize`).
-- Ícone na bandeja, painel de configurações, início opcional com o Windows.
+- Ícone na bandeja, painel de configurações em janela própria (abas Geral, Voz, Atalhos, Ponte e Modelos), início opcional com o Windows.
+- Três tamanhos (ou o lado em pixels, de 160 a 800) e um modo compacto que deixa só o holograma.
+- Tela cheia ("sala") num monitor à escolha: vórtice grande, o que você disse, a resposta em letra grande e um relógio.
+- Escolha do modelo entre os que o OpenJarvis expõe.
 - Botão **Texto** abre a interface gráfica de texto do OpenJarvis.
 - Opcional: a ponte do Vard (setup privado do autor, `rdl-vard`) dá olhos na tela e modo jogo. Sem ela tudo funciona igual, veja [docs/ponte-do-vard.md](docs/ponte-do-vard.md).
 - Opcional: uma voz própria (qualquer motor de voz local que siga um contrato simples) fala a resposta frase a frase, começando antes de a resposta inteira estar sintetizada. Veja [Voz própria](#voz-própria-opcional).
@@ -29,8 +32,8 @@ Projeto independente, sem vínculo com o OpenJarvis nem com a Stanford.
 
 Baixe o instalador na página de releases e rode um dos dois:
 
-- `Vard_0.1.0_x64-setup.exe` (NSIS): instala só para o seu usuário, sem pedir administrador. Silencioso: `Vard_0.1.0_x64-setup.exe /S`. Fica em `%LOCALAPPDATA%\Vard\`.
-- `Vard_0.1.0_x64_en-US.msi` (WiX): instala para a máquina toda e exige administrador. Silencioso: `msiexec /i Vard_0.1.0_x64_en-US.msi /qn`.
+- `Vard_0.2.0_x64-setup.exe` (NSIS): instala só para o seu usuário, sem pedir administrador. Silencioso: `Vard_0.2.0_x64-setup.exe /S`. Fica em `%LOCALAPPDATA%\Vard\`.
+- `Vard_0.2.0_x64_en-US.msi` (WiX): instala para a máquina toda e exige administrador. Silencioso: `msiexec /i Vard_0.2.0_x64_en-US.msi /qn`.
 
 Para gerar você mesmo: `npm install` e `npm run tauri build` (os instaladores saem em `src-tauri/target/release/bundle/`).
 
@@ -46,17 +49,22 @@ Para gerar você mesmo: `npm install` e `npm run tauri build` (os instaladores s
 | --- | --- |
 | `Ctrl+Alt+Space` (segurar) | Push-to-talk: fale enquanto segura; o nome "Vard" é dispensado |
 | `Ctrl+Alt+Period` | Interrompe a fala em curso |
-| `Ctrl+Alt+V` | Mostra ou oculta o HUD |
+| `Ctrl+Alt+V` | Mostra ou oculta o widget |
+| `Ctrl+Alt+,` | Abre ou fecha as configurações |
+| `Ctrl+Alt+E` | Liga a escuta (abre o microfone) ou alterna o mudo |
+| `Ctrl+Alt+F` | Liga ou desliga a tela cheia (sala) |
 
-Os três podem ser trocados no painel de configurações (valem depois de reiniciar o HUD).
+Todos podem ser trocados na aba Atalhos: clique no campo e pressione a nova combinação (Ctrl, Alt ou Win mais uma tecla). O painel recusa combinações repetidas e marca o atalho que o Windows não aceitou (outro programa já usa). Valem depois de reiniciar o Vard.
+
+![Painel de atalhos](docs/painel-atalhos.png)
 
 ### Botões
 
-Mudo do microfone, interromper, olhar a tela (só com a ponte), abrir a conversa em texto, sempre no topo, configurações e modo compacto. O ícone da bandeja tem Mostrar/ocultar, Sempre no topo, Configurações e Sair.
+Mudo do microfone, interromper, olhar a tela (só com a ponte), abrir a conversa em texto, sempre no topo, configurações e modo compacto. No compacto o widget fica só com o holograma: os botões aparecem quando o mouse passa por cima e somem 2 s depois que ele sai (com "clique atravessa" ligado eles não aparecem). O ícone da bandeja tem Mostrar/ocultar, Sempre no topo, Configurações, Tela cheia e Sair.
 
 ## Configurar
 
-Pela engrenagem do HUD ou pelo item **Configurações** da bandeja. O painel tem todos os campos do arquivo `hud.config.json` (se ele ficar ilegível, o HUD sobe com o padrão e guarda o original como `hud.config.json.invalido`; em `%APPDATA%\io.github.pauloroos.vard\`):
+Pela engrenagem, pelo item **Configurações** da bandeja ou por `Ctrl+Alt+,`. O painel abre numa janela própria com as abas Geral, Voz, Atalhos, Ponte e Modelos. Salvar aplica na hora o tamanho, o compacto, sempre no topo, o clique atravessando, o seu nome e o modelo; endereços, voz, ouvido e atalhos valem depois de reiniciar (o painel diz quais). Os campos são os do arquivo `hud.config.json` (se ele ficar ilegível, o HUD sobe com o padrão e guarda o original como `hud.config.json.invalido`; em `%APPDATA%\io.github.pauloroos.vard\`):
 
 | Campo | Padrão | Para quê |
 | --- | --- | --- |
@@ -70,10 +78,26 @@ Pela engrenagem do HUD ou pelo item **Configurações** da bandeja. O painel tem
 | `voz`, `velocidade` | `pm_alex`, `1.05` | Voz e velocidade da fala |
 | `finish_ms`, `limiar_vad` | `900`, `0.02` | Silêncio que encerra a fala e sensibilidade do microfone |
 | `sempre_no_topo`, `click_through` | ligado, desligado | Janela sempre visível; clique atravessa a janela |
-| `atalhos` | ver acima | Atalhos globais |
+| `tamanho`, `tamanho_px` | `medio`, `320` | Tamanho do widget: `pequeno` (240 px), `medio` (320), `grande` (480) ou `personalizado` (`tamanho_px`, de 160 a 800) |
+| `compacto` | desligado | Só o holograma; os botões aparecem com o mouse |
+| `modelo` | vazio | Modelo do OpenJarvis (vazio = o primeiro da lista dele) |
+| `sala_monitor` | vazio | Monitor da tela cheia (vazio = o principal) |
+| `atalhos` | ver acima | Atalhos globais: `falar`, `parar`, `mostrar`, `config`, `escuta`, `sala` |
 | `instrucao_formato` | respostas curtas | Instrução enviada junto com cada pergunta |
 
 Endereços fora de `127.0.0.1` ou `localhost` geram um aviso (o HUD manda o que você diz e, com a ponte, imagens da sua tela; mantenha tudo na própria máquina). A caixa **Iniciar com o Windows** cria ou remove `Vard.lnk` na pasta Startup do seu usuário. O botão **Testar OpenJarvis** confere o servidor e a fala.
+
+## Tela cheia (sala)
+
+![Sala em tela cheia](docs/sala.png)
+
+`Ctrl+Alt+F` ou **Tela cheia** na bandeja abrem uma janela preta, sem bordas, ocupando o monitor escolhido em Geral → Janela: o vórtice grande, o que você disse, a resposta em letra grande e um relógio. É só um espelho: quem ouve e fala continua sendo o widget, que pode ficar em outro monitor. `Esc`, o atalho ou a bandeja fecham. Se o monitor escolhido estiver desconectado, a sala abre no principal e o widget avisa.
+
+O widget fica sempre no topo e pode cobrir a sala se estiver no mesmo monitor: use outro monitor para a sala ou mova o widget para um canto.
+
+## Modelos
+
+A aba **Modelos** lista os modelos que o OpenJarvis expõe (`/v1/models`) e deixa escolher o principal; "Automático" usa o primeiro da lista. Se a ponte do Vard informar um modelo de reserva, ele aparece ali. **Testar** faz uma pergunta curta e mostra quanto tempo levou. Trocar de provedor (OmniRouter, assinaturas, LM Studio) é configuração do OpenJarvis: o Vard só escolhe entre o que ele oferece. Se o modelo escolhido sumir do OpenJarvis, o Vard usa o primeiro da lista.
 
 ## Voz própria (opcional)
 
@@ -99,7 +123,8 @@ na tela. O contrato completo está em [docs/voz-propria.md](docs/voz-propria.md)
 - **Fala desligada** (o HUD avisa e não ouve): o `[speech]` do OpenJarvis não está ativo ou o backend não carregou. Veja [docs/ligar-a-fala.md](docs/ligar-a-fala.md) e o log do servidor.
 - **Microfone**: se o HUD diz que o microfone está bloqueado, libere em Configurações do Windows, Privacidade, Microfone, e dê dois cliques no núcleo de novo. Se ele corta o começo das frases ou ouve ruído, ajuste `limiar_vad`.
 - **O botão Texto não abre nada útil**: a interface de texto do OpenJarvis não está de pé em `gui_url`. Suba com `jarvis gui --no-server --no-browser`.
-- **Atalho não funciona**: outro programa já usa a combinação. Troque no painel e reinicie o HUD.
+- **Atalho não funciona**: outro programa já usa a combinação. A aba Atalhos marca o atalho que não registrou; troque e reinicie o Vard.
+- **A sala abriu no monitor errado**: o monitor escolhido estava desconectado e ela abriu no principal. Escolha de novo em Geral → Janela.
 
 ## Conectores
 

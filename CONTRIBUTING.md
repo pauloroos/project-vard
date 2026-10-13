@@ -20,6 +20,9 @@ cargo test --manifest-path src-tauri/Cargo.toml
 
 `HUD_REAL=1 HUD_REAL_WAV=<um WAV dizendo "Preflight"> npm run test:real` (PowerShell: `$env:HUD_REAL=1; $env:HUD_REAL_WAV="<wav>"; npm run test:real`) prova contra um OpenJarvis de verdade (transcrever, perguntar, sintetizar).
 
+O front tem três páginas, declaradas em vite.config.ts: index.html (widget), configuracoes.html (painel) e sala.html (tela cheia).
+The front end has three pages, declared in vite.config.ts: index.html (widget), configuracoes.html (settings) and sala.html (full screen).
+
 ## Rodar em desenvolvimento / Run in development
 
 ```
@@ -40,6 +43,11 @@ Starts a fake OpenJarvis at `http://127.0.0.1:8765`. Use it with `VITE_OJ_ALVO`,
 
 No `tauri dev` existe `window.__vardPergunta("que horas são")` (só em desenvolvimento): injeta a pergunta como se viesse do microfone; com o microfone fechado, toca por uma saída de áudio própria. O console mostra `resposta do núcleo em X ms` e `voz: 1º áudio em Y ms após a resposta`.
 In `tauri dev`, `window.__vardPergunta("...")` (development only) injects a question as if it came from the microphone; the console prints both timings.
+
+## Provas sem injetar teclado / Proofs without keyboard injection
+
+Prove o comportamento por testes, pelo harness e por `window.__vardPergunta`, nunca simulando teclas ou cliques do mouse no sistema (atalhos globais e foco são do usuário). Para capturas do painel, abra `configuracoes.html` no Vite com `invoke` simulado, sem dados pessoais.
+Prove behaviour through tests, the harness and `window.__vardPergunta`, never by simulating system-wide key presses or mouse clicks (global shortcuts and focus belong to the user). For panel screenshots, open `configuracoes.html` in Vite with a mocked `invoke` and no personal data.
 
 ## Ícone / Icon
 

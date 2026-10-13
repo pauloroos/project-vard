@@ -15,7 +15,10 @@ Independent project, not affiliated with OpenJarvis or Stanford.
 - Listens through the microphone (automatic voice detection) or through a global push-to-talk shortcut.
 - Wake word: say the assistant's name ("Vard, what time is it"); with push-to-talk the name is not needed.
 - Transcription, chat and speech synthesis all go to OpenJarvis (`/v1/speech/transcribe`, `/v1/chat/completions`, `/v1/speech/synthesize`).
-- Tray icon, settings panel, optional start with Windows.
+- Tray icon, settings panel in its own window (tabs Geral, Voz, Atalhos, Ponte and Modelos), optional start with Windows.
+- Three sizes (or the side in pixels, 160 to 800) and a compact mode that leaves only the hologram.
+- Full screen ("sala") on a monitor of your choice: a large vortex, what you said, the answer in large type and a clock.
+- Pick the model among the ones OpenJarvis exposes.
 - The **Text** button opens OpenJarvis' graphical text interface.
 - Optional: the Vard bridge (the author's private setup, `rdl-vard`) adds screen vision and a game mode. Everything works without it, see [docs/ponte-do-vard.md](docs/ponte-do-vard.md) (Portuguese).
 - Optional: your own voice service (any local TTS engine that follows a small contract) speaks the answer sentence by sentence, starting before the whole answer is synthesized. See [Own voice](#own-voice-optional).
@@ -31,8 +34,8 @@ Independent project, not affiliated with OpenJarvis or Stanford.
 
 Download the installer from the releases page and run one of them:
 
-- `Vard_0.1.0_x64-setup.exe` (NSIS): per-user, no administrator needed. Silent: `Vard_0.1.0_x64-setup.exe /S`. Installs to `%LOCALAPPDATA%\Vard\`.
-- `Vard_0.1.0_x64_en-US.msi` (WiX): per-machine, needs administrator. Silent: `msiexec /i Vard_0.1.0_x64_en-US.msi /qn`.
+- `Vard_0.2.0_x64-setup.exe` (NSIS): per-user, no administrator needed. Silent: `Vard_0.2.0_x64-setup.exe /S`. Installs to `%LOCALAPPDATA%\Vard\`.
+- `Vard_0.2.0_x64_en-US.msi` (WiX): per-machine, needs administrator. Silent: `msiexec /i Vard_0.2.0_x64_en-US.msi /qn`.
 
 To build it yourself: `npm install` and `npm run tauri build` (installers land in `src-tauri/target/release/bundle/`).
 
@@ -48,17 +51,22 @@ To build it yourself: `npm install` and `npm run tauri build` (installers land i
 | --- | --- |
 | `Ctrl+Alt+Space` (hold) | Push-to-talk: speak while holding; the name "Vard" is not required |
 | `Ctrl+Alt+Period` | Stop the current speech |
-| `Ctrl+Alt+V` | Show or hide the HUD |
+| `Ctrl+Alt+V` | Show or hide the widget |
+| `Ctrl+Alt+,` | Open or close the settings |
+| `Ctrl+Alt+E` | Start listening (opens the microphone) or toggle mute |
+| `Ctrl+Alt+F` | Toggle full screen (sala) |
 
-All three can be changed in the settings panel (applied after restarting the HUD).
+All of them can be changed in the Atalhos tab: click the field and press the new combination (Ctrl, Alt or Win plus a key). The panel rejects duplicates and marks any shortcut Windows refused (another program owns it). Changes apply after restarting Vard.
+
+![Shortcuts tab](docs/painel-atalhos.png)
 
 ### Buttons
 
-Microphone mute, stop, look at the screen (bridge only), open the text conversation, always on top, settings and compact mode. The tray icon has Show/hide, Always on top, Settings and Quit.
+Microphone mute, stop, look at the screen (bridge only), open the text conversation, always on top, settings and compact mode. In compact mode only the hologram shows: the buttons appear while the mouse is over the widget and fade 2 s after it leaves (with click-through on they never appear). The tray icon has Show/hide, Always on top, Settings, Full screen and Quit.
 
 ## Configure
 
-Use the gear on the HUD or **Configurações** in the tray menu. The panel covers every field of `hud.config.json` (if the file becomes unreadable the HUD starts with the defaults and keeps the original as `hud.config.json.invalido`; in `%APPDATA%\io.github.pauloroos.vard\`):
+Use the gear, **Configurações** in the tray menu or `Ctrl+Alt+,`. The panel opens in its own window with the tabs Geral, Voz, Atalhos, Ponte and Modelos. Saving applies size, compact mode, always on top, click-through, your name and the model right away; addresses, voice, listening and shortcuts apply after a restart (the panel says which). The fields are those of `hud.config.json` (if the file becomes unreadable the HUD starts with the defaults and keeps the original as `hud.config.json.invalido`; in `%APPDATA%\io.github.pauloroos.vard\`):
 
 | Field | Default | Purpose |
 | --- | --- | --- |
@@ -72,10 +80,26 @@ Use the gear on the HUD or **Configurações** in the tray menu. The panel cover
 | `voz`, `velocidade` | `pm_alex`, `1.05` | Speech voice and speed |
 | `finish_ms`, `limiar_vad` | `900`, `0.02` | Silence that ends an utterance and microphone sensitivity |
 | `sempre_no_topo`, `click_through` | on, off | Always visible; clicks pass through the window |
-| `atalhos` | see above | Global shortcuts |
+| `tamanho`, `tamanho_px` | `medio`, `320` | Widget size: `pequeno` (240 px), `medio` (320), `grande` (480) or `personalizado` (`tamanho_px`, 160 to 800) |
+| `compacto` | off | Hologram only; buttons show on hover |
+| `modelo` | empty | OpenJarvis model (empty = the first one it lists) |
+| `sala_monitor` | empty | Full-screen monitor (empty = primary) |
+| `atalhos` | see above | Global shortcuts: `falar`, `parar`, `mostrar`, `config`, `escuta`, `sala` |
 | `instrucao_formato` | short answers | Instruction sent with every question |
 
 URLs outside `127.0.0.1` or `localhost` raise a warning (the HUD sends what you say and, with the bridge, images of your screen; keep everything on your own machine). **Iniciar com o Windows** creates or removes `Vard.lnk` in your user Startup folder. **Testar OpenJarvis** checks the server and speech.
+
+## Full screen (sala)
+
+![Full-screen sala](docs/sala.png)
+
+`Ctrl+Alt+F` or **Tela cheia** in the tray opens a black borderless window filling the monitor chosen in Geral → Janela: the large vortex, what you said, the answer in large type and a clock. It is only a mirror: the widget, which can stay on another monitor, still listens and speaks. `Esc`, the shortcut or the tray close it. If the chosen monitor is disconnected, it opens on the primary one and the widget says so.
+
+The widget is always on top and may cover the sala if both are on the same monitor: put the sala on another monitor or move the widget to a corner.
+
+## Models
+
+The **Modelos** tab lists the models OpenJarvis exposes (`/v1/models`) and lets you pick the main one; "Automático" uses the first one. If the Vard bridge reports a fallback model, it shows there. **Testar** asks a short question and shows how long it took. Switching providers (OmniRouter, subscriptions, LM Studio) is OpenJarvis configuration: Vard only picks among what it offers. If the chosen model disappears from OpenJarvis, Vard uses the first one.
 
 ## Own voice (optional)
 
@@ -101,7 +125,8 @@ nothing changes on screen. The full contract is in [docs/voz-propria.md](docs/vo
 - **Speech off** (the HUD says so and does not listen): OpenJarvis' `[speech]` is disabled or its backend failed to load. See [docs/ligar-a-fala.md](docs/ligar-a-fala.md) and the server log.
 - **Microphone**: if the HUD says the microphone is blocked, allow it under Windows Settings, Privacy, Microphone, then double-click the core again. If it clips the start of sentences or picks up noise, tune `limiar_vad`.
 - **The Text button shows nothing useful**: OpenJarvis' text interface is not running at `gui_url`. Start it with `jarvis gui --no-server --no-browser`.
-- **A shortcut does nothing**: another program already owns the combination. Change it in the panel and restart the HUD.
+- **A shortcut does nothing**: another program already owns the combination. The Atalhos tab marks the shortcut that did not register; change it and restart Vard.
+- **Full screen opened on the wrong monitor**: the chosen monitor was disconnected, so it opened on the primary one. Pick it again in Geral → Janela.
 
 ## Connectors
 

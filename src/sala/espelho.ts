@@ -50,3 +50,8 @@ export function reduzir(atual: Espelho, ev: unknown): Espelho {
 export function formatarHora(d: Date): string {
   return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
 }
+
+/** A sala existe quando a consulta por rótulo (WebviewWindow.getByLabel) devolve uma janela, e não null. Serve para o widget retomar o espelho ao recarregar. */
+export function salaExiste(janela: unknown): boolean {
+  return janela !== null && janela !== undefined;
+}

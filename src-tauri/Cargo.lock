@@ -5307,7 +5307,7 @@ dependencies = [
 
 [[package]]
 name = "vard"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "base64 0.23.1",
  "image",

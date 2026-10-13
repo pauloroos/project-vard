@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { ESPELHO_INICIAL, MAX_TEXTO, formatarHora, reduzir } from "../src/sala/espelho";
+import { ESPELHO_INICIAL, MAX_TEXTO, formatarHora, reduzir, salaExiste } from "../src/sala/espelho";
 
 describe("espelho da sala", () => {
   it("estado_valido_muda", () => {
@@ -31,5 +31,10 @@ describe("espelho da sala", () => {
   it("relogio", () => {
     expect(formatarHora(new Date(2026, 9, 12, 9, 5))).toBe("09:05");
     expect(formatarHora(new Date(2026, 9, 12, 23, 59))).toBe("23:59");
+  });
+  it("sala_existe_so_com_janela", () => {
+    expect(salaExiste(null)).toBe(false);
+    expect(salaExiste(undefined)).toBe(false);
+    expect(salaExiste({ label: "sala" })).toBe(true);
   });
 });
