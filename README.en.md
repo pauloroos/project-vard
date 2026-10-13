@@ -105,7 +105,7 @@ nothing changes on screen. The full contract is in [docs/voz-propria.md](docs/vo
 
 ## Connectors
 
-Vard talks to assistants through connectors. Today there is only one, OpenJarvis (`src/conectores/openjarvis/cliente.ts`). Others are welcome: implement the `Conector` interface in `src/conectores/conector.ts` (`saude`, `modelos`, `transcrever`, `perguntar`, `sintetizar`).
+Vard talks to assistants through connectors. Today there is only one, OpenJarvis (`src/conectores/openjarvis/cliente.ts`). Others are welcome: implement the `Conector` interface in `src/conectores/conector.ts` (`saude`, `modelos`, `definirModelo`, `transcrever`, `perguntar`, `sintetizar`). `definirModelo` stores the preferred model (empty = the first from `modelos()`) and takes effect on the next question. Warning: in the panel's Models tab, picking a non-default model, or pressing Test on it, may make the LLM server (for example LM Studio) load a second model into the GPU and use its memory.
 
 ## Development
 

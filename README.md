@@ -103,7 +103,7 @@ na tela. O contrato completo está em [docs/voz-propria.md](docs/voz-propria.md)
 
 ## Conectores
 
-O Vard fala com assistentes por conectores. Hoje existe um só, o OpenJarvis (`src/conectores/openjarvis/cliente.ts`). Outros são bem-vindos: basta implementar a interface `Conector` em `src/conectores/conector.ts` (`saude`, `modelos`, `transcrever`, `perguntar`, `sintetizar`).
+O Vard fala com assistentes por conectores. Hoje existe um só, o OpenJarvis (`src/conectores/openjarvis/cliente.ts`). Outros são bem-vindos: basta implementar a interface `Conector` em `src/conectores/conector.ts` (`saude`, `modelos`, `definirModelo`, `transcrever`, `perguntar`, `sintetizar`). `definirModelo` guarda o modelo preferido (vazio = o primeiro de `modelos()`) e vale na próxima pergunta. Atenção: na aba Modelos do painel, escolher um modelo diferente do automático, ou clicar em Testar nele, pode fazer o servidor de LLM (por exemplo o LM Studio) carregar um segundo modelo na GPU e consumir memória.
 
 ## Desenvolvimento
 

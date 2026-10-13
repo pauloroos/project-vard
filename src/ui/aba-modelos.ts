@@ -26,6 +26,7 @@ export class AbaModelos {
   async carregar() {
     this.raiz.innerHTML = `
       <p class="nota">O Vard só escolhe entre os modelos que o OpenJarvis expõe. Trocar de provedor (OmniRouter, assinaturas, LM Studio) é configuração do OpenJarvis, não do Vard.</p>
+      <p class="nota aviso-gpu">Atenção: escolher um modelo diferente do automático, ou clicar em Testar nele, pode fazer o servidor de LLM (por exemplo o LM Studio) carregar um segundo modelo na GPU e consumir memória.</p>
       <fieldset><legend>Modelo principal</legend><div id="mod-lista">Carregando...</div></fieldset>
       <fieldset><legend>Reserva</legend><div id="mod-reserva">Consultando a ponte...</div></fieldset>
       <button id="mod-testar" type="button">Testar</button> <span id="mod-tempo"></span>`;

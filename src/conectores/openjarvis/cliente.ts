@@ -54,14 +54,16 @@ export class OpenJarvis implements Conector {
     const r = await comTimeout(5000, (signal) => fetch(`${this.base}/v1/models`, { signal }));
     if (!r.ok) throw new Error(`modelos HTTP ${r.status}`);
     const j = await r.json();
-    return ((j?.data ?? []) as { id?: string }[]).map((m) => String(m.id ?? "")).filter(Boolean);
+    return Array.isArray(j?.data) ? j.data.map((m: { id?: unknown }) => String(m?.id ?? "")).filter(Boolean) : [];
   }
 
   definirModelo(preferido: string) { this.preferido = preferido; this.modelo = null; }
 
   private async idModelo(): Promise<string> {
     if (this.modelo) return this.modelo;
-    const escolha = escolherModelo(await this.modelos(), this.preferido);
+    const preferido = this.preferido;
+    const escolha = escolherModelo(await this.modelos(), preferido);
+    if (this.preferido !== preferido) return this.idModelo(); // definirModelo() rodou durante a espera: o resultado é obsoleto
     if (!escolha) throw new Error("nenhum modelo");
     if (escolha.caiu) console.warn(`modelo ${this.preferido} não está mais no OpenJarvis; usando ${escolha.id}`);
     this.modelo = escolha.id;
