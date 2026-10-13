@@ -2,47 +2,60 @@
   --ciano: #00f0ff;
   --brilho: #00a2ff;
   --mono: "JetBrains Mono", Consolas, monospace;
+  --escala: 1; /* lado do widget / 320 px; o main troca conforme o tamanho da config */
 }
 html, body { background: transparent; margin: 0; overflow: hidden; }
 
 /* Sem painel, sem vidro: só o vórtice flutuando. A janela inteira (inclusive a parte vazia) arrasta. */
 #app {
-  position: relative; width: 320px; height: 360px; background: transparent;
+  position: relative; width: calc(320px * var(--escala)); height: calc(360px * var(--escala)); background: transparent;
   font-family: var(--mono); text-transform: uppercase; letter-spacing: 0.14em; color: var(--ciano);
   user-select: none;
 }
 #nucleo { position: absolute; left: 0; top: 0; display: block; cursor: move; }
 
 #dica {
-  position: absolute; left: 12px; right: 12px; top: 282px; text-align: center;
-  font-size: 8px; line-height: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  position: absolute; left: calc(12px * var(--escala)); right: calc(12px * var(--escala)); top: calc(282px * var(--escala));
+  text-align: center; font-size: calc(8px * var(--escala)); line-height: calc(12px * var(--escala));
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   text-shadow: 0 0 6px var(--brilho), 0 0 12px var(--brilho); opacity: 0.9;
 }
 #resposta {
-  position: absolute; left: 24px; right: 24px; top: 297px; text-align: center;
-  font-size: 7px; line-height: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  position: absolute; left: calc(24px * var(--escala)); right: calc(24px * var(--escala)); top: calc(297px * var(--escala));
+  text-align: center; font-size: calc(7px * var(--escala)); line-height: calc(11px * var(--escala));
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   letter-spacing: 0.08em; opacity: 0; transition: opacity 1.2s ease;
 }
 #resposta.visivel { opacity: 0.6; transition: opacity 0.2s ease; }
 
 #botoes {
-  position: absolute; left: 0; right: 0; top: 322px; display: flex; justify-content: center; gap: 6px;
-  opacity: 0.4; transition: opacity 0.2s ease;
+  position: absolute; left: 0; right: 0; top: calc(322px * var(--escala)); display: flex; justify-content: center;
+  gap: calc(6px * var(--escala)); opacity: 0.4; transition: opacity 0.3s ease;
 }
 #app:hover #botoes { opacity: 1; }
 #botoes button {
-  width: 24px; height: 24px; padding: 0; display: flex; align-items: center; justify-content: center; cursor: pointer;
-  color: var(--ciano); background: rgba(0, 240, 255, 0.06); border: 1px solid rgba(0, 240, 255, 0.35); border-radius: 50%;
+  width: calc(24px * var(--escala)); height: calc(24px * var(--escala)); padding: 0; display: flex; align-items: center;
+  justify-content: center; cursor: pointer; color: var(--ciano); background: rgba(0, 240, 255, 0.06);
+  border: 1px solid rgba(0, 240, 255, 0.35); border-radius: 50%;
 }
-#botoes button svg { width: 13px; height: 13px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; pointer-events: none; }
+#botoes button svg {
+  width: calc(13px * var(--escala)); height: calc(13px * var(--escala)); fill: none; stroke: currentColor;
+  stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; pointer-events: none;
+}
 #botoes button:hover { background: rgba(0, 240, 255, 0.22); box-shadow: 0 0 8px var(--brilho); }
 #botoes button[hidden] { display: none; }
-#app.capturando::after { content: ""; position: absolute; top: 8px; right: 8px; width: 10px; height: 10px; border-radius: 50%; background: #ff3030; box-shadow: 0 0 10px #ff3030; animation: piscar 0.5s infinite alternate; }
+#app.capturando::after {
+  content: ""; position: absolute; top: calc(8px * var(--escala)); right: calc(8px * var(--escala));
+  width: calc(10px * var(--escala)); height: calc(10px * var(--escala)); border-radius: 50%;
+  background: #ff3030; box-shadow: 0 0 10px #ff3030; animation: piscar 0.5s infinite alternate;
+}
 @keyframes piscar { from { opacity: 0.4; } to { opacity: 1; } }
 #botoes button.ativo { color: #ff6060; border-color: rgba(255, 96, 96, 0.7); }
 
-/* compacto: some o texto, ficam o núcleo e os botões */
+/* Compacto: só o holograma. O texto some; a barra aparece com o mouse em cima e some 2 s depois (Revelador). */
 #app.compacto #dica, #app.compacto #resposta { display: none; }
+#app.compacto #botoes { opacity: 0; pointer-events: none; }
+#app.compacto.revelado #botoes { opacity: 1; pointer-events: auto; }
 
 /* painel de configurações: cobre o widget, rola por dentro */
 #config {

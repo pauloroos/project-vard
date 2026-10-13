@@ -206,6 +206,26 @@ pub fn capturar_tela(window: tauri::Window) -> Result<String, String> {
     Ok(base64::engine::general_purpose::STANDARD.encode(buf.into_inner()))
 }
 
+/// Redimensiona o widget (tamanho da config) mantendo o canto superior esquerdo; se passar da borda do monitor, encosta nela.
+#[tauri::command]
+pub fn redimensionar_janela(window: tauri::Window, largura: f64, altura: f64) -> Result<(), String> {
+    let ok = |v: f64| v.is_finite() && (100.0..=4000.0).contains(&v);
+    if !ok(largura) || !ok(altura) {
+        return Err("tamanho fora do intervalo".into());
+    }
+    window.set_size(tauri::LogicalSize::new(largura, altura)).map_err(|e| e.to_string())?;
+    let fator = window.scale_factor().map_err(|e| e.to_string())?;
+    let pos = window.outer_position().map_err(|e| e.to_string())?;
+    if let Some(m) = window.current_monitor().map_err(|e| e.to_string())? {
+        let mon = crate::janelas::info(&m, None);
+        let (x, y) = crate::janelas::encaixar(pos.x, pos.y, (largura * fator).round() as u32, (altura * fator).round() as u32, &mon);
+        if (x, y) != (pos.x, pos.y) {
+            window.set_position(tauri::PhysicalPosition::new(x, y)).map_err(|e| e.to_string())?;
+        }
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod testes {
     use super::*;

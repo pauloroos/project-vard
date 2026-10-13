@@ -1,6 +1,8 @@
 import { invoke } from "@tauri-apps/api/core";
 import type { AcaoAtalho } from "./atalhos";
 
+export const TAMANHOS = ["pequeno", "medio", "grande", "personalizado"] as const;
+
 export interface Config {
   openjarvis_url: string; gui_url: string; ponte_url: string;
   /** Serviço de voz próprio (POST /falar); vazio desliga e a voz fica sempre a do OpenJarvis. */
@@ -8,6 +10,10 @@ export interface Config {
   nome: string; usuario: string; variantes: string[]; idioma: string; voz: string; velocidade: number;
   finish_ms: number; limiar_vad: number; sempre_no_topo: boolean; click_through: boolean;
   posicao: { x: number; y: number } | null;
+  /** Tamanho do widget: preset ou "personalizado" (usa tamanho_px, lado em px lógicos). */
+  tamanho: (typeof TAMANHOS)[number]; tamanho_px: number;
+  /** Compacto: só o holograma; a barra de botões aparece com o mouse em cima. */
+  compacto: boolean;
   atalhos: Record<AcaoAtalho, string>;
   instrucao_formato: string;
 }
@@ -17,6 +23,7 @@ export const CONFIG_PADRAO: Config = {
   voz_url: "http://127.0.0.1:4710",
   nome: "vard", usuario: "", variantes: ["vard", "varde", "vardi", "ward", "bard"], idioma: "pt", voz: "pm_alex", velocidade: 1.05,
   finish_ms: 900, limiar_vad: 0.02, sempre_no_topo: true, click_through: false, posicao: null,
+  tamanho: "medio", tamanho_px: 320, compacto: false,
   atalhos: {
     falar: "Ctrl+Alt+Space", parar: "Ctrl+Alt+Period", mostrar: "Ctrl+Alt+V",
     config: "Ctrl+Alt+Comma", escuta: "Ctrl+Alt+E",
@@ -43,6 +50,8 @@ function mesclar(salvo: unknown): Config {
       if (p === null || (typeof p === "object" && typeof p.x === "number" && typeof p.y === "number")) saida[k] = v;
     } else if (k === "variantes") {
       if (Array.isArray(v) && v.every((x) => typeof x === "string")) saida[k] = v;
+    } else if (k === "tamanho") {
+      if (typeof v === "string" && (TAMANHOS as readonly string[]).includes(v)) saida[k] = v;
     } else if (typeof v === typeof padrao) {
       saida[k] = v;
     }

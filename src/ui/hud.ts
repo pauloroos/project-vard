@@ -2,6 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import type { Config } from "../config/config";
 import { salvarConfig } from "../config/config";
 import type { Estado } from "../fala/conversa";
+import { Revelador } from "./revelador";
 
 const ROTULO: Record<Estado, string> = {
   repouso: "pronto", ouvindo: "ouvindo", pensando: "pensando", falando: "falando",
@@ -27,6 +28,8 @@ export interface AcoesHud {
   aoTela?: () => void;
   /** Engrenagem: abre o painel de configurações. */
   aoConfig?: () => void;
+  /** O widget gravou topo ou compacto pelos próprios botões (o main avisa o painel). */
+  aoConfigMudou?: (c: Config) => void;
 }
 
 /** Linha de estado, última resposta e barra de comandos (cinco ícones). Só DOM, sem regra de negócio. */
@@ -38,11 +41,11 @@ export class Hud {
   private latenciaMs: number | null = null;
   private taxaHz = 48000;
   private mudo = true;
-  private compacto = false;
   private linha: HTMLElement;
   private botoes: HTMLElement;
   private respostaEl: HTMLElement;
   private timerResposta = 0;
+  private revelador: Revelador;
   private botaoMudo: HTMLButtonElement;
   private botaoModo: HTMLButtonElement;
   private botaoTopoEl: HTMLButtonElement;
@@ -55,7 +58,7 @@ export class Hud {
     this.botaoMudo.classList.add("ativo");
     this.botaoTela = this.botao(ICONES.tela, "Olhar a tela", () => this.acoes.aoTela?.());
     this.botaoTela.hidden = true; // aparece quando a ponte responde
-    this.botaoModo = this.botao(ICONES.compacto, "Compacto", () => this.alternarModo());
+    this.botaoModo = this.botao(ICONES.compacto, "Compacto", () => { void this.alternarCompacto(); });
     this.botaoTopoEl = this.botao(ICONES.topo, "", () => { void this.alternarTopo(); });
     this.rotuloTopo();
     this.botoes.append(
@@ -67,6 +70,10 @@ export class Hud {
       this.botao(ICONES.config, "Configurações", () => this.acoes.aoConfig?.()),
       this.botaoModo,
     );
+    this.revelador = new Revelador(2000, (v) => this.raiz.classList.toggle("revelado", v));
+    raiz.addEventListener("mouseenter", () => this.revelador.entrou());
+    raiz.addEventListener("mouseleave", () => this.revelador.saiu());
+    this.setCompacto(cfg.compacto);
     this.pintar();
   }
 
@@ -93,6 +100,7 @@ export class Hud {
       await invoke("definir_sempre_no_topo", { ligado: novo });
       this.cfg.sempre_no_topo = novo;
       await salvarConfig(this.cfg);
+      this.acoes.aoConfigMudou?.(this.cfg);
       this.rotuloTopo();
     } catch (erro) { console.warn("não consegui alternar o topo", erro); }
   }
@@ -105,10 +113,18 @@ export class Hud {
     this.pintar();
   }
 
-  private alternarModo() {
-    this.compacto = !this.compacto;
-    this.raiz.classList.toggle("compacto", this.compacto);
-    this.botaoModo.title = this.compacto ? "Expandir" : "Compacto";
+  /** Compacto: só o holograma; a barra aparece com o mouse em cima. Também chamado quando o painel muda a config. */
+  setCompacto(c: boolean) {
+    this.raiz.classList.toggle("compacto", c);
+    this.botaoModo.title = c ? "Expandir" : "Compacto";
+    this.botaoModo.setAttribute("aria-label", this.botaoModo.title);
+  }
+
+  private async alternarCompacto() {
+    this.cfg.compacto = !this.cfg.compacto;
+    this.setCompacto(this.cfg.compacto);
+    try { await salvarConfig(this.cfg); } catch (erro) { console.warn("não consegui gravar o compacto", erro); }
+    this.acoes.aoConfigMudou?.(this.cfg);
   }
 
   /** Mostra ou esconde o botão Tela conforme a ponte do Vard responde. */

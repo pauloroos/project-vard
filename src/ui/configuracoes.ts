@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import type { Config } from "../config/config";
-import { avisosDeUrl, salvarConfig, urlLocal } from "../config/config";
+import { TAMANHOS, avisosDeUrl, salvarConfig, urlLocal } from "../config/config";
 import type { OpenJarvis } from "../conectores/openjarvis/cliente";
 import { ACOES_ATALHO, ROTULOS_ATALHO, normalizarAtalho, validarAtalhos, type AcaoAtalho, type FalhaAtalho } from "../config/atalhos";
 import { campoAtalho } from "./campo-atalho";
@@ -13,6 +13,10 @@ export interface DepsConfiguracoes {
   /** Chamado ao abrir/fechar: o main tira o click-through enquanto o painel está aberto. */
   aoAlternar?: (aberto: boolean) => void;
 }
+
+const ROTULOS_TAMANHO: Record<(typeof TAMANHOS)[number], string> = {
+  pequeno: "Pequeno (240 px)", medio: "Médio (320 px)", grande: "Grande (480 px)", personalizado: "Personalizado",
+};
 
 const esc = (t: string) => t.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
 
@@ -51,6 +55,12 @@ export class Configuracoes {
   private marca(id: string, rotulo: string, valor: boolean): string {
     return `<label class="marca"><input id="cfg-${id}" type="checkbox" ${valor ? "checked" : ""}> ${rotulo}</label>`;
   }
+  /** O widget mudou topo ou compacto sozinho: reflete no painel aberto. */
+  atualizarCampos() {
+    if (!this.aberto()) return;
+    this.el("sempre_no_topo").checked = this.cfg.sempre_no_topo;
+    this.el("compacto").checked = this.cfg.compacto;
+  }
   private el(id: string): HTMLInputElement { return this.painel.querySelector<HTMLInputElement>(`#cfg-${id}`)!; }
 
   private desenhar() {
@@ -77,6 +87,9 @@ export class Configuracoes {
       <fieldset><legend>Janela e atalhos</legend>
         ${this.marca("sempre_no_topo", "Sempre no topo", c.sempre_no_topo)}
         ${this.marca("click_through", "Clique atravessa a janela", c.click_through)}
+        ${this.marca("compacto", "Compacto (só o holograma; a barra aparece com o mouse)", c.compacto)}
+        <label>Tamanho do widget<select id="cfg-tamanho">${TAMANHOS.map((t) => `<option value="${t}"${t === c.tamanho ? " selected" : ""}>${ROTULOS_TAMANHO[t]}</option>`).join("")}</select></label>
+        ${this.campo("tamanho_px", "Lado personalizado (px, 160 a 800)", c.tamanho_px, "number", 'step="10" min="160" max="800"')}
         ${this.marca("logon", "Iniciar com o Windows", false)}
         <div id="cfg-atalhos"></div>
         <p class="nota">Clique num atalho e pressione a nova combinação (Ctrl, Alt ou Win mais uma tecla). Esc cancela. Valem depois de reiniciar o Vard.</p>
@@ -152,6 +165,9 @@ export class Configuracoes {
       instrucao_formato: txt("instrucao_formato", c.instrucao_formato),
       sempre_no_topo: this.el("sempre_no_topo").checked, click_through: this.el("click_through").checked,
       atalhos: { ...this.atalhos },
+      compacto: this.el("compacto").checked,
+      tamanho: (TAMANHOS as readonly string[]).includes(this.el("tamanho").value) ? (this.el("tamanho").value as Config["tamanho"]) : c.tamanho,
+      tamanho_px: num("tamanho_px", c.tamanho_px),
     };
   }
 

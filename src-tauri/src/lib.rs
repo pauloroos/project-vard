@@ -1,4 +1,5 @@
 mod comandos;
+mod janelas;
 
 use serde_json::Value;
 use tauri::{
@@ -8,7 +9,7 @@ use tauri::{
 };
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
 
-const JANELA: &str = "hud";
+const JANELA: &str = janelas::HUD;
 
 fn alternar_visibilidade(app: &AppHandle) {
     if let Some(w) = app.get_webview_window(JANELA) {
@@ -104,7 +105,8 @@ pub fn run() {
             comandos::inicio_no_logon_ativo,
             comandos::definir_inicio_no_logon,
             comandos::validar_atalho,
-            comandos::falhas_de_atalho
+            comandos::falhas_de_atalho,
+            comandos::redimensionar_janela
         ])
         .setup(|app| {
             let handle = app.handle().clone();

@@ -28,8 +28,7 @@ const ALVOS: Record<Estado, Alvo> = {
   fora: { velExt: 0.5, velResto: 0.5, escala: 1, fft: 0, pulso: 0, respira: 0.6, agita: 0.25 },
 };
 
-const LADO = 320;
-const CENTRO = LADO / 2;
+const LADO_BASE = 320; // geometria desenhada em 320x320 e escalada para o lado pedido
 const BARRAS = 48;
 const SLOTS = 24; // BARRAS / 2, espelhado
 const CAMADAS = 3; // graves no centro, médios no meio, agudos na borda
@@ -77,12 +76,11 @@ export class Nucleo {
   private ondaNasc = new Float64Array(ONDAS).fill(-1);
   private ultimoDisparo = 0;
 
-  constructor(canvas: HTMLCanvasElement) {
-    const dpr = window.devicePixelRatio || 1;
-    canvas.width = LADO * dpr; canvas.height = LADO * dpr;
-    canvas.style.width = `${LADO}px`; canvas.style.height = `${LADO}px`;
+  private lado = LADO_BASE;
+
+  constructor(private canvas: HTMLCanvasElement, lado = LADO_BASE) {
     this.ctx = canvas.getContext("2d")!;
-    this.ctx.scale(dpr, dpr);
+    this.redimensionar(lado);
     const ouro = Math.PI * (3 - Math.sqrt(5));
     for (let i = 0; i < PARTICULAS; i++) {
       const y = 1 - (i / (PARTICULAS - 1)) * 2;
@@ -90,6 +88,16 @@ export class Nucleo {
       this.px[i] = Math.cos(ouro * i) * r; this.py[i] = y; this.pz[i] = Math.sin(ouro * i) * r;
     }
     this.fixarCor(this.estado);
+  }
+
+  /** Muda o tamanho do desenho (tamanho do widget, tela cheia da sala). Canvas no tamanho real x DPR: nada desfoca. */
+  redimensionar(lado: number) {
+    const dpr = window.devicePixelRatio || 1;
+    this.lado = lado;
+    this.canvas.width = Math.round(lado * dpr); this.canvas.height = Math.round(lado * dpr);
+    this.canvas.style.width = `${lado}px`; this.canvas.style.height = `${lado}px`;
+    this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    if (this.iniciado && !this.rodando) this.desenhar(performance.now()); // parado (jogo): redesenha uma vez
   }
 
   setEstado(e: Estado) {
@@ -228,10 +236,11 @@ export class Nucleo {
     this.tResp += dt;
 
     const alfa = this.cor[6];
-    ctx.clearRect(0, 0, LADO, LADO);
+    ctx.clearRect(0, 0, this.lado, this.lado);
     ctx.save();
-    ctx.translate(CENTRO, CENTRO);
-    ctx.scale(ESCALA_VISUAL, ESCALA_VISUAL);
+    ctx.translate(this.lado / 2, this.lado / 2);
+    const k = ESCALA_VISUAL * (this.lado / LADO_BASE);
+    ctx.scale(k, k);
 
     // halo de fundo
     const halo = ctx.createRadialGradient(0, 0, 10, 0, 0, 142);

@@ -16,6 +16,7 @@ import { FALAS, saudacaoPara } from "./fala/falas";
 import { Hud } from "./ui/hud";
 import { Configuracoes } from "./ui/configuracoes";
 import { Nucleo } from "./ui/nucleo";
+import { ladoDoTamanho, medidasDoWidget } from "./ui/tamanho";
 
 const PRE_ROLL_MS = 300;
 /** Prazo da voz própria numa fala fixa que não está no cache (o aquecimento usa o prazo normal). */
@@ -26,17 +27,28 @@ window.addEventListener("DOMContentLoaded", async () => {
   const cfg = await carregarConfig(); // nunca lança: arquivo ruim cai para o padrão
   const canvas = document.getElementById("nucleo") as HTMLCanvasElement;
   const app = document.getElementById("app") as HTMLElement;
-  const nucleo = new Nucleo(canvas);
+  const nucleo = new Nucleo(canvas, ladoDoTamanho(cfg));
+  // Tamanho do widget: uma escala para o CSS, o núcleo no lado real e a janela do mesmo tamanho (canto superior esquerdo fixo).
+  const aplicarTamanho = async () => {
+    const m = medidasDoWidget(ladoDoTamanho(cfg));
+    document.documentElement.style.setProperty("--escala", String(m.escala));
+    nucleo.redimensionar(m.lado);
+    try { await invoke("redimensionar_janela", { largura: m.largura, altura: m.altura }); }
+    catch (erro) { console.warn("não consegui redimensionar a janela", erro); }
+  };
+  await aplicarTamanho();
   nucleo.iniciar();
   let interromperTudo = () => {};
   let alternarMicrofone: () => Promise<void> = async () => {};
   let olharTela = () => {};
   let abrirConfig = () => {};
+  let atualizarPainel = () => {};
   const hud = new Hud(cfg, app, {
     aoConfig: () => abrirConfig(),
     aoMudo: () => { void alternarMicrofone(); },
     aoInterromper: () => interromperTudo(),
     aoTela: () => olharTela(),
+    aoConfigMudou: () => atualizarPainel(),
   });
   hud.dica("clique para ligar o ouvido");
   // Atalhos que o Windows recusou no arranque (outro programa já usa): avisa uma vez na linha de estado.
@@ -64,10 +76,13 @@ window.addEventListener("DOMContentLoaded", async () => {
     aoSalvar: (c) => {
       void invoke("definir_sempre_no_topo", { ligado: c.sempre_no_topo }).catch(() => {});
       hud.atualizarTopo();
+      hud.setCompacto(c.compacto);
+      void aplicarTamanho();
     },
     aoAlternar: (aberto) => { if (cfg.click_through) aplicarClickThrough(!aberto); },
   });
   abrirConfig = () => { void painel.abrir(); };
+  atualizarPainel = () => painel.atualizarCampos();
   if (cfg.click_through) aplicarClickThrough(true);
 
   // A boca só existe depois que o microfone abre (usa o mesmo AudioContext).

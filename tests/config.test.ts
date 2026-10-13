@@ -13,6 +13,14 @@ describe("carregarConfig", () => {
     expect(await carregarConfig()).toEqual(CONFIG_PADRAO);
   });
 
+  it("tamanho desconhecido volta ao padrão; compacto e lado salvos valem", async () => {
+    invoke.mockResolvedValue({ tamanho: "enorme", tamanho_px: 500, compacto: true });
+    const c = await carregarConfig();
+    expect(c.tamanho).toBe("medio");
+    expect(c.tamanho_px).toBe(500);
+    expect(c.compacto).toBe(true);
+  });
+
   it("mescla o padrao com o salvo", async () => {
     invoke.mockResolvedValue({ nome: "jarvis", velocidade: 1.2, voz_url: "" });
     const c = await carregarConfig();
