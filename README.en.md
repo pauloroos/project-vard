@@ -52,8 +52,8 @@ To build it yourself: `npm install` and `npm run tauri build` (installers land i
 | `Ctrl+Alt+Space` (hold) | Push-to-talk: speak while holding; the name "Vard" is not required |
 | `Ctrl+Alt+Period` | Stop the current speech |
 | `Ctrl+Alt+V` | Show or hide the widget |
-| `Ctrl+Alt+,` | Open or close the settings |
-| `Ctrl+Alt+E` | Start listening (opens the microphone) or toggle mute |
+| `Ctrl+Alt+P` | Open or close the settings |
+| `Ctrl+Alt+L` | Start listening (opens the microphone) or toggle mute |
 | `Ctrl+Alt+F` | Toggle full screen (sala) |
 
 All of them can be changed in the Atalhos tab: click the field and press the new combination (Ctrl, Alt or Win plus a key). The panel rejects duplicates and marks any shortcut Windows refused (another program owns it). Changes apply after restarting Vard.
@@ -66,7 +66,7 @@ Microphone mute, stop, look at the screen (bridge only), open the text conversat
 
 ## Configure
 
-Use the gear, **Configurações** in the tray menu or `Ctrl+Alt+,`. The panel opens in its own window with the tabs Geral, Voz, Atalhos, Ponte and Modelos. Saving applies size, compact mode, always on top, click-through, your name and the model right away; addresses, voice, listening and shortcuts apply after a restart (the panel says which). The fields are those of `hud.config.json` (if the file becomes unreadable the HUD starts with the defaults and keeps the original as `hud.config.json.invalido`; in `%APPDATA%\io.github.pauloroos.vard\`):
+Use the gear, **Configurações** in the tray menu or `Ctrl+Alt+P`. The panel opens in its own window with the tabs Geral, Voz, Atalhos, Ponte and Modelos. Saving applies size, compact mode, always on top, click-through, your name and the model right away; addresses, voice, listening and shortcuts apply after a restart (the panel says which). The fields are those of `hud.config.json` (if the file becomes unreadable the HUD starts with the defaults and keeps the original as `hud.config.json.invalido`; in `%APPDATA%\io.github.pauloroos.vard\`):
 
 | Field | Default | Purpose |
 | --- | --- | --- |

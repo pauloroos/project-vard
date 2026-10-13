@@ -1,7 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import type { Config } from "../config/config";
 import { avisosDeUrl, mudancasQueExigemReinicio, salvarConfig, urlLocal } from "../config/config";
-import { ACOES_ATALHO, ROTULOS_ATALHO, validarAtalhos, type AcaoAtalho, type FalhaAtalho } from "../config/atalhos";
+import { ACOES_ATALHO, ROTULOS_ATALHO, avisoAltGr, validarAtalhos, type AcaoAtalho, type FalhaAtalho } from "../config/atalhos";
 import { campoAtalho } from "./campo-atalho";
 import type { OpenJarvis } from "../conectores/openjarvis/cliente";
 import type { StatusPonte } from "../conectores/ponte/cliente";
@@ -175,8 +175,9 @@ export class Configuracoes {
     for (const [acao, { campo, motivo }] of this.linhasAtalho) {
       const falha = this.falhas.find((f) => f.chave === acao && f.combinacao === this.atalhos[acao]);
       const texto = erros[acao] ?? (falha ? `Não registrou no Windows: ${falha.erro}. Outro programa pode estar usando; troque e reinicie.` : "");
-      campo.classList.toggle("aviso", texto !== "");
-      motivo.textContent = texto;
+      const altgr = texto === "" ? avisoAltGr(this.atalhos[acao]) : null;
+      campo.classList.toggle("aviso", texto !== "" || altgr !== null);
+      motivo.textContent = texto || altgr || "";
     }
   }
 

@@ -42,8 +42,17 @@ describe("carregarConfig", () => {
     invoke.mockResolvedValue({ atalhos: { falar: "Ctrl+Shift+F", parar: "Ctrl+Alt+Period", mostrar: "Ctrl+Alt+V" } });
     const c = await carregarConfig();
     expect(c.atalhos.falar).toBe("Ctrl+Shift+F");
-    expect(c.atalhos.config).toBe("Ctrl+Alt+Comma");
-    expect(c.atalhos.escuta).toBe("Ctrl+Alt+E");
+    expect(c.atalhos.config).toBe("Ctrl+Alt+P");
+    expect(c.atalhos.escuta).toBe("Ctrl+Alt+L");
+  });
+
+  it("migra o painel Ctrl+Alt+Comma (antigo padrão, roubava o ç) e preserva escolha do usuário", async () => {
+    invoke.mockResolvedValue({ atalhos: { config: "Ctrl+Alt+Comma", escuta: "Ctrl+Alt+Comma" } });
+    const c = await carregarConfig();
+    expect(c.atalhos.config).toBe("Ctrl+Alt+P");
+    expect(c.atalhos.escuta).toBe("Ctrl+Alt+Comma");
+    invoke.mockResolvedValue({ atalhos: { config: "Ctrl+Shift+K" } });
+    expect((await carregarConfig()).atalhos.config).toBe("Ctrl+Shift+K");
   });
 });
 

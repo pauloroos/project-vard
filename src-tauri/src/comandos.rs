@@ -12,8 +12,8 @@ pub const ATALHOS: [(&str, &str); 6] = [
     ("falar", "Ctrl+Alt+Space"),
     ("parar", "Ctrl+Alt+Period"),
     ("mostrar", "Ctrl+Alt+V"),
-    ("config", "Ctrl+Alt+Comma"),
-    ("escuta", "Ctrl+Alt+E"),
+    ("config", "Ctrl+Alt+P"),
+    ("escuta", "Ctrl+Alt+L"),
     ("sala", "Ctrl+Alt+F"),
 ];
 
@@ -30,12 +30,16 @@ pub struct FalhasDeAtalho(pub Mutex<Vec<FalhaAtalho>>);
 
 /// Combinação da config para a ação `chave`, ou o padrão.
 pub fn atalho_da_config(config: &Value, chave: &str, padrao: &str) -> String {
-    config
+    let salvo = config
         .get("atalhos")
         .and_then(|a| a.get(chave))
         .and_then(|v| v.as_str())
-        .unwrap_or(padrao)
-        .to_string()
+        .unwrap_or(padrao);
+    // Migração: o antigo padrão do painel roubava o ç (AltGr+, no ABNT2); só esse valor exato migra.
+    if chave == "config" && salvo == "Ctrl+Alt+Comma" {
+        return padrao.to_string();
+    }
+    salvo.to_string()
 }
 
 /// Ok se o plugin global-shortcut entende a combinação (o mesmo parser do registro).
@@ -302,9 +306,18 @@ mod testes {
     #[test]
     fn atalho_da_config_usa_salvo_ou_padrao() {
         let c = serde_json::json!({ "atalhos": { "escuta": "Ctrl+Shift+L" } });
-        assert_eq!(atalho_da_config(&c, "escuta", "Ctrl+Alt+E"), "Ctrl+Shift+L");
-        assert_eq!(atalho_da_config(&c, "config", "Ctrl+Alt+Comma"), "Ctrl+Alt+Comma");
+        assert_eq!(atalho_da_config(&c, "escuta", "Ctrl+Alt+L"), "Ctrl+Shift+L");
+        assert_eq!(atalho_da_config(&c, "config", "Ctrl+Alt+P"), "Ctrl+Alt+P");
         assert_eq!(atalho_da_config(&Value::Null, "falar", "Ctrl+Alt+Space"), "Ctrl+Alt+Space");
+    }
+
+    #[test]
+    fn painel_antigo_ctrl_alt_virgula_migra_e_escolha_do_usuario_fica() {
+        let antigo = serde_json::json!({ "atalhos": { "config": "Ctrl+Alt+Comma" } });
+        assert_eq!(atalho_da_config(&antigo, "config", "Ctrl+Alt+P"), "Ctrl+Alt+P");
+        let outro = serde_json::json!({ "atalhos": { "config": "Ctrl+Shift+K", "escuta": "Ctrl+Alt+Comma" } });
+        assert_eq!(atalho_da_config(&outro, "config", "Ctrl+Alt+P"), "Ctrl+Shift+K");
+        assert_eq!(atalho_da_config(&outro, "escuta", "Ctrl+Alt+L"), "Ctrl+Alt+Comma");
     }
 
     #[test]

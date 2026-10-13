@@ -50,8 +50,8 @@ Para gerar você mesmo: `npm install` e `npm run tauri build` (os instaladores s
 | `Ctrl+Alt+Space` (segurar) | Push-to-talk: fale enquanto segura; o nome "Vard" é dispensado |
 | `Ctrl+Alt+Period` | Interrompe a fala em curso |
 | `Ctrl+Alt+V` | Mostra ou oculta o widget |
-| `Ctrl+Alt+,` | Abre ou fecha as configurações |
-| `Ctrl+Alt+E` | Liga a escuta (abre o microfone) ou alterna o mudo |
+| `Ctrl+Alt+P` | Abre ou fecha as configurações |
+| `Ctrl+Alt+L` | Liga a escuta (abre o microfone) ou alterna o mudo |
 | `Ctrl+Alt+F` | Liga ou desliga a tela cheia (sala) |
 
 Todos podem ser trocados na aba Atalhos: clique no campo e pressione a nova combinação (Ctrl, Alt ou Win mais uma tecla). O painel recusa combinações repetidas e marca o atalho que o Windows não aceitou (outro programa já usa). Valem depois de reiniciar o Vard.
@@ -64,7 +64,7 @@ Mudo do microfone, interromper, olhar a tela (só com a ponte), abrir a conversa
 
 ## Configurar
 
-Pela engrenagem, pelo item **Configurações** da bandeja ou por `Ctrl+Alt+,`. O painel abre numa janela própria com as abas Geral, Voz, Atalhos, Ponte e Modelos. Salvar aplica na hora o tamanho, o compacto, sempre no topo, o clique atravessando, o seu nome e o modelo; endereços, voz, ouvido e atalhos valem depois de reiniciar (o painel diz quais). Os campos são os do arquivo `hud.config.json` (se ele ficar ilegível, o HUD sobe com o padrão e guarda o original como `hud.config.json.invalido`; em `%APPDATA%\io.github.pauloroos.vard\`):
+Pela engrenagem, pelo item **Configurações** da bandeja ou por `Ctrl+Alt+P`. O painel abre numa janela própria com as abas Geral, Voz, Atalhos, Ponte e Modelos. Salvar aplica na hora o tamanho, o compacto, sempre no topo, o clique atravessando, o seu nome e o modelo; endereços, voz, ouvido e atalhos valem depois de reiniciar (o painel diz quais). Os campos são os do arquivo `hud.config.json` (se ele ficar ilegível, o HUD sobe com o padrão e guarda o original como `hud.config.json.invalido`; em `%APPDATA%\io.github.pauloroos.vard\`):
 
 | Campo | Padrão | Para quê |
 | --- | --- | --- |

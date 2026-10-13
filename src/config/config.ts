@@ -30,7 +30,7 @@ export const CONFIG_PADRAO: Config = {
   tamanho: "medio", tamanho_px: 320, compacto: false,
   atalhos: {
     falar: "Ctrl+Alt+Space", parar: "Ctrl+Alt+Period", mostrar: "Ctrl+Alt+V",
-    config: "Ctrl+Alt+Comma", escuta: "Ctrl+Alt+E", sala: "Ctrl+Alt+F",
+    config: "Ctrl+Alt+P", escuta: "Ctrl+Alt+L", sala: "Ctrl+Alt+F",
   },
   instrucao_formato: "Responda em até duas frases, para ser lido em voz alta.",
   modelo: "",
@@ -50,6 +50,9 @@ function mesclar(salvo: unknown): Config {
           const x = (v as Record<string, unknown>)[a];
           if (typeof x === "string") (saida.atalhos as Record<string, string>)[a] = x;
         }
+        // Migração: o antigo padrão do painel roubava o ç (AltGr+, no ABNT2); só esse valor exato migra.
+        const at = saida.atalhos as Record<string, string>;
+        if (at.config === "Ctrl+Alt+Comma") at.config = CONFIG_PADRAO.atalhos.config;
       }
     } else if (k === "posicao") {
       const p = v as { x?: unknown; y?: unknown } | null;

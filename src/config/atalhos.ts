@@ -95,6 +95,18 @@ export function conflitos(atalhos: Record<AcaoAtalho, string>): [AcaoAtalho, Aca
   return pares;
 }
 
+const TECLAS_ALTGR = new Set(["Q", "W", "E", "R", "C", "2", "3", "4", "5", "6", "Comma"]);
+
+/** Aviso (não bloqueia) quando Ctrl+Alt+<tecla> coincide com AltGr+<tecla> do ABNT2; null se não há risco. */
+export function avisoAltGr(atalho: string): string | null {
+  const n = normalizarAtalho(atalho);
+  if (!n) return null;
+  const partes = n.split("+");
+  if (partes.length !== 3 || partes[0] !== "Ctrl" || partes[1] !== "Alt" || !TECLAS_ALTGR.has(partes[2])) return null;
+  const k = exibirAtalho(n).split("+")[2].toUpperCase();
+  return `Em teclados ABNT2, Ctrl+Alt+${k} é a mesma tecla que AltGr+${k} (ç, /, ?, °...). Prefira outra tecla.`;
+}
+
 /** Motivo por ação para o painel marcar o campo. Vazio = pode salvar. */
 export function validarAtalhos(atalhos: Record<AcaoAtalho, string>): Partial<Record<AcaoAtalho, string>> {
   const erros: Partial<Record<AcaoAtalho, string>> = {};
