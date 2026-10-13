@@ -115,6 +115,7 @@ window.addEventListener("DOMContentLoaded", async () => {
 
   // Ponte opcional do Vard: sem ela o HUD funciona igual, só sem o botão Tela e sem modo jogo.
   const ponte = new Ponte(cfg.ponte_url);
+  let canalAberto = false; // modo conversa (nome dispensado); a Tarefa 6 usa no HUD
   let ponteNoAr = true; // desconhecida até a 1ª sondagem (já disparada abaixo): tenta a ponte em vez de dizer que não há
   const espera = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
   // Falas fixas: a voz própria primeiro (o cache guarda o WAV dela), o OpenJarvis como reserva.
@@ -148,6 +149,8 @@ window.addEventListener("DOMContentLoaded", async () => {
     },
     abrirMicrofone: () => abrirSeFechado(),
     fecharMicrofone: () => fecharTudoDoMicrofone(),
+    mutar: () => { definirMudo(true); hud.setMudo(true); },
+    aoCanal: (aberto) => { canalAberto = aberto; console.info("modo conversa:", canalAberto ? "aberto" : "fechado"); },
   });
   olharTela = () => { void conversa.aoTextoTranscrito("olha a tela", true); };
 
@@ -172,7 +175,7 @@ window.addEventListener("DOMContentLoaded", async () => {
     return aquecendo;
   };
   const aquecerFalas = async () => {
-    for (const t of [saudacaoPara(cfg.usuario), FALAS.erroModelo, FALAS.erroOuvido, FALAS.openjarvisFora, FALAS.voltei, FALAS.modoJogoAtivado]) {
+    for (const t of [saudacaoPara(cfg.usuario), FALAS.erroModelo, FALAS.erroOuvido, FALAS.openjarvisFora, FALAS.voltei, FALAS.modoJogoAtivado, FALAS.pareiDeOuvir]) {
       try { await fixa(t, false); } catch { aquecido = false; } // uma de cada vez: não disputa a GPU com a conversa
     }
   };
@@ -312,7 +315,7 @@ window.addEventListener("DOMContentLoaded", async () => {
   if (import.meta.env.DEV) {
     // Só em desenvolvimento: injeta uma pergunta como se tivesse vindo do microfone (mede a latência sem voz humana).
     // Com o microfone fechado, a boca ganha um AudioContext próprio (sem pedir permissão de microfone).
-    (window as unknown as { __vardPergunta?: (t: string) => Promise<void> }).__vardPergunta = async (texto: string) => {
+    const injetar = async (texto: string, pushToTalk: boolean) => {
       if (!bocaReal) {
         bocaReal = new Boca(new AudioContext());
         nucleo.setAnalisadores(null, bocaReal.analisador);
@@ -321,13 +324,16 @@ window.addEventListener("DOMContentLoaded", async () => {
       try {
         console.log("ouvi:", texto);
         mostrarOuvido(texto);
-        await conversa.aoTextoTranscrito(texto, true);
+        await conversa.aoTextoTranscrito(texto, pushToTalk);
       } finally {
         ocupado = false;
         detector.reset();
         mostrarEstado(conversa.estado, conversa.detalhe);
       }
     };
+    (window as unknown as { __vardPergunta?: (t: string) => Promise<void> }).__vardPergunta = (texto: string) => injetar(texto, true);
+    // Pelo caminho do VAD (sem push-to-talk): exige o nome, a menos que o modo conversa esteja aberto.
+    (window as unknown as { __vardOuvido?: (t: string) => Promise<void> }).__vardOuvido = (texto: string) => injetar(texto, false);
   }
 
   await listen("ptt-inicio", () => {

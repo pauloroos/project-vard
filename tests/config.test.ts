@@ -21,6 +21,17 @@ describe("carregarConfig", () => {
     expect(c.compacto).toBe(true);
   });
 
+  it("conversa_ms: negativo, texto e NaN voltam ao padrão; zero desliga", async () => {
+    invoke.mockResolvedValue({ conversa_ms: -5 });
+    expect((await carregarConfig()).conversa_ms).toBe(20000);
+    invoke.mockResolvedValue({ conversa_ms: "x" });
+    expect((await carregarConfig()).conversa_ms).toBe(20000);
+    invoke.mockResolvedValue({ conversa_ms: 0 });
+    expect((await carregarConfig()).conversa_ms).toBe(0);
+    invoke.mockResolvedValue({ conversa_ms: 1500.4 });
+    expect((await carregarConfig()).conversa_ms).toBe(1500);
+  });
+
   it("mescla o padrao com o salvo", async () => {
     invoke.mockResolvedValue({ nome: "jarvis", velocidade: 1.2, voz_url: "" });
     const c = await carregarConfig();
@@ -137,7 +148,7 @@ describe("salvar no painel", () => {
 });
 
 describe("payloads entre janelas", () => {
-  const ok = { tamanho: "grande", tamanho_px: 480, compacto: false, sempre_no_topo: true, click_through: false, usuario: "Ana", modelo: "" };
+  const ok = { tamanho: "grande", tamanho_px: 480, compacto: false, sempre_no_topo: true, click_through: false, usuario: "Ana", modelo: "", conversa_ms: 20000 };
   it("lado fora de 160..800 é limitado, não recusado", () => {
     expect(lerConfigAoVivo({ ...ok, tamanho_px: 1000 })).toEqual({ ...ok, tamanho_px: 800 });
     expect(lerConfigAoVivo({ ...ok, tamanho_px: 100 })).toEqual({ ...ok, tamanho_px: 160 });
@@ -147,8 +158,9 @@ describe("payloads entre janelas", () => {
   it("recusa_tipos_e_faixas_ruins", () => {
     for (const ruim of [null, "x", 3, { ...ok, tamanho: "enorme" }, 
       { ...ok, tamanho_px: "320" }, { ...ok, tamanho_px: NaN }, { ...ok, compacto: "sim" }, { ...ok, sempre_no_topo: 1 },
-      { ...ok, click_through: null }, { ...ok, usuario: 5 }, { ...ok, modelo: 7 }]) expect(lerConfigAoVivo(ruim)).toBeNull();
+      { ...ok, click_through: null }, { ...ok, usuario: 5 }, { ...ok, modelo: 7 }, { ...ok, conversa_ms: "20" }, { ...ok, conversa_ms: -1 }, { ...ok, conversa_ms: NaN }]) expect(lerConfigAoVivo(ruim)).toBeNull();
   });
+  it("conversa_ms_numerico_e_aceito", () => { expect(lerConfigAoVivo({ ...ok, conversa_ms: 0 })).toEqual({ ...ok, conversa_ms: 0 }); });
   it("topo_e_compacto", () => {
     expect(lerTopoCompacto({ sempre_no_topo: true, compacto: false })).toEqual({ sempre_no_topo: true, compacto: false });
     expect(lerTopoCompacto({ sempre_no_topo: "1", compacto: false })).toBeNull();

@@ -20,6 +20,8 @@ export interface Config {
   modelo: string;
   /** Monitor da sala (tela cheia), pelo nome do sistema; vazio = o principal. O Rust lê a cada abertura. */
   sala_monitor: string;
+  /** Modo conversa: ms ouvindo sem o nome depois de uma resposta; 0 desliga. */
+  conversa_ms: number;
 }
 
 export const CONFIG_PADRAO: Config = {
@@ -35,6 +37,7 @@ export const CONFIG_PADRAO: Config = {
   instrucao_formato: "Responda em até duas frases, para ser lido em voz alta.",
   modelo: "",
   sala_monitor: "",
+  conversa_ms: 20000,
 };
 
 /** Mescla o salvo com o padrão descartando o que tem tipo errado (arquivo editado à mão). */
@@ -61,6 +64,8 @@ function mesclar(salvo: unknown): Config {
       if (Array.isArray(v) && v.every((x) => typeof x === "string")) saida[k] = v;
     } else if (k === "tamanho") {
       if (typeof v === "string" && (TAMANHOS as readonly string[]).includes(v)) saida[k] = v;
+    } else if (k === "conversa_ms") {
+      if (typeof v === "number" && Number.isFinite(v) && v >= 0) saida[k] = Math.round(v);
     } else if (typeof v === typeof padrao) {
       saida[k] = v;
     }
@@ -111,7 +116,7 @@ export function avisosDeUrl(c: Pick<Config, "openjarvis_url" | "gui_url" | "pont
 }
 
 /** Chaves que o widget aplica na hora (evento config-salva). O resto só vale depois de reiniciar. */
-export const CHAVES_AO_VIVO = ["tamanho", "tamanho_px", "compacto", "sempre_no_topo", "click_through", "usuario", "modelo"] as const satisfies readonly (keyof Config)[];
+export const CHAVES_AO_VIVO = ["tamanho", "tamanho_px", "compacto", "sempre_no_topo", "click_through", "usuario", "modelo", "conversa_ms"] as const satisfies readonly (keyof Config)[];
 export type ChaveAoVivo = (typeof CHAVES_AO_VIVO)[number];
 
 /** Copia para a config viva do widget só as chaves ao vivo; devolve as que mudaram. */
@@ -152,7 +157,8 @@ export function lerConfigAoVivo(x: unknown): Pick<Config, ChaveAoVivo> | null {
   if (typeof px !== "number" || !Number.isFinite(px)) return null;
   if (typeof o.compacto !== "boolean" || typeof o.sempre_no_topo !== "boolean" || typeof o.click_through !== "boolean") return null;
   if (typeof o.usuario !== "string" || typeof o.modelo !== "string") return null;
-  return { tamanho: o.tamanho as Config["tamanho"], tamanho_px: limitarLado(px), compacto: o.compacto, sempre_no_topo: o.sempre_no_topo, click_through: o.click_through, usuario: o.usuario, modelo: o.modelo };
+  if (typeof o.conversa_ms !== "number" || !Number.isFinite(o.conversa_ms) || o.conversa_ms < 0) return null;
+  return { tamanho: o.tamanho as Config["tamanho"], tamanho_px: limitarLado(px), compacto: o.compacto, sempre_no_topo: o.sempre_no_topo, click_through: o.click_through, usuario: o.usuario, modelo: o.modelo, conversa_ms: Math.round(o.conversa_ms) };
 }
 
 /** Valida o payload de config-mudou-no-widget (topo e compacto); inválido devolve null. */

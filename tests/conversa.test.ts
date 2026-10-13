@@ -1,5 +1,5 @@
-import { describe, it, expect, vi, beforeEach, type Mock } from "vitest";
-import type { FalaEmFluxo, Mensagem } from "../src/fala/conversa";
+import { describe, it, expect, vi, beforeEach, afterEach, type Mock } from "vitest";
+import type { DepsConversa, FalaEmFluxo, Mensagem } from "../src/fala/conversa";
 import { Conversa } from "../src/fala/conversa";
 import { FALAS } from "../src/fala/falas";
 import { CONFIG_PADRAO } from "../src/config/config";
@@ -13,16 +13,18 @@ describe("conversa", () => {
   let estados: string[];
   let ultimaFala: string | null;
   let c: Conversa;
+  let deps: DepsConversa;
 
   beforeEach(() => {
     oj = { perguntar: vi.fn().mockResolvedValue("Agora são 13h."), sintetizar: vi.fn().mockResolvedValue(WAV) };
     boca = { falando: false, tocar: vi.fn().mockResolvedValue(undefined), parar: vi.fn() };
     estados = []; ultimaFala = null;
-    c = new Conversa({
+    deps = {
       oj, boca, config: CONFIG_PADRAO,
       falas: async (t: string) => { ultimaFala = t; return WAV; },
       aoEstado: (e) => estados.push(e),
-    });
+    };
+    c = new Conversa(deps);
   });
 
   it("texto sem o nome é descartado sem chamar o agente", async () => {
@@ -325,7 +327,7 @@ describe("nome de chamada", () => {
   it("nome configurado chama o assistente e o nome padrão deixa de chamar", async () => {
     const oj = { perguntar: vi.fn().mockResolvedValue("Agora são 13h."), sintetizar: vi.fn().mockResolvedValue(WAV) };
     const boca = { falando: false, tocar: vi.fn().mockResolvedValue(undefined), parar: vi.fn() };
-    const c = new Conversa({ oj, boca, config: { ...CONFIG_PADRAO, nome: "Jarvis" }, falas: async () => WAV });
+    const c = new Conversa({ oj, boca, config: { ...CONFIG_PADRAO, nome: "Jarvis", conversa_ms: 0 }, falas: async () => WAV });
     await c.aoTextoTranscrito("Jarvis, que horas são", false);
     expect(oj.perguntar).toHaveBeenCalledOnce();
     await c.aoTextoTranscrito("Vard, que horas são", false);
@@ -496,5 +498,82 @@ describe("voz própria frase a frase", () => {
     m.fimDoToque.shift()!();
     await p;
     expect(m.tocados).toEqual([F1, F2]);
+  });
+});
+
+describe("modo conversa", () => {
+  let oj: { perguntar: Mock<(m: Mensagem[], s?: AbortSignal) => Promise<string>>; sintetizar: Mock<(t: string, v: string, x: number) => Promise<ArrayBuffer>> };
+  let boca: { falando: boolean; tocar: Mock<(w: ArrayBuffer) => Promise<void>>; parar: Mock<() => void> };
+  let ultimaFala: string | null;
+  let canal: boolean[];
+  let mutar: Mock<() => void>;
+  let deps: DepsConversa;
+  let c: Conversa;
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    oj = { perguntar: vi.fn().mockResolvedValue("Agora são 13h."), sintetizar: vi.fn().mockResolvedValue(WAV) };
+    boca = { falando: false, tocar: vi.fn().mockResolvedValue(undefined), parar: vi.fn() };
+    ultimaFala = null; canal = []; mutar = vi.fn();
+    deps = {
+      oj, boca, config: { ...CONFIG_PADRAO, conversa_ms: 20000 },
+      falas: async (t: string) => { ultimaFala = t; return WAV; },
+      mutar, aoCanal: (a) => canal.push(a),
+    };
+    c = new Conversa(deps);
+  });
+  afterEach(() => { vi.useRealTimers(); });
+
+  it("depois_de_responder_o_nome_e_dispensado_ate_o_silencio", async () => {
+    await c.aoTextoTranscrito("Vard, que horas são", false);
+    expect(c.canalAberto()).toBe(true);
+    expect(canal).toEqual([true]);
+    await c.aoTextoTranscrito("e amanhã", false);
+    expect(oj.perguntar).toHaveBeenCalledTimes(2);
+    vi.advanceTimersByTime(19999); expect(c.canalAberto()).toBe(true);
+    vi.advanceTimersByTime(1); expect(c.canalAberto()).toBe(false);
+    expect(canal).toEqual([true, false]);
+    await c.aoTextoTranscrito("e depois", false);
+    expect(oj.perguntar).toHaveBeenCalledTimes(2); // nome exigido de novo
+  });
+  it("cada_troca_rearma_o_relogio", async () => {
+    await c.aoTextoTranscrito("Vard, oi", false);
+    vi.advanceTimersByTime(15000);
+    await c.aoTextoTranscrito("que horas são", false);
+    vi.advanceTimersByTime(15000); expect(c.canalAberto()).toBe(true);
+  });
+  it("conversa_ms_zero_desliga", async () => {
+    c = new Conversa({ ...deps, config: { ...CONFIG_PADRAO, conversa_ms: 0 } });
+    await c.aoTextoTranscrito("Vard, que horas são", false);
+    expect(c.canalAberto()).toBe(false);
+    await c.aoTextoTranscrito("e amanhã", false);
+    expect(oj.perguntar).toHaveBeenCalledTimes(1);
+  });
+  it("frase_de_encerramento_fala_e_muta_com_ou_sem_o_nome", async () => {
+    await c.aoTextoTranscrito("Vard, pode parar de me ouvir", false);
+    expect(ultimaFala).toBe(FALAS.pareiDeOuvir);
+    expect(mutar).toHaveBeenCalledOnce();
+    expect(c.canalAberto()).toBe(false);
+    await c.aoTextoTranscrito("Vard, oi", false);
+    await c.aoTextoTranscrito("vou entrar em reunião", false);
+    expect(mutar).toHaveBeenCalledTimes(2);
+    expect(oj.perguntar).not.toHaveBeenCalledWith(expect.arrayContaining([expect.objectContaining({ content: "vou entrar em reunião" })]), expect.anything());
+  });
+  it("jogo_fecha_o_canal", async () => {
+    const ponte = { ver: vi.fn(), modo: vi.fn().mockResolvedValue(true) };
+    c = new Conversa({ ...deps, ponte, fecharMicrofone: () => true });
+    await c.aoTextoTranscrito("Vard, oi", false);
+    await c.aoStatusPonte({ modo: "jogo" });
+    expect(c.canalAberto()).toBe(false);
+    expect(canal).toEqual([true, false]);
+  });
+  it("nucleo_fora_fecha_o_canal", async () => {
+    await c.aoTextoTranscrito("Vard, oi", false);
+    await c.aoHealth(false, false);
+    expect(c.canalAberto()).toBe(false);
+  });
+  it("push_to_talk_tambem_abre_o_canal", async () => {
+    await c.aoTextoTranscrito("que horas são", true);
+    expect(c.canalAberto()).toBe(true);
   });
 });

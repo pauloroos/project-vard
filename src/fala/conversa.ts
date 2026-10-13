@@ -2,6 +2,7 @@ import { gatilhos, type Config } from "../config/config";
 import { fluxoParaWav } from "../audio/wav";
 import { FALAS, saudacaoPara } from "./falas";
 import { cortarEmFrases } from "./frases";
+import { ehEncerramento } from "./encerramento";
 import { aPartirDoGatilho, classificar, ehConfirmacao, ehInterrupcao, extrairComando } from "./rotas";
 
 export type Estado = "repouso" | "ouvindo" | "pensando" | "falando" | "jogo" | "erro" | "fora";
@@ -32,7 +33,7 @@ export interface DepsConversa {
   voz?: { falar(texto: string, velocidade: number, sinal?: AbortSignal): Promise<FalaEmFluxo> };
   /** Fala fixa já sintetizada (com cache). */
   falas: (texto: string) => Promise<ArrayBuffer>;
-  config: Pick<Config, "nome" | "variantes" | "voz" | "velocidade" | "instrucao_formato"> & Partial<Pick<Config, "usuario">>;
+  config: Pick<Config, "nome" | "variantes" | "voz" | "velocidade" | "instrucao_formato" | "conversa_ms"> & Partial<Pick<Config, "usuario">>;
   /** Ponte opcional do Vard: olhos na tela e modo jogo. */
   ponte?: {
     ver(jpegB64: string, pergunta: string): Promise<string>;
@@ -51,6 +52,10 @@ export interface DepsConversa {
   fecharMicrofone?: () => boolean | void | Promise<boolean | void>;
   aoEstado?: (e: Estado, detalhe: string) => void;
   aoResposta?: (texto: string) => void;
+  /** Frase de encerramento ("pode parar de me ouvir"): quem usa muta o microfone. */
+  mutar?: () => void;
+  /** O modo conversa abriu (true) ou fechou (false): o nome está dispensado enquanto aberto. */
+  aoCanal?: (aberto: boolean) => void;
 }
 
 const MAX_MENSAGENS = 20; // 10 trocas
@@ -65,9 +70,31 @@ export class Conversa {
   private microfoneFechado = false;
   private erroPonte = false;
   private pergunta: AbortController | null = null;
+  private canalAte = 0; // instante em que o modo conversa fecha; 0 = fechado
+  private relogioCanal: ReturnType<typeof setTimeout> | null = null;
   private entrandoEmJogo = false; // aviso do modo jogo tocando: a sondagem da ponte não mexe no estado
 
   constructor(private d: DepsConversa) {}
+
+  /** Modo conversa: depois de uma resposta, o nome fica dispensado até o silêncio de `conversa_ms`. */
+  canalAberto(): boolean { return this.canalAte > 0 && Date.now() < this.canalAte; }
+
+  private abrirCanal() {
+    const ms = this.d.config.conversa_ms;
+    if (!(ms > 0)) return;
+    const estava = this.canalAberto();
+    this.canalAte = Date.now() + ms;
+    if (this.relogioCanal) clearTimeout(this.relogioCanal);
+    this.relogioCanal = setTimeout(() => this.fecharCanal(), ms);
+    if (!estava) this.d.aoCanal?.(true);
+  }
+
+  private fecharCanal() {
+    if (this.relogioCanal) { clearTimeout(this.relogioCanal); this.relogioCanal = null; }
+    const estava = this.canalAte > 0; // não por canalAberto(): no disparo do relógio o instante já passou
+    this.canalAte = 0;
+    if (estava) this.d.aoCanal?.(false);
+  }
 
   /** Método (não comparação direta) para o TypeScript não estreitar `estado` através dos await. */
   private emJogo(): boolean { return this.estado === "jogo"; }
@@ -186,15 +213,22 @@ export class Conversa {
       if (dentroDoPrazo && ehConfirmacao(extrairComando(bruto, v) ?? bruto)) { await this.ativarJogo(); return; }
     }
 
+    // Frase de encerramento: com ou sem o nome na frente. Fala "Parei de ouvir." e muta até alguém reativar.
+    if (ehEncerramento(extrairComando(bruto, v) ?? bruto)) {
+      this.fecharCanal();
+      await this.falarFixa(FALAS.pareiDeOuvir);
+      this.d.mutar?.();
+      return;
+    }
+
     let comando: string;
     if (pushToTalk) {
       comando = extrairComando(bruto, v) ?? bruto;
     } else {
       const apartir = aPartirDoGatilho(bruto, v);
-      if (apartir === null) return;
-      comando = extrairComando(apartir, v) ?? apartir;
+      if (apartir === null) { if (!this.canalAberto()) return; comando = bruto; } else comando = extrairComando(apartir, v) ?? apartir;
     }
-    if (comando === "") { await this.falarFixa(saudacaoPara(this.d.config.usuario)); return; }
+    if (comando === "") { await this.falarFixa(saudacaoPara(this.d.config.usuario)); this.abrirCanal(); return; }
     if (ehInterrupcao(comando)) return;
 
     const rota = classificar(comando);
@@ -240,6 +274,7 @@ export class Conversa {
       const codigo = (erro as { codigo?: string } | null)?.codigo;
       const fala = (codigo && (FALAS.erros as Record<string, string>)[codigo]) || FALAS.erroModelo;
       await this.falarFixa(fala);
+      this.abrirCanal();
       if (this.estado !== "repouso") this.mudar("repouso");
       return;
     }
@@ -251,7 +286,7 @@ export class Conversa {
     if (this.emJogo()) return;
     await this.falarEmFrases(resposta, ac.signal);
     if (this.pergunta === ac) this.pergunta = null;
-    if (!ac.signal.aborted && !this.emJogo()) this.mudar("repouso");
+    if (!ac.signal.aborted && !this.emJogo()) { this.abrirCanal(); this.mudar("repouso"); }
   }
 
   private async ativarJogo(): Promise<void> {
@@ -271,6 +306,7 @@ export class Conversa {
 
   /** Muda para o jogo e cancela a pergunta em voo (a resposta tardia não tira o HUD do jogo). */
   private entrarNoJogo() {
+    this.fecharCanal();
     this.pergunta?.abort();
     this.pergunta = null;
     this.mudar("jogo");
@@ -303,6 +339,7 @@ export class Conversa {
     if (this.estado === "jogo" || this.entrandoEmJogo || this.erroPonte) return; // com o jogo ou a ponte em erro quem manda é o status da ponte
     if (!ok) {
       if (this.estado !== "fora") {
+        this.fecharCanal();
         this.mudar("fora", "sem conexão com o núcleo");
         if (!this.foraAvisado) { this.foraAvisado = true; await this.falarFixa(FALAS.openjarvisFora, false); }
       }
@@ -310,7 +347,7 @@ export class Conversa {
     }
     this.foraAvisado = false;
     if (!falaOk) {
-      if (this.estado !== "erro") this.mudar("erro", FALAS.falaDesligada);
+      if (this.estado !== "erro") { this.fecharCanal(); this.mudar("erro", FALAS.falaDesligada); }
       return;
     }
     if (this.estado === "fora" || this.estado === "erro") {

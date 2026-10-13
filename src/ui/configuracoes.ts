@@ -135,6 +135,7 @@ export class Configuracoes {
         <fieldset><legend>Ouvido</legend>
           ${this.campo("finish_ms", "Silêncio para encerrar a fala (ms)", c.finish_ms, "number", 'step="50" min="200" max="3000"')}
           ${this.campo("limiar_vad", "Limiar do microfone", c.limiar_vad, "number", 'step="0.005" min="0.001" max="0.5"')}
+          ${this.campo("conversa_s", "Modo conversa: segundos ouvindo sem o nome depois de uma resposta (0 desliga)", c.conversa_ms / 1000, "number", 'step="1" min="0" max="300"')}
         </fieldset>
       </section>
       <section data-aba="atalhos">
@@ -225,6 +226,7 @@ export class Configuracoes {
       variantes: this.el("variantes").value.split(",").map((v) => v.trim()).filter(Boolean),
       idioma: opc("idioma"), voz: txt("voz", c.voz),
       velocidade: num("velocidade", c.velocidade), finish_ms: num("finish_ms", c.finish_ms), limiar_vad: num("limiar_vad", c.limiar_vad),
+      conversa_ms: Math.round(Math.max(0, num("conversa_s", c.conversa_ms / 1000)) * 1000),
       instrucao_formato: txt("instrucao_formato", c.instrucao_formato),
       tamanho: this.sel("tamanho").value as Config["tamanho"], tamanho_px: limitarLado(num("tamanho_px", c.tamanho_px)),
       compacto: this.el("compacto").checked,

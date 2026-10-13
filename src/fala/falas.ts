@@ -10,6 +10,7 @@ export const FALAS = {
   semPonte: "Isso eu só faço com a minha ponte ligada.",
   openjarvisFora: "Perdi a conexão com o meu núcleo. Já volto.",
   voltei: "Voltei.",
+  pareiDeOuvir: "Parei de ouvir.",
   falaDesligada: "Minha voz está desligada; veja as configurações.",
   microfoneBloqueado: "Não estou ouvindo: o microfone está bloqueado.",
   erros: {
