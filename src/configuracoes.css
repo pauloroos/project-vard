@@ -38,6 +38,12 @@ footer .acoes { display: flex; gap: 8px; justify-content: flex-end; }
 
 #sis-estado { margin: 10px 0; }
 #sis-msg { min-height: 20px; margin-top: 6px; opacity: 0.8; }
+
+#reu-estado { margin: 10px 0; }
+#reu-msg { min-height: 20px; margin-top: 6px; opacity: 0.8; }
+#reu-ultima { margin-top: 14px; padding: 8px 10px; border: 1px solid rgba(0, 240, 255, 0.25); border-radius: 6px; }
+#reu-ultima h3 { margin: 0 0 6px; font-size: 13px; text-transform: uppercase; letter-spacing: 0.14em; opacity: 0.8; }
+#reu-ultima .linha { margin-top: 3px; opacity: 0.9; }
 section .acoes { display: flex; gap: 8px; }
 
 #atu-resultado { margin: 10px 0; }

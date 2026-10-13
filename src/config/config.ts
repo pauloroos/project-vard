@@ -31,6 +31,12 @@ export interface Config {
   gemini_chave: string; gemini_voz: string;
   /** Consulta a release mais nova ao abrir a aba Atualização do painel (só então; nunca em segundo plano). */
   atualizacao_ao_abrir: boolean;
+  /** Não ouvir: microfone desligado (o mesmo que o botão Mudo do HUD). */
+  nao_ouvir: boolean;
+  /** Não falar: a resposta aparece só em texto, sem síntese nem áudio. */
+  nao_falar: boolean;
+  /** Fala os avisos que chegam da ponte (tarefa/reunião); nunca com nao_falar ligado. */
+  falar_avisos: boolean;
 }
 
 export const CONFIG_PADRAO: Config = {
@@ -41,7 +47,7 @@ export const CONFIG_PADRAO: Config = {
   tamanho: "medio", tamanho_px: 320, compacto: false,
   atalhos: {
     falar: "Ctrl+Alt+Space", parar: "Ctrl+Alt+Period", mostrar: "Ctrl+Alt+V",
-    config: "Ctrl+Alt+P", escuta: "Ctrl+Alt+L", sala: "Ctrl+Alt+F",
+    config: "Ctrl+Alt+P", escuta: "Ctrl+Alt+L", sala: "Ctrl+Alt+F", naofalar: "Ctrl+Alt+N",
   },
   instrucao_formato: "Responda em até duas frases, para ser lido em voz alta.",
   modelo: "",
@@ -49,6 +55,7 @@ export const CONFIG_PADRAO: Config = {
   conversa_ms: 20000,
   voz_provedor: "propria", voz_propria: "", elevenlabs_chave: "", elevenlabs_voz: "", gemini_chave: "", gemini_voz: "Kore",
   atualizacao_ao_abrir: false,
+  nao_ouvir: false, nao_falar: false, falar_avisos: false,
 };
 
 /** Mescla o salvo com o padrão descartando o que tem tipo errado (arquivo editado à mão). */
@@ -129,7 +136,7 @@ export function avisosDeUrl(c: Pick<Config, "openjarvis_url" | "gui_url" | "pont
 }
 
 /** Chaves que o widget aplica na hora (evento config-salva). O resto só vale depois de reiniciar. */
-export const CHAVES_AO_VIVO = ["tamanho", "tamanho_px", "compacto", "sempre_no_topo", "click_through", "invisivel", "usuario", "modelo", "conversa_ms"] as const satisfies readonly (keyof Config)[];
+export const CHAVES_AO_VIVO = ["tamanho", "tamanho_px", "compacto", "sempre_no_topo", "click_through", "invisivel", "usuario", "modelo", "conversa_ms", "nao_ouvir", "nao_falar", "falar_avisos"] as const satisfies readonly (keyof Config)[];
 export type ChaveAoVivo = (typeof CHAVES_AO_VIVO)[number];
 
 /** Copia para a config viva do widget só as chaves ao vivo; devolve as que mudaram. */
@@ -172,7 +179,8 @@ export function lerConfigAoVivo(x: unknown): Pick<Config, ChaveAoVivo> | null {
   if (typeof o.compacto !== "boolean" || typeof o.sempre_no_topo !== "boolean" || typeof o.click_through !== "boolean" || typeof o.invisivel !== "boolean") return null;
   if (typeof o.usuario !== "string" || typeof o.modelo !== "string") return null;
   if (typeof o.conversa_ms !== "number" || !Number.isFinite(o.conversa_ms) || o.conversa_ms < 0) return null;
-  return { tamanho: o.tamanho as Config["tamanho"], tamanho_px: limitarLado(px), compacto: o.compacto, sempre_no_topo: o.sempre_no_topo, click_through: o.click_through, invisivel: o.invisivel, usuario: o.usuario, modelo: o.modelo, conversa_ms: Math.round(o.conversa_ms) };
+  if (typeof o.nao_ouvir !== "boolean" || typeof o.nao_falar !== "boolean" || typeof o.falar_avisos !== "boolean") return null;
+  return { tamanho: o.tamanho as Config["tamanho"], tamanho_px: limitarLado(px), compacto: o.compacto, sempre_no_topo: o.sempre_no_topo, click_through: o.click_through, invisivel: o.invisivel, usuario: o.usuario, modelo: o.modelo, conversa_ms: Math.round(o.conversa_ms), nao_ouvir: o.nao_ouvir, nao_falar: o.nao_falar, falar_avisos: o.falar_avisos };
 }
 
 /** Valida o payload de config-mudou-no-widget (topo e compacto); inválido devolve null. */

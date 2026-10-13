@@ -4,7 +4,7 @@ import { emitTo, listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { PhysicalPosition } from "@tauri-apps/api/dpi";
 import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
-import { aplicarAoVivo, carregarConfig, lerConfigAoVivo } from "./config/config";
+import { aplicarAoVivo, atualizarConfig, carregarConfig, lerConfigAoVivo } from "./config/config";
 import type { FalhaAtalho } from "./config/atalhos";
 import { abrirMicrofone, definirMudo, fecharMicrofone, estaMudo, onAmostras, rmsAtual, taxaAtual } from "./audio/microfone";
 import { DetectorDeVoz } from "./audio/vad";
@@ -14,6 +14,8 @@ import { falaFixa, type FonteDeFala } from "./audio/cache";
 import { OpenJarvis } from "./conectores/openjarvis/cliente";
 import { Ponte } from "./conectores/ponte/cliente";
 import { CentralAvisos } from "./avisos/central";
+import { deveFalarAviso } from "./avisos/fala";
+import { EstadoReuniao } from "./reuniao/estado";
 import { criarFonteDeVoz } from "./conectores/voz/escolher";
 import type { FonteDeVoz } from "./conectores/voz/fonte";
 import { Conversa, type Estado } from "./fala/conversa";
@@ -56,6 +58,8 @@ window.addEventListener("DOMContentLoaded", async () => {
   nucleo.iniciar();
   let interromperTudo = () => {};
   let alternarMicrofone: () => Promise<void> = async () => {};
+  let alternarNaoOuvir: () => Promise<void> = async () => {};
+  let alternarNaoFalar: () => Promise<void> = async () => {};
   let olharTela = () => {};
   let abrirConfig = () => {};
   const hud = new Hud(cfg, app, {
@@ -65,11 +69,18 @@ window.addEventListener("DOMContentLoaded", async () => {
       // A janela do painel pode estar sendo criada agora: repete o pedido da aba até o painel ouvir.
       for (const atraso of [300, 1000, 2500]) setTimeout(() => { void emitTo("configuracoes", "abrir-aba", "avisos").catch(() => {}); }, atraso);
     },
-    aoMudo: () => { void alternarMicrofone(); },
+    aoMudo: () => { void alternarNaoOuvir(); },
+    aoNaoFalar: () => { void alternarNaoFalar(); },
     aoInterromper: () => interromperTudo(),
     aoTela: () => olharTela(),
     aoConfigMudou: (c) => { void emitTo("configuracoes", "config-mudou-no-widget", { sempre_no_topo: c.sempre_no_topo, compacto: c.compacto }).catch(() => {}); },
   });
+  // "Não ouvir" salvo: o widget nasce com o microfone desligado (é assim que ele abre; o botão Mudo fica aceso).
+  if (cfg.nao_ouvir) hud.setMudo(true);
+  // Bandeja (comando do Rust): espelha os dois estados; erro ignorado enquanto ele não existe.
+  const sincronizarBandeja = () => {
+    void invoke("sincronizar_bandeja", { naoOuvir: cfg.nao_ouvir, naoFalar: cfg.nao_falar }).catch(() => {});
+  };
   // Modo invisível: o widget só aparece durante a conversa (ou revelado à mão). Nunca esconde a janela: o WebView2 estrangularia os timers do VAD.
   const invisibilidade = new Invisibilidade((visivel) => {
     hud.setInvisivel(!visivel);
@@ -112,22 +123,54 @@ window.addEventListener("DOMContentLoaded", async () => {
 
   // A boca só existe depois que o microfone abre (usa o mesmo AudioContext).
   let bocaReal: Boca | null = null;
+  // "Não falar" ligado: nenhuma síntese nem áudio passa daqui (nem a fala fixa, nem a resposta, nem os avisos).
+  let naoFalar = cfg.nao_falar;
   // Latência: do fim da fala do usuário até o começo da reprodução da resposta.
   let fimDaFala = 0;
   const boca = {
     get falando() { return bocaReal?.falando ?? false; },
     async tocar(wav: ArrayBuffer) {
+      if (naoFalar) return;
       if (!bocaReal) return;
       if (fimDaFala) { hud.setLatencia(performance.now() - fimDaFala); fimDaFala = 0; }
       await bocaReal.tocar(wav);
     },
     async tocarFluxo(corpo: ReadableStream<Uint8Array>, taxa: number, sinal?: AbortSignal) {
+      if (naoFalar) { await corpo.cancel().catch(() => {}); return; }
       if (!bocaReal) { await corpo.cancel().catch(() => {}); return; }
       if (fimDaFala) { hud.setLatencia(performance.now() - fimDaFala); fimDaFala = 0; }
       await bocaReal.tocarFluxo(corpo, taxa, sinal);
     },
     parar() { bocaReal?.parar(); },
   };
+  // "Não ouvir" = o que o Mudo já faz (fecha ou mudo o microfone), gravado na config e espelhado na bandeja.
+  const aplicarNaoOuvir = async (valor: boolean, gravar: boolean) => {
+    cfg.nao_ouvir = valor;
+    if (valor) {
+      if (ligado) definirMudo(true);
+      hud.setMudo(true);
+    } else if (!ligado) {
+      await alternarMicrofone(); // primeira vez: abre sem mudo
+    } else {
+      definirMudo(false); hud.setMudo(false);
+    }
+    if (gravar) {
+      try { await atualizarConfig({ nao_ouvir: valor }); } catch (erro) { console.warn("não consegui gravar o não ouvir", erro); }
+    }
+    sincronizarBandeja();
+  };
+  // "Não falar" = a resposta só em texto: corta o áudio em curso sem abortar a pergunta que já está no ar.
+  const aplicarNaoFalar = async (valor: boolean, gravar: boolean) => {
+    naoFalar = valor; cfg.nao_falar = valor;
+    hud.setNaoFalar(valor);
+    if (valor) boca.parar();
+    if (gravar) {
+      try { await atualizarConfig({ nao_falar: valor }); } catch (erro) { console.warn("não consegui gravar o não falar", erro); }
+    }
+    sincronizarBandeja();
+  };
+  alternarNaoOuvir = async () => { await aplicarNaoOuvir(ligado && !estaMudo(), true); };
+  alternarNaoFalar = async () => { await aplicarNaoFalar(!naoFalar, true); };
 
   // Captura: anel com os últimos ~300 ms (pre-roll) + acúmulo da fala.
   let anel: Float32Array[] = [];
@@ -144,7 +187,14 @@ window.addEventListener("DOMContentLoaded", async () => {
   // Central de avisos: lista a cada status (10 s) e os eventos ao vivo entram sozinhos.
   const avisos = new CentralAvisos(ponte);
   avisos.aoMudar = () => hud.setNaoLidos(avisos.naoLidos);
-  if (cfg.ponte_url) ponte.eventos((tipo, dados) => { if (tipo === "oficina" || tipo === "reuniao") avisos.aplicarEvento(tipo, dados); });
+  // Reunião: o widget fica mudo enquanto ela corre (o serviço da reunião é quem manda; aqui só escutamos).
+  let reuniaoAtiva = false;
+  let aoReuniao: (ativa: boolean) => void = () => {};
+  const estadoReuniao = new EstadoReuniao((ativa) => aoReuniao(ativa));
+  if (cfg.ponte_url) ponte.eventos((tipo, dados) => {
+    if (tipo === "oficina" || tipo === "reuniao") { avisos.aplicarEvento(tipo, dados); void falarAviso(tipo, dados); }
+    if (tipo === "reuniao") estadoReuniao.aplicarEvento(dados);
+  });
   let ponteNoAr = true; // desconhecida até a 1ª sondagem (já disparada abaixo): tenta a ponte em vez de dizer que não há
   const espera = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
   // Falas fixas: a voz própria primeiro (o cache guarda o WAV dela), o OpenJarvis como reserva.
@@ -157,11 +207,22 @@ window.addEventListener("DOMContentLoaded", async () => {
     fontes.push({ origem: "oj", voz: cfg.voz, sintetizar: () => oj.sintetizar(t, cfg.voz, cfg.velocidade) });
     return falaFixa(t, fontes);
   };
+  // Aviso falado (só com "falar avisos" ligado): o resumo que a ponte mandou, pela mesma rota das frases fixas.
+  // Nunca interrompe o que estiver falando (ou transcrevendo): com a boca ocupada o aviso só fica na tela.
+  const falarAviso = async (tipo: string, dados: unknown) => {
+    const d = typeof dados === "object" && dados !== null ? (dados as Record<string, unknown>) : {};
+    const resumo = typeof d.resumo === "string" ? d.resumo.trim() : "";
+    const ev = { tipo: tipo === "oficina" ? "tarefa" : tipo, estado: typeof d.estado === "string" ? d.estado : undefined };
+    if (!resumo || !deveFalarAviso(cfg, ev, ocupado || boca.falando, reuniaoAtiva)) return;
+    try { await boca.tocar(await fixa(resumo)); } catch { /* sem voz, o aviso já está na tela */ }
+  };
 
   const conversa = new Conversa({
     oj, boca, config: cfg,
     ...(voz ? { voz } : {}),
     falas: fixa,
+    reuniaoAtiva: () => reuniaoAtiva,
+    falarPermitida: () => !naoFalar,
     aoEstado: (e, detalhe) => {
       mostrarEstado(e, detalhe);
       // Terminou de falar: descarta o pre-roll, que teria a cauda da própria voz (eco).
@@ -182,12 +243,19 @@ window.addEventListener("DOMContentLoaded", async () => {
     aoCanal: (aberto) => { invisibilidade.definirCanal(aberto); console.info("modo conversa:", aberto ? "aberto" : "fechado"); },
   });
   olharTela = () => { void conversa.aoTextoTranscrito("olha a tela", true); };
+  // Reunião começou: corta o que estiver falando e acende o chip; quando termina, o widget volta ao estado do usuário.
+  aoReuniao = (ativa) => {
+    reuniaoAtiva = ativa;
+    hud.setReuniao(ativa);
+    if (ativa) conversa.interromper(); // corta o que estiver falando; o mudo do usuário não é mexido
+  };
 
   // Status da ponte a cada 10 s: mostra/esconde o botão Tela e acompanha o modo jogo. Nunca trava a conversa.
   const sondarPonte = async () => {
     const st = await ponte.status();
     ponteNoAr = st !== null;
     hud.setPonte(ponteNoAr);
+    estadoReuniao.atualizarStatus(st ? st.reuniao ?? "ausente" : null);
     void avisos.carregar(); // falha em silêncio com a ponte fora
     try { await conversa.aoStatusPonte(st); } catch (erro) { console.warn("status da ponte falhou", erro); }
   };
@@ -266,7 +334,7 @@ window.addEventListener("DOMContentLoaded", async () => {
         texto = await oj.transcrever(wav, cfg.idioma);
       } catch (erro) {
         console.warn("transcrição falhou", erro);
-        try { await boca.tocar(await fixa(FALAS.erroOuvido)); } catch { /* sem voz, fica só no HUD */ }
+        if (!naoFalar) { try { await boca.tocar(await fixa(FALAS.erroOuvido)); } catch { /* sem voz, fica só no HUD */ } }
         return;
       }
       console.log("ouvi:", texto);
@@ -324,7 +392,8 @@ window.addEventListener("DOMContentLoaded", async () => {
       largarAmostras = onAmostras(guardarAmostras);
       relogioVad = window.setInterval(() => {
         tiques++;
-        if (boca.falando || ocupado || pttSegurado || estaMudo()) { detector.reset(); return; }
+        // Reunião em andamento conta como mudo (sem gravar nada na config e sem mexer no botão Mudo do usuário).
+        if (boca.falando || ocupado || pttSegurado || estaMudo() || reuniaoAtiva) { detector.reset(); return; }
         const ev = detector.alimentar(rmsAtual(), performance.now());
         if (ev === "inicio") comecarCaptura();
         else if (ev === "fim" || ev === "teto") void encerrar(false);
@@ -372,7 +441,7 @@ window.addEventListener("DOMContentLoaded", async () => {
   }
 
   await listen("ptt-inicio", () => {
-    if (!ligado || estaMudo()) return;
+    if (!ligado || estaMudo() || reuniaoAtiva) return; // reunião: o widget está mudo (sem tocar no mudo do usuário)
     // Apertar para falar corta a resposta em curso (mesmo caminho do botão Interromper) e depois captura.
     const respondendo = boca.falando || ocupado;
     if (respondendo) conversa.interromper();
@@ -392,7 +461,17 @@ window.addEventListener("DOMContentLoaded", async () => {
     if (typeof ev.payload !== "boolean") { console.warn("invisivel ignorado: payload inválido"); return; }
     cfg.invisivel = ev.payload; invisibilidade.definirModo(ev.payload);
   });
-  await listen("alternar-escuta", () => { void alternarMicrofone(); });
+  await listen("alternar-escuta", () => { void alternarNaoOuvir(); });
+  // "Não falar": o atalho global alterna; a bandeja manda o valor já decidido.
+  await listen("alternar-fala", () => { void alternarNaoFalar(); });
+  await listen<unknown>("nao-ouvir", (ev) => {
+    if (typeof ev.payload !== "boolean") { console.warn("nao-ouvir ignorado: payload inválido"); return; }
+    void aplicarNaoOuvir(ev.payload, false);
+  });
+  await listen<unknown>("nao-falar", (ev) => {
+    if (typeof ev.payload !== "boolean") { console.warn("nao-falar ignorado: payload inválido"); return; }
+    void aplicarNaoFalar(ev.payload, false);
+  });
   // Sala aberta: retrato na hora e níveis a 20 Hz (o vórtice dela reage como o daqui). Fechada: nada vai para lá.
   let relogioSala = 0;
   const retomarSala = () => {
@@ -435,6 +514,8 @@ window.addEventListener("DOMContentLoaded", async () => {
     }
     if (mudou.includes("modelo")) oj.definirModelo(cfg.modelo);
     if (mudou.includes("usuario")) void fixa(saudacaoPara(cfg.usuario), false).catch(() => {}); // aquece a saudação nova
+    if (mudou.includes("nao_ouvir")) await aplicarNaoOuvir(cfg.nao_ouvir, false); // o painel já gravou
+    if (mudou.includes("nao_falar")) await aplicarNaoFalar(cfg.nao_falar, false);
   };
   await listen<unknown>("config-salva", (ev) => { void aplicarConfigSalva(ev.payload); });
 });

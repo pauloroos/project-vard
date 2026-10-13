@@ -33,6 +33,8 @@ export interface DepsConversa {
   voz?: { falar(texto: string, velocidade: number, sinal?: AbortSignal): Promise<FalaEmFluxo> };
   /** Fala fixa já sintetizada (com cache). */
   falas: (texto: string) => Promise<ArrayBuffer>;
+  /** false = "não falar": nenhuma síntese nem áudio; a resposta fica só em texto. */
+  falarPermitida?: () => boolean;
   config: Pick<Config, "nome" | "variantes" | "voz" | "velocidade" | "instrucao_formato" | "conversa_ms"> & Partial<Pick<Config, "usuario">>;
   /** Ponte opcional do Vard: olhos na tela e modo jogo. */
   ponte?: {
@@ -56,6 +58,8 @@ export interface DepsConversa {
   mutar?: () => void;
   /** O modo conversa abriu (true) ou fechou (false): o nome está dispensado enquanto aberto. */
   aoCanal?: (aberto: boolean) => void;
+  /** Reunião em andamento (a ponte avisa): o widget não fala nada enquanto durar. */
+  reuniaoAtiva?: () => boolean;
 }
 
 const MAX_MENSAGENS = 20; // 10 trocas
@@ -99,6 +103,12 @@ export class Conversa {
   /** Método (não comparação direta) para o TypeScript não estreitar `estado` através dos await. */
   private emJogo(): boolean { return this.estado === "jogo"; }
 
+  /** Reunião em andamento: o widget não fala nada (sem gravar nada na config, é só o estado do momento). */
+  private mudoPorReuniao(): boolean { return this.d.reuniaoAtiva?.() === true; }
+
+  /** "Não falar" ligado ou reunião em andamento: nenhuma síntese nem áudio (a resposta já está em texto). */
+  private podeFalar(): boolean { return !this.mudoPorReuniao() && this.d.falarPermitida?.() !== false; }
+
   private mudar(e: Estado, detalhe = "") {
     this.estado = e;
     this.detalhe = detalhe;
@@ -107,6 +117,7 @@ export class Conversa {
 
   private async tocar(wav: Promise<ArrayBuffer>, mudarEstado = true) {
     try {
+      if (!this.podeFalar()) { await wav.catch(() => {}); return; } // sem voz: o áudio não toca
       const w = await wav;
       if (mudarEstado) this.mudar("falando");
       await this.d.boca.tocar(w);
@@ -116,12 +127,14 @@ export class Conversa {
   }
 
   private async falarFixa(texto: string, mudarEstado = true) {
+    if (!this.podeFalar()) return; // nem sintetiza
     await this.tocar(this.d.falas(texto), mudarEstado);
     if (mudarEstado && this.estado === "falando") this.mudar("repouso");
   }
 
   /** Fala a resposta frase a frase: a frase seguinte é pedida antes de a atual começar a tocar. */
   private async falarEmFrases(texto: string, sinal: AbortSignal): Promise<void> {
+    if (!this.podeFalar()) return; // sem voz: a resposta já foi mostrada em texto
     const frases = cortarEmFrases(texto);
     if (frases.length === 0) return;
     const d = this.d;
@@ -150,6 +163,7 @@ export class Conversa {
     let primeiro = true;
     try {
       for (let i = 0; i < frases.length; i++) {
+        if (!this.podeFalar()) return; // "não falar" ligou no meio: corta sem esperar o fim de uma fala que não existe
         let som: Som | null = null;
         try { som = await pendente; } catch (erro) { console.warn("falha ao sintetizar a frase", erro); }
         pendente = null;

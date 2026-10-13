@@ -10,6 +10,7 @@ import type { PonteAvisos } from "../avisos/central";
 import { AbaAtualizacao } from "./aba-atualizacao";
 import { AbaAvisos } from "./aba-avisos";
 import { AbaModelos } from "./aba-modelos";
+import { AbaReuniao, type PonteReuniao } from "./aba-reuniao";
 import { AbaSaber } from "./aba-saber";
 import { AbaSistema } from "./aba-sistema";
 import { AbaVoz } from "./aba-voz";
@@ -21,8 +22,8 @@ export interface DepsConfiguracoes {
   statusPonte: (url: string) => Promise<StatusPonte | null>;
   /** Dispara um verbo do ciclo da ponte no endereço dado (true = aceitou). */
   modoPonte: (url: string, verbo: string) => Promise<boolean>;
-  /** Cliente da ponte no endereço dado (avisos, tarefas e eventos ao vivo). */
-  ponte: (url: string) => PonteAvisos;
+  /** Cliente da ponte no endereço dado (avisos, tarefas, reunião e eventos ao vivo). */
+  ponte: (url: string) => PonteAvisos & PonteReuniao;
   /** Depois de gravar: o main avisa o widget (evento config-salva). */
   aoSalvar?: (c: Config) => void;
   /** Fecha a janela do painel. */
@@ -34,8 +35,8 @@ export interface DepsConfiguracoes {
 /** Monitor como o comando listar_monitores devolve (pixels físicos). */
 export interface MonitorInfo { nome: string; x: number; y: number; largura: number; altura: number; escala: number; principal: boolean }
 
-export type Aba = "geral" | "voz" | "atalhos" | "saber" | "modelos" | "sistema" | "avisos" | "atualizacao";
-const ABAS: [Aba, string][] = [["geral", "Geral"], ["voz", "Voz"], ["atalhos", "Atalhos"], ["saber", "O que eu sei fazer"], ["modelos", "Modelos"], ["sistema", "Sistema"], ["avisos", "Avisos"], ["atualizacao", "Atualização"]];
+export type Aba = "geral" | "voz" | "atalhos" | "saber" | "modelos" | "sistema" | "reuniao" | "avisos" | "atualizacao";
+const ABAS: [Aba, string][] = [["geral", "Geral"], ["voz", "Voz"], ["atalhos", "Atalhos"], ["saber", "O que eu sei fazer"], ["modelos", "Modelos"], ["sistema", "Sistema"], ["reuniao", "Reunião"], ["avisos", "Avisos"], ["atualizacao", "Atualização"]];
 const OPCOES_TAMANHO: [Config["tamanho"], string][] = [
   ["pequeno", "Pequeno (240 px)"], ["medio", "Médio (320 px)"], ["grande", "Grande (480 px)"], ["personalizado", "Personalizado"],
 ];
@@ -51,6 +52,7 @@ export class Configuracoes {
   private falhas: FalhaAtalho[] = [];
   private modelos: AbaModelos | null = null;
   private sistema: AbaSistema | null = null;
+  private reuniao: AbaReuniao | null = null;
   private avisos: AbaAvisos | null = null;
   private saber: AbaSaber | null = null;
   private atualizacao: AbaAtualizacao | null = null;
@@ -82,6 +84,14 @@ export class Configuracoes {
       modo: (v) => this.deps.modoPonte(urlPonte(), v),
     });
     this.sistema.montar();
+    this.reuniao = new AbaReuniao(this.raiz.querySelector<HTMLElement>("#cfg-reuniao")!, {
+      reuniaoStatus: () => this.deps.ponte(urlPonte()).reuniaoStatus(),
+      iniciarReuniao: () => this.deps.ponte(urlPonte()).iniciarReuniao(),
+      encerrarReuniao: () => this.deps.ponte(urlPonte()).encerrarReuniao(),
+      listaReuniao: (n) => this.deps.ponte(urlPonte()).listaReuniao(n),
+      gerarAta: (tipo, qual) => this.deps.ponte(urlPonte()).gerarAta(tipo, qual),
+    });
+    this.reuniao.montar();
     this.avisos = new AbaAvisos(this.raiz.querySelector<HTMLElement>("#cfg-avisos")!, {
       avisos: () => this.deps.ponte(urlPonte()).avisos(),
       marcarLidos: (ids) => this.deps.ponte(urlPonte()).marcarLidos(ids),
@@ -109,6 +119,7 @@ export class Configuracoes {
     for (const s of this.raiz.querySelectorAll<HTMLElement>("section[data-aba]")) s.hidden = s.dataset.aba !== aba;
     for (const b of this.raiz.querySelectorAll<HTMLButtonElement>("nav button")) b.classList.toggle("ativa", b.dataset.aba === aba);
     if (aba === "sistema") this.sistema?.ativar(); else this.sistema?.desativar();
+    if (aba === "reuniao") this.reuniao?.ativar(); else this.reuniao?.desativar();
     if (aba === "avisos") this.avisos?.ativar(); else this.avisos?.desativar();
     if (aba === "saber") this.saber?.ativar(); else this.saber?.desativar();
     if (aba === "atualizacao" && this.cfg.atualizacao_ao_abrir) this.atualizacao?.aoAbrir();
@@ -168,6 +179,11 @@ export class Configuracoes {
           ${this.marca("logon", "Iniciar com o Windows", false)}
           <label>Monitor da tela cheia<select id="cfg-sala_monitor"></select></label>
         </fieldset>
+        <fieldset><legend>Ouvir e falar</legend>
+          ${this.marca("nao_ouvir", "Não ouvir (microfone desligado)", c.nao_ouvir)}
+          ${this.marca("nao_falar", "Não falar (resposta só em texto)", c.nao_falar)}
+          ${this.marca("falar_avisos", "Falar os avisos de tarefas (desligado por padrão)", c.falar_avisos)}
+        </fieldset>
       </section>
       <section data-aba="voz">
         <fieldset><legend>Fala</legend>
@@ -189,6 +205,7 @@ export class Configuracoes {
         ${this.campo("ponte_url", "Ponte do Vard (opcional; vazio desliga)", c.ponte_url)}
         <div id="cfg-sistema"></div>
       </section>
+      <section data-aba="reuniao"><div id="cfg-reuniao"></div></section>
       <section data-aba="saber"><div id="cfg-saber"></div></section>
       <section data-aba="avisos"><div id="cfg-avisos"></div></section>
       <section data-aba="atualizacao">
@@ -285,6 +302,9 @@ export class Configuracoes {
       compacto: this.el("compacto").checked,
       sempre_no_topo: this.el("sempre_no_topo").checked, click_through: this.el("click_through").checked, invisivel: this.el("invisivel").checked,
       atualizacao_ao_abrir: this.el("atualizacao_ao_abrir").checked,
+      nao_ouvir: this.el("nao_ouvir").checked,
+      nao_falar: this.el("nao_falar").checked,
+      falar_avisos: this.el("falar_avisos").checked,
       atalhos: { ...this.atalhos },
       modelo: this.modelos?.escolhido ?? c.modelo,
       sala_monitor: this.sel("sala_monitor").options.length ? this.sel("sala_monitor").value : c.sala_monitor, // lista ainda não chegou: mantém

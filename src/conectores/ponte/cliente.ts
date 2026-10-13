@@ -1,5 +1,17 @@
 // Cliente da ponte opcional do Vard (127.0.0.1:4700). Sem ponte o HUD funciona igual: tudo aqui falha em silêncio.
-export interface StatusPonte { ok: boolean; modo: string; detalhe?: string; reserva?: string; tarefas_abertas?: number; modelos_lmstudio?: string[] }
+export interface StatusPonte { ok: boolean; modo: string; detalhe?: string; reserva?: string; tarefas_abertas?: number; modelos_lmstudio?: string[]; reuniao?: "ativa" | "inativa" | "ausente" }
+
+/** Estado da reunião segundo o /reuniao/status da ponte. */
+export interface StatusReuniao { ativa: boolean; pasta?: string; inicio?: string; duracao_s?: number; falas?: number }
+
+/** Uma reunião já terminada, como o /reuniao/lista devolve. */
+export interface ReuniaoDaLista { pasta: string; inicio: string; fim: string; duracao_s: number; ata: boolean; relatorio: boolean }
+
+/** Resultado de um pedido de reunião: `frase` é o texto (em português) para mostrar na tela. */
+export interface ResultadoReuniao { ok: boolean; frase: string }
+
+/** Frase fixa quando a ponte responde 503 (o serviço da reunião não está instalado ou caiu). */
+export const FRASE_REUNIAO_AUSENTE = "A reunião não está instalada ou está fora do ar.";
 
 /** Um aviso da central da ponte. `n` só existe nos do tipo tarefa. */
 export interface Aviso { id: number; hora: string; tipo: string; resumo: string; n?: number; estado?: string; lido: boolean }
@@ -34,6 +46,15 @@ async function comTimeout<T>(ms: number, f: (sinal: AbortSignal) => Promise<T>):
   try { return await f(ac.signal); } finally { clearTimeout(t); }
 }
 
+/** `frase` da ponte quando ela manda texto; o padrão entra quando o corpo não veio ou veio vazio. */
+function fraseDe(j: unknown, padrao: string): string {
+  const f = (j as { frase?: unknown } | null)?.frase;
+  return typeof f === "string" && f.trim() ? f.trim() : padrao;
+}
+
+/** Flag de documento pronto: `true` ou um caminho/texto não vazio (a ponte pode devolver os dois). */
+function pronto(v: unknown): boolean { return v === true || (typeof v === "string" && v.trim() !== ""); }
+
 function paraBlob(b64: string): Blob {
   const bin = atob(b64);
   const bytes = new Uint8Array(bin.length);
@@ -57,7 +78,8 @@ export class Ponte {
         const reserva = typeof j.reserva === "string" && j.reserva.trim() ? j.reserva.trim() : undefined;
         const modelos = Array.isArray(j.modelos_lmstudio) ? j.modelos_lmstudio.filter((x: unknown) => typeof x === "string") : undefined;
         const tarefas_abertas = typeof j.tarefas_abertas === "number" ? j.tarefas_abertas : undefined;
-        return { ok: j.openjarvis === true && j.lmstudio === true, modo: String(j.modo ?? ""), detalhe, reserva, tarefas_abertas, modelos_lmstudio: modelos };
+        const reuniao = j.reuniao === "ativa" || j.reuniao === "inativa" || j.reuniao === "ausente" ? j.reuniao : undefined;
+        return { ok: j.openjarvis === true && j.lmstudio === true, modo: String(j.modo ?? ""), detalhe, reserva, tarefas_abertas, modelos_lmstudio: modelos, ...(reuniao ? { reuniao } : {}) };
       });
     } catch { return null; }
   }
@@ -162,6 +184,86 @@ export class Ponte {
         if (!r.ok) return null;
         const j = await r.json();
         return { n: typeof j.n === "number" ? j.n : n, estado: String(j.estado ?? ""), resumo: String(j.resumo ?? ""), texto: String(j.texto ?? "") };
+      });
+    } catch { return null; }
+  }
+
+  /** Estado da reunião agora (a ponte manda o serviço da reunião responder). null = ponte ausente. */
+  async reuniaoStatus(): Promise<StatusReuniao | null> {
+    if (!this.base) return null;
+    try {
+      return await comTimeout(5000, async (signal) => {
+        const r = await fetch(`${this.base}/reuniao/status`, { signal });
+        if (!r.ok) return null;
+        const j = await r.json();
+        return {
+          ativa: j.ativa === true,
+          ...(typeof j.pasta === "string" && j.pasta ? { pasta: j.pasta } : {}),
+          ...(typeof j.inicio === "string" && j.inicio ? { inicio: j.inicio } : {}),
+          ...(typeof j.duracao_s === "number" ? { duracao_s: j.duracao_s } : {}),
+          ...(typeof j.falas === "number" ? { falas: j.falas } : {}),
+        };
+      });
+    } catch { return null; }
+  }
+
+  /** Pede o começo da reunião. null = ponte ausente (ou serviço da reunião fora, tratado pela `frase`). */
+  async iniciarReuniao(): Promise<ResultadoReuniao | null> {
+    return this.pedidoReuniao("iniciar", "Reunião iniciada.", { 409: "Já há uma reunião em andamento." });
+  }
+
+  /** Pede o fim da reunião (quem encerra é o serviço da reunião, não o widget). null = ponte ausente. */
+  async encerrarReuniao(): Promise<ResultadoReuniao | null> {
+    return this.pedidoReuniao("encerrar", "Reunião encerrada.", { 409: "Não há reunião em andamento." });
+  }
+
+  /** POST /reuniao/{iniciar,encerrar}: o corpo vem com `frase` pronta; sem ela, entra o texto padrão do erro. */
+  private async pedidoReuniao(rota: "iniciar" | "encerrar", ok: string, erros: Record<number, string>): Promise<ResultadoReuniao | null> {
+    if (!this.base) return null;
+    try {
+      return await comTimeout(10000, async (signal) => {
+        const r = await fetch(`${this.base}/reuniao/${rota}`, { method: "POST", signal });
+        const j: unknown = await r.json().catch(() => null);
+        if (r.status === 503) return { ok: false, frase: FRASE_REUNIAO_AUSENTE };
+        if (!r.ok) return { ok: false, frase: fraseDe(j, erros[r.status] ?? "A ponte não aceitou o pedido.") };
+        return { ok: true, frase: fraseDe(j, ok) };
+      });
+    } catch { return null; }
+  }
+
+  /** As últimas reuniões (a mais nova primeiro). null = ponte ausente ou nenhum registro. */
+  async listaReuniao(n = 1): Promise<ReuniaoDaLista[] | null> {
+    if (!this.base) return null;
+    try {
+      return await comTimeout(5000, async (signal) => {
+        const r = await fetch(`${this.base}/reuniao/lista?n=${Math.max(1, Math.round(n))}`, { signal });
+        if (!r.ok) return null;
+        const j: unknown = await r.json();
+        if (!Array.isArray(j)) return null;
+        return j.map((x): ReuniaoDaLista => {
+          const o = (typeof x === "object" && x !== null ? x : {}) as Record<string, unknown>;
+          return {
+            pasta: String(o.pasta ?? ""), inicio: String(o.inicio ?? ""), fim: String(o.fim ?? ""),
+            duracao_s: typeof o.duracao_s === "number" ? o.duracao_s : 0,
+            ata: pronto(o.ata), relatorio: pronto(o.relatorio),
+          };
+        });
+      });
+    } catch { return null; }
+  }
+
+  /** Gera a ata ou o relatório (qual: "ultima"). A ponte responde a `frase` pronta em ok e em erro (404/409). */
+  async gerarAta(tipo: "ata" | "relatorio", qual = "ultima"): Promise<ResultadoReuniao | null> {
+    if (!this.base) return null;
+    try {
+      return await comTimeout(120000, async (signal) => {
+        const r = await fetch(`${this.base}/reuniao/ata`, {
+          method: "POST", headers: { "Content-Type": "application/json" }, signal,
+          body: JSON.stringify({ tipo, qual }),
+        });
+        const j: unknown = await r.json().catch(() => null);
+        if (r.status === 503) return { ok: false, frase: FRASE_REUNIAO_AUSENTE };
+        return { ok: r.ok && (j as { ok?: unknown } | null)?.ok !== false, frase: fraseDe(j, r.ok ? (tipo === "ata" ? "Ata gerada." : "Relatório gerado.") : "Não consegui gerar o documento.") };
       });
     } catch { return null; }
   }

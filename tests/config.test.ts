@@ -3,7 +3,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 const invoke = vi.fn();
 vi.mock("@tauri-apps/api/core", () => ({ invoke: (...a: unknown[]) => invoke(...a) }));
 
-import { lerConfigAoVivo, lerTopoCompacto, aplicarAoVivo, carregarConfig, CONFIG_PADRAO, mudancasQueExigemReinicio, atualizarConfig, limitarLado, urlLocal, avisosDeUrl, gatilhos } from "../src/config/config";
+import { lerConfigAoVivo, lerTopoCompacto, aplicarAoVivo, carregarConfig, CONFIG_PADRAO, CHAVES_AO_VIVO, mudancasQueExigemReinicio, atualizarConfig, limitarLado, urlLocal, avisosDeUrl, gatilhos } from "../src/config/config";
 
 describe("carregarConfig", () => {
   beforeEach(() => invoke.mockReset());
@@ -174,8 +174,50 @@ describe("salvar no painel", () => {
   });
 });
 
+describe("não ouvir, não falar e falar avisos", () => {
+  const copia = () => ({ ...CONFIG_PADRAO, atalhos: { ...CONFIG_PADRAO.atalhos } });
+
+  it("padrão: os três desligados", () => {
+    expect(CONFIG_PADRAO.nao_ouvir).toBe(false);
+    expect(CONFIG_PADRAO.nao_falar).toBe(false);
+    expect(CONFIG_PADRAO.falar_avisos).toBe(false);
+  });
+
+  it("carrega o salvo booleano e volta ao padrão quando é texto", async () => {
+    invoke.mockReset();
+    invoke.mockResolvedValue({ nao_ouvir: true, nao_falar: "sim", falar_avisos: true });
+    const c = await carregarConfig();
+    expect(c.nao_ouvir).toBe(true);
+    expect(c.nao_falar).toBe(false);
+    expect(c.falar_avisos).toBe(true);
+  });
+
+  it("as três são chaves ao vivo: mudam sem reiniciar", () => {
+    expect(CHAVES_AO_VIVO).toContain("nao_ouvir");
+    expect(CHAVES_AO_VIVO).toContain("nao_falar");
+    expect(CHAVES_AO_VIVO).toContain("falar_avisos");
+    const vivo = copia();
+    expect(aplicarAoVivo(vivo, { ...copia(), nao_falar: true, falar_avisos: true })).toEqual(["nao_falar", "falar_avisos"]);
+    expect(vivo.nao_falar).toBe(true);
+    expect(vivo.falar_avisos).toBe(true);
+    expect(mudancasQueExigemReinicio(copia(), { ...copia(), nao_ouvir: true })).toEqual([]);
+  });
+
+  it("atualizarConfig grava a chave inteira no disco", async () => {
+    invoke.mockReset();
+    const disco = { ...CONFIG_PADRAO, atalhos: { ...CONFIG_PADRAO.atalhos } };
+    let gravado: unknown = null;
+    invoke.mockImplementation(async (cmd: string, args?: { config: unknown }) => {
+      if (cmd === "ler_config") return JSON.parse(JSON.stringify(disco));
+      if (cmd === "gravar_config") { gravado = args?.config; return; }
+    });
+    await atualizarConfig({ nao_ouvir: true });
+    expect(gravado).toEqual({ ...disco, nao_ouvir: true });
+  });
+});
+
 describe("payloads entre janelas", () => {
-  const ok = { tamanho: "grande", tamanho_px: 480, compacto: false, sempre_no_topo: true, click_through: false, invisivel: false, usuario: "Ana", modelo: "", conversa_ms: 20000 };
+  const ok = { tamanho: "grande", tamanho_px: 480, compacto: false, sempre_no_topo: true, click_through: false, invisivel: false, usuario: "Ana", modelo: "", conversa_ms: 20000, nao_ouvir: false, nao_falar: false, falar_avisos: false };
   it("lado fora de 160..800 é limitado, não recusado", () => {
     expect(lerConfigAoVivo({ ...ok, tamanho_px: 1000 })).toEqual({ ...ok, tamanho_px: 800 });
     expect(lerConfigAoVivo({ ...ok, tamanho_px: 100 })).toEqual({ ...ok, tamanho_px: 160 });
@@ -185,7 +227,8 @@ describe("payloads entre janelas", () => {
   it("recusa_tipos_e_faixas_ruins", () => {
     for (const ruim of [null, "x", 3, { ...ok, tamanho: "enorme" }, 
       { ...ok, tamanho_px: "320" }, { ...ok, tamanho_px: NaN }, { ...ok, compacto: "sim" }, { ...ok, sempre_no_topo: 1 },
-      { ...ok, click_through: null }, { ...ok, invisivel: "sim" }, { ...ok, invisivel: undefined }, { ...ok, usuario: 5 }, { ...ok, modelo: 7 }, { ...ok, conversa_ms: "20" }, { ...ok, conversa_ms: -1 }, { ...ok, conversa_ms: NaN }]) expect(lerConfigAoVivo(ruim)).toBeNull();
+      { ...ok, click_through: null }, { ...ok, invisivel: "sim" }, { ...ok, invisivel: undefined }, { ...ok, usuario: 5 }, { ...ok, modelo: 7 }, { ...ok, conversa_ms: "20" }, { ...ok, conversa_ms: -1 }, { ...ok, conversa_ms: NaN },
+      { ...ok, nao_ouvir: "sim" }, { ...ok, nao_falar: 1 }, { ...ok, falar_avisos: null }]) expect(lerConfigAoVivo(ruim)).toBeNull();
   });
   it("conversa_ms_numerico_e_aceito", () => { expect(lerConfigAoVivo({ ...ok, conversa_ms: 0 })).toEqual({ ...ok, conversa_ms: 0 }); });
   it("topo_e_compacto", () => {

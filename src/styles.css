@@ -64,6 +64,17 @@ html, body { background: transparent; margin: 0; overflow: hidden; }
 #cont-avisos[hidden] { display: none; }
 #app.capturando #cont-avisos { right: calc(26px * var(--escala)); } /* o ponto vermelho de captura fica no mesmo canto */
 
+/* Chip "reunião" (canto superior esquerdo): ponto vermelho + rótulo, enquanto a reunião corre. Some no modo invisível junto com o resto. */
+#chip-reuniao {
+  position: absolute; top: calc(8px * var(--escala)); left: calc(8px * var(--escala)); z-index: 5;
+  display: flex; align-items: center; gap: calc(4px * var(--escala));
+  height: calc(14px * var(--escala)); padding: 0 calc(5px * var(--escala));
+  background: rgba(255, 48, 48, 0.12); border: 1px solid rgba(255, 48, 48, 0.55); border-radius: calc(7px * var(--escala));
+  color: #ff8080; font-size: calc(8px * var(--escala)); line-height: 1; letter-spacing: 0.08em;
+}
+#chip-reuniao::before { content: ""; width: calc(5px * var(--escala)); height: calc(5px * var(--escala)); border-radius: 50%; background: #ff3030; box-shadow: 0 0 6px #ff3030; }
+#chip-reuniao[hidden] { display: none; }
+
 /* Compacto: só o holograma. O texto some; a barra aparece com o mouse em cima e some 2 s depois (Revelador). */
 #app.compacto #dica, #app.compacto #resposta { display: none; }
 #app.compacto #dica.avisando { display: block; }
