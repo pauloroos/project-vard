@@ -145,6 +145,18 @@ describe("salvar no painel", () => {
     expect(mudancasQueExigemReinicio(CONFIG_PADRAO, novo)).toEqual(["endereços", "atalhos"]);
     expect(mudancasQueExigemReinicio(CONFIG_PADRAO, copia())).toEqual([]);
   });
+
+  it("provedor de voz só aceita os conhecidos", async () => {
+    invoke.mockResolvedValue({ voz_provedor: "nuvem-x" });
+    expect((await carregarConfig()).voz_provedor).toBe("propria");
+    invoke.mockResolvedValue({ voz_provedor: "gemini" });
+    expect((await carregarConfig()).voz_provedor).toBe("gemini");
+  });
+
+  it("provedor e chave exigem reinício da voz", () => {
+    expect(mudancasQueExigemReinicio(CONFIG_PADRAO, { ...copia(), voz_provedor: "gemini" })).toContain("voz");
+    expect(mudancasQueExigemReinicio(CONFIG_PADRAO, { ...copia(), gemini_chave: "x" })).toContain("voz");
+  });
 });
 
 describe("payloads entre janelas", () => {

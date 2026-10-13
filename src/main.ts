@@ -11,7 +11,8 @@ import { Boca } from "./audio/boca";
 import { falaFixa, type FonteDeFala } from "./audio/cache";
 import { OpenJarvis } from "./conectores/openjarvis/cliente";
 import { Ponte } from "./conectores/ponte/cliente";
-import { Voz } from "./conectores/voz/cliente";
+import { criarFonteDeVoz } from "./conectores/voz/escolher";
+import type { FonteDeVoz } from "./conectores/voz/fonte";
 import { Conversa, type Estado } from "./fala/conversa";
 import { FALAS, saudacaoPara } from "./fala/falas";
 import { Hud } from "./ui/hud";
@@ -77,7 +78,7 @@ window.addEventListener("DOMContentLoaded", async () => {
   const base = import.meta.env.DEV ? `${location.origin}/oj` : cfg.openjarvis_url;
   const oj = new OpenJarvis(base, cfg.modelo);
   // Voz própria opcional (docs/voz-propria.md). Vazio desliga: a voz fica sempre a do OpenJarvis.
-  const voz = cfg.voz_url.trim() ? new Voz(cfg.voz_url.trim()) : null;
+  const voz: FonteDeVoz | null = criarFonteDeVoz(cfg);
 
   // Painel de configurações: janela própria (engrenagem, bandeja ou atalho). Aqui só o clique atravessando a janela.
   const aplicarClickThrough = (ligado: boolean) => { void invoke("definir_click_through", { ligado }).catch(() => {}); };

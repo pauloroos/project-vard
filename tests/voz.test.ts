@@ -130,4 +130,34 @@ describe("Voz", () => {
     expect(await new Voz("http://x", { fetch: resposta({ pronta: false, voz: "Voz Teste" }) }).saude()).toBe(false);
     expect(await new Voz("http://x", { fetch: async () => { throw new TypeError("Failed to fetch"); } }).saude()).toBe(false);
   });
+
+  it("voz pedida vai no corpo e vira o nome antes do saude", async () => {
+    const f = vi.fn(async (_u: string, _i: Init) => pcm());
+    const voz = new Voz("http://x", { fetch: f, voz: "Ana Florence" });
+    expect(voz.nome).toBe("Ana Florence");
+    await voz.falar("Oi.", 1);
+    expect(JSON.parse(String(f.mock.calls[0][1].body))).toEqual({ texto: "Oi.", velocidade: 1, voz: "Ana Florence" });
+  });
+
+  it("sem voz pedida o corpo não tem a chave", async () => {
+    const f = vi.fn(async (_u: string, _i: Init) => pcm());
+    await new Voz("http://x", { fetch: f }).falar("Oi.", 1);
+    expect("voz" in JSON.parse(String(f.mock.calls[0][1].body))).toBe(false);
+  });
+
+  it("voz pedida não é trocada pelo saude", async () => {
+    const voz = new Voz("http://x", { fetch: async () => new Response(JSON.stringify({ pronta: true, voz: "Suad" }), { status: 200 }), voz: "Ana" });
+    await voz.saude();
+    expect(voz.nome).toBe("Ana");
+  });
+
+  it("vozes 200 devolve lista e atual", async () => {
+    const voz = new Voz("http://x", { fetch: async () => new Response(JSON.stringify({ vozes: ["A", "B"], atual: "A" }), { status: 200 }) });
+    expect(await voz.vozes()).toEqual({ vozes: ["A", "B"], atual: "A" });
+  });
+
+  it("vozes 404 devolve vazio", async () => {
+    const voz = new Voz("http://x", { fetch: async () => new Response("{}", { status: 404 }) });
+    expect(await voz.vozes()).toEqual({ vozes: [], atual: "" });
+  });
 });

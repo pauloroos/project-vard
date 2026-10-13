@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { PROVEDORES_VOZ, type ProvedorVoz } from "../conectores/voz/escolher";
 import { normalizarAtalho, type AcaoAtalho } from "./atalhos";
 
 export const TAMANHOS = ["pequeno", "medio", "grande", "personalizado"] as const;
@@ -22,6 +23,12 @@ export interface Config {
   sala_monitor: string;
   /** Modo conversa: ms ouvindo sem o nome depois de uma resposta; 0 desliga. */
   conversa_ms: number;
+  /** Quem fala: voz própria (XTTS), voz do OpenJarvis (Kokoro) ou nuvem (ElevenLabs, Gemini). */
+  voz_provedor: ProvedorVoz;
+  /** Voz do serviço próprio; vazio = a atual dele. */
+  voz_propria: string;
+  elevenlabs_chave: string; elevenlabs_voz: string;
+  gemini_chave: string; gemini_voz: string;
 }
 
 export const CONFIG_PADRAO: Config = {
@@ -38,6 +45,7 @@ export const CONFIG_PADRAO: Config = {
   modelo: "",
   sala_monitor: "",
   conversa_ms: 20000,
+  voz_provedor: "propria", voz_propria: "", elevenlabs_chave: "", elevenlabs_voz: "", gemini_chave: "", gemini_voz: "Kore",
 };
 
 /** Mescla o salvo com o padrão descartando o que tem tipo errado (arquivo editado à mão). */
@@ -64,6 +72,8 @@ function mesclar(salvo: unknown): Config {
       if (Array.isArray(v) && v.every((x) => typeof x === "string")) saida[k] = v;
     } else if (k === "tamanho") {
       if (typeof v === "string" && (TAMANHOS as readonly string[]).includes(v)) saida[k] = v;
+    } else if (k === "voz_provedor") {
+      if (typeof v === "string" && (PROVEDORES_VOZ as readonly string[]).includes(v)) saida[k] = v;
     } else if (k === "conversa_ms") {
       if (typeof v === "number" && Number.isFinite(v) && v >= 0) saida[k] = Math.round(v);
     } else if (typeof v === typeof padrao) {
@@ -131,7 +141,8 @@ export function aplicarAoVivo(vivo: Config, novo: Pick<Config, ChaveAoVivo>): Ch
 const REINICIO: [keyof Config, string][] = [
   ["openjarvis_url", "endereços"], ["gui_url", "endereços"], ["ponte_url", "endereços"], ["voz_url", "endereços"],
   ["nome", "nome de chamada"], ["variantes", "nome de chamada"], ["idioma", "idioma"],
-  ["voz", "voz"], ["velocidade", "voz"], ["instrucao_formato", "instrução de formato"],
+  ["voz", "voz"], ["velocidade", "voz"], ["voz_provedor", "voz"], ["voz_propria", "voz"],
+  ["elevenlabs_chave", "voz"], ["elevenlabs_voz", "voz"], ["gemini_chave", "voz"], ["gemini_voz", "voz"], ["instrucao_formato", "instrução de formato"],
   ["finish_ms", "ouvido"], ["limiar_vad", "ouvido"], ["atalhos", "atalhos"],
 ];
 

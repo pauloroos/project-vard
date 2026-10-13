@@ -7,6 +7,7 @@ import type { OpenJarvis } from "../conectores/openjarvis/cliente";
 import type { StatusPonte } from "../conectores/ponte/cliente";
 import { AbaModelos } from "./aba-modelos";
 import { AbaSistema } from "./aba-sistema";
+import { AbaVoz } from "./aba-voz";
 
 export interface DepsConfiguracoes {
   /** Cliente do OpenJarvis para o endereço dado (o main decide se passa pelo proxy do dev). */
@@ -41,6 +42,7 @@ export class Configuracoes {
   private falhas: FalhaAtalho[] = [];
   private modelos: AbaModelos | null = null;
   private sistema: AbaSistema | null = null;
+  private abaVoz!: AbaVoz;
   private linhasAtalho = new Map<AcaoAtalho, { campo: HTMLButtonElement; motivo: HTMLElement }>();
 
   constructor(private cfg: Config, private raiz: HTMLElement, private deps: DepsConfiguracoes) {
@@ -50,6 +52,13 @@ export class Configuracoes {
   /** Desenha as abas e lê o que só o Rust sabe (início no logon, atalhos que não registraram). */
   async montar() {
     this.desenhar();
+    this.abaVoz = new AbaVoz(this.raiz.querySelector<HTMLElement>("#cfg-voz")!, this.cfg, {
+      criarOj: () => this.deps.criarOj(this.cfg.openjarvis_url),
+      velocidade: () => { const n = Number(this.el("velocidade").value.trim().replace(",", ".")); return Number.isFinite(n) && n > 0 ? n : this.cfg.velocidade; },
+      dizer: (t, ruim) => this.dizer(t, ruim),
+    });
+    this.abaVoz.montar();
+    this.marcarUrl("voz_url");
     this.modelos = new AbaModelos(this.raiz.querySelector<HTMLElement>("#cfg-modelos")!, this.cfg.modelo, {
       criarOj: (modelo) => this.deps.criarOj(this.cfg.openjarvis_url, modelo),
       statusPonte: () => this.deps.statusPonte(this.cfg.ponte_url),
@@ -127,11 +136,10 @@ export class Configuracoes {
       </section>
       <section data-aba="voz">
         <fieldset><legend>Fala</legend>
-          ${this.campo("voz", "Voz da fala (OpenJarvis)", c.voz)}
           ${this.campo("velocidade", "Velocidade da fala", c.velocidade, "number", 'step="0.05" min="0.5" max="2"')}
-          ${this.campo("voz_url", "Serviço de voz (opcional; vazio desliga)", c.voz_url)}
           ${this.campo("instrucao_formato", "Instrução de formato", c.instrucao_formato)}
         </fieldset>
+        <div id="cfg-voz"></div>
         <fieldset><legend>Ouvido</legend>
           ${this.campo("finish_ms", "Silêncio para encerrar a fala (ms)", c.finish_ms, "number", 'step="50" min="200" max="3000"')}
           ${this.campo("limiar_vad", "Limiar do microfone", c.limiar_vad, "number", 'step="0.005" min="0.001" max="0.5"')}
@@ -158,12 +166,15 @@ export class Configuracoes {
     this.raiz.querySelector("#cfg-salvar")!.addEventListener("click", () => { void this.salvar(); });
     this.raiz.querySelector("#cfg-testar")!.addEventListener("click", () => { void this.testar(); });
     this.montarAtalhos(this.raiz.querySelector<HTMLElement>("#cfg-atalhos")!);
-    for (const id of ["openjarvis_url", "gui_url", "ponte_url", "voz_url"]) {
-      const campo = this.el(id);
-      const opcional = id === "ponte_url" || id === "voz_url"; // vazio desliga: não é endereço ruim
-      const marcar = () => campo.classList.toggle("aviso", !(opcional && campo.value.trim() === "") && !urlLocal(campo.value.trim()));
-      campo.addEventListener("input", marcar); marcar();
-    }
+    for (const id of ["openjarvis_url", "gui_url", "ponte_url"]) this.marcarUrl(id);
+  }
+
+  /** Marca em aviso o campo de endereço que não é local; nos opcionais (ponte, voz) vazio desliga e não é aviso. */
+  private marcarUrl(id: string) {
+    const campo = this.el(id);
+    const opcional = id === "ponte_url" || id === "voz_url";
+    const marcar = () => campo.classList.toggle("aviso", !(opcional && campo.value.trim() === "") && !urlLocal(campo.value.trim()));
+    campo.addEventListener("input", marcar); marcar();
   }
 
   private montarAtalhos(caixa: HTMLElement) {
@@ -221,10 +232,10 @@ export class Configuracoes {
     return {
       ...c,
       openjarvis_url: txt("openjarvis_url", c.openjarvis_url), gui_url: txt("gui_url", c.gui_url), ponte_url: opc("ponte_url"),
-      voz_url: opc("voz_url"),
+      ...this.abaVoz.ler(), voz_url: this.abaVoz.vozUrl(),
       nome: txt("nome", c.nome), usuario: opc("usuario"),
       variantes: this.el("variantes").value.split(",").map((v) => v.trim()).filter(Boolean),
-      idioma: opc("idioma"), voz: txt("voz", c.voz),
+      idioma: opc("idioma"),
       velocidade: num("velocidade", c.velocidade), finish_ms: num("finish_ms", c.finish_ms), limiar_vad: num("limiar_vad", c.limiar_vad),
       conversa_ms: Math.round(Math.max(0, num("conversa_s", c.conversa_ms / 1000)) * 1000),
       instrucao_formato: txt("instrucao_formato", c.instrucao_formato),
@@ -238,6 +249,8 @@ export class Configuracoes {
   }
 
   private async salvar() {
+    const erroVoz = this.abaVoz.erro();
+    if (erroVoz) { this.abrirAba("voz"); this.dizer(erroVoz, true); return; }
     const novo = this.lerFormulario();
     if (novo.variantes.length === 0) novo.variantes = [novo.nome];
     const erros = validarAtalhos(novo.atalhos);

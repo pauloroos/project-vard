@@ -120,12 +120,13 @@ export function criarVozFalsa({ estado = { pedidos: [], aquecendo: false } } = {
     const json = (obj, status = 200) => { res.writeHead(status, { "Content-Type": "application/json", ...cors }); res.end(JSON.stringify(obj)); };
     if (req.method === "OPTIONS") { res.writeHead(204, cors); res.end(); return; }
     if (caminho === "/saude") return json({ pronta: !estado.aquecendo, voz: "Voz Falsa", device: "cpu", aquecida: !estado.aquecendo });
+    if (caminho === "/vozes") return json({ vozes: ["Voz Falsa", "Outra Falsa"], atual: "Voz Falsa" });
     if (req.method === "POST" && caminho === "/falar") {
       let corpo = {};
       try { corpo = JSON.parse((await lerCorpo(req)).toString("utf8") || "{}"); } catch { /* corpo inválido conta como texto vazio */ }
       const texto = String(corpo.texto ?? "").trim();
       const pcm = String(req.headers.accept ?? "").includes("audio/pcm");
-      estado.pedidos.push({ texto, velocidade: corpo.velocidade, pcm });
+      estado.pedidos.push({ texto, velocidade: corpo.velocidade, pcm, voz: corpo.voz });
       if (!texto || texto.length > 400) return json({ erro: "texto vazio ou com mais de 400 caracteres" }, 400);
       if (estado.aquecendo) return json({ erro: "aquecendo" }, 503);
       if (pcm) {

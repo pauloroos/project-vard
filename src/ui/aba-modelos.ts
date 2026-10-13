@@ -11,6 +11,14 @@ export async function medirModelo(conector: Pick<OpenJarvis, "perguntar">): Prom
   return { ms: performance.now() - t0, resposta };
 }
 
+/** Separa os modelos por origem: os que o LM Studio tem (informados pela ponte) e o resto (nuvem). Sem a lista da ponte, um grupo só. */
+export function agruparModelos(ids: string[], locais: string[] | null): { titulo: string; ids: string[] }[] {
+  if (locais === null) return [{ titulo: "Todos", ids }];
+  const l = ids.filter((id) => locais.includes(id));
+  const n = ids.filter((id) => !locais.includes(id));
+  return [{ titulo: "LM Studio (local)", ids: l }, { titulo: "OmniRouter (nuvem)", ids: n }].filter((g) => g.ids.length > 0);
+}
+
 export interface DepsAbaModelos {
   /** Cliente no endereço salvo, já com o modelo pedido ("" = automático). */
   criarOj: (modelo: string) => OpenJarvis;
@@ -32,27 +40,38 @@ export class AbaModelos {
       <button id="mod-testar" type="button">Testar</button> <span id="mod-tempo"></span>`;
     this.raiz.querySelector("#mod-testar")!.addEventListener("click", () => { void this.testar(); });
     const lista = this.raiz.querySelector<HTMLElement>("#mod-lista")!;
-    try { this.desenharLista(lista, await this.deps.criarOj("").modelos()); }
-    catch (erro) { lista.textContent = `O OpenJarvis não respondeu à lista de modelos: ${String(erro)}`; }
-    const st = await this.deps.statusPonte();
+    const [ids, st] = await Promise.all([
+      this.deps.criarOj("").modelos().catch((erro: unknown) => erro as Error),
+      this.deps.statusPonte(),
+    ]);
+    if (Array.isArray(ids)) this.desenharLista(lista, ids, st?.modelos_lmstudio ?? null);
+    else lista.textContent = `O OpenJarvis não respondeu à lista de modelos: ${String(ids)}`;
     this.raiz.querySelector("#mod-reserva")!.textContent = st === null
       ? "Ponte fora ou desligada: sem informação de reserva."
       : st.reserva ? `Se o principal falhar, o OpenJarvis usa ${st.reserva}.` : "A ponte não informa um modelo de reserva.";
   }
 
-  private desenharLista(lista: HTMLElement, ids: string[]) {
-    const opcoes: [string, string][] = [["", `Automático (o primeiro: ${ids[0] ?? "nenhum"})`], ...ids.map((id): [string, string] => [id, id])];
-    if (this.escolhido && !ids.includes(this.escolhido)) opcoes.push([this.escolhido, `${this.escolhido} (não está mais no OpenJarvis; o Vard usa o primeiro)`]);
-    lista.innerHTML = "";
-    for (const [valor, rotulo] of opcoes) {
+  private desenharLista(lista: HTMLElement, ids: string[], locais: string[] | null) {
+    const rotulo = (valor: string, texto: string) => {
       const l = document.createElement("label");
       l.className = "marca";
       const r = document.createElement("input");
       r.type = "radio"; r.name = "modelo"; r.value = valor; r.checked = valor === this.escolhido;
       r.addEventListener("change", () => { if (r.checked) this.escolhido = valor; });
-      l.append(r, document.createTextNode(` ${rotulo}`)); // texto, não HTML: ids vêm do servidor
-      lista.append(l);
+      l.append(r, document.createTextNode(` ${texto}`)); // texto, não HTML: ids vêm do servidor
+      return l;
+    };
+    lista.innerHTML = "";
+    lista.append(rotulo("", `Automático (o primeiro: ${ids[0] ?? "nenhum"})`));
+    for (const g of agruparModelos(ids, locais)) {
+      const f = document.createElement("fieldset");
+      f.className = "grupo";
+      const lg = document.createElement("legend");
+      lg.textContent = g.titulo;
+      f.append(lg, ...g.ids.map((id) => rotulo(id, id)));
+      lista.append(f);
     }
+    if (this.escolhido && !ids.includes(this.escolhido)) lista.append(rotulo(this.escolhido, `${this.escolhido} (não está mais no OpenJarvis; o Vard usa o primeiro)`));
   }
 
   private async testar() {

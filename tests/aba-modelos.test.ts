@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { AbaModelos, type DepsAbaModelos } from "../src/ui/aba-modelos";
+import { AbaModelos, agruparModelos, type DepsAbaModelos } from "../src/ui/aba-modelos";
 import { OpenJarvis } from "../src/conectores/openjarvis/cliente";
 
 // DOM mínimo: o suficiente para a aba (os testes rodam em node, sem navegador).
@@ -19,7 +19,10 @@ function montar(ids: string[] | Error, status: Awaited<ReturnType<DepsAbaModelos
   const aba = new AbaModelos(raiz as unknown as HTMLElement, modelo, { criarOj: () => oj, statusPonte: async () => status });
   return { aba, raiz, lista: raiz.querySelector("#mod-lista"), reserva: raiz.querySelector("#mod-reserva") };
 }
-const rotulos = (lista: No) => lista.filhos.map((l) => ((l as No).filhos[1] as { texto: string }).texto.trim());
+/** Os rótulos (labels) da lista, entrando nos fieldsets: um label tem o rádio em filhos[0] e o texto em filhos[1]. */
+const labels = (lista: No): No[] => lista.filhos.flatMap((f) => ((f as No).filhos[0] instanceof No && ((f as No).filhos[0] as No).type === "radio" ? [f as No] : labels(f as No)));
+const rotulos = (lista: No) => labels(lista).map((l) => (l.filhos[1] as { texto: string }).texto.trim());
+const titulos = (lista: No) => lista.filhos.filter((f) => (f as No).className === "grupo").map((f) => ((f as No).filhos[0] as No).textContent);
 
 describe("AbaModelos", () => {
   afterEach(() => vi.restoreAllMocks());
@@ -41,15 +44,26 @@ describe("AbaModelos", () => {
     const r = rotulos(t.lista);
     expect(r).toHaveLength(4);
     expect(r[3]).toContain("não está mais no OpenJarvis");
-    expect((t.lista.filhos[3] as No).filhos[0]).toMatchObject({ value: "c", checked: true });
+    expect(labels(t.lista)[3].filhos[0]).toMatchObject({ value: "c", checked: true });
     expect(t.aba.escolhido).toBe("c");
   });
   it("escolher_um_modelo_atualiza_escolhido", async () => {
     const t = montar(["a", "b"], null);
     await t.aba.carregar();
-    const r = (t.lista.filhos[2] as No).filhos[0] as No;
+    const r = labels(t.lista)[2].filhos[0] as No;
     r.checked = true; r.ouvintes.change[0]();
     expect(t.aba.escolhido).toBe("b");
+  });
+  it("com_modelos_do_lmstudio_a_lista_vem_em_dois_grupos", async () => {
+    const t = montar(["a", "b", "c"], { ok: true, modo: "ligado", modelos_lmstudio: ["b"] });
+    await t.aba.carregar();
+    expect(titulos(t.lista)).toEqual(["LM Studio (local)", "OmniRouter (nuvem)"]);
+    expect(rotulos(t.lista)).toEqual(["Automático (o primeiro: a)", "b", "a", "c"]);
+  });
+  it("sem_a_ponte_um_grupo_so", async () => {
+    const t = montar(["a"], null);
+    await t.aba.carregar();
+    expect(titulos(t.lista)).toEqual(["Todos"]);
   });
   it("reserva_presente_e_ausente", async () => {
     const com = montar(["a"], { ok: true, modo: "ligado", reserva: "combo/t1" });
@@ -84,5 +98,17 @@ describe("AbaModelos", () => {
     expect(corpos).toEqual(["b", "b"]);
     vi.unstubAllGlobals();
     vi.stubGlobal("document", { createElement: () => new No(), createTextNode: (t: string) => ({ texto: t }) });
+  });
+});
+
+describe("agruparModelos", () => {
+  it("separa_local_e_nuvem", () => {
+    expect(agruparModelos(["a", "b", "c"], ["b"])).toEqual([{ titulo: "LM Studio (local)", ids: ["b"] }, { titulo: "OmniRouter (nuvem)", ids: ["a", "c"] }]);
+  });
+  it("sem_lista_da_ponte_e_um_grupo_todos", () => {
+    expect(agruparModelos(["a"], null)).toEqual([{ titulo: "Todos", ids: ["a"] }]);
+  });
+  it("so_local_omite_o_grupo_vazio", () => {
+    expect(agruparModelos(["a"], ["a"])).toEqual([{ titulo: "LM Studio (local)", ids: ["a"] }]);
   });
 });

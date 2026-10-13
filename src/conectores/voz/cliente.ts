@@ -1,5 +1,6 @@
 // Serviço de voz próprio e opcional (contrato em docs/voz-propria.md): POST /falar devolve PCM 16 bits em fluxo.
 import { fluxoParaWav } from "../../audio/wav";
+import type { FonteDeVoz } from "./fonte";
 
 /** Falha do serviço de voz. `conexao` = nem respondeu (fora do ar, caiu no meio ou passou do prazo). */
 export class ErroVoz extends Error {
@@ -16,14 +17,17 @@ interface OpcoesVoz {
   fetch?: (url: string, init: RequestInit) => Promise<Response>;
   /** Prazo até o primeiro byte de áudio e entre um pedaço e outro. */
   prazoMs?: number;
+  /** Voz do serviço a pedir em cada /falar; vazio = a atual dele. */
+  voz?: string;
 }
 
 const PRAZO_MS = 8000;
 const TAXA_PADRAO = 24000; // o cabeçalho X-Taxa só é legível com Access-Control-Expose-Headers
 
-export class Voz {
-  /** Nome da voz informado pelo /saude ("" até a primeira resposta). Entra na chave do cache das falas fixas. */
-  nome = "";
+export class Voz implements FonteDeVoz {
+  /** Voz pedida na config, ou a informada pelo /saude ("" até a primeira resposta). Entra na chave do cache das falas fixas. */
+  nome: string;
+  private vozPedida: string;
   private base: string;
   private buscar: (url: string, init: RequestInit) => Promise<Response>;
   private prazo: number;
@@ -32,6 +36,8 @@ export class Voz {
     this.base = url.replace(/\/+$/, "");
     this.buscar = opcoes.fetch ?? ((u, i) => fetch(u, i));
     this.prazo = opcoes.prazoMs ?? PRAZO_MS;
+    this.vozPedida = (opcoes.voz ?? "").trim();
+    this.nome = this.vozPedida;
   }
 
   /** true só quando o serviço responde e diz que está pronto (modelo carregado). */
@@ -42,7 +48,7 @@ export class Voz {
       const r = await this.buscar(`${this.base}/saude`, { signal: ac.signal });
       if (!r.ok) return false;
       const j = await r.json();
-      if (typeof j?.voz === "string") this.nome = j.voz;
+      if (typeof j?.voz === "string" && !this.vozPedida) this.nome = j.voz;
       return j?.pronta === true;
     } catch { return false; } finally { clearTimeout(t); }
   }
@@ -73,7 +79,7 @@ export class Voz {
         r = await this.buscar(`${this.base}/falar`, {
           method: "POST", signal: ac.signal,
           headers: { "Content-Type": "application/json", Accept: "audio/pcm" },
-          body: JSON.stringify({ texto, velocidade }),
+          body: JSON.stringify({ texto, velocidade, ...(this.vozPedida ? { voz: this.vozPedida } : {}) }),
         });
       } catch (erro) { throw caiu(erro); }
       if (!r.ok) { void r.body?.cancel().catch(() => {}); throw new ErroVoz(`voz HTTP ${r.status}`, false); }
@@ -123,6 +129,19 @@ export class Voz {
       encerrar();
       throw erro;
     }
+  }
+
+  /** Vozes que o serviço tem (GET /vozes). Serviço antigo (404) ou fora: lista vazia. */
+  async vozes(): Promise<{ vozes: string[]; atual: string }> {
+    const ac = new AbortController();
+    const t = setTimeout(() => ac.abort(), 3000);
+    try {
+      const r = await this.buscar(`${this.base}/vozes`, { signal: ac.signal });
+      if (!r.ok) return { vozes: [], atual: "" };
+      const j = await r.json();
+      const vozes = Array.isArray(j?.vozes) ? j.vozes.filter((v: unknown) => typeof v === "string") : [];
+      return { vozes, atual: typeof j?.atual === "string" ? j.atual : "" };
+    } catch { return { vozes: [], atual: "" }; } finally { clearTimeout(t); }
   }
 
   /** A fala inteira como WAV (para as falas fixas, que vão para o cache). */
