@@ -2,11 +2,13 @@
 import type { FalaEmFluxo } from "../../fala/conversa";
 import { fluxoParaWav } from "../../audio/wav";
 import { ErroVoz } from "../voz/cliente";
+import { comPrazoEntrePedacos } from "../voz/fluxo";
 import type { FonteDeVoz } from "../voz/fonte";
 
 const BASE = "https://api.elevenlabs.io/v1";
 const TAXA = 24000;
 const PRAZO_MS = 15000;
+const PRAZO_PEDACO_MS = 8000;
 
 export class ElevenLabs implements FonteDeVoz {
   readonly nome: string;
@@ -32,7 +34,7 @@ export class ElevenLabs implements FonteDeVoz {
       } catch (erro) { throw new ErroVoz(`sem conexão com o ElevenLabs: ${String(erro)}`, true); }
       if (!r.ok) { void r.body?.cancel().catch(() => {}); throw new ErroVoz(`ElevenLabs respondeu ${r.status}`, false); }
       if (!r.body) throw new ErroVoz("ElevenLabs sem corpo", false);
-      return { corpo: r.body, taxa: TAXA };
+      return { corpo: comPrazoEntrePedacos(r.body, PRAZO_PEDACO_MS), taxa: TAXA };
     } finally { clearTimeout(t); sinal?.removeEventListener("abort", repassar); }
   }
   async falarWav(texto: string, velocidade: number, prazoMs?: number): Promise<ArrayBuffer> {

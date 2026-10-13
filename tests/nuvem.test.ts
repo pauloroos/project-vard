@@ -28,6 +28,19 @@ describe("ElevenLabs", () => {
     await new ElevenLabs("k", "v", { fetch: f }).falar("Oi.", 2);
     expect(JSON.parse(String((f.mock.calls[0] as unknown as [string, RequestInit])[1].body)).voice_settings.speed).toBe(1.2);
   });
+  it("queda_no_meio_do_fluxo_vira_ErroVoz_pelo_prazo_entre_pedacos", async () => {
+    vi.useFakeTimers();
+    try {
+      const corpo = new ReadableStream<Uint8Array>({ start(c) { c.enqueue(new Uint8Array([1, 0])); }, pull: () => new Promise(() => {}) });
+      const f = vi.fn(async () => new Response(corpo, { status: 200 }));
+      const { corpo: c } = await new ElevenLabs("k", "v", { fetch: f }).falar("Oi.", 1);
+      const l = c.getReader();
+      expect((await l.read()).value).toEqual(new Uint8Array([1, 0]));
+      const lido = l.read().catch((e) => e);
+      await vi.advanceTimersByTimeAsync(8000);
+      expect(await lido).toMatchObject({ name: "ErroVoz", conexao: true });
+    } finally { vi.useRealTimers(); }
+  });
   it("401_vira_ErroVoz_sem_conexao", async () => {
     const f = vi.fn(async () => new Response("{}", { status: 401 }));
     await expect(new ElevenLabs("k", "v", { fetch: f }).falar("Oi.", 1)).rejects.toMatchObject({ name: "ErroVoz", conexao: false });
