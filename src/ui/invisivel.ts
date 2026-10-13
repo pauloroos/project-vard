@@ -1,7 +1,7 @@
 import type { Estado } from "../fala/conversa";
 
 /**
- * Modo invisível: o widget só aparece enquanto há motivo (conversa em curso, canal do modo conversa aberto ou
+ * Modo invisível: o widget só aparece enquanto há motivo (conversa em curso (pensando ou falando), canal do modo conversa aberto ou
  * revelado à mão) e some `atrasoMs` depois que o último motivo acaba. Com o modo desligado, sempre visível.
  */
 export class Invisibilidade {
@@ -21,7 +21,8 @@ export class Invisibilidade {
   /** Ctrl+Alt+V ou "Mostrar/ocultar" da bandeja com o modo ligado: revela ou esconde na hora. */
   alternarRevelacao() { this.revelado = !this.revelado; this.decidir(this.revelado ? undefined : 0); }
 
-  private motivo(): boolean { return !this.modo || this.estado !== "repouso" || this.canal || this.revelado; }
+  /** "ouvindo" não conta (o VAD dispara com qualquer ruído, antes de saber se foi chamado), nem "jogo", "erro" e "fora". */
+  private motivo(): boolean { return !this.modo || this.estado === "pensando" || this.estado === "falando" || this.canal || this.revelado; }
 
   private decidir(atraso = this.atrasoMs) {
     if (this.motivo()) { this.cancelar(); this.mudar(true); return; }
