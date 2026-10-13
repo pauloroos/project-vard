@@ -42,7 +42,7 @@ export class AbaAtualizacao {
     void this.deps.versao().then((v) => { this.instalada = v; this.linhaInstalada.textContent = `Instalada: ${v}`; }).catch(() => { this.linhaInstalada.textContent = "Instalada: desconhecida"; });
   }
 
-  /** Chamado ao abrir a aba com "Verificar ao abrir o painel" marcada: consulta uma vez por abertura do painel. */
+  /** Chamado ao abrir a aba com "Verificar ao abrir a aba Atualização" marcada: consulta uma vez por abertura do painel. */
   aoAbrir() {
     if (this.consultou) return;
     void this.verificar();

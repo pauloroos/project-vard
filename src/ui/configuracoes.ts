@@ -169,7 +169,7 @@ export class Configuracoes {
       </section>
       <section data-aba="atualizacao">
         <div id="cfg-atualizacao"></div>
-        ${this.marca("atualizacao_ao_abrir", "Verificar ao abrir o painel", c.atualizacao_ao_abrir)}
+        ${this.marca("atualizacao_ao_abrir", "Verificar ao abrir a aba Atualização", c.atualizacao_ao_abrir)}
         <p class="nota">A consulta vai ao GitHub (api.github.com) só quando você clica em Verificar ou marca esta caixa.</p>
       </section>
       <section data-aba="modelos" id="cfg-modelos"></section>

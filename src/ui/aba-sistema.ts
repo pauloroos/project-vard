@@ -29,7 +29,7 @@ export interface DepsAbaSistema {
   modo: (verbo: string) => Promise<boolean>;
 }
 
-const TEXTO = "A ponte liga o Vard à sua instalação: olhos na tela (o que está no monitor), modo jogo (desliga tudo e tira os modelos da GPU) e os avisos da oficina. Sem ela o widget funciona igual, só sem esses recursos.";
+const TEXTO = "A ponte liga o Vard à sua instalação: olhos na tela (o que está no monitor), modo jogo (desliga tudo e tira os modelos da GPU) e os avisos da oficina. Sem ela o widget funciona igual, só sem esses recursos. Ligar sobe tudo (modelo, núcleo, ponte, voz); Modo jogo desliga tudo e libera a GPU; Desligar derruba também o servidor de modelos e a bandeja (a ponte cai junto; a aba mostra 'fora' até ligar de novo).";
 const VERBOS: [string, string, "ligar" | "jogo" | "desligar"][] = [["voltar", "Ligar", "ligar"], ["jogo", "Modo jogo", "jogo"], ["parar", "Desligar", "desligar"]];
 
 /** Aba Sistema: estado da ponte a cada 5 s enquanto aberta e os três verbos do ciclo. O campo ponte_url fica no painel, fora daqui. */
@@ -80,7 +80,7 @@ export class AbaSistema {
   }
 
   private async clicar(verbo: string) {
-    if (verbo === "voltar") this.confirmacao.cancelar();
+    if (verbo === "voltar") { this.confirmacao.cancelar(); this.rotular(); }
     if (verbo !== "voltar" && !this.confirmacao.pedir(verbo)) { this.rotular(); return; }
     this.msg.textContent = "Enviando...";
     const ok = await this.deps.modo(verbo);

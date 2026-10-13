@@ -31,6 +31,18 @@ export function opcoesDeVoz(base: [string, string][], atual: string, rotuloAusen
   return atual && !base.some(([v]) => v === atual) ? [...base, [atual, rotuloAusente(atual)]] : base;
 }
 
+/** Voz do Gemini que o select marca: a salva ou, vazia, a Kore (o padrão de criarFonteDeVoz). */
+export function vozGeminiMarcada(salva: string): string { return salva.trim() || "Kore"; }
+
+/** Motivo para não salvar e os campos (ids sem "cfg-") a marcar; null quando está tudo certo. */
+export function problemaDeVoz(c: Pick<CamposVoz, "voz_provedor" | "elevenlabs_chave" | "elevenlabs_voz" | "gemini_chave">): { texto: string; campos: string[] } | null {
+  if (c.voz_provedor === "elevenlabs" && (!c.elevenlabs_chave || !c.elevenlabs_voz)) {
+    return { texto: "Informe a chave do ElevenLabs e a voz, ou escolha outro provedor.", campos: [...(c.elevenlabs_chave ? [] : ["elevenlabs_chave"]), ...(c.elevenlabs_voz ? [] : ["elevenlabs_voz_id"])] };
+  }
+  if (c.voz_provedor === "gemini" && !c.gemini_chave) return { texto: "Informe a chave do Gemini, ou escolha outro provedor.", campos: ["gemini_chave"] };
+  return null;
+}
+
 /** Toca um WAV no painel (a janela de configurações tem o próprio AudioContext). */
 async function tocarWav(wav: ArrayBuffer): Promise<void> {
   const ctx = new AudioContext();
@@ -68,7 +80,7 @@ export class AbaVoz {
       </div>
       <div data-prov="elevenlabs">
         <label>Chave da API<input id="cfg-elevenlabs_chave" type="password" autocomplete="off" value="${esc(c.elevenlabs_chave)}"></label>
-        <label>Voz da conta<select id="cfg-elevenlabs_voz"><option value="">${c.elevenlabs_voz ? esc(c.elevenlabs_voz) : "(carregue as vozes)"}</option></select></label>
+        <label>Voz da conta<select id="cfg-elevenlabs_voz"><option value="${esc(c.elevenlabs_voz)}">${c.elevenlabs_voz ? esc(c.elevenlabs_voz) : "(carregue as vozes)"}</option></select></label>
         <button id="cfg-elevenlabs_carregar" type="button">Carregar vozes</button>
         <label>Ou o id da voz<input id="cfg-elevenlabs_voz_id" type="text" value="${esc(c.elevenlabs_voz)}"></label>
         <p class="nota">Só fala com a ElevenLabs quando este provedor está escolhido; o texto das falas vai para a nuvem.</p>
@@ -81,12 +93,13 @@ export class AbaVoz {
       <button id="cfg-ouvir" type="button">Ouvir</button>`;
     // Semeia já na montagem: um Salvar antes de o /vozes responder não apaga a escolha.
     this.preencher(this.sel("voz_propria"), opcoesDeVoz([["", "A voz atual do serviço"]], c.voz_propria), c.voz_propria);
-    this.preencher(this.sel("gemini_voz"), opcoesDeVoz(VOZES_GEMINI.map((v): [string, string] => [v, v]), c.gemini_voz, (v) => `${v} (fora da lista)`), c.gemini_voz);
+    this.preencher(this.sel("gemini_voz"), opcoesDeVoz(VOZES_GEMINI.map((v): [string, string] => [v, v]), vozGeminiMarcada(c.gemini_voz), (v) => `${v} (fora da lista)`), vozGeminiMarcada(c.gemini_voz));
     for (const r of this.raiz.querySelectorAll<HTMLInputElement>('input[name="voz_provedor"]')) r.addEventListener("change", () => this.mostrar());
     this.sel("voz_kokoro").addEventListener("change", () => this.mostrar());
     this.sel("elevenlabs_voz").addEventListener("change", () => { const v = this.sel("elevenlabs_voz").value; if (v) this.el("elevenlabs_voz_id").value = v; });
     this.el("voz_url").addEventListener("change", () => { void this.carregarPropria(); });
     this.raiz.querySelector("#cfg-elevenlabs_carregar")!.addEventListener("click", () => { void this.carregarElevenLabs(); });
+    for (const id of ["elevenlabs_chave", "elevenlabs_voz_id", "gemini_chave"]) this.el(id).addEventListener("input", () => this.el(id).classList.remove("aviso"));
     this.raiz.querySelector("#cfg-ouvir")!.addEventListener("click", () => { void this.ouvir(); });
     this.mostrar();
     void this.carregarPropria();
@@ -114,9 +127,10 @@ export class AbaVoz {
   private async carregarPropria() {
     const sel = this.sel("voz_propria");
     const nota = this.raiz.querySelector<HTMLElement>("#cfg-voz_propria_nota")!;
-    const escolhida = sel.options.length ? sel.value : this.cfg.voz_propria;
     const url = this.vozUrl();
     const { vozes, atual } = url ? await new Voz(url).vozes() : { vozes: [], atual: "" };
+    // Lida depois do await: uma escolha feita enquanto o /vozes respondia não pode ser revertida.
+    const escolhida = sel.options.length ? sel.value : this.cfg.voz_propria;
     this.preencher(sel, opcoesDeVoz([["", atual ? `A voz atual do serviço (${atual})` : "A voz atual do serviço"], ...vozes.map((v): [string, string] => [v, v])], escolhida), escolhida);
     nota.textContent = vozes.length ? "" : "Voz própria fora do ar; a lista aparece quando ela subir.";
   }
@@ -144,12 +158,11 @@ export class AbaVoz {
     };
   }
 
-  /** Motivo para não salvar (provedor de nuvem sem chave ou voz), ou null. */
+  /** Motivo para não salvar (provedor de nuvem sem chave ou voz), ou null. Marca em aviso o campo que falta (some ao digitar). */
   erro(): string | null {
-    const c = this.ler();
-    if (c.voz_provedor === "elevenlabs" && (!c.elevenlabs_chave || !c.elevenlabs_voz)) return "Informe a chave do ElevenLabs e a voz, ou escolha outro provedor.";
-    if (c.voz_provedor === "gemini" && !c.gemini_chave) return "Informe a chave do Gemini, ou escolha outro provedor.";
-    return null;
+    const p = problemaDeVoz(this.ler());
+    for (const id of ["elevenlabs_chave", "elevenlabs_voz_id", "gemini_chave"]) this.el(id).classList.toggle("aviso", p?.campos.includes(id) ?? false);
+    return p ? p.texto : null;
   }
 
   private async ouvir() {
