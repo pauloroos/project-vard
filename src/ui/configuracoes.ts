@@ -2,6 +2,8 @@ import { invoke } from "@tauri-apps/api/core";
 import type { Config } from "../config/config";
 import { avisosDeUrl, salvarConfig, urlLocal } from "../config/config";
 import type { OpenJarvis } from "../conectores/openjarvis/cliente";
+import { ACOES_ATALHO, ROTULOS_ATALHO, validarAtalhos, type AcaoAtalho, type FalhaAtalho } from "../config/atalhos";
+import { campoAtalho } from "./campo-atalho";
 
 export interface DepsConfiguracoes {
   /** Cria um cliente do OpenJarvis para o endereço digitado (o main decide se passa pelo proxy do dev). */
@@ -20,6 +22,9 @@ export class Configuracoes {
   private msg!: HTMLElement;
   private logon!: HTMLInputElement;
   private logonGuardado = false;
+  private atalhos!: Config["atalhos"];
+  private falhas: FalhaAtalho[] = [];
+  private linhasAtalho = new Map<AcaoAtalho, { campo: HTMLButtonElement; motivo: HTMLElement }>();
 
   constructor(private cfg: Config, painel: HTMLElement, private deps: DepsConfiguracoes) {
     this.painel = painel;
@@ -34,6 +39,8 @@ export class Configuracoes {
     this.deps.aoAlternar?.(true);
     try { this.logonGuardado = await invoke<boolean>("inicio_no_logon_ativo"); } catch { this.logonGuardado = false; /* fora do Tauri */ }
     this.logon.checked = this.logonGuardado;
+    try { this.falhas = await invoke<FalhaAtalho[]>("falhas_de_atalho"); } catch { this.falhas = []; }
+    this.marcarAtalhos({});
   }
 
   fechar() { this.painel.hidden = true; this.deps.aoAlternar?.(false); }
@@ -71,9 +78,8 @@ export class Configuracoes {
         ${this.marca("sempre_no_topo", "Sempre no topo", c.sempre_no_topo)}
         ${this.marca("click_through", "Clique atravessa a janela", c.click_through)}
         ${this.marca("logon", "Iniciar com o Windows", false)}
-        ${this.campo("atalho_falar", "Atalho: falar (segurar)", c.atalhos.falar)}
-        ${this.campo("atalho_parar", "Atalho: interromper", c.atalhos.parar)}
-        ${this.campo("atalho_mostrar", "Atalho: mostrar/ocultar", c.atalhos.mostrar)}
+        <div id="cfg-atalhos"></div>
+        <p class="nota">Clique num atalho e pressione a nova combinação (Ctrl, Alt ou Win mais uma tecla). Esc cancela. Valem depois de reiniciar o Vard.</p>
       </fieldset>
       <div id="cfg-msg" role="status"></div>
       <div class="acoes">
@@ -91,6 +97,34 @@ export class Configuracoes {
       const opcional = id === "ponte_url" || id === "voz_url"; // vazio desliga: não é endereço ruim
       const marcar = () => campo.classList.toggle("aviso", !(opcional && campo.value.trim() === "") && !urlLocal(campo.value.trim()));
       campo.addEventListener("input", marcar); marcar();
+    }
+    this.atalhos = { ...this.cfg.atalhos };
+    this.montarAtalhos(this.painel.querySelector<HTMLElement>("#cfg-atalhos")!);
+  }
+
+  private montarAtalhos(caixa: HTMLElement) {
+    this.linhasAtalho.clear();
+    for (const acao of ACOES_ATALHO) {
+      const linha = document.createElement("div");
+      linha.className = "linha-atalho";
+      const rotulo = document.createElement("span");
+      rotulo.textContent = ROTULOS_ATALHO[acao];
+      const campo = campoAtalho(this.atalhos[acao], (nova) => { this.atalhos[acao] = nova; this.marcarAtalhos(validarAtalhos(this.atalhos)); });
+      const motivo = document.createElement("small");
+      motivo.className = "motivo";
+      linha.append(rotulo, campo, motivo);
+      caixa.append(linha);
+      this.linhasAtalho.set(acao, { campo, motivo });
+    }
+  }
+
+  /** Marca cada campo com o erro de validação ou com a falha de registro do arranque (enquanto a combinação for a mesma). */
+  private marcarAtalhos(erros: Partial<Record<AcaoAtalho, string>>) {
+    for (const [acao, { campo, motivo }] of this.linhasAtalho) {
+      const falha = this.falhas.find((f) => f.chave === acao && f.combinacao === this.atalhos[acao]);
+      const texto = erros[acao] ?? (falha ? `Não registrou no Windows: ${falha.erro}. Outro programa pode estar usando; troque e reinicie.` : "");
+      campo.classList.toggle("aviso", texto !== "");
+      motivo.textContent = texto;
     }
   }
 
@@ -117,13 +151,21 @@ export class Configuracoes {
       velocidade: num("velocidade", c.velocidade), finish_ms: num("finish_ms", c.finish_ms), limiar_vad: num("limiar_vad", c.limiar_vad),
       instrucao_formato: txt("instrucao_formato", c.instrucao_formato),
       sempre_no_topo: this.el("sempre_no_topo").checked, click_through: this.el("click_through").checked,
-      atalhos: { falar: txt("atalho_falar", c.atalhos.falar), parar: txt("atalho_parar", c.atalhos.parar), mostrar: txt("atalho_mostrar", c.atalhos.mostrar) },
+      atalhos: { ...this.atalhos },
     };
   }
 
   private async salvar() {
     const novo = this.lerFormulario();
     if (novo.variantes.length === 0) novo.variantes = [novo.nome];
+    const erros = validarAtalhos(novo.atalhos);
+    for (const acao of ACOES_ATALHO) {
+      if (erros[acao]) continue;
+      try { await invoke("validar_atalho", { combinacao: novo.atalhos[acao] }); }
+      catch (e) { erros[acao] = `O Windows não aceita essa combinação (${String(e)}).`; }
+    }
+    this.marcarAtalhos(erros);
+    if (Object.keys(erros).length) { this.dizer("Corrija os atalhos marcados antes de salvar.", true); return; }
     const exigeReinicio = (["openjarvis_url", "ponte_url", "voz_url", "nome", "idioma", "voz", "velocidade", "finish_ms", "limiar_vad", "instrucao_formato"] as const)
       .some((k) => novo[k] !== this.cfg[k]) || JSON.stringify(novo.variantes) !== JSON.stringify(this.cfg.variantes)
       || JSON.stringify(novo.atalhos) !== JSON.stringify(this.cfg.atalhos);

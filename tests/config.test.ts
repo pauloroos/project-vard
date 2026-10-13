@@ -29,6 +29,14 @@ describe("carregarConfig", () => {
     expect(c.atalhos.parar).toBe(CONFIG_PADRAO.atalhos.parar);
     expect(c.atalhos.mostrar).toBe(CONFIG_PADRAO.atalhos.mostrar);
   });
+
+  it("atalhos novos têm padrão e o salvo antigo (só três) continua valendo", async () => {
+    invoke.mockResolvedValue({ atalhos: { falar: "Ctrl+Shift+F", parar: "Ctrl+Alt+Period", mostrar: "Ctrl+Alt+V" } });
+    const c = await carregarConfig();
+    expect(c.atalhos.falar).toBe("Ctrl+Shift+F");
+    expect(c.atalhos.config).toBe("Ctrl+Alt+Comma");
+    expect(c.atalhos.escuta).toBe("Ctrl+Alt+M");
+  });
 });
 
 describe("carregarConfig com arquivo ruim", () => {

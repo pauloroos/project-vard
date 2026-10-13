@@ -1,9 +1,59 @@
 use base64::Engine;
+use serde::Serialize;
 use serde_json::Value;
 use std::{
     fs,
     path::{Path, PathBuf},
+    sync::Mutex,
 };
+
+/// Ações com atalho global: chave em `atalhos` na config e o padrão. Mesma ordem de ACOES_ATALHO no front.
+pub const ATALHOS: [(&str, &str); 5] = [
+    ("falar", "Ctrl+Alt+Space"),
+    ("parar", "Ctrl+Alt+Period"),
+    ("mostrar", "Ctrl+Alt+V"),
+    ("config", "Ctrl+Alt+Comma"),
+    ("escuta", "Ctrl+Alt+M"),
+];
+
+#[derive(Serialize, Clone, Debug, PartialEq)]
+pub struct FalhaAtalho {
+    pub chave: String,
+    pub combinacao: String,
+    pub erro: String,
+}
+
+/// Atalhos que não registraram no arranque (combinação inválida ou já usada por outro programa).
+#[derive(Default)]
+pub struct FalhasDeAtalho(pub Mutex<Vec<FalhaAtalho>>);
+
+/// Combinação da config para a ação `chave`, ou o padrão.
+pub fn atalho_da_config(config: &Value, chave: &str, padrao: &str) -> String {
+    config
+        .get("atalhos")
+        .and_then(|a| a.get(chave))
+        .and_then(|v| v.as_str())
+        .unwrap_or(padrao)
+        .to_string()
+}
+
+/// Ok se o plugin global-shortcut entende a combinação (o mesmo parser do registro).
+pub fn validar_combinacao(combinacao: &str) -> Result<(), String> {
+    combinacao
+        .parse::<tauri_plugin_global_shortcut::Shortcut>()
+        .map(|_| ())
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn validar_atalho(combinacao: String) -> Result<(), String> {
+    validar_combinacao(&combinacao)
+}
+
+#[tauri::command]
+pub fn falhas_de_atalho(estado: tauri::State<'_, FalhasDeAtalho>) -> Vec<FalhaAtalho> {
+    estado.0.lock().map(|v| v.clone()).unwrap_or_default()
+}
 
 /// Caminho do arquivo de config dentro de um diretório (separado para ser testável).
 pub fn caminho_em(dir: &Path) -> PathBuf {
@@ -159,6 +209,27 @@ pub fn capturar_tela(window: tauri::Window) -> Result<String, String> {
 #[cfg(test)]
 mod testes {
     use super::*;
+
+    #[test]
+    fn padroes_de_atalho_sao_validos() {
+        for (chave, padrao) in ATALHOS {
+            assert!(validar_combinacao(padrao).is_ok(), "{chave}: {padrao}");
+        }
+    }
+
+    #[test]
+    fn combinacao_invalida_e_recusada() {
+        assert!(validar_combinacao("Ctrl+Alt+Banana").is_err());
+        assert!(validar_combinacao("").is_err());
+    }
+
+    #[test]
+    fn atalho_da_config_usa_salvo_ou_padrao() {
+        let c = serde_json::json!({ "atalhos": { "escuta": "Ctrl+Shift+E" } });
+        assert_eq!(atalho_da_config(&c, "escuta", "Ctrl+Alt+M"), "Ctrl+Shift+E");
+        assert_eq!(atalho_da_config(&c, "config", "Ctrl+Alt+Comma"), "Ctrl+Alt+Comma");
+        assert_eq!(atalho_da_config(&Value::Null, "falar", "Ctrl+Alt+Space"), "Ctrl+Alt+Space");
+    }
 
     #[test]
     fn caminho_em_termina_em_hud_config_json() {

@@ -2,6 +2,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { carregarConfig } from "./config/config";
+import type { FalhaAtalho } from "./config/atalhos";
 import { abrirMicrofone, definirMudo, fecharMicrofone, estaMudo, onAmostras, rmsAtual, taxaAtual } from "./audio/microfone";
 import { DetectorDeVoz } from "./audio/vad";
 import { pcmParaWav, reamostrar } from "./audio/wav";
@@ -38,6 +39,11 @@ window.addEventListener("DOMContentLoaded", async () => {
     aoTela: () => olharTela(),
   });
   hud.dica("clique para ligar o ouvido");
+  // Atalhos que o Windows recusou no arranque (outro programa já usa): avisa uma vez na linha de estado.
+  try {
+    const falhas = await invoke<FalhaAtalho[]>("falhas_de_atalho");
+    if (falhas.length) hud.dica(`atalho ${falhas.map((f) => f.combinacao).join(", ")} não registrou; veja Configurações`);
+  } catch { /* fora do Tauri */ }
 
   if (import.meta.env.DEV && import.meta.env.VITE_PROVA) {
     // Só em desenvolvimento: força um estado visual com analisadores sintéticos (para capturas de tela).
@@ -325,5 +331,7 @@ window.addEventListener("DOMContentLoaded", async () => {
   });
   await listen("parar", () => { conversa.interromper(); });
   await listen("abrir-configuracoes", () => { void painel.abrir(); });
+  await listen("alternar-escuta", () => { void alternarMicrofone(); });
+  await listen("alternar-configuracoes", () => { if (painel.aberto()) painel.fechar(); else void painel.abrir(); });
   await listen<boolean>("sempre-no-topo", (ev) => { cfg.sempre_no_topo = ev.payload; hud.atualizarTopo(); });
 });

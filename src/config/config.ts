@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import type { AcaoAtalho } from "./atalhos";
 
 export interface Config {
   openjarvis_url: string; gui_url: string; ponte_url: string;
@@ -7,7 +8,7 @@ export interface Config {
   nome: string; usuario: string; variantes: string[]; idioma: string; voz: string; velocidade: number;
   finish_ms: number; limiar_vad: number; sempre_no_topo: boolean; click_through: boolean;
   posicao: { x: number; y: number } | null;
-  atalhos: { falar: string; parar: string; mostrar: string };
+  atalhos: Record<AcaoAtalho, string>;
   instrucao_formato: string;
 }
 
@@ -16,7 +17,10 @@ export const CONFIG_PADRAO: Config = {
   voz_url: "http://127.0.0.1:4710",
   nome: "vard", usuario: "", variantes: ["vard", "varde", "vardi", "ward", "bard"], idioma: "pt", voz: "pm_alex", velocidade: 1.05,
   finish_ms: 900, limiar_vad: 0.02, sempre_no_topo: true, click_through: false, posicao: null,
-  atalhos: { falar: "Ctrl+Alt+Space", parar: "Ctrl+Alt+Period", mostrar: "Ctrl+Alt+V" },
+  atalhos: {
+    falar: "Ctrl+Alt+Space", parar: "Ctrl+Alt+Period", mostrar: "Ctrl+Alt+V",
+    config: "Ctrl+Alt+Comma", escuta: "Ctrl+Alt+M",
+  },
   instrucao_formato: "Responda em até duas frases, para ser lido em voz alta.",
 };
 

@@ -1,0 +1,42 @@
+import { describe, it, expect } from "vitest";
+import { combinacaoDoEvento, conflitos, exibirAtalho, normalizarAtalho, validarAtalhos } from "../src/config/atalhos";
+import { CONFIG_PADRAO } from "../src/config/config";
+
+const ev = (code: string, mods: Partial<Record<"ctrlKey" | "altKey" | "shiftKey" | "metaKey", boolean>> = {}) =>
+  ({ code, ctrlKey: false, altKey: false, shiftKey: false, metaKey: false, ...mods });
+
+describe("atalhos", () => {
+  it("normaliza_variacoes", () => {
+    expect(normalizarAtalho("ctrl+alt+.")).toBe("Ctrl+Alt+Period");
+    expect(normalizarAtalho("Alt + Ctrl + m")).toBe("Ctrl+Alt+M");
+    expect(normalizarAtalho("Ctrl+Alt+KeyM")).toBe("Ctrl+Alt+M");
+    expect(normalizarAtalho("Ctrl+Alt+,")).toBe("Ctrl+Alt+Comma");
+    expect(normalizarAtalho("Win+Shift+F5")).toBe("Shift+Super+F5");
+    expect(normalizarAtalho("Control+Alt+space")).toBe("Ctrl+Alt+Space");
+  });
+  it("recusa_invalidos", () => {
+    for (const t of ["M", "Shift+M", "Ctrl+Alt", "Ctrl+M+N", "Ctrl+Alt+Banana", ""]) expect(normalizarAtalho(t)).toBeNull();
+  });
+  it("combinacao_do_evento", () => {
+    expect(combinacaoDoEvento(ev("KeyM", { ctrlKey: true, altKey: true }))).toBe("Ctrl+Alt+M");
+    expect(combinacaoDoEvento(ev("Comma", { ctrlKey: true, altKey: true }))).toBe("Ctrl+Alt+Comma");
+    expect(combinacaoDoEvento(ev("ControlLeft", { ctrlKey: true }))).toBeNull();
+    expect(combinacaoDoEvento(ev("KeyM"))).toBeNull();
+  });
+  it("conflito_detectado", () => {
+    expect(conflitos(CONFIG_PADRAO.atalhos)).toEqual([]);
+    const a = { ...CONFIG_PADRAO.atalhos, escuta: "ctrl+alt+v" };
+    expect(conflitos(a)).toEqual([["mostrar", "escuta"]]);
+    expect(validarAtalhos(a).escuta).toContain("Mostrar/ocultar");
+    expect(validarAtalhos({ ...CONFIG_PADRAO.atalhos, config: "M" }).config).toContain("inválida");
+  });
+  it("padroes_validos", () => {
+    for (const v of Object.values(CONFIG_PADRAO.atalhos)) expect(normalizarAtalho(v)).toBe(v);
+    expect(Object.keys(validarAtalhos(CONFIG_PADRAO.atalhos))).toEqual([]);
+  });
+  it("exibe_amigavel", () => {
+    expect(exibirAtalho("Ctrl+Alt+Comma")).toBe("Ctrl+Alt+,");
+    expect(exibirAtalho("Ctrl+Alt+Space")).toBe("Ctrl+Alt+Espaço");
+    expect(exibirAtalho("Super+F")).toBe("Win+F");
+  });
+});

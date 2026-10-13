@@ -64,6 +64,12 @@ html, body { background: transparent; margin: 0; overflow: hidden; }
 #config input[type="checkbox"] { accent-color: var(--ciano); margin: 0; }
 #cfg-msg { min-height: 20px; margin: 4px 0; line-height: 10px; opacity: 0.95; }
 #cfg-msg.ruim { color: #ffb020; }
+#config .linha-atalho { display: grid; grid-template-columns: 1fr auto; gap: 2px 6px; align-items: center; margin-top: 4px; }
+#config button.atalho { padding: 2px 6px; color: var(--ciano); background: rgba(0, 240, 255, 0.07); border: 1px solid rgba(0, 240, 255, 0.35); border-radius: 4px; font: inherit; cursor: pointer; }
+#config button.atalho.ouvindo { border-style: dashed; }
+#config button.atalho.aviso { border-color: #ffb020; color: #ffd070; }
+#config .motivo { grid-column: 1 / -1; color: #ffd070; }
+#config .nota { margin: 4px 0 0; opacity: 0.75; }
 #config .acoes { display: flex; gap: 6px; justify-content: flex-end; padding-bottom: 4px; }
 #config .acoes button {
   padding: 4px 8px; color: var(--ciano); background: rgba(0, 240, 255, 0.08); border: 1px solid rgba(0, 240, 255, 0.45);

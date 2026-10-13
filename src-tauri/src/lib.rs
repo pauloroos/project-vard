@@ -21,46 +21,34 @@ fn alternar_visibilidade(app: &AppHandle) {
     }
 }
 
-fn atalho(config: &Value, chave: &str, padrao: &str) -> String {
-    config
-        .get("atalhos")
-        .and_then(|a| a.get(chave))
-        .and_then(|v| v.as_str())
-        .unwrap_or(padrao)
-        .to_string()
+fn acionar(app: &AppHandle, chave: &str, estado: ShortcutState) {
+    match (chave, estado) {
+        ("falar", ShortcutState::Pressed) => { let _ = app.emit_to(JANELA, "ptt-inicio", ()); }
+        ("falar", ShortcutState::Released) => { let _ = app.emit_to(JANELA, "ptt-fim", ()); }
+        (_, ShortcutState::Released) => {}
+        ("parar", _) => { let _ = app.emit_to(JANELA, "parar", ()); }
+        ("mostrar", _) => alternar_visibilidade(app),
+        ("escuta", _) => { let _ = app.emit_to(JANELA, "alternar-escuta", ()); }
+        ("config", _) => {
+            // Provisório: a Tarefa 3 troca por janelas::alternar_configuracoes (janela própria).
+            if let Some(w) = app.get_webview_window(JANELA) { let _ = w.show(); }
+            let _ = app.emit_to(JANELA, "alternar-configuracoes", ());
+        }
+        _ => {}
+    }
 }
 
 fn registrar_atalhos(app: &AppHandle, config: &Value) {
     let gs = app.global_shortcut();
-    let falar = atalho(config, "falar", "Ctrl+Alt+Space");
-    let parar = atalho(config, "parar", "Ctrl+Alt+Period");
-    let mostrar = atalho(config, "mostrar", "Ctrl+Alt+V");
-
-    let h = app.clone();
-    if let Err(e) = gs.on_shortcut(falar.as_str(), move |_, _, ev| {
-        let nome = match ev.state() {
-            ShortcutState::Pressed => "ptt-inicio",
-            ShortcutState::Released => "ptt-fim",
-        };
-        let _ = h.emit_to(JANELA, nome, ());
-    }) {
-        eprintln!("atalho falar ({falar}): {e}");
-    }
-    let h = app.clone();
-    if let Err(e) = gs.on_shortcut(parar.as_str(), move |_, _, ev| {
-        if ev.state() == ShortcutState::Pressed {
-            let _ = h.emit_to(JANELA, "parar", ());
+    for (chave, padrao) in comandos::ATALHOS {
+        let combinacao = comandos::atalho_da_config(config, chave, padrao);
+        let h = app.clone();
+        if let Err(e) = gs.on_shortcut(combinacao.as_str(), move |_, _, ev| acionar(&h, chave, ev.state())) {
+            eprintln!("atalho {chave} ({combinacao}): {e}");
+            if let Ok(mut falhas) = app.state::<comandos::FalhasDeAtalho>().0.lock() {
+                falhas.push(comandos::FalhaAtalho { chave: chave.to_string(), combinacao: combinacao.clone(), erro: e.to_string() });
+            }
         }
-    }) {
-        eprintln!("atalho parar ({parar}): {e}");
-    }
-    let h = app.clone();
-    if let Err(e) = gs.on_shortcut(mostrar.as_str(), move |_, _, ev| {
-        if ev.state() == ShortcutState::Pressed {
-            alternar_visibilidade(&h);
-        }
-    }) {
-        eprintln!("atalho mostrar ({mostrar}): {e}");
     }
 }
 
@@ -105,6 +93,7 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
+        .manage(comandos::FalhasDeAtalho::default())
         .invoke_handler(tauri::generate_handler![
             comandos::ler_config,
             comandos::gravar_config,
@@ -113,7 +102,9 @@ pub fn run() {
             comandos::capturar_tela,
             comandos::abrir_url,
             comandos::inicio_no_logon_ativo,
-            comandos::definir_inicio_no_logon
+            comandos::definir_inicio_no_logon,
+            comandos::validar_atalho,
+            comandos::falhas_de_atalho
         ])
         .setup(|app| {
             let handle = app.handle().clone();
