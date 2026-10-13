@@ -364,5 +364,7 @@ export class Conversa {
     this.pergunta = null;
     this.d.boca.parar();
     if (this.estado === "falando" || this.estado === "pensando") this.mudar("repouso");
+    // Canal órfão (relógio limpo ao perguntar): rearma para o canal fechar sozinho depois de conversa_ms.
+    if (this.canalAte > 0 && !this.relogioCanal) this.abrirCanal();
   }
 }

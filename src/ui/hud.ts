@@ -113,10 +113,10 @@ export class Hud {
     this.pintar();
   }
 
-  /** Compacto: só o holograma; a barra aparece com o mouse em cima. Também chamado quando o painel muda a config. */
   /** Modo invisível: só opacidade (a janela nunca é escondida, para os timers do VAD seguirem). */
   setInvisivel(oculto: boolean) { this.raiz.classList.toggle("invisivel", oculto); }
 
+  /** Compacto: só o holograma; a barra aparece com o mouse em cima. Também chamado quando o painel muda a config. */
   setCompacto(c: boolean) {
     this.raiz.classList.toggle("compacto", c);
     this.botaoModo.title = c ? "Expandir" : "Compacto";

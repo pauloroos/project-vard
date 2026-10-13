@@ -10,9 +10,8 @@ html, body { background: transparent; margin: 0; overflow: hidden; }
 #app {
   position: relative; width: calc(320px * var(--escala)); height: calc(360px * var(--escala)); background: transparent;
   font-family: var(--mono); text-transform: uppercase; letter-spacing: 0.14em; color: var(--ciano);
-  user-select: none;
+  user-select: none; transition: opacity 0.3s ease;
 }
-#app { transition: opacity 0.3s ease; }
 #app.invisivel { opacity: 0; pointer-events: none; }
 #nucleo { position: absolute; left: 0; top: 0; display: block; cursor: move; }
 
