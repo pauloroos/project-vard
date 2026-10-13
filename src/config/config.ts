@@ -16,6 +16,8 @@ export interface Config {
   compacto: boolean;
   atalhos: Record<AcaoAtalho, string>;
   instrucao_formato: string;
+  /** Modelo principal do OpenJarvis; vazio = o primeiro que ele expõe. */
+  modelo: string;
 }
 
 export const CONFIG_PADRAO: Config = {
@@ -29,6 +31,7 @@ export const CONFIG_PADRAO: Config = {
     config: "Ctrl+Alt+Comma", escuta: "Ctrl+Alt+E",
   },
   instrucao_formato: "Responda em até duas frases, para ser lido em voz alta.",
+  modelo: "",
 };
 
 /** Mescla o salvo com o padrão descartando o que tem tipo errado (arquivo editado à mão). */
@@ -96,7 +99,7 @@ export function avisosDeUrl(c: Pick<Config, "openjarvis_url" | "gui_url" | "pont
 }
 
 /** Chaves que o widget aplica na hora (evento config-salva). O resto só vale depois de reiniciar. */
-export const CHAVES_AO_VIVO = ["tamanho", "tamanho_px", "compacto", "sempre_no_topo", "click_through", "usuario"] as const satisfies readonly (keyof Config)[];
+export const CHAVES_AO_VIVO = ["tamanho", "tamanho_px", "compacto", "sempre_no_topo", "click_through", "usuario", "modelo"] as const satisfies readonly (keyof Config)[];
 export type ChaveAoVivo = (typeof CHAVES_AO_VIVO)[number];
 
 /** Copia para a config viva do widget só as chaves ao vivo; devolve as que mudaram. */
@@ -130,8 +133,8 @@ export function lerConfigAoVivo(x: unknown): Pick<Config, ChaveAoVivo> | null {
   if (!(TAMANHOS as readonly unknown[]).includes(o.tamanho)) return null;
   if (typeof px !== "number" || !Number.isFinite(px) || px < 160 || px > 800) return null;
   if (typeof o.compacto !== "boolean" || typeof o.sempre_no_topo !== "boolean" || typeof o.click_through !== "boolean") return null;
-  if (typeof o.usuario !== "string") return null;
-  return { tamanho: o.tamanho as Config["tamanho"], tamanho_px: px, compacto: o.compacto, sempre_no_topo: o.sempre_no_topo, click_through: o.click_through, usuario: o.usuario };
+  if (typeof o.usuario !== "string" || typeof o.modelo !== "string") return null;
+  return { tamanho: o.tamanho as Config["tamanho"], tamanho_px: px, compacto: o.compacto, sempre_no_topo: o.sempre_no_topo, click_through: o.click_through, usuario: o.usuario, modelo: o.modelo };
 }
 
 /** Valida o payload de config-mudou-no-widget (topo e compacto); inválido devolve null. */

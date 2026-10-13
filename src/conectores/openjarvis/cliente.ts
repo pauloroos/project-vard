@@ -9,11 +9,19 @@ async function comTimeout<T>(ms: number, f: (sinal: AbortSignal) => Promise<T>, 
   try { return await f(ac.signal); } finally { clearTimeout(t); externo?.removeEventListener("abort", repassar); }
 }
 
+/** O preferido se o núcleo ainda o expõe; senão o primeiro (caiu = true quando havia um preferido). null sem modelos. */
+export function escolherModelo(ids: string[], preferido: string): { id: string; caiu: boolean } | null {
+  if (ids.length === 0) return null;
+  const p = preferido.trim();
+  if (p && ids.includes(p)) return { id: p, caiu: false };
+  return { id: ids[0], caiu: p !== "" };
+}
+
 export class OpenJarvis implements Conector {
   private modelo: string | null = null;
   private base: string;
 
-  constructor(base: string) { this.base = base.replace(/\/+$/, ""); }
+  constructor(base: string, private preferido = "") { this.base = base.replace(/\/+$/, ""); }
 
   async saude(): Promise<boolean> {
     try {
@@ -49,14 +57,14 @@ export class OpenJarvis implements Conector {
     return ((j?.data ?? []) as { id?: string }[]).map((m) => String(m.id ?? "")).filter(Boolean);
   }
 
+  definirModelo(preferido: string) { this.preferido = preferido; this.modelo = null; }
+
   private async idModelo(): Promise<string> {
     if (this.modelo) return this.modelo;
-    const r = await comTimeout(5000, (signal) => fetch(`${this.base}/v1/models`, { signal }));
-    if (!r.ok) throw new Error(`modelos HTTP ${r.status}`);
-    const j = await r.json();
-    const id = j?.data?.[0]?.id;
-    if (!id) throw new Error("nenhum modelo");
-    this.modelo = id as string;
+    const escolha = escolherModelo(await this.modelos(), this.preferido);
+    if (!escolha) throw new Error("nenhum modelo");
+    if (escolha.caiu) console.warn(`modelo ${this.preferido} não está mais no OpenJarvis; usando ${escolha.id}`);
+    this.modelo = escolha.id;
     return this.modelo;
   }
 

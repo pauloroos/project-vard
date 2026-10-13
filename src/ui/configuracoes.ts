@@ -4,18 +4,22 @@ import { avisosDeUrl, mudancasQueExigemReinicio, salvarConfig, urlLocal } from "
 import { ACOES_ATALHO, ROTULOS_ATALHO, validarAtalhos, type AcaoAtalho, type FalhaAtalho } from "../config/atalhos";
 import { campoAtalho } from "./campo-atalho";
 import type { OpenJarvis } from "../conectores/openjarvis/cliente";
+import type { StatusPonte } from "../conectores/ponte/cliente";
+import { AbaModelos } from "./aba-modelos";
 
 export interface DepsConfiguracoes {
   /** Cliente do OpenJarvis para o endereço dado (o main decide se passa pelo proxy do dev). */
-  criarOj: (url: string) => OpenJarvis;
+  criarOj: (url: string, modelo?: string) => OpenJarvis;
+  /** Status da ponte no endereço dado (null = fora ou desligada). */
+  statusPonte: (url: string) => Promise<StatusPonte | null>;
   /** Depois de gravar: o main avisa o widget (evento config-salva). */
   aoSalvar?: (c: Config) => void;
   /** Fecha a janela do painel. */
   fechar?: () => void;
 }
 
-export type Aba = "geral" | "voz" | "atalhos" | "ponte";
-const ABAS: [Aba, string][] = [["geral", "Geral"], ["voz", "Voz"], ["atalhos", "Atalhos"], ["ponte", "Ponte"]];
+export type Aba = "geral" | "voz" | "atalhos" | "modelos" | "ponte";
+const ABAS: [Aba, string][] = [["geral", "Geral"], ["voz", "Voz"], ["atalhos", "Atalhos"], ["modelos", "Modelos"], ["ponte", "Ponte"]];
 const OPCOES_TAMANHO: [Config["tamanho"], string][] = [
   ["pequeno", "Pequeno (240 px)"], ["medio", "Médio (320 px)"], ["grande", "Grande (480 px)"], ["personalizado", "Personalizado"],
 ];
@@ -29,6 +33,7 @@ export class Configuracoes {
   private logonGuardado = false;
   private atalhos: Config["atalhos"];
   private falhas: FalhaAtalho[] = [];
+  private modelos: AbaModelos | null = null;
   private linhasAtalho = new Map<AcaoAtalho, { campo: HTMLButtonElement; motivo: HTMLElement }>();
 
   constructor(private cfg: Config, private raiz: HTMLElement, private deps: DepsConfiguracoes) {
@@ -38,6 +43,11 @@ export class Configuracoes {
   /** Desenha as abas e lê o que só o Rust sabe (início no logon, atalhos que não registraram). */
   async montar() {
     this.desenhar();
+    this.modelos = new AbaModelos(this.raiz.querySelector<HTMLElement>("#cfg-modelos")!, this.cfg.modelo, {
+      criarOj: (modelo) => this.deps.criarOj(this.cfg.openjarvis_url, modelo),
+      statusPonte: () => this.deps.statusPonte(this.cfg.ponte_url),
+    });
+    void this.modelos.carregar();
     this.abrirAba("geral");
     try { this.logonGuardado = await invoke<boolean>("inicio_no_logon_ativo"); } catch { this.logonGuardado = false; }
     this.logon.checked = this.logonGuardado;
@@ -119,6 +129,7 @@ export class Configuracoes {
         ${this.campo("ponte_url", "Ponte do Vard (opcional; vazio desliga)", c.ponte_url)}
         <p class="nota">A ponte dá olhos na tela e modo jogo. Sem ela o widget funciona igual. Veja docs/ponte-do-vard.md.</p>
       </section>
+      <section data-aba="modelos" id="cfg-modelos"></section>
       <footer>
         <div id="cfg-msg" role="status"></div>
         <div class="acoes"><button id="cfg-salvar" type="button">Salvar</button><button id="cfg-fechar" type="button">Fechar</button></div>
@@ -190,6 +201,7 @@ export class Configuracoes {
       compacto: this.el("compacto").checked,
       sempre_no_topo: this.el("sempre_no_topo").checked, click_through: this.el("click_through").checked,
       atalhos: { ...this.atalhos },
+      modelo: this.modelos?.escolhido ?? c.modelo,
     };
   }
 

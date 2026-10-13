@@ -62,7 +62,7 @@ window.addEventListener("DOMContentLoaded", async () => {
 
   // No `tauri dev` a origem do webview (localhost:1420) é recusada pelo CORS do OpenJarvis; o Vite faz a ponte em /oj.
   const base = import.meta.env.DEV ? `${location.origin}/oj` : cfg.openjarvis_url;
-  const oj = new OpenJarvis(base);
+  const oj = new OpenJarvis(base, cfg.modelo);
   // Voz própria opcional (docs/voz-propria.md). Vazio desliga: a voz fica sempre a do OpenJarvis.
   const voz = cfg.voz_url.trim() ? new Voz(cfg.voz_url.trim()) : null;
 
@@ -350,6 +350,7 @@ window.addEventListener("DOMContentLoaded", async () => {
       hud.atualizarTopo();
     }
     if (mudou.includes("click_through")) aplicarClickThrough(cfg.click_through);
+    if (mudou.includes("modelo")) oj.definirModelo(cfg.modelo);
     if (mudou.includes("usuario")) void fixa(saudacaoPara(cfg.usuario), false).catch(() => {}); // aquece a saudação nova
   };
   await listen<unknown>("config-salva", (ev) => { void aplicarConfigSalva(ev.payload); });

@@ -1,5 +1,5 @@
 // Cliente da ponte opcional do Vard (127.0.0.1:4700). Sem ponte o HUD funciona igual: tudo aqui falha em silêncio.
-export interface StatusPonte { ok: boolean; modo: string; detalhe?: string }
+export interface StatusPonte { ok: boolean; modo: string; detalhe?: string; reserva?: string }
 
 /** Erro da ponte com o código curto (`modelo_fora`, `segredos`...) que vira fala fixa em FALAS.erros. */
 export class ErroPonte extends Error {
@@ -32,7 +32,8 @@ export class Ponte {
         if (!r.ok) return null;
         const j = await r.json();
         const detalhe = typeof j.detalhe === "string" && j.detalhe ? j.detalhe : undefined;
-        return { ok: j.openjarvis === true && j.lmstudio === true, modo: String(j.modo ?? ""), detalhe };
+        const reserva = typeof j.reserva === "string" && j.reserva.trim() ? j.reserva.trim() : undefined;
+        return { ok: j.openjarvis === true && j.lmstudio === true, modo: String(j.modo ?? ""), detalhe, reserva };
       });
     } catch { return null; }
   }

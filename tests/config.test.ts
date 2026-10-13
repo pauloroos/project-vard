@@ -128,12 +128,12 @@ describe("salvar no painel", () => {
 });
 
 describe("payloads entre janelas", () => {
-  const ok = { tamanho: "grande", tamanho_px: 480, compacto: false, sempre_no_topo: true, click_through: false, usuario: "Ana" };
+  const ok = { tamanho: "grande", tamanho_px: 480, compacto: false, sempre_no_topo: true, click_through: false, usuario: "Ana", modelo: "" };
   it("aceita_payload_valido", () => { expect(lerConfigAoVivo({ ...ok, extra: 1 })).toEqual(ok); });
   it("recusa_tipos_e_faixas_ruins", () => {
     for (const ruim of [null, "x", 3, { ...ok, tamanho: "enorme" }, { ...ok, tamanho_px: 100 }, { ...ok, tamanho_px: 900 },
       { ...ok, tamanho_px: "320" }, { ...ok, tamanho_px: NaN }, { ...ok, compacto: "sim" }, { ...ok, sempre_no_topo: 1 },
-      { ...ok, click_through: null }, { ...ok, usuario: 5 }]) expect(lerConfigAoVivo(ruim)).toBeNull();
+      { ...ok, click_through: null }, { ...ok, usuario: 5 }, { ...ok, modelo: 7 }]) expect(lerConfigAoVivo(ruim)).toBeNull();
   });
   it("topo_e_compacto", () => {
     expect(lerTopoCompacto({ sempre_no_topo: true, compacto: false })).toEqual({ sempre_no_topo: true, compacto: false });
