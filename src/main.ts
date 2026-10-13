@@ -77,7 +77,8 @@ window.addEventListener("DOMContentLoaded", async () => {
     espelho = reduzir(espelho, ev);
     if (salaAberta) void emitTo("sala", "sala:espelho", ev).catch(() => {});
   };
-  const mostrarEstado = (e: Estado, detalhe = "") => { invisibilidade.definirEstado(e); nucleo.setEstado(e); hud.setEstado(e, detalhe); paraSala({ tipo: "estado", estado: e, detalhe }); };
+  // `revela`: false no "pensando" da transcrição sem push-to-talk; antes do nome ser dito o modo invisível não pode aparecer.
+  const mostrarEstado = (e: Estado, detalhe = "", revela = true) => { if (revela) invisibilidade.definirEstado(e); nucleo.setEstado(e); hud.setEstado(e, detalhe); paraSala({ tipo: "estado", estado: e, detalhe }); };
   const mostrarOuvido = (t: string) => { hud.setOuvido(t); paraSala({ tipo: "ouvido", texto: t }); };
   const mostrarResposta = (t: string) => { hud.setResposta(t); paraSala({ tipo: "resposta", texto: t }); };
   hud.dica("clique para ligar o ouvido");
@@ -246,7 +247,7 @@ window.addEventListener("DOMContentLoaded", async () => {
       return;
     }
     ocupado = true;
-    mostrarEstado("pensando");
+    mostrarEstado("pensando", "", pushToTalk);
     try {
       const wav = pcmParaWav(reamostrar(tudo, taxaAtual(), 16000), 16000);
       let texto: string;
