@@ -536,6 +536,18 @@ describe("modo conversa", () => {
     await c.aoTextoTranscrito("e depois", false);
     expect(oj.perguntar).toHaveBeenCalledTimes(2); // nome exigido de novo
   });
+  it("resposta_longa_nao_fecha_o_canal_no_meio", async () => {
+    await c.aoTextoTranscrito("Vard, oi", false);
+    expect(canal).toEqual([true]);
+    boca.tocar.mockImplementation(() => new Promise<void>((r) => setTimeout(r, 30000)));
+    const p = c.aoTextoTranscrito("que horas são", false);
+    await vi.advanceTimersByTimeAsync(25000);
+    expect(canal).toEqual([true]); // sem false no meio
+    await vi.advanceTimersByTimeAsync(6000);
+    await p;
+    expect(canal).toEqual([true]); // sem pisca true/false/true
+    expect(c.canalAberto()).toBe(true);
+  });
   it("cada_troca_rearma_o_relogio", async () => {
     await c.aoTextoTranscrito("Vard, oi", false);
     vi.advanceTimersByTime(15000);

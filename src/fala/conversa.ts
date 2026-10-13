@@ -82,7 +82,7 @@ export class Conversa {
   private abrirCanal() {
     const ms = this.d.config.conversa_ms;
     if (!(ms > 0)) return;
-    const estava = this.canalAberto();
+    const estava = this.canalAte > 0; // simétrico ao fecharCanal: não depende do relógio
     this.canalAte = Date.now() + ms;
     if (this.relogioCanal) clearTimeout(this.relogioCanal);
     this.relogioCanal = setTimeout(() => this.fecharCanal(), ms);
@@ -243,6 +243,8 @@ export class Conversa {
     }
 
     this.mudar("pensando");
+    // O relógio velho não pode fechar o canal no meio de uma resposta longa (pisca no modo invisível): o canal segue "aberto" e o fim da resposta rearma.
+    if (this.relogioCanal) { clearTimeout(this.relogioCanal); this.relogioCanal = null; }
     this.pergunta?.abort();
     const ac = new AbortController();
     this.pergunta = ac;
