@@ -310,22 +310,64 @@ fn host_do_github(host: &str) -> bool {
     HOSTS_RELEASE.contains(&host) || host.strip_suffix(".githubusercontent.com").is_some_and(|p| !p.is_empty())
 }
 
-/// Só https nos hosts do GitHub (e, em build de desenvolvimento, http em 127.0.0.1/localhost para o harness).
-pub fn host_permitido(url: &str, dev: bool) -> bool {
-    let (esquema, resto) = match url.split_once("://") {
-        Some(x) => x,
-        None => return false,
-    };
-    let autoridade = resto.split(['/', '?', '#']).next().unwrap_or("");
-    if autoridade.contains('@') {
-        return false;
+fn local(host: &str) -> bool {
+    host == "127.0.0.1" || host == "localhost"
+}
+
+/// Interpreta o endereço como o cliente HTTP o interpretaria (barra invertida, porta, usuário) e devolve o `Url` se a regra de
+/// hosts passar: https em hosts do GitHub, porta padrão, sem usuário/senha; em build de desenvolvimento, também http local
+/// (qualquer porta) para o harness.
+fn url_permitida(url: &str, dev: bool) -> Option<url::Url> {
+    let u = url::Url::parse(url).ok()?;
+    if !u.username().is_empty() || u.password().is_some() {
+        return None;
     }
-    let host = autoridade.split(':').next().unwrap_or("").to_ascii_lowercase();
-    match esquema {
-        "https" => host_do_github(&host),
-        "http" => dev && (host == "127.0.0.1" || host == "localhost"),
+    let host = u.host_str()?.to_ascii_lowercase();
+    let ok = match u.scheme() {
+        "https" => matches!(u.port(), None | Some(443)) && host_do_github(&host),
+        "http" => dev && local(&host),
         _ => false,
+    };
+    ok.then_some(u)
+}
+
+/// Regra de hosts (sem caminho).
+pub fn host_permitido(url: &str, dev: bool) -> bool {
+    url_permitida(url, dev).is_some()
+}
+
+/// Endereço da API de releases do projeto: api.github.com/repos/pauloroos/project-vard/ (em dev, qualquer caminho local).
+pub fn endereco_de_release_permitido(url: &str, dev: bool) -> bool {
+    match url_permitida(url, dev) {
+        Some(u) => match u.host_str().map(str::to_ascii_lowercase).as_deref() {
+            Some("api.github.com") => u.path().starts_with("/repos/pauloroos/project-vard/"),
+            Some(h) => dev && local(h),
+            None => false,
+        },
+        None => false,
     }
+}
+
+/// Endereço do instalador: github.com/pauloroos/project-vard/releases/download/ (em dev, qualquer caminho local). A CDN dos
+/// assets só entra por redirecionamento.
+pub fn endereco_de_download_permitido(url: &str, dev: bool) -> bool {
+    match url_permitida(url, dev) {
+        Some(u) => match u.host_str().map(str::to_ascii_lowercase).as_deref() {
+            Some("github.com") => u.path().starts_with("/pauloroos/project-vard/releases/download/"),
+            Some(h) => dev && local(h),
+            None => false,
+        },
+        None => false,
+    }
+}
+
+/// Confere o sha256 (hex, sem diferença de maiúsculas; aceita o prefixo "sha256:") do conteúdo.
+pub fn sha256_confere(bytes: &[u8], esperado: &str) -> bool {
+    use sha2::{Digest, Sha256};
+    let esperado = esperado.trim();
+    let esperado = esperado.strip_prefix("sha256:").unwrap_or(esperado);
+    let obtido: String = Sha256::digest(bytes).iter().map(|b| format!("{b:02x}")).collect();
+    obtido.eq_ignore_ascii_case(esperado)
 }
 
 /// Decide se um redirecionamento pode ser seguido: mesma regra do endereço inicial (https só em hosts do GitHub, incluindo
@@ -367,7 +409,7 @@ pub fn versao_do_app(app: tauri::AppHandle) -> String {
 /// GET da API de releases. Só por ação do usuário (botão ou caixa "ao abrir"). Corpo limitado a 1 MB.
 #[tauri::command]
 pub async fn buscar_release(url: String) -> Result<String, String> {
-    if !host_permitido(&url, cfg!(debug_assertions)) {
+    if !endereco_de_release_permitido(&url, cfg!(debug_assertions)) {
         return Err("endereço fora da lista permitida".into());
     }
     tauri::async_runtime::spawn_blocking(move || {
@@ -402,8 +444,8 @@ impl Drop for ApagarSeFalhar {
 
 /// Baixa o -setup.exe da release para a pasta temporária, confere o tamanho, roda o instalador e fecha o Vard.
 #[tauri::command]
-pub async fn instalar_atualizacao(app: tauri::AppHandle, url: String, nome: String, bytes: u64) -> Result<(), String> {
-    if !host_permitido(&url, cfg!(debug_assertions)) {
+pub async fn instalar_atualizacao(app: tauri::AppHandle, url: String, nome: String, bytes: u64, sha256: Option<String>) -> Result<(), String> {
+    if !endereco_de_download_permitido(&url, cfg!(debug_assertions)) {
         return Err("endereço fora da lista permitida".into());
     }
     if !nome_de_instalador_valido(&nome) {
@@ -426,6 +468,12 @@ pub async fn instalar_atualizacao(app: tauri::AppHandle, url: String, nome: Stri
         drop(f);
         if copiados != bytes {
             return Err("o download veio incompleto ou maior que o anunciado; tente de novo".into());
+        }
+        if let Some(esperado) = sha256.as_deref().filter(|e| !e.trim().is_empty()) {
+            let conteudo = fs::read(&caminho).map_err(|e| e.to_string())?;
+            if !sha256_confere(&conteudo, esperado) {
+                return Err("o arquivo baixado não confere (sha256)".into());
+            }
         }
         guarda.1 = false;
         Ok(caminho)
@@ -539,6 +587,45 @@ mod testes {
         assert!(!host_permitido("https://api.github.com.evil.com/", false));
         assert!(!host_permitido("https://user@api.github.com/", false));
         assert!(!host_permitido("ftp://github.com/", false));
+    }
+
+    #[test]
+    fn host_permitido_recusa_barra_invertida_porta_e_usuario() {
+        assert!(!host_permitido(r"https://evil.com\.githubusercontent.com/x", false));
+        assert!(!host_permitido("https://github.com:8443/pauloroos/project-vard/releases/download/v1/a-setup.exe", false));
+        assert!(!host_permitido("https://user@github.com/x", false));
+        assert!(!host_permitido("https://user:senha@github.com/x", false));
+        assert!(host_permitido("https://github.com:443/x", false));
+    }
+
+    #[test]
+    fn caminho_de_release_preso_ao_repositorio() {
+        assert!(endereco_de_release_permitido("https://api.github.com/repos/pauloroos/project-vard/releases/latest", false));
+        assert!(!endereco_de_release_permitido("https://api.github.com/repos/outro/projeto/releases/latest", false));
+        assert!(!endereco_de_release_permitido("https://api.github.com/user", false));
+        assert!(!endereco_de_release_permitido("https://github.com/pauloroos/project-vard/releases/download/v1/a-setup.exe", false));
+        assert!(endereco_de_release_permitido("http://127.0.0.1:9/qualquer", true));
+        assert!(!endereco_de_release_permitido("http://127.0.0.1:9/qualquer", false));
+    }
+
+    #[test]
+    fn caminho_de_download_preso_ao_repositorio() {
+        assert!(endereco_de_download_permitido("https://github.com/pauloroos/project-vard/releases/download/v0.3.0/Vard_0.3.0_x64-setup.exe", false));
+        assert!(!endereco_de_download_permitido("https://github.com/outro/projeto/releases/download/v1/a-setup.exe", false));
+        assert!(!endereco_de_download_permitido("https://github.com/pauloroos/project-vard/archive/main.zip", false));
+        assert!(!endereco_de_download_permitido("https://raw.githubusercontent.com/pauloroos/project-vard/main/a-setup.exe", false));
+        assert!(!endereco_de_download_permitido("https://github.com/pauloroos/project-vard/releases/download/../../x", false));
+        assert!(endereco_de_download_permitido("http://localhost:9/a-setup.exe", true));
+    }
+
+    #[test]
+    fn sha256_confere_ignora_maiusculas() {
+        let h = "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08";
+        assert!(sha256_confere(b"test", h));
+        assert!(sha256_confere(b"test", &h.to_ascii_uppercase()));
+        assert!(sha256_confere(b"test", &format!("sha256:{h}")));
+        assert!(!sha256_confere(b"tesT", h));
+        assert!(!sha256_confere(b"test", ""));
     }
 
     #[test]

@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 // @ts-expect-error módulo .mjs sem tipos
 import { criarServidor } from "./harness/servidor-falso.mjs";
@@ -18,7 +19,9 @@ describe("atualização contra o harness", () => {
     expect(rel.maisNova).toBe(true);
     expect(rel.setup!.nome).toBe("Vard_9.9.9_x64-setup.exe");
     const d = await fetch(rel.setup!.url.replace(/^http:\/\/127\.0\.0\.1:\d+/, base));
-    expect((await d.arrayBuffer()).byteLength).toBe(rel.setup!.bytes);
+    const corpo = Buffer.from(await d.arrayBuffer());
+    expect(corpo.byteLength).toBe(rel.setup!.bytes);
+    expect(rel.setup!.sha256).toBe(createHash("sha256").update(corpo).digest("hex"));
   });
   it("sem_release_e_404", async () => {
     const s2 = criarServidor(); await new Promise<void>((r) => s2.listen(0, "127.0.0.1", () => r()));

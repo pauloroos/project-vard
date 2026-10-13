@@ -21,7 +21,7 @@ window.addEventListener("DOMContentLoaded", async () => {
       // Só o build de desenvolvimento aceita outro endereço (harness); o instalado consulta sempre o GitHub oficial.
       url: import.meta.env.DEV ? (import.meta.env.VITE_RELEASE_URL ?? URL_RELEASE) : URL_RELEASE,
       buscar: (url) => invoke<string>("buscar_release", { url }),
-      instalar: (s) => invoke<void>("instalar_atualizacao", { url: s.url, nome: s.nome, bytes: s.bytes }),
+      instalar: (s) => invoke<void>("instalar_atualizacao", { url: s.url, nome: s.nome, bytes: s.bytes, sha256: s.sha256 }),
       versao: () => invoke<string>("versao_do_app"),
     },
   });

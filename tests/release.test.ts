@@ -6,7 +6,7 @@ const release = {
   html_url: "https://github.com/pauloroos/project-vard/releases/tag/v0.4.0",
   assets: [
     { name: "Vard_0.4.0_x64_en-US.msi", browser_download_url: "https://github.com/x/Vard_0.4.0_x64_en-US.msi", size: 10 },
-    { name: "Vard_0.4.0_x64-setup.exe", browser_download_url: "https://github.com/x/Vard_0.4.0_x64-setup.exe", size: 4321 },
+    { name: "Vard_0.4.0_x64-setup.exe", browser_download_url: "https://github.com/x/Vard_0.4.0_x64-setup.exe", size: 4321, digest: "sha256:ABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABAB" },
   ],
 };
 
@@ -25,8 +25,14 @@ describe("interpretarRelease", () => {
     const r = interpretarRelease(release, "0.3.0")!;
     expect(r.versao).toBe("0.4.0");
     expect(r.maisNova).toBe(true);
-    expect(r.setup).toEqual({ nome: "Vard_0.4.0_x64-setup.exe", url: "https://github.com/x/Vard_0.4.0_x64-setup.exe", bytes: 4321 });
+    expect(r.setup).toEqual({ nome: "Vard_0.4.0_x64-setup.exe", url: "https://github.com/x/Vard_0.4.0_x64-setup.exe", bytes: 4321, sha256: "abababababababababababababababababababababababababababababababab" });
     expect(r.notas).toBe("Notas\n- item");
+  });
+  it("digest_ausente_ou_invalido_vira_null", () => {
+    const a = { ...release.assets[1] } as Record<string, unknown>;
+    delete a.digest;
+    expect(interpretarRelease({ ...release, assets: [a] }, "0.3.0")!.setup!.sha256).toBeNull();
+    expect(interpretarRelease({ ...release, assets: [{ ...a, digest: "md5:abc" }] }, "0.3.0")!.setup!.sha256).toBeNull();
   });
   it("mesma_versao_nao_e_mais_nova", () => { expect(interpretarRelease(release, "0.4.0")!.maisNova).toBe(false); });
   it("sem_setup_vira_null", () => { expect(interpretarRelease({ ...release, assets: [release.assets[0]] }, "0.3.0")!.setup).toBeNull(); });

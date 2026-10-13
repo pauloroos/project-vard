@@ -4,6 +4,7 @@
 // brigar com um serviço de voz de verdade na mesma porta). RELEASE=1 liga a release falsa do GitHub (aba Atualização).
 import http from "node:http";
 import { pathToFileURL } from "node:url";
+import { createHash } from "node:crypto";
 
 /** WAV PCM 16 bits mono com uma senoide de `segundos` segundos. */
 export function senoideWav(segundos = 0.3, freq = 440, taxa = 22050) {
@@ -53,7 +54,7 @@ export function criarServidor({ log = () => {}, release = false } = {}) {
       return json({
         tag_name: "v9.9.9", name: "Vard 9.9.9", body: "Release falsa do harness.\n- só para teste", published_at: "2026-11-01T10:00:00Z",
         html_url: `${base}/release-falsa`,
-        assets: [{ name: "Vard_9.9.9_x64-setup.exe", browser_download_url: `${base}/download/Vard_9.9.9_x64-setup.exe`, size: 1234 }],
+        assets: [{ name: "Vard_9.9.9_x64-setup.exe", browser_download_url: `${base}/download/Vard_9.9.9_x64-setup.exe`, size: 1234, digest: `sha256:${createHash("sha256").update(Buffer.alloc(1234)).digest("hex")}` }],
       });
     }
     if (release && req.method === "GET" && caminho === "/download/Vard_9.9.9_x64-setup.exe") {

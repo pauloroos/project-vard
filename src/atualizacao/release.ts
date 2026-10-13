@@ -3,7 +3,7 @@ export const URL_RELEASE = "https://api.github.com/repos/pauloroos/project-vard/
 
 export interface Release {
   versao: string; nome: string; notas: string; publicadaEm: string; url: string;
-  setup: { nome: string; url: string; bytes: number } | null;
+  setup: { nome: string; url: string; bytes: number; sha256: string | null } | null;
   maisNova: boolean;
 }
 
@@ -38,7 +38,8 @@ export function interpretarRelease(json: unknown, instalada: string): Release | 
     if (typeof a !== "object" || a === null) continue;
     const o = a as Record<string, unknown>;
     if (typeof o.name === "string" && /-setup\.exe$/i.test(o.name) && typeof o.browser_download_url === "string" && typeof o.size === "number") {
-      setup = { nome: o.name, url: o.browser_download_url, bytes: o.size }; break;
+      const m = typeof o.digest === "string" ? /^sha256:([0-9a-f]{64})$/i.exec(o.digest.trim()) : null;
+      setup = { nome: o.name, url: o.browser_download_url, bytes: o.size, sha256: m ? m[1].toLowerCase() : null }; break;
     }
   }
   return {

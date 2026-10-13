@@ -22,7 +22,7 @@ export interface DepsConfiguracoes {
   /** Fecha a janela do painel. */
   fechar?: () => void;
   /** Release do GitHub: endereço da consulta, GET pelo Rust, instalação do setup e versão instalada. */
-  atualizacao: { url: string; buscar: (url: string) => Promise<string>; instalar: (setup: { nome: string; url: string; bytes: number }) => Promise<void>; versao: () => Promise<string> };
+  atualizacao: { url: string; buscar: (url: string) => Promise<string>; instalar: (setup: { nome: string; url: string; bytes: number; sha256: string | null }) => Promise<void>; versao: () => Promise<string> };
 }
 
 /** Monitor como o comando listar_monitores devolve (pixels físicos). */
