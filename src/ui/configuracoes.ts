@@ -6,12 +6,15 @@ import { campoAtalho } from "./campo-atalho";
 import type { OpenJarvis } from "../conectores/openjarvis/cliente";
 import type { StatusPonte } from "../conectores/ponte/cliente";
 import { AbaModelos } from "./aba-modelos";
+import { AbaSistema } from "./aba-sistema";
 
 export interface DepsConfiguracoes {
   /** Cliente do OpenJarvis para o endereço dado (o main decide se passa pelo proxy do dev). */
   criarOj: (url: string, modelo?: string) => OpenJarvis;
   /** Status da ponte no endereço dado (null = fora ou desligada). */
   statusPonte: (url: string) => Promise<StatusPonte | null>;
+  /** Dispara um verbo do ciclo da ponte no endereço dado (true = aceitou). */
+  modoPonte: (url: string, verbo: string) => Promise<boolean>;
   /** Depois de gravar: o main avisa o widget (evento config-salva). */
   aoSalvar?: (c: Config) => void;
   /** Fecha a janela do painel. */
@@ -21,8 +24,8 @@ export interface DepsConfiguracoes {
 /** Monitor como o comando listar_monitores devolve (pixels físicos). */
 export interface MonitorInfo { nome: string; x: number; y: number; largura: number; altura: number; escala: number; principal: boolean }
 
-export type Aba = "geral" | "voz" | "atalhos" | "modelos" | "ponte";
-const ABAS: [Aba, string][] = [["geral", "Geral"], ["voz", "Voz"], ["atalhos", "Atalhos"], ["modelos", "Modelos"], ["ponte", "Ponte"]];
+export type Aba = "geral" | "voz" | "atalhos" | "modelos" | "sistema";
+const ABAS: [Aba, string][] = [["geral", "Geral"], ["voz", "Voz"], ["atalhos", "Atalhos"], ["modelos", "Modelos"], ["sistema", "Sistema"]];
 const OPCOES_TAMANHO: [Config["tamanho"], string][] = [
   ["pequeno", "Pequeno (240 px)"], ["medio", "Médio (320 px)"], ["grande", "Grande (480 px)"], ["personalizado", "Personalizado"],
 ];
@@ -37,6 +40,7 @@ export class Configuracoes {
   private atalhos: Config["atalhos"];
   private falhas: FalhaAtalho[] = [];
   private modelos: AbaModelos | null = null;
+  private sistema: AbaSistema | null = null;
   private linhasAtalho = new Map<AcaoAtalho, { campo: HTMLButtonElement; motivo: HTMLElement }>();
 
   constructor(private cfg: Config, private raiz: HTMLElement, private deps: DepsConfiguracoes) {
@@ -51,6 +55,12 @@ export class Configuracoes {
       statusPonte: () => this.deps.statusPonte(this.cfg.ponte_url),
     });
     void this.modelos.carregar();
+    const urlPonte = () => this.el("ponte_url").value.trim() || this.cfg.ponte_url;
+    this.sistema = new AbaSistema(this.raiz.querySelector<HTMLElement>("#cfg-sistema")!, {
+      statusPonte: () => this.deps.statusPonte(urlPonte()),
+      modo: (v) => this.deps.modoPonte(urlPonte(), v),
+    });
+    this.sistema.montar();
     this.abrirAba("geral");
     try { this.logonGuardado = await invoke<boolean>("inicio_no_logon_ativo"); } catch { this.logonGuardado = false; }
     this.logon.checked = this.logonGuardado;
@@ -63,6 +73,7 @@ export class Configuracoes {
   abrirAba(aba: Aba) {
     for (const s of this.raiz.querySelectorAll<HTMLElement>("section[data-aba]")) s.hidden = s.dataset.aba !== aba;
     for (const b of this.raiz.querySelectorAll<HTMLButtonElement>("nav button")) b.classList.toggle("ativa", b.dataset.aba === aba);
+    if (aba === "sistema") this.sistema?.ativar(); else this.sistema?.desativar();
   }
 
   /** O widget gravou topo ou compacto pelos próprios botões: acompanha sem perder o resto do formulário. */
@@ -130,9 +141,9 @@ export class Configuracoes {
         <p class="nota">Clique num atalho e pressione a nova combinação (Ctrl, Alt ou Win mais uma tecla). Esc cancela. Valem depois de reiniciar o Vard.</p>
         <div id="cfg-atalhos"></div>
       </section>
-      <section data-aba="ponte">
+      <section data-aba="sistema">
         ${this.campo("ponte_url", "Ponte do Vard (opcional; vazio desliga)", c.ponte_url)}
-        <p class="nota">A ponte dá olhos na tela e modo jogo. Sem ela o widget funciona igual. Veja docs/ponte-do-vard.md.</p>
+        <div id="cfg-sistema"></div>
       </section>
       <section data-aba="modelos" id="cfg-modelos"></section>
       <footer>

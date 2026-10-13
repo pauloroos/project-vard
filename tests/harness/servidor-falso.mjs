@@ -79,7 +79,7 @@ export function criarPonteFalsa({ estado = { modo: "ligado", pedidos: [] } } = {
     const cors = { ...CORS, ...(origem ? { "Access-Control-Allow-Origin": origem } : {}) };
     const json = (obj, status = 200) => { res.writeHead(status, { "Content-Type": "application/json", ...cors }); res.end(JSON.stringify(obj)); };
     if (req.method === "OPTIONS") { res.writeHead(204, cors); res.end(); return; }
-    if (caminho === "/status") return json({ openjarvis: true, lmstudio: true, modelo: "falso", modo: estado.modo });
+    if (caminho === "/status") return json({ openjarvis: true, lmstudio: true, modelo: "falso", modo: estado.modo, tarefas_abertas: 0, modelos_lmstudio: ["falso"] });
     if (req.method === "POST" && caminho === "/see") {
       const corpo = await lerCorpo(req);
       estado.pedidos.push({ caminho, bytes: corpo.length, jpeg: corpo.includes(Buffer.from([0xff, 0xd8])) });

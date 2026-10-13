@@ -69,7 +69,7 @@ describe("Ponte do Vard contra a ponte falsa", () => {
   afterAll(() => new Promise<void>((r) => srv.close(() => r())));
 
   it("status, ver e modo", async () => {
-    expect(await ponte.status()).toEqual({ ok: true, modo: "ligado", detalhe: undefined });
+    expect(await ponte.status()).toEqual({ ok: true, modo: "ligado", detalhe: undefined, tarefas_abertas: 0, modelos_lmstudio: ["falso"] });
     expect(await ponte.ver("/9j/4AAQ", "o que está na tela?")).toBe("Um editor de código aberto.");
     expect(srv.estado.pedidos[0].jpeg).toBe(true);
     expect(await ponte.modo("jogo")).toBe(true);

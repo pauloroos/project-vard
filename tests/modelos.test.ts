@@ -38,6 +38,16 @@ describe("modelos", () => {
     vi.stubGlobal("fetch", vi.fn(async () => resposta({ openjarvis: true, lmstudio: true, modo: "ligado" })));
     expect((await new Ponte("http://127.0.0.1:4700").status())?.reserva).toBeUndefined();
   });
+  it("status_da_ponte_filtra_modelos_lmstudio", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => resposta({ openjarvis: true, lmstudio: true, modo: "ligado", modelos_lmstudio: ["a", 1, "b"], tarefas_abertas: 3 })));
+    const st = await new Ponte("http://127.0.0.1:4700").status();
+    expect(st?.modelos_lmstudio).toEqual(["a", "b"]);
+    expect(st?.tarefas_abertas).toBe(3);
+    vi.stubGlobal("fetch", vi.fn(async () => resposta({ openjarvis: true, lmstudio: true, modo: "ligado" })));
+    const sem = await new Ponte("http://127.0.0.1:4700").status();
+    expect(sem?.modelos_lmstudio).toBeUndefined();
+    expect(sem?.tarefas_abertas).toBeUndefined();
+  });
   it("formatar_segundos", () => {
     expect(formatarSegundos(1830)).toBe("1,8 s");
   });

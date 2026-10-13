@@ -12,6 +12,7 @@ window.addEventListener("DOMContentLoaded", async () => {
     // No `tauri dev` o OpenJarvis recusa a origem do Vite: o painel passa pelo mesmo proxy /oj do widget.
     criarOj: (url, modelo = "") => new OpenJarvis(import.meta.env.DEV ? `${location.origin}/oj` : url, modelo),
     statusPonte: (url) => new Ponte(url).status(),
+    modoPonte: (url, verbo) => new Ponte(url).modo(verbo),
     aoSalvar: (c) => { void emitTo("hud", "config-salva", c).catch((erro) => console.warn("não avisei o widget", erro)); },
     fechar: () => { void getCurrentWindow().close(); },
   });

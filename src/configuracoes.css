@@ -35,3 +35,7 @@ footer { padding: 10px 14px; border-top: 1px solid rgba(0, 240, 255, 0.25); }
 #cfg-msg { min-height: 20px; }
 #cfg-msg.ruim { color: #ffb020; }
 footer .acoes { display: flex; gap: 8px; justify-content: flex-end; }
+
+#sis-estado { margin: 10px 0; }
+#sis-msg { min-height: 20px; margin-top: 6px; opacity: 0.8; }
+section .acoes { display: flex; gap: 8px; }
