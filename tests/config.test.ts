@@ -3,7 +3,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 const invoke = vi.fn();
 vi.mock("@tauri-apps/api/core", () => ({ invoke: (...a: unknown[]) => invoke(...a) }));
 
-import { lerConfigAoVivo, lerTopoCompacto, aplicarAoVivo, carregarConfig, CONFIG_PADRAO, CHAVES_AO_VIVO, mudancasQueExigemReinicio, atualizarConfig, limitarLado, urlLocal, avisosDeUrl, gatilhos } from "../src/config/config";
+import { lerConfigAoVivo, lerTopoCompacto, lerNaoOuvirFalar, aplicarAoVivo, carregarConfig, CONFIG_PADRAO, CHAVES_AO_VIVO, mudancasQueExigemReinicio, atualizarConfig, limitarLado, urlLocal, avisosDeUrl, gatilhos } from "../src/config/config";
 
 describe("carregarConfig", () => {
   beforeEach(() => invoke.mockReset());
@@ -235,6 +235,12 @@ describe("payloads entre janelas", () => {
     expect(lerTopoCompacto({ sempre_no_topo: true, compacto: false })).toEqual({ sempre_no_topo: true, compacto: false });
     expect(lerTopoCompacto({ sempre_no_topo: "1", compacto: false })).toBeNull();
     expect(lerTopoCompacto(undefined)).toBeNull();
+  });
+  it("nao_ouvir_e_nao_falar", () => {
+    expect(lerNaoOuvirFalar({ nao_ouvir: true, nao_falar: false })).toEqual({ nao_ouvir: true, nao_falar: false });
+    expect(lerNaoOuvirFalar({ nao_ouvir: "1", nao_falar: false })).toBeNull();
+    expect(lerNaoOuvirFalar({ nao_ouvir: true })).toBeNull();
+    expect(lerNaoOuvirFalar(undefined)).toBeNull();
   });
 });
 

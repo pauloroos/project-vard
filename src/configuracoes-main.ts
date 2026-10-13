@@ -3,7 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { emitTo, listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { URL_RELEASE } from "./atualizacao/release";
-import { carregarConfig, lerTopoCompacto } from "./config/config";
+import { carregarConfig, lerNaoOuvirFalar, lerTopoCompacto } from "./config/config";
 import { OpenJarvis } from "./conectores/openjarvis/cliente";
 import { Ponte } from "./conectores/ponte/cliente";
 import { Configuracoes, type Aba } from "./ui/configuracoes";
@@ -41,6 +41,12 @@ window.addEventListener("DOMContentLoaded", async () => {
   await listen<unknown>("invisivel", (ev) => {
     if (typeof ev.payload !== "boolean") { console.warn("invisivel ignorado: payload inválido"); return; }
     painel.mudouInvisivel(ev.payload);
+  });
+  // O widget mudou "não ouvir"/"não falar" (HUD, atalho ou bandeja): o painel acompanha as duas caixas.
+  await listen<unknown>("nao-ouvir-falar-mudou", (ev) => {
+    const v = lerNaoOuvirFalar(ev.payload);
+    if (!v) { console.warn("nao-ouvir-falar-mudou ignorado: payload inválido"); return; }
+    painel.mudouNaoOuvirFalar(v);
   });
   // O widget clicou na bolinha de avisos: abre a aba pedida (chega mais de uma vez enquanto a janela carrega).
   await listen<unknown>("abrir-aba", (ev) => {

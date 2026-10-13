@@ -22,3 +22,18 @@ export function deveFalarAviso(
   if (reuniaoAtiva) return false;
   return ev.tipo === "tarefa" && ESTADOS_TAREFA.includes(ev.estado ?? "");
 }
+
+/**
+ * Um aviso por vez: sintetizar e falar demoram, e dois avisos em cima só atrapalham
+ * (o resumo do primeiro já está na tela). Enquanto um corre, os demais são descartados.
+ */
+export class AvisoPorVez {
+  private ocupado = false;
+
+  /** Roda `tarefa` se não houver outra em curso; nesse caso devolve null sem rodar nada. */
+  async executar<T>(tarefa: () => Promise<T>): Promise<T | null> {
+    if (this.ocupado) return null;
+    this.ocupado = true;
+    try { return await tarefa(); } finally { this.ocupado = false; }
+  }
+}

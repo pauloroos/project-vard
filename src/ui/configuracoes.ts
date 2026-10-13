@@ -139,6 +139,14 @@ export class Configuracoes {
     this.el("sempre_no_topo").checked = ligado;
   }
 
+  /** O widget mudou "não ouvir"/"não falar" (HUD, atalho ou bandeja): sem isto um Salvar gravaria os valores antigos. */
+  mudouNaoOuvirFalar(c: Pick<Config, "nao_ouvir" | "nao_falar">) {
+    this.cfg.nao_ouvir = c.nao_ouvir;
+    this.cfg.nao_falar = c.nao_falar;
+    this.el("nao_ouvir").checked = c.nao_ouvir;
+    this.el("nao_falar").checked = c.nao_falar;
+  }
+
   mudouInvisivel(ligado: boolean) {
     this.cfg.invisivel = ligado;
     this.el("invisivel").checked = ligado;

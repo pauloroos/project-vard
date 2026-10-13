@@ -173,6 +173,19 @@ fn criar_bandeja(app: &AppHandle, no_topo: bool, invisivel_ligado: bool, nao_ouv
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            // No modo invisível a segunda abertura só revela (a janela já está "mostrada", mas com
+            // opacidade 0 e cliques bloqueados; show() sozinho não adianta, o widget tem que alternar).
+            let invisivel = comandos::ler_config_valor(app)
+                .ok()
+                .and_then(|c| c.get("invisivel").and_then(|v| v.as_bool()))
+                .unwrap_or(false);
+            if invisivel {
+                if let Some(w) = app.get_webview_window(JANELA) {
+                    let _ = w.unminimize();
+                }
+                alternar_visibilidade(app);
+                return;
+            }
             if let Some(w) = app.get_webview_window(JANELA) {
                 let _ = w.show();
                 let _ = w.unminimize();

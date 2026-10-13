@@ -190,3 +190,11 @@ export function lerTopoCompacto(x: unknown): Pick<Config, "sempre_no_topo" | "co
   if (typeof o.sempre_no_topo !== "boolean" || typeof o.compacto !== "boolean") return null;
   return { sempre_no_topo: o.sempre_no_topo, compacto: o.compacto };
 }
+
+/** Payload do widget quando o "não ouvir"/"não falar" muda pelo HUD, pelo atalho ou pela bandeja. */
+export function lerNaoOuvirFalar(x: unknown): Pick<Config, "nao_ouvir" | "nao_falar"> | null {
+  if (typeof x !== "object" || x === null) return null;
+  const o = x as Record<string, unknown>;
+  if (typeof o.nao_ouvir !== "boolean" || typeof o.nao_falar !== "boolean") return null;
+  return { nao_ouvir: o.nao_ouvir, nao_falar: o.nao_falar };
+}

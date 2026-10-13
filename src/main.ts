@@ -15,7 +15,7 @@ import { OpenJarvis } from "./conectores/openjarvis/cliente";
 import { Ponte } from "./conectores/ponte/cliente";
 import { CentralAvisos } from "./avisos/central";
 import { EmAndamento, textoDaDica as dicaDeAndamento } from "./avisos/andamento";
-import { deveFalarAviso } from "./avisos/fala";
+import { deveFalarAviso, AvisoPorVez } from "./avisos/fala";
 import { EstadoReuniao } from "./reuniao/estado";
 import { criarFonteDeVoz } from "./conectores/voz/escolher";
 import type { FonteDeVoz } from "./conectores/voz/fonte";
@@ -159,6 +159,8 @@ window.addEventListener("DOMContentLoaded", async () => {
       try { await atualizarConfig({ nao_ouvir: valor }); } catch (erro) { console.warn("não consegui gravar o não ouvir", erro); }
     }
     sincronizarBandeja();
+    // O painel aberto precisa acompanhar (senão um Salvar dele restauraria o valor antigo).
+    void emitTo("configuracoes", "nao-ouvir-falar-mudou", { nao_ouvir: cfg.nao_ouvir, nao_falar: cfg.nao_falar }).catch(() => {});
   };
   // "Não falar" = a resposta só em texto: corta o áudio em curso sem abortar a pergunta que já está no ar.
   const aplicarNaoFalar = async (valor: boolean, gravar: boolean) => {
@@ -169,6 +171,7 @@ window.addEventListener("DOMContentLoaded", async () => {
       try { await atualizarConfig({ nao_falar: valor }); } catch (erro) { console.warn("não consegui gravar o não falar", erro); }
     }
     sincronizarBandeja();
+    void emitTo("configuracoes", "nao-ouvir-falar-mudou", { nao_ouvir: cfg.nao_ouvir, nao_falar: cfg.nao_falar }).catch(() => {});
   };
   alternarNaoOuvir = async () => { await aplicarNaoOuvir(ligado && !estaMudo(), true); };
   alternarNaoFalar = async () => { await aplicarNaoFalar(!naoFalar, true); };
@@ -217,12 +220,17 @@ window.addEventListener("DOMContentLoaded", async () => {
   };
   // Aviso falado (só com "falar avisos" ligado): o resumo que a ponte mandou, pela mesma rota das frases fixas.
   // Nunca interrompe o que estiver falando (ou transcrevendo): com a boca ocupada o aviso só fica na tela.
+  const avisosPorVez = new AvisoPorVez();
   const falarAviso = async (tipo: string, dados: unknown) => {
     const d = typeof dados === "object" && dados !== null ? (dados as Record<string, unknown>) : {};
     const resumo = typeof d.resumo === "string" ? d.resumo.trim() : "";
     const ev = { tipo: tipo === "oficina" ? "tarefa" : tipo, estado: typeof d.estado === "string" ? d.estado : undefined };
     if (!resumo || !deveFalarAviso(cfg, ev, ocupado || boca.falando, reuniaoAtiva)) return;
-    try { await boca.tocar(await fixa(resumo)); } catch { /* sem voz, o aviso já está na tela */ }
+    await avisosPorVez.executar(async () => {
+      const wav = await fixa(resumo); // sintetizar pode demorar: enquanto isso a reunião pode começar, o "não falar" pode ligar ou uma resposta pode começar a falar
+      if (!deveFalarAviso(cfg, ev, ocupado || boca.falando, reuniaoAtiva)) return;
+      try { await boca.tocar(wav); } catch { /* sem voz, o aviso já está na tela */ }
+    });
   };
 
   const conversa = new Conversa({
@@ -251,11 +259,20 @@ window.addEventListener("DOMContentLoaded", async () => {
     aoCanal: (aberto) => { invisibilidade.definirCanal(aberto); console.info("modo conversa:", aberto ? "aberto" : "fechado"); },
   });
   olharTela = () => { void conversa.aoTextoTranscrito("olha a tela", true); };
+  const detector = new DetectorDeVoz({ limiar: cfg.limiar_vad, inicioMs: 150, fimMs: cfg.finish_ms, tetoMs: 12000 });
+  // Descarta a captura em curso: a reunião que começa no meio dela (o VAD pararia de finalizar e o PCM
+  // cresceria a reunião inteira) e o modo jogo que solta o microfone usam o mesmo caminho.
+  const descartarCaptura = () => {
+    capturando = false;
+    pcm = []; anel = []; anelAmostras = 0;
+    pttSegurado = false;
+    detector.reset();
+  };
   // Reunião começou: corta o que estiver falando e acende o chip; quando termina, o widget volta ao estado do usuário.
   aoReuniao = (ativa) => {
     reuniaoAtiva = ativa;
     hud.setReuniao(ativa);
-    if (ativa) conversa.interromper(); // corta o que estiver falando; o mudo do usuário não é mexido
+    if (ativa) { descartarCaptura(); conversa.interromper(); } // corta o que estiver falando; o mudo do usuário não é mexido
   };
 
   // Status da ponte a cada 10 s: mostra/esconde o botão Tela e acompanha o modo jogo. Nunca trava a conversa.
@@ -306,7 +323,6 @@ window.addEventListener("DOMContentLoaded", async () => {
   setInterval(() => { void checarSaude(); }, 5000);
 
   interromperTudo = () => conversa.interromper();
-  const detector = new DetectorDeVoz({ limiar: cfg.limiar_vad, inicioMs: 150, fimMs: cfg.finish_ms, tetoMs: 12000 });
 
   const guardarAmostras = (a: Float32Array) => {
     if (capturando) { pcm.push(a); return; }
@@ -377,8 +393,7 @@ window.addEventListener("DOMContentLoaded", async () => {
     analisadorEntrada = null;
     fecharMicrofone();
     ligado = false;
-    capturando = false; pcm = []; anel = []; anelAmostras = 0; pttSegurado = false;
-    detector.reset();
+    descartarCaptura();
     hud.setMudo(true);
     return true;
   };
