@@ -50,6 +50,8 @@ To build it yourself: `npm install` and `npm run tauri build` (installers land i
 2. **Double-click the core** (or click the microphone button) to open the microphone. Windows may ask for permission the first time.
 3. Say "Vard, que horas são". The core turns cyan while listening, amber while thinking, and the answer is spoken.
 
+Only one instance runs at a time: opening Vard again brings the window to the front. During development use `npm run tauri:dev` to coexist with the installed Vard.
+
 ### Shortcuts
 
 | Shortcut | Action |

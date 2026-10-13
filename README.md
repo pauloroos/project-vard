@@ -48,6 +48,8 @@ Para gerar você mesmo: `npm install` e `npm run tauri build` (os instaladores s
 2. Dê **dois cliques no núcleo** (ou clique no botão do microfone) para abrir o microfone. O Windows pode pedir permissão na primeira vez.
 3. Diga "Vard, que horas são". O núcleo fica ciano ouvindo, âmbar pensando, e a resposta sai em voz alta.
 
+Só uma instância roda por vez: abrir o Vard de novo traz a janela para a frente. Em desenvolvimento use `npm run tauri:dev` para coexistir com o Vard instalado.
+
 ### Atalhos
 
 | Atalho | O que faz |

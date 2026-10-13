@@ -10,6 +10,7 @@
     "test": "vitest run",
     "check": "tsc --noEmit && tsc -p tsconfig.test.json",
     "tauri": "tauri",
+    "tauri:dev": "tauri dev --config src-tauri/tauri.dev.conf.json",
     "harness": "node tests/harness/servidor-falso.mjs",
     "test:real": "vitest run tests/integracao-real.test.ts"
   },
