@@ -94,6 +94,43 @@ pub fn alternar_configuracoes(app: &AppHandle) {
 
 pub const SALA: &str = "sala";
 
+/// O widget só é escondido por nós se estava visível; assim, ao fechar a sala, não reaparece um widget que o usuário já tinha escondido.
+static WIDGET_ESCONDIDO_PELA_SALA: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Decisão pura: esconder o widget quando a sala abre apenas se ele está visível.
+pub fn deve_esconder_widget(widget_visivel: bool) -> bool {
+    widget_visivel
+}
+
+/// Esconde o widget (a janela segue viva: microfone, VAD e eventos continuam). Só mexe na visibilidade.
+fn esconder_widget(app: &AppHandle) {
+    if let Some(hud) = app.get_webview_window(HUD) {
+        let visivel = hud.is_visible().unwrap_or(false);
+        if deve_esconder_widget(visivel) {
+            match hud.hide() {
+                Ok(()) => {
+                    WIDGET_ESCONDIDO_PELA_SALA.store(true, std::sync::atomic::Ordering::SeqCst);
+                    eprintln!("[info] sala aberta: widget escondido (is_visible={})", hud.is_visible().unwrap_or(true));
+                }
+                Err(e) => eprintln!("[erro] não consegui esconder o widget: {e}"),
+            }
+        }
+    }
+}
+
+/// Mostra o widget de volta (mesma posição: hide/show não move a janela) se foi a sala que o escondeu.
+fn mostrar_widget(app: &AppHandle) {
+    if !WIDGET_ESCONDIDO_PELA_SALA.swap(false, std::sync::atomic::Ordering::SeqCst) {
+        return;
+    }
+    if let Some(hud) = app.get_webview_window(HUD) {
+        match hud.show() {
+            Ok(()) => eprintln!("[info] sala fechada: widget mostrado (is_visible={})", hud.is_visible().unwrap_or(false)),
+            Err(e) => eprintln!("[erro] não consegui mostrar o widget de volta: {e}"),
+        }
+    }
+}
+
 /// Monitor da sala: o de nome `nome`; se ele sumiu (ou o nome é vazio), o principal. `true` = caiu no principal.
 pub fn escolher_monitor(lista: &[MonitorInfo], nome: &str) -> Option<(usize, bool)> {
     if lista.is_empty() {
@@ -138,6 +175,7 @@ pub fn alternar_sala(app: &AppHandle) -> Result<Option<String>, String> {
     let h = app.clone();
     w.on_window_event(move |ev| {
         if let tauri::WindowEvent::Destroyed = ev {
+            mostrar_widget(&h);
             let _ = h.emit_to(HUD, "sala-fechada", ());
         }
     });
@@ -152,6 +190,7 @@ pub fn alternar_sala(app: &AppHandle) -> Result<Option<String>, String> {
         let _ = w.close(); // nada de janela invisível esquecida: o próximo atalho tenta de novo
         return Err(e.to_string());
     }
+    esconder_widget(app); // só depois de a sala estar no lugar; se ela falhou, voltamos acima sem esconder
     // "Monitor N" como no painel (mesma ordem de available_monitors): o nome do sistema é algo como DISPLAY1 com prefixo.
     Ok(caiu.then(|| format!("O monitor escolhido não está conectado; a sala abriu no Monitor {}.", i + 1)))
 }
@@ -191,6 +230,12 @@ mod testes {
     fn monitor_ausente_cai_no_principal() {
         let l = [mon("B", -1920, false), mon("A", 0, true)];
         assert_eq!(escolher_monitor(&l, "TV"), Some((1, true)));
+    }
+
+    #[test]
+    fn esconde_widget_so_se_visivel() {
+        assert!(deve_esconder_widget(true));
+        assert!(!deve_esconder_widget(false));
     }
 
     #[test]

@@ -93,7 +93,7 @@ Endereços fora de `127.0.0.1` ou `localhost` geram um aviso (o HUD manda o que 
 
 `Ctrl+Alt+F` ou **Tela cheia** na bandeja abrem uma janela preta, sem bordas, ocupando o monitor escolhido em Geral → Janela: o vórtice grande, o que você disse, a resposta em letra grande e um relógio. É só um espelho: quem ouve e fala continua sendo o widget, que pode ficar em outro monitor. `Esc`, o atalho ou a bandeja fecham. Se o monitor escolhido estiver desconectado, a sala abre no principal e o widget avisa.
 
-O widget fica sempre no topo e pode cobrir a sala se estiver no mesmo monitor: use outro monitor para a sala ou mova o widget para um canto.
+O widget some enquanto a sala está aberta e volta ao fechar (na mesma posição); ele continua rodando escondido: microfone, atalhos e conversa seguem funcionando.
 
 ## Modelos
 

@@ -95,7 +95,7 @@ URLs outside `127.0.0.1` or `localhost` raise a warning (the HUD sends what you 
 
 `Ctrl+Alt+F` or **Tela cheia** in the tray opens a black borderless window filling the monitor chosen in Geral → Janela: the large vortex, what you said, the answer in large type and a clock. It is only a mirror: the widget, which can stay on another monitor, still listens and speaks. `Esc`, the shortcut or the tray close it. If the chosen monitor is disconnected, it opens on the primary one and the widget says so.
 
-The widget is always on top and may cover the sala if both are on the same monitor: put the sala on another monitor or move the widget to a corner.
+The widget hides while the sala is open and comes back when it closes (same position); it keeps running hidden: microphone, shortcuts and conversation keep working.
 
 ## Models
 
