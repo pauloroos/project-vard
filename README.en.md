@@ -15,10 +15,15 @@ Independent project, not affiliated with OpenJarvis or Stanford.
 - Listens through the microphone (automatic voice detection) or through a global push-to-talk shortcut.
 - Wake word: say the assistant's name ("Vard, what time is it"); with push-to-talk the name is not needed.
 - Transcription, chat and speech synthesis all go to OpenJarvis (`/v1/speech/transcribe`, `/v1/chat/completions`, `/v1/speech/synthesize`).
-- Tray icon, settings panel in its own window (tabs Geral, Voz, Atalhos, Modelos and Ponte), optional start with Windows.
+- Tray icon, settings panel in its own window (tabs Geral, Voz, Atalhos, Modelos, Sistema and Atualização), optional start with Windows.
 - Three sizes (or the side in pixels, 160 to 800) and a compact mode that leaves only the hologram.
 - Full screen ("sala") on a monitor of your choice: a large vortex, what you said, the answer in large type and a clock.
 - Pick the model among the ones OpenJarvis exposes.
+- Conversation mode: after an answer it keeps listening without the wake word for 20 s (adjustable); "pode parar de me ouvir" or "vou entrar em reunião" mute the microphone until you turn it back on.
+- Choice of voice: your own voice (XTTS, with the service's voice list), OpenJarvis' (Kokoro) or, if you want and with your own key, ElevenLabs and Gemini TTS; a Ouvir button plays a sample sentence.
+- Invisible mode: the widget disappears and only shows while a conversation lasts.
+- The button bar opens on the side away from the monitor edge (above when the widget is at the bottom).
+- Atualização tab: checks GitHub for the newest release only when you ask and installs from there.
 - The **Text** button opens OpenJarvis' graphical text interface.
 - Optional: the Vard bridge (the author's private setup, `rdl-vard`) adds screen vision and a game mode. Everything works without it, see [docs/ponte-do-vard.md](docs/ponte-do-vard.md) (Portuguese).
 - Optional: your own voice service (any local TTS engine that follows a small contract) speaks the answer sentence by sentence, starting before the whole answer is synthesized. See [Own voice](#own-voice-optional).
@@ -34,8 +39,8 @@ Independent project, not affiliated with OpenJarvis or Stanford.
 
 Download the installer from the releases page and run one of them:
 
-- `Vard_0.2.0_x64-setup.exe` (NSIS): per-user, no administrator needed. Silent: `Vard_0.2.0_x64-setup.exe /S`. Installs to `%LOCALAPPDATA%\Vard\`.
-- `Vard_0.2.0_x64_en-US.msi` (WiX): per-machine, needs administrator. Silent: `msiexec /i Vard_0.2.0_x64_en-US.msi /qn`.
+- `Vard_0.3.0_x64-setup.exe` (NSIS): per-user, no administrator needed. Silent: `Vard_0.3.0_x64-setup.exe /S`. Installs to `%LOCALAPPDATA%\Vard\`.
+- `Vard_0.3.0_x64_en-US.msi` (WiX): per-machine, needs administrator. Silent: `msiexec /i Vard_0.3.0_x64_en-US.msi /qn`.
 
 To build it yourself: `npm install` and `npm run tauri build` (installers land in `src-tauri/target/release/bundle/`).
 
@@ -60,13 +65,19 @@ All of them can be changed in the Atalhos tab: click the field and press the new
 
 ![Shortcuts tab](docs/painel-atalhos.png)
 
+### Conversation mode
+
+After Vard answers, the channel stays open for 20 s: you can keep talking without repeating the name. Each utterance restarts the timer; when it runs out the name is required again. The timer is `conversa_ms` (milliseconds; `0` turns the mode off).
+
+To end it early, say one of these expressions (with or without the name in front; they are matched in Portuguese): "pode parar de me ouvir", "pare de me ouvir", "para de me ouvir", "deixa de me ouvir", "não precisa mais me ouvir", "vou entrar em reunião", "entrando em reunião", "estou em reunião", "tô em reunião", "modo silencioso" or "pode descansar". Vard confirms, closes the channel and mutes the microphone. To listen again, click the microphone button, press `Ctrl+Alt+L` or double-click the core. Asking about a meeting ("tenho reunião hoje?") ends nothing.
+
 ### Buttons
 
-Microphone mute, stop, look at the screen (bridge only), open the text conversation, always on top, settings and compact mode. In compact mode only the hologram shows: the buttons appear while the mouse is over the widget and fade 2 s after it leaves (with click-through on they never appear). The tray icon has Show/hide, Always on top, Settings, Full screen and Quit.
+Microphone mute, stop, look at the screen (bridge only), open the text conversation, always on top, settings and compact mode. In compact mode only the hologram shows: the buttons appear while the mouse is over the widget and fade 2 s after it leaves (with click-through on they never appear). With the widget in the lower half of the monitor, the button bar sits above the hologram. The tray icon has Show/hide, Always on top, Modo invisível, Settings, Full screen and Quit.
 
 ## Configure
 
-Use the gear, **Configurações** in the tray menu or `Ctrl+Alt+P`. The panel opens in its own window with the tabs Geral, Voz, Atalhos, Modelos and Ponte. Saving applies size, compact mode, always on top, click-through, your name and the model right away; addresses, voice, call name, language, format instruction, listening and shortcuts apply after a restart (the panel says which). In the file, shortcuts use the key names `Period` and `Comma` (the screen shows `.` and `,`). The fields are those of `hud.config.json` (if the file becomes unreadable the HUD starts with the defaults and keeps the original as `hud.config.json.invalido`; in `%APPDATA%\io.github.pauloroos.vard\`):
+Use the gear, **Configurações** in the tray menu or `Ctrl+Alt+P`. The panel opens in its own window with the tabs Geral, Voz, Atalhos, Modelos, Sistema and Atualização. Saving applies size, compact mode, always on top, click-through, your name and the model right away; addresses, voice, call name, language, format instruction, listening and shortcuts apply after a restart (the panel says which). In the file, shortcuts use the key names `Period` and `Comma` (the screen shows `.` and `,`). The fields are those of `hud.config.json` (if the file becomes unreadable the HUD starts with the defaults and keeps the original as `hud.config.json.invalido`; in `%APPDATA%\io.github.pauloroos.vard\`):
 
 | Field | Default | Purpose |
 | --- | --- | --- |
@@ -82,6 +93,11 @@ Use the gear, **Configurações** in the tray menu or `Ctrl+Alt+P`. The panel op
 | `sempre_no_topo`, `click_through` | on, off | Always visible; clicks pass through the window |
 | `tamanho`, `tamanho_px` | `medio`, `320` | Widget size: `pequeno` (240 px), `medio` (320), `grande` (480) or `personalizado` (`tamanho_px`, 160 to 800) |
 | `compacto` | off | Hologram only; buttons show on hover |
+| `conversa_ms` | `20000` | Conversation mode: ms of listening without the name after an answer (0 turns it off) |
+| `voz_provedor`, `voz_propria` | `propria`, empty | Voice provider (`propria`, `openjarvis`, `elevenlabs`, `gemini`) and the own service's voice (empty = its current one) |
+| `elevenlabs_chave`, `elevenlabs_voz`, `gemini_chave`, `gemini_voz` | empty, `Kore` | Optional cloud providers; only called when chosen as the provider and a key is set |
+| `invisivel` | off | Invisible mode: shows only during a conversation |
+| `atualizacao_ao_abrir` | off | Check GitHub for a release when the Atualização tab opens |
 | `modelo` | empty | OpenJarvis model (empty = the first one it lists) |
 | `sala_monitor` | empty | Full-screen monitor (empty = primary) |
 | `atalhos` | see above | Global shortcuts: `falar`, `parar`, `mostrar`, `config`, `escuta`, `sala` |
@@ -99,7 +115,29 @@ The widget hides while the sala is open and comes back when it closes (same posi
 
 ## Models
 
-The **Modelos** tab lists the models OpenJarvis exposes (`/v1/models`) and lets you pick the main one; "Automático" uses the first one. If the Vard bridge reports a fallback model, it shows there. **Testar** asks a short question and shows how long it took. Switching providers (OmniRouter, subscriptions, LM Studio) is OpenJarvis configuration: Vard only picks among what it offers. If the chosen model disappears from OpenJarvis, Vard uses the first one. Warning: picking a non-default model, or pressing Testar on it, may make the LLM server (for example LM Studio) load a second model into the GPU and use its memory.
+The **Modelos** tab lists the models OpenJarvis exposes (`/v1/models`) and lets you pick the main one; "Automático" uses the first one. If the Vard bridge reports a fallback model, it shows there. With the bridge up, the list comes in two groups: LM Studio (local) and OmniRouter (cloud). **Testar** asks a short question and shows how long it took. Switching providers (OmniRouter, subscriptions, LM Studio) is OpenJarvis configuration: Vard only picks among what it offers. If the chosen model disappears from OpenJarvis, Vard uses the first one. Warning: picking a non-default model, or pressing Testar on it, may make the LLM server (for example LM Studio) load a second model into the GPU and use its memory.
+
+## System
+
+The **Sistema** tab shows the state of the Vard bridge (the author's private setup: mode, whether OpenJarvis is up and how many tasks are open), refreshed every 5 s while the tab is open. It has three buttons:
+
+- **Ligar** brings everything up (model, core, bridge and voice).
+- **Modo jogo** turns everything off and takes the models off the GPU.
+- **Desligar** also stops the model server and the tray. The bridge goes down with it, so the tab shows "fora" until you start it again some other way.
+
+Each button asks for confirmation: the first click changes the label to **Confirmar** and a second click within 5 s runs it (another button, or the timeout, starts over). Buttons that make no sense in the current mode are disabled, and without the bridge none of them works; the rest of Vard is unaffected. The bridge address (`ponte_url`) is in the Geral tab.
+
+## Invisible mode
+
+Turn it on with the **Modo invisível** checkbox in the panel or the tray item. While on, the widget is transparent and the cursor passes through it; it only shows while Vard is thinking or speaking, while the conversation-mode channel is open or when you reveal it, and hides 1.5 s after the last reason. "Listening" does not count, because the voice detector fires on any noise before it knows you called Vard.
+
+In this mode `Ctrl+Alt+V` and the tray's Show/hide reveal or hide the widget immediately. Without "always on top" the revealed widget may end up behind other windows: keep that option on if you want to see it every time.
+
+## Update
+
+The **Atualização** tab shows the installed version and checks the project's newest GitHub release **only when you click Verificar agora** or, if you tick the box (`atualizacao_ao_abrir`), once when the tab opens. Vard never checks on its own in the background.
+
+If a newer version exists, the tab shows the date and notes and offers **Baixar e instalar**. Vard only talks to GitHub (`api.github.com`, `github.com` and the `*.githubusercontent.com` hosts that serve the files), downloads the `-setup.exe` to `%TEMP%\Vard\`, checks its size and, when the GitHub API reports a sha256, the hash too, runs the installer and closes Vard. The installer is not signed: SmartScreen may warn. The `.msi` is not installed from here (it needs administrator): download it from the release page.
 
 ## Own voice (optional)
 
@@ -116,8 +154,16 @@ Any TTS engine works. The service needs two routes on `127.0.0.1`:
   `X-Taxa`, `X-Canais`, `X-Formato`). `400` for empty or too long text, `503 {"erro": "aquecendo"}` while the model loads.
 - CORS open to `http://tauri.localhost` (installed app) and `http://localhost:1420` (`tauri dev`).
 
+Optional parts of the contract: `GET /vozes` returns `{"vozes": ["name", ...], "atual": "name"}` and feeds the Voz tab's list; the `voz` field of `/falar` picks a voice from that list (without it the service's current voice is used). A service without `/vozes` keeps working, just without the list.
+
 If the service is down, takes more than 8 s or rejects a sentence, that sentence is spoken with OpenJarvis' voice and
 nothing changes on screen. The full contract is in [docs/voz-propria.md](docs/voz-propria.md) (Portuguese).
+
+### Other voice providers
+
+In the Voz tab the provider can be `propria`, `openjarvis` (Kokoro, OpenJarvis' voice), `elevenlabs` or `gemini`. The last two are optional and in the cloud: they are only called when chosen as the provider and a key is set (password fields; the key never goes to the log), and the text of the spoken lines goes to the vendor. For ElevenLabs also set the voice id; Gemini's default voice is `Kore` and it ignores the speed. The **Ouvir** button plays a sample sentence with the chosen provider.
+
+With a cloud provider on, the fixed phrases ("Voltei." and the others) are synthesized on it once at startup to warm the cache; that sends those short texts to the vendor. With `propria` or `openjarvis` nothing leaves your machine.
 
 ## Troubleshooting
 
@@ -126,6 +172,9 @@ nothing changes on screen. The full contract is in [docs/voz-propria.md](docs/vo
 - **Microphone**: if the HUD says the microphone is blocked, allow it under Windows Settings, Privacy, Microphone, then double-click the core again. If it clips the start of sentences or picks up noise, tune `limiar_vad`.
 - **The Text button shows nothing useful**: OpenJarvis' text interface is not running at `gui_url`. Start it with `jarvis gui --no-server --no-browser`.
 - **A shortcut does nothing**: another program already owns the combination. The Atalhos tab marks the shortcut that did not register; change it and restart Vard.
+- **Vard no longer hears me**: you said a conversation-mode closing phrase; click the microphone, press `Ctrl+Alt+L` or double-click the core.
+- **The widget vanished**: invisible mode is on; `Ctrl+Alt+V` or Show/hide in the tray reveal it, and the panel checkbox or the tray item turn the mode off.
+- **The downloaded installer did not open**: SmartScreen may have blocked it; run the file in `%TEMP%\Vard\` and choose "Run anyway".
 - **Full screen opened on the wrong monitor**: the chosen monitor was disconnected, so it opened on the primary one. Pick it again in Geral → Janela.
 
 ## Connectors

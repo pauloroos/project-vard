@@ -83,10 +83,26 @@ precisa expor o cabeçalho (ou reamostrar para 24 kHz).
 O HUD instalado chama de `http://tauri.localhost` e o `tauri dev` de `http://localhost:1420`. O serviço precisa
 responder ao preflight (`OPTIONS`) desses dois `Origin` aceitando `POST` e os cabeçalhos `content-type` e `accept`.
 
+### `GET /vozes` (opcional)
+
+```json
+{ "vozes": ["Voz A", "Voz B"], "atual": "Voz A" }
+```
+
+Alimenta a lista da aba Voz. Sem a rota (ou fora do ar) a lista fica vazia e a voz atual do serviço continua valendo.
+
+### `voz` no `/falar` (opcional)
+
+O corpo do `POST /falar` pode trazer `"voz": "Voz B"`, um nome da lista de `/vozes`. O HUD só manda o campo quando você escolhe uma voz no painel (`voz_propria`); sem ele o serviço usa a voz atual. Para um nome desconhecido o serviço deve responder `400`; nesse caso só aquela frase sai pelo OpenJarvis. A voz escolhida entra na chave do cache das falas fixas.
+
+## Outros provedores
+
+Os provedores `openjarvis` (Kokoro), `elevenlabs` e `gemini` não usam este contrato: o HUD fala com eles direto, só quando escolhidos na aba Voz e, nos dois da nuvem, com a chave informada. Com um provedor na nuvem ligado, as falas fixas são sintetizadas nele uma vez no arranque, para aquecer o cache; com `propria` ou `openjarvis` nada sai da máquina.
+
 ## Testar sem um motor de voz
 
 `VOZ=4710 npm run harness` (PowerShell: `$env:VOZ=4710; npm run harness`) sobe uma voz falsa que segue este contrato:
-3 pedaços de 0,1 s de silêncio em PCM, ou um WAV de 0,3 s sem o `Accept`. Não suba a voz falsa com um serviço de voz
+3 pedaços de 0,1 s de silêncio em PCM, ou um WAV de 0,3 s sem o `Accept`, e a rota `/vozes` com duas vozes. Não suba a voz falsa com um serviço de voz
 de verdade na mesma porta.
 
 Com um serviço de verdade no ar, um teste rápido (bash):
