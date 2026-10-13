@@ -1,6 +1,6 @@
 // Janelas do Vard: o widget (hud), o painel de configurações e a sala. Funções puras testáveis no fim.
 use serde::Serialize;
-use tauri::{AppHandle, Manager, WebviewUrl, WebviewWindowBuilder};
+use tauri::{AppHandle, Emitter, Manager, WebviewUrl, WebviewWindowBuilder};
 
 pub const HUD: &str = "hud";
 
@@ -92,6 +92,70 @@ pub fn alternar_configuracoes(app: &AppHandle) {
     }
 }
 
+pub const SALA: &str = "sala";
+
+/// Monitor da sala: o de nome `nome`; se ele sumiu (ou o nome é vazio), o principal. `true` = caiu no principal.
+pub fn escolher_monitor(lista: &[MonitorInfo], nome: &str) -> Option<(usize, bool)> {
+    if lista.is_empty() {
+        return None;
+    }
+    if !nome.is_empty() {
+        if let Some(i) = lista.iter().position(|m| m.nome == nome) {
+            return Some((i, false));
+        }
+    }
+    let i = lista.iter().position(|m| m.principal).unwrap_or(0);
+    Some((i, !nome.is_empty()))
+}
+
+/// Abre a sala (tela cheia no monitor escolhido) ou fecha a que está aberta. Devolve um aviso quando o monitor sumiu.
+pub fn alternar_sala(app: &AppHandle) -> Result<Option<String>, String> {
+    if let Some(w) = app.get_webview_window(SALA) {
+        w.close().map_err(|e| e.to_string())?;
+        return Ok(None);
+    }
+    let hud = app.get_webview_window(HUD).ok_or("janela do widget não existe")?;
+    let principal = hud.primary_monitor().map_err(|e| e.to_string())?.and_then(|m| m.name().cloned());
+    let lista: Vec<MonitorInfo> = hud
+        .available_monitors()
+        .map_err(|e| e.to_string())?
+        .iter()
+        .map(|m| info(m, principal.as_ref()))
+        .collect();
+    let config = crate::comandos::ler_config_valor(app).unwrap_or(serde_json::Value::Null);
+    let pedido = config.get("sala_monitor").and_then(|v| v.as_str()).unwrap_or("");
+    let (i, caiu) = escolher_monitor(&lista, pedido).ok_or("nenhum monitor encontrado")?;
+    let alvo = &lista[i];
+    // Escondida até estar no lugar: posiciona no canto do monitor (físico), tela cheia nele, depois mostra.
+    let w = WebviewWindowBuilder::new(app, SALA, WebviewUrl::App("sala.html".into()))
+        .title("Vard - sala")
+        .decorations(false)
+        .skip_taskbar(true)
+        .visible(false)
+        .build()
+        .map_err(|e| e.to_string())?;
+    // O aviso de fechamento é ligado antes de posicionar: se algo falhar daqui em diante, o widget ainda fica sabendo.
+    let h = app.clone();
+    w.on_window_event(move |ev| {
+        if let tauri::WindowEvent::Destroyed = ev {
+            let _ = h.emit_to(HUD, "sala-fechada", ());
+        }
+    });
+    let posicionar = || -> tauri::Result<()> {
+        w.set_position(tauri::PhysicalPosition::new(alvo.x, alvo.y))?;
+        w.set_fullscreen(true)?;
+        w.show()?;
+        let _ = w.set_focus(); // Esc fecha: o teclado precisa estar na sala
+        Ok(())
+    };
+    if let Err(e) = posicionar() {
+        let _ = w.close(); // nada de janela invisível esquecida: o próximo atalho tenta de novo
+        return Err(e.to_string());
+    }
+    // "Monitor N" como no painel (mesma ordem de available_monitors): o nome do sistema é algo como DISPLAY1 com prefixo.
+    Ok(caiu.then(|| format!("O monitor escolhido não está conectado; a sala abriu no Monitor {}.", i + 1)))
+}
+
 #[cfg(test)]
 mod testes {
     use super::*;
@@ -114,6 +178,24 @@ mod testes {
     #[test]
     fn encaixar_maior_que_o_monitor() {
         assert_eq!(encaixar(50, 50, 4000, 3000, &mon("A", 0, true)), (0, 0));
+    }
+
+    #[test]
+    fn monitor_escolhido() {
+        let l = [mon("DISPLAY1", 0, true), mon("DISPLAY2", 1920, false)];
+        assert_eq!(escolher_monitor(&l, "DISPLAY2"), Some((1, false)));
+        assert_eq!(escolher_monitor(&l, ""), Some((0, false)));
+    }
+
+    #[test]
+    fn monitor_ausente_cai_no_principal() {
+        let l = [mon("B", -1920, false), mon("A", 0, true)];
+        assert_eq!(escolher_monitor(&l, "TV"), Some((1, true)));
+    }
+
+    #[test]
+    fn sem_monitor() {
+        assert_eq!(escolher_monitor(&[], "TV"), None);
     }
 
     #[test]

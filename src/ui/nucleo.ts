@@ -1,5 +1,6 @@
 import { Aneis, R_INT } from "./aneis";
 import { simplex2 } from "./ruido";
+import type { FonteDeEspectro } from "../sala/espectro";
 
 export type Estado = "repouso" | "ouvindo" | "pensando" | "falando" | "jogo" | "erro" | "fora";
 
@@ -43,8 +44,8 @@ const ESCALA_VISUAL = 0.8;
 
 export class Nucleo {
   private estado: Estado = "repouso";
-  private entrada: AnalyserNode | null = null;
-  private saida: AnalyserNode | null = null;
+  private entrada: FonteDeEspectro | null = null;
+  private saida: FonteDeEspectro | null = null;
   private dadosFreq: Uint8Array<ArrayBuffer> = new Uint8Array(0);
   private dadosTempoE: Float32Array<ArrayBuffer> = new Float32Array(0);
   private dadosTempoS: Float32Array<ArrayBuffer> = new Float32Array(0);
@@ -112,7 +113,7 @@ export class Nucleo {
     }
   }
 
-  setAnalisadores(entrada: AnalyserNode | null, saida: AnalyserNode | null) { this.entrada = entrada; this.saida = saida; }
+  setAnalisadores(entrada: FonteDeEspectro | null, saida: FonteDeEspectro | null) { this.entrada = entrada; this.saida = saida; }
 
   iniciar() {
     this.iniciado = true;
@@ -153,7 +154,7 @@ export class Nucleo {
     }
   }
 
-  private lerFft(an: AnalyserNode) {
+  private lerFft(an: FonteDeEspectro) {
     if (this.dadosFreq.length !== an.frequencyBinCount) this.dadosFreq = new Uint8Array(an.frequencyBinCount);
     an.getByteFrequencyData(this.dadosFreq);
     this.mapear(this.dadosFreq.length);

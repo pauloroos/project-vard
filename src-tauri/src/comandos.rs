@@ -8,12 +8,13 @@ use std::{
 };
 
 /// Ações com atalho global: chave em `atalhos` na config e o padrão. Mesma ordem de ACOES_ATALHO no front.
-pub const ATALHOS: [(&str, &str); 5] = [
+pub const ATALHOS: [(&str, &str); 6] = [
     ("falar", "Ctrl+Alt+Space"),
     ("parar", "Ctrl+Alt+Period"),
     ("mostrar", "Ctrl+Alt+V"),
     ("config", "Ctrl+Alt+Comma"),
     ("escuta", "Ctrl+Alt+E"),
+    ("sala", "Ctrl+Alt+F"),
 ];
 
 #[derive(Serialize, Clone, Debug, PartialEq)]
@@ -230,6 +231,24 @@ pub fn redimensionar_janela(window: tauri::Window, largura: f64, altura: f64) ->
 #[tauri::command]
 pub async fn abrir_configuracoes(app: tauri::AppHandle) -> Result<(), String> {
     crate::janelas::abrir_configuracoes(&app).map_err(|e| e.to_string())
+}
+
+/// Esc na sala e quem mais quiser alternar por comando. Assíncrono: cria janela.
+#[tauri::command]
+pub async fn alternar_sala(app: tauri::AppHandle) -> Result<Option<String>, String> {
+    crate::janelas::alternar_sala(&app)
+}
+
+/// Monitores para o painel escolher onde a sala abre.
+#[tauri::command]
+pub fn listar_monitores(window: tauri::Window) -> Result<Vec<crate::janelas::MonitorInfo>, String> {
+    let principal = window.primary_monitor().map_err(|e| e.to_string())?.and_then(|m| m.name().cloned());
+    Ok(window
+        .available_monitors()
+        .map_err(|e| e.to_string())?
+        .iter()
+        .map(|m| crate::janelas::info(m, principal.as_ref()))
+        .collect())
 }
 
 #[cfg(test)]

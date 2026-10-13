@@ -11,11 +11,13 @@ import { falaFixa, type FonteDeFala } from "./audio/cache";
 import { OpenJarvis } from "./conectores/openjarvis/cliente";
 import { Ponte } from "./conectores/ponte/cliente";
 import { Voz } from "./conectores/voz/cliente";
-import { Conversa } from "./fala/conversa";
+import { Conversa, type Estado } from "./fala/conversa";
 import { FALAS, saudacaoPara } from "./fala/falas";
 import { Hud } from "./ui/hud";
 import { Nucleo } from "./ui/nucleo";
 import { ladoDoTamanho, ladoMudou, medidasDoWidget } from "./ui/tamanho";
+import { ESPELHO_INICIAL, reduzir, type Espelho, type EventoEspelho } from "./sala/espelho";
+import { lerNiveis } from "./sala/espectro";
 
 const PRE_ROLL_MS = 300;
 /** Prazo da voz própria numa fala fixa que não está no cache (o aquecimento usa o prazo normal). */
@@ -48,6 +50,16 @@ window.addEventListener("DOMContentLoaded", async () => {
     aoTela: () => olharTela(),
     aoConfigMudou: (c) => { void emitTo("configuracoes", "config-mudou-no-widget", { sempre_no_topo: c.sempre_no_topo, compacto: c.compacto }).catch(() => {}); },
   });
+  // Sala (tela cheia): espelho do que o widget mostra. O widget guarda o mesmo espelho para mandar o retrato quando ela abre.
+  let salaAberta = false;
+  let espelho: Espelho = ESPELHO_INICIAL;
+  const paraSala = (ev: EventoEspelho) => {
+    espelho = reduzir(espelho, ev);
+    if (salaAberta) void emitTo("sala", "sala:espelho", ev).catch(() => {});
+  };
+  const mostrarEstado = (e: Estado, detalhe = "") => { nucleo.setEstado(e); hud.setEstado(e, detalhe); paraSala({ tipo: "estado", estado: e, detalhe }); };
+  const mostrarOuvido = (t: string) => { hud.setOuvido(t); paraSala({ tipo: "ouvido", texto: t }); };
+  const mostrarResposta = (t: string) => { hud.setResposta(t); paraSala({ tipo: "resposta", texto: t }); };
   hud.dica("clique para ligar o ouvido");
   // Atalhos que o Windows recusou no arranque (outro programa já usa): avisa uma vez na linha de estado.
   try {
@@ -120,12 +132,12 @@ window.addEventListener("DOMContentLoaded", async () => {
     ...(voz ? { voz } : {}),
     falas: fixa,
     aoEstado: (e, detalhe) => {
-      nucleo.setEstado(e); hud.setEstado(e, detalhe);
+      mostrarEstado(e, detalhe);
       // Terminou de falar: descarta o pre-roll, que teria a cauda da própria voz (eco).
       if (estavaFalando && e !== "falando") { anel = []; anelAmostras = 0; }
       estavaFalando = e === "falando";
     },
-    aoResposta: (t) => hud.setResposta(t),
+    aoResposta: (t) => mostrarResposta(t),
     ponte, ponteNoAr: () => ponteNoAr,
     // Indicador vermelho por ~1 s antes de capturar; a captura é direta (sem compartilhamento).
     antesDaCaptura: async () => { hud.setIndicadorTela(true); await espera(1000); },
@@ -195,7 +207,7 @@ window.addEventListener("DOMContentLoaded", async () => {
   const comecarCaptura = () => {
     pcm = anel; anel = []; anelAmostras = 0; // o pre-roll vira o começo da fala
     capturando = true;
-    nucleo.setEstado("ouvindo"); hud.setEstado("ouvindo");
+    mostrarEstado("ouvindo");
   };
 
   const encerrar = async (pushToTalk: boolean) => {
@@ -208,11 +220,11 @@ window.addEventListener("DOMContentLoaded", async () => {
     pcm = [];
     console.log("fala capturada", tudo.length, "amostras a", taxaAtual(), "Hz");
     if (tudo.length < (taxaAtual() * MIN_FALA_MS) / 1000 || conversa.estado === "fora" || conversa.estado === "erro") {
-      nucleo.setEstado(conversa.estado); hud.setEstado(conversa.estado, conversa.detalhe);
+      mostrarEstado(conversa.estado, conversa.detalhe);
       return;
     }
     ocupado = true;
-    nucleo.setEstado("pensando"); hud.setEstado("pensando");
+    mostrarEstado("pensando");
     try {
       const wav = pcmParaWav(reamostrar(tudo, taxaAtual(), 16000), 16000);
       let texto: string;
@@ -224,7 +236,7 @@ window.addEventListener("DOMContentLoaded", async () => {
         return;
       }
       console.log("ouvi:", texto);
-      if (texto) hud.setOuvido(texto);
+      if (texto) mostrarOuvido(texto);
       await conversa.aoTextoTranscrito(texto, pushToTalk);
     } catch (erro) {
       console.error("ciclo de fala falhou", erro);
@@ -232,13 +244,14 @@ window.addEventListener("DOMContentLoaded", async () => {
       fimDaFala = 0;
       ocupado = false;
       detector.reset();
-      nucleo.setEstado(conversa.estado); hud.setEstado(conversa.estado, conversa.detalhe);
+      mostrarEstado(conversa.estado, conversa.detalhe);
       if (pttPendente && pttSegurado && ligado && !capturando) comecarCaptura();
       pttPendente = false;
     }
   };
 
   let ligado = false;
+  let analisadorEntrada: AnalyserNode | null = null; // o do microfone, para a sala
   let relogioVad = 0;
   let largarAmostras: (() => void) | null = null;
   // Modo jogo: solta o microfone de verdade (a GPU e o ouvido ficam livres); alternarMicrofone reabre sozinho depois.
@@ -248,6 +261,7 @@ window.addEventListener("DOMContentLoaded", async () => {
     largarAmostras?.(); largarAmostras = null;
     bocaReal?.parar(); bocaReal = null;
     nucleo.setAnalisadores(null, null);
+    analisadorEntrada = null;
     fecharMicrofone();
     ligado = false;
     capturando = false; pcm = []; anel = []; anelAmostras = 0; pttSegurado = false;
@@ -264,11 +278,12 @@ window.addEventListener("DOMContentLoaded", async () => {
       const mic = await abrirMicrofone();
       if (ligado) return;
       ligado = true;
+      analisadorEntrada = mic.analisador;
       definirMudo(false);
       hud.setMudo(false);
       bocaReal = new Boca(mic.contexto);
       hud.setTaxa(mic.contexto.sampleRate);
-      hud.setEstado(conversa.estado, conversa.detalhe);
+      mostrarEstado(conversa.estado, conversa.detalhe);
       nucleo.setAnalisadores(mic.analisador, bocaReal.analisador);
       largarAmostras = onAmostras(guardarAmostras);
       relogioVad = window.setInterval(() => {
@@ -279,8 +294,7 @@ window.addEventListener("DOMContentLoaded", async () => {
       }, 50);
     } catch (erro) {
       console.error("falha ao abrir o microfone", erro);
-      hud.dica(FALAS.microfoneBloqueado);
-      nucleo.setEstado("erro");
+      mostrarEstado("erro", FALAS.microfoneBloqueado);
     }
   };
 
@@ -305,12 +319,12 @@ window.addEventListener("DOMContentLoaded", async () => {
       ocupado = true;
       try {
         console.log("ouvi:", texto);
-        hud.setOuvido(texto);
+        mostrarOuvido(texto);
         await conversa.aoTextoTranscrito(texto, true);
       } finally {
         ocupado = false;
         detector.reset();
-        nucleo.setEstado(conversa.estado); hud.setEstado(conversa.estado, conversa.detalhe);
+        mostrarEstado(conversa.estado, conversa.detalhe);
       }
     };
   }
@@ -332,6 +346,21 @@ window.addEventListener("DOMContentLoaded", async () => {
   });
   await listen("parar", () => { conversa.interromper(); });
   await listen("alternar-escuta", () => { void alternarMicrofone(); });
+  // Sala aberta: retrato na hora e níveis a 20 Hz (o vórtice dela reage como o daqui). Fechada: nada vai para lá.
+  let relogioSala = 0;
+  await listen("sala:pronta", () => {
+    salaAberta = true;
+    void emitTo("sala", "sala:espelho", { tipo: "retrato", espelho }).catch(() => {});
+    clearInterval(relogioSala);
+    relogioSala = window.setInterval(() => {
+      void emitTo("sala", "sala:niveis", { entrada: lerNiveis(analisadorEntrada), saida: lerNiveis(bocaReal?.analisador ?? null) }).catch(() => {});
+    }, 50);
+  });
+  await listen("sala-fechada", () => { salaAberta = false; clearInterval(relogioSala); });
+  await listen<unknown>("aviso", (ev) => {
+    if (typeof ev.payload !== "string") { console.warn("aviso ignorado: payload inválido"); return; }
+    hud.dica(ev.payload);
+  });
   await listen<unknown>("sempre-no-topo", (ev) => {
     if (typeof ev.payload !== "boolean") { console.warn("sempre-no-topo ignorado: payload inválido"); return; }
     cfg.sempre_no_topo = ev.payload; hud.atualizarTopo();

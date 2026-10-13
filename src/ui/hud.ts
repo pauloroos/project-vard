@@ -4,7 +4,7 @@ import { salvarConfig } from "../config/config";
 import type { Estado } from "../fala/conversa";
 import { Revelador } from "./revelador";
 
-const ROTULO: Record<Estado, string> = {
+export const ROTULO_ESTADO: Record<Estado, string> = {
   repouso: "pronto", ouvindo: "ouvindo", pensando: "pensando", falando: "falando",
   jogo: "MODO JOGO", erro: "atenção", fora: "núcleo offline",
 };
@@ -146,7 +146,7 @@ export class Hud {
   setTaxa(hz: number) { this.taxaHz = hz; this.pintar(); }
 
   private pintar() {
-    const base = this.detalhe || ROTULO[this.estado];
+    const base = this.detalhe || ROTULO_ESTADO[this.estado];
     const semOuvido = this.mudo && this.estado === "repouso" && !this.detalhe;
     const texto = semOuvido ? "toque duas vezes no núcleo para ouvir" : base;
     this.linha.textContent = this.ouvido && !semOuvido && this.estado !== "fora" && this.estado !== "erro" ? `${texto} | ${this.ouvido}` : texto;

@@ -18,6 +18,9 @@ export interface DepsConfiguracoes {
   fechar?: () => void;
 }
 
+/** Monitor como o comando listar_monitores devolve (pixels físicos). */
+export interface MonitorInfo { nome: string; x: number; y: number; largura: number; altura: number; escala: number; principal: boolean }
+
 export type Aba = "geral" | "voz" | "atalhos" | "modelos" | "ponte";
 const ABAS: [Aba, string][] = [["geral", "Geral"], ["voz", "Voz"], ["atalhos", "Atalhos"], ["modelos", "Modelos"], ["ponte", "Ponte"]];
 const OPCOES_TAMANHO: [Config["tamanho"], string][] = [
@@ -51,6 +54,7 @@ export class Configuracoes {
     this.abrirAba("geral");
     try { this.logonGuardado = await invoke<boolean>("inicio_no_logon_ativo"); } catch { this.logonGuardado = false; }
     this.logon.checked = this.logonGuardado;
+    try { this.preencherMonitores(await invoke<MonitorInfo[]>("listar_monitores")); } catch { this.preencherMonitores([]); }
     try { this.falhas = await invoke<FalhaAtalho[]>("falhas_de_atalho"); } catch { this.falhas = []; }
     this.marcarAtalhos({});
     if (this.falhas.length) this.dizer("Há atalhos que o Windows não aceitou: veja a aba Atalhos.", true);
@@ -107,6 +111,7 @@ export class Configuracoes {
           ${this.marca("sempre_no_topo", "Sempre no topo", c.sempre_no_topo)}
           ${this.marca("click_through", "Clique atravessa a janela", c.click_through)}
           ${this.marca("logon", "Iniciar com o Windows", false)}
+          <label>Monitor da tela cheia<select id="cfg-sala_monitor"></select></label>
         </fieldset>
       </section>
       <section data-aba="voz">
@@ -176,6 +181,18 @@ export class Configuracoes {
   }
 
 
+  /** "Principal" mais os monitores conectados; um escolhido que sumiu continua na lista, marcado, para não se perder. */
+  private preencherMonitores(lista: MonitorInfo[]) {
+    const sel = this.sel("sala_monitor");
+    const atual = this.cfg.sala_monitor;
+    const opcoes: [string, string][] = [
+      ["", "Principal"],
+      ...lista.map((m, i): [string, string] => [m.nome, `Monitor ${i + 1}: ${m.largura}x${m.altura}${m.principal ? " (principal)" : ""}`]),
+    ];
+    if (atual && !lista.some((m) => m.nome === atual)) opcoes.push([atual, "Desconectado (a sala abre no principal)"]);
+    sel.replaceChildren(...opcoes.map(([valor, rotulo]) => new Option(rotulo, valor, false, valor === atual)));
+  }
+
   private dizer(t: string, ruim = false) { this.msg.textContent = t; this.msg.classList.toggle("ruim", ruim); }
 
   /** Lê o formulário; números inválidos e textos obrigatórios vazios mantêm o valor atual. */
@@ -202,6 +219,7 @@ export class Configuracoes {
       sempre_no_topo: this.el("sempre_no_topo").checked, click_through: this.el("click_through").checked,
       atalhos: { ...this.atalhos },
       modelo: this.modelos?.escolhido ?? c.modelo,
+      sala_monitor: this.sel("sala_monitor").options.length ? this.sel("sala_monitor").value : c.sala_monitor, // lista ainda não chegou: mantém
     };
   }
 

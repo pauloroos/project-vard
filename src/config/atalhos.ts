@@ -1,7 +1,7 @@
 // Atalhos globais no formato do plugin global-shortcut do Tauri: normalização, captura pelo teclado e conflitos. Puro.
 
 /** Ações com atalho global, na ordem do painel (a mesma da tabela ATALHOS do Rust). */
-export const ACOES_ATALHO = ["falar", "parar", "mostrar", "config", "escuta"] as const;
+export const ACOES_ATALHO = ["falar", "parar", "mostrar", "config", "escuta", "sala"] as const;
 export type AcaoAtalho = (typeof ACOES_ATALHO)[number];
 
 export const ROTULOS_ATALHO: Record<AcaoAtalho, string> = {
@@ -10,6 +10,7 @@ export const ROTULOS_ATALHO: Record<AcaoAtalho, string> = {
   mostrar: "Mostrar/ocultar o widget",
   config: "Abrir/fechar as configurações",
   escuta: "Ligar/desligar a escuta",
+  sala: "Tela cheia (sala)",
 };
 
 /** Atalho que o Rust não conseguiu registrar no arranque (comando falhas_de_atalho). */

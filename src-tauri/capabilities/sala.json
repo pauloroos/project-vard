@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "sala",
+  "description": "Permissoes da janela da sala (tela cheia)",
+  "windows": ["sala"],
+  "permissions": ["core:default"]
+}

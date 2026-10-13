@@ -18,6 +18,8 @@ export interface Config {
   instrucao_formato: string;
   /** Modelo principal do OpenJarvis; vazio = o primeiro que ele expõe. */
   modelo: string;
+  /** Monitor da sala (tela cheia), pelo nome do sistema; vazio = o principal. O Rust lê a cada abertura. */
+  sala_monitor: string;
 }
 
 export const CONFIG_PADRAO: Config = {
@@ -28,10 +30,11 @@ export const CONFIG_PADRAO: Config = {
   tamanho: "medio", tamanho_px: 320, compacto: false,
   atalhos: {
     falar: "Ctrl+Alt+Space", parar: "Ctrl+Alt+Period", mostrar: "Ctrl+Alt+V",
-    config: "Ctrl+Alt+Comma", escuta: "Ctrl+Alt+E",
+    config: "Ctrl+Alt+Comma", escuta: "Ctrl+Alt+E", sala: "Ctrl+Alt+F",
   },
   instrucao_formato: "Responda em até duas frases, para ser lido em voz alta.",
   modelo: "",
+  sala_monitor: "",
 };
 
 /** Mescla o salvo com o padrão descartando o que tem tipo errado (arquivo editado à mão). */

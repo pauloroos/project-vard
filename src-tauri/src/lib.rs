@@ -22,6 +22,17 @@ fn alternar_visibilidade(app: &AppHandle) {
     }
 }
 
+/// Atalho e bandeja: alterna a sala; um problema (monitor sumiu, janela não abriu) vira aviso na linha de estado do widget.
+fn alternar_sala_e_avisar(app: &AppHandle) {
+    let aviso = match janelas::alternar_sala(app) {
+        Ok(aviso) => aviso,
+        Err(e) => Some(format!("Tela cheia não abriu: {e}")),
+    };
+    if let Some(texto) = aviso {
+        let _ = app.emit_to(JANELA, "aviso", texto);
+    }
+}
+
 fn acionar(app: &AppHandle, chave: &str, estado: ShortcutState) {
     match (chave, estado) {
         ("falar", ShortcutState::Pressed) => { let _ = app.emit_to(JANELA, "ptt-inicio", ()); }
@@ -31,6 +42,7 @@ fn acionar(app: &AppHandle, chave: &str, estado: ShortcutState) {
         ("mostrar", _) => alternar_visibilidade(app),
         ("escuta", _) => { let _ = app.emit_to(JANELA, "alternar-escuta", ()); }
         ("config", _) => janelas::alternar_configuracoes(app),
+        ("sala", _) => alternar_sala_e_avisar(app),
         _ => {}
     }
 }
@@ -53,8 +65,9 @@ fn criar_bandeja(app: &AppHandle, no_topo: bool) -> tauri::Result<()> {
     let mostrar = MenuItem::with_id(app, "mostrar", "Mostrar/ocultar", true, None::<&str>)?;
     let topo = CheckMenuItem::with_id(app, "topo", "Sempre no topo", true, no_topo, None::<&str>)?;
     let config = MenuItem::with_id(app, "config", "Configurações", true, None::<&str>)?;
+    let sala = MenuItem::with_id(app, "sala", "Tela cheia", true, None::<&str>)?;
     let sair = MenuItem::with_id(app, "sair", "Sair", true, None::<&str>)?;
-    let menu = Menu::with_items(app, &[&mostrar, &topo, &config, &sair])?;
+    let menu = Menu::with_items(app, &[&mostrar, &topo, &config, &sala, &sair])?;
 
     let topo_ref = topo.clone();
     let mut b = TrayIconBuilder::with_id("hud")
@@ -75,6 +88,7 @@ fn criar_bandeja(app: &AppHandle, no_topo: bool) -> tauri::Result<()> {
                     eprintln!("painel de configurações: {e}");
                 }
             }
+            "sala" => alternar_sala_e_avisar(app),
             "sair" => app.exit(0),
             _ => {}
         });
@@ -103,7 +117,9 @@ pub fn run() {
             comandos::validar_atalho,
             comandos::falhas_de_atalho,
             comandos::redimensionar_janela,
-            comandos::abrir_configuracoes
+            comandos::abrir_configuracoes,
+            comandos::alternar_sala,
+            comandos::listar_monitores
         ])
         .setup(|app| {
             let handle = app.handle().clone();
