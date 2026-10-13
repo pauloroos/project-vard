@@ -12,6 +12,8 @@ html, body { background: transparent; margin: 0; overflow: hidden; }
   font-family: var(--mono); text-transform: uppercase; letter-spacing: 0.14em; color: var(--ciano);
   user-select: none;
 }
+#app { transition: opacity 0.3s ease; }
+#app.invisivel { opacity: 0; pointer-events: none; }
 #nucleo { position: absolute; left: 0; top: 0; display: block; cursor: move; }
 
 #dica {

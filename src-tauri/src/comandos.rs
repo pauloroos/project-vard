@@ -266,9 +266,59 @@ pub fn listar_monitores(window: tauri::Window) -> Result<Vec<crate::janelas::Mon
         .collect())
 }
 
+/// Troca só as chaves de `parcial` numa config (a bandeja grava uma chave sem desfazer o resto).
+pub fn mesclar(atual: Value, parcial: Value) -> Value {
+    let mut base = match atual {
+        Value::Object(m) => m,
+        _ => serde_json::Map::new(),
+    };
+    if let Value::Object(p) = parcial {
+        for (k, v) in p {
+            base.insert(k, v);
+        }
+    }
+    Value::Object(base)
+}
+
+/// Lê, mescla e grava a config (uma chave só; o resto fica como estava).
+pub fn mesclar_config(app: &tauri::AppHandle, parcial: Value) -> Result<(), String> {
+    let atual = ler_config_valor(app).unwrap_or(Value::Null);
+    gravar_config(app.clone(), mesclar(atual, parcial))
+}
+
+/// Modo invisível: o cursor atravessa a janela enquanto ela está transparente (a opacidade é do CSS do widget).
+#[tauri::command]
+pub fn definir_invisivel(window: tauri::Window, ligado: bool) -> Result<(), String> {
+    window.set_ignore_cursor_events(ligado).map_err(|e| e.to_string())
+}
+
+/// O painel mudou "invisivel": a marca da bandeja acompanha.
+#[tauri::command]
+pub fn marcar_invisivel_na_bandeja(estado: tauri::State<'_, crate::Bandeja>, ligado: bool) -> Result<(), String> {
+    if let Ok(g) = estado.0.lock() {
+        if let Some(item) = g.as_ref() {
+            item.set_checked(ligado).map_err(|e| e.to_string())?;
+        }
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod testes {
     use super::*;
+
+    #[test]
+    fn mesclar_troca_so_a_chave_do_parcial() {
+        assert_eq!(
+            mesclar(serde_json::json!({"a":1,"invisivel":false}), serde_json::json!({"invisivel":true})),
+            serde_json::json!({"a":1,"invisivel":true})
+        );
+    }
+
+    #[test]
+    fn mesclar_sobre_nada_cria_o_objeto() {
+        assert_eq!(mesclar(Value::Null, serde_json::json!({"invisivel":true})), serde_json::json!({"invisivel":true}));
+    }
 
     #[test]
     fn padroes_de_atalho_sao_validos() {

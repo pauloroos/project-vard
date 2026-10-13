@@ -19,6 +19,7 @@ import { Conversa, type Estado } from "./fala/conversa";
 import { FALAS, saudacaoPara } from "./fala/falas";
 import { Adiador } from "./ui/dock";
 import { Hud } from "./ui/hud";
+import { Invisibilidade } from "./ui/invisivel";
 import { Nucleo } from "./ui/nucleo";
 import { ladoDoTamanho, ladoMudou, medidasDoWidget } from "./ui/tamanho";
 import { ESPELHO_INICIAL, reduzir, salaExiste, type Espelho, type EventoEspelho } from "./sala/espelho";
@@ -63,6 +64,12 @@ window.addEventListener("DOMContentLoaded", async () => {
     aoTela: () => olharTela(),
     aoConfigMudou: (c) => { void emitTo("configuracoes", "config-mudou-no-widget", { sempre_no_topo: c.sempre_no_topo, compacto: c.compacto }).catch(() => {}); },
   });
+  // Modo invisível: o widget só aparece durante a conversa (ou revelado à mão). Nunca esconde a janela: o WebView2 estrangularia os timers do VAD.
+  const invisibilidade = new Invisibilidade((visivel) => {
+    hud.setInvisivel(!visivel);
+    void invoke("definir_invisivel", { ligado: !visivel || cfg.click_through }).catch(() => {});
+  });
+  invisibilidade.definirModo(cfg.invisivel);
   // Sala (tela cheia): espelho do que o widget mostra. O widget guarda o mesmo espelho para mandar o retrato quando ela abre.
   let salaAberta = false;
   let espelho: Espelho = ESPELHO_INICIAL;
@@ -70,7 +77,7 @@ window.addEventListener("DOMContentLoaded", async () => {
     espelho = reduzir(espelho, ev);
     if (salaAberta) void emitTo("sala", "sala:espelho", ev).catch(() => {});
   };
-  const mostrarEstado = (e: Estado, detalhe = "") => { nucleo.setEstado(e); hud.setEstado(e, detalhe); paraSala({ tipo: "estado", estado: e, detalhe }); };
+  const mostrarEstado = (e: Estado, detalhe = "") => { invisibilidade.definirEstado(e); nucleo.setEstado(e); hud.setEstado(e, detalhe); paraSala({ tipo: "estado", estado: e, detalhe }); };
   const mostrarOuvido = (t: string) => { hud.setOuvido(t); paraSala({ tipo: "ouvido", texto: t }); };
   const mostrarResposta = (t: string) => { hud.setResposta(t); paraSala({ tipo: "resposta", texto: t }); };
   hud.dica("clique para ligar o ouvido");
@@ -127,7 +134,6 @@ window.addEventListener("DOMContentLoaded", async () => {
 
   // Ponte opcional do Vard: sem ela o HUD funciona igual, só sem o botão Tela e sem modo jogo.
   const ponte = new Ponte(cfg.ponte_url);
-  let canalAberto = false; // modo conversa (nome dispensado); a Tarefa 6 usa no HUD
   let ponteNoAr = true; // desconhecida até a 1ª sondagem (já disparada abaixo): tenta a ponte em vez de dizer que não há
   const espera = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
   // Falas fixas: a voz própria primeiro (o cache guarda o WAV dela), o OpenJarvis como reserva.
@@ -162,7 +168,7 @@ window.addEventListener("DOMContentLoaded", async () => {
     abrirMicrofone: () => abrirSeFechado(),
     fecharMicrofone: () => fecharTudoDoMicrofone(),
     mutar: () => { definirMudo(true); hud.setMudo(true); },
-    aoCanal: (aberto) => { canalAberto = aberto; console.info("modo conversa:", canalAberto ? "aberto" : "fechado"); },
+    aoCanal: (aberto) => { invisibilidade.definirCanal(aberto); console.info("modo conversa:", aberto ? "aberto" : "fechado"); },
   });
   olharTela = () => { void conversa.aoTextoTranscrito("olha a tela", true); };
 
@@ -269,6 +275,8 @@ window.addEventListener("DOMContentLoaded", async () => {
   let ligado = false;
   let analisadorEntrada: AnalyserNode | null = null; // o do microfone, para a sala
   let relogioVad = 0;
+  let tiques = 0; // prova em dev: o laço do VAD não pode ser estrangulado com o widget invisível
+  if (import.meta.env.DEV) setInterval(() => { console.info(`vad: ${tiques} tiques em 10 s`); tiques = 0; }, 10000);
   let largarAmostras: (() => void) | null = null;
   // Modo jogo: solta o microfone de verdade (a GPU e o ouvido ficam livres); alternarMicrofone reabre sozinho depois.
   const fecharTudoDoMicrofone = (): boolean => {
@@ -303,6 +311,7 @@ window.addEventListener("DOMContentLoaded", async () => {
       nucleo.setAnalisadores(mic.analisador, bocaReal.analisador);
       largarAmostras = onAmostras(guardarAmostras);
       relogioVad = window.setInterval(() => {
+        tiques++;
         if (boca.falando || ocupado || pttSegurado || estaMudo()) { detector.reset(); return; }
         const ev = detector.alimentar(rmsAtual(), performance.now());
         if (ev === "inicio") comecarCaptura();
@@ -366,6 +375,11 @@ window.addEventListener("DOMContentLoaded", async () => {
     if (capturando) void encerrar(true);
   });
   await listen("parar", () => { conversa.interromper(); });
+  await listen("alternar-revelacao", () => invisibilidade.alternarRevelacao());
+  await listen<unknown>("invisivel", (ev) => {
+    if (typeof ev.payload !== "boolean") { console.warn("invisivel ignorado: payload inválido"); return; }
+    cfg.invisivel = ev.payload; invisibilidade.definirModo(ev.payload);
+  });
   await listen("alternar-escuta", () => { void alternarMicrofone(); });
   // Sala aberta: retrato na hora e níveis a 20 Hz (o vórtice dela reage como o daqui). Fechada: nada vai para lá.
   let relogioSala = 0;
@@ -402,7 +416,11 @@ window.addEventListener("DOMContentLoaded", async () => {
       try { await invoke("definir_sempre_no_topo", { ligado: cfg.sempre_no_topo }); } catch (erro) { console.warn("topo", erro); }
       hud.atualizarTopo();
     }
-    if (mudou.includes("click_through")) aplicarClickThrough(cfg.click_through);
+    if (mudou.includes("click_through")) aplicarClickThrough(cfg.click_through || !invisibilidade.visivel()); // invisível segue sem cliques
+    if (mudou.includes("invisivel")) {
+      invisibilidade.definirModo(cfg.invisivel);
+      void invoke("marcar_invisivel_na_bandeja", { ligado: cfg.invisivel }).catch(() => {});
+    }
     if (mudou.includes("modelo")) oj.definirModelo(cfg.modelo);
     if (mudou.includes("usuario")) void fixa(saudacaoPara(cfg.usuario), false).catch(() => {}); // aquece a saudação nova
   };

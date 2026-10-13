@@ -99,6 +99,11 @@ export class Configuracoes {
     this.el("sempre_no_topo").checked = ligado;
   }
 
+  mudouInvisivel(ligado: boolean) {
+    this.cfg.invisivel = ligado;
+    this.el("invisivel").checked = ligado;
+  }
+
   private campo(id: string, rotulo: string, valor: string | number, tipo = "text", extra = ""): string {
     return `<label>${rotulo}<input id="cfg-${id}" type="${tipo}" value="${esc(String(valor))}" ${extra}></label>`;
   }
@@ -130,6 +135,7 @@ export class Configuracoes {
           ${this.marca("compacto", "Compacto (só o holograma)", c.compacto)}
           ${this.marca("sempre_no_topo", "Sempre no topo", c.sempre_no_topo)}
           ${this.marca("click_through", "Clique atravessa a janela", c.click_through)}
+          ${this.marca("invisivel", "Modo invisível (aparece só durante a conversa)", c.invisivel)}
           ${this.marca("logon", "Iniciar com o Windows", false)}
           <label>Monitor da tela cheia<select id="cfg-sala_monitor"></select></label>
         </fieldset>
@@ -241,7 +247,7 @@ export class Configuracoes {
       instrucao_formato: txt("instrucao_formato", c.instrucao_formato),
       tamanho: this.sel("tamanho").value as Config["tamanho"], tamanho_px: limitarLado(num("tamanho_px", c.tamanho_px)),
       compacto: this.el("compacto").checked,
-      sempre_no_topo: this.el("sempre_no_topo").checked, click_through: this.el("click_through").checked,
+      sempre_no_topo: this.el("sempre_no_topo").checked, click_through: this.el("click_through").checked, invisivel: this.el("invisivel").checked,
       atalhos: { ...this.atalhos },
       modelo: this.modelos?.escolhido ?? c.modelo,
       sala_monitor: this.sel("sala_monitor").options.length ? this.sel("sala_monitor").value : c.sala_monitor, // lista ainda não chegou: mantém

@@ -7,11 +7,24 @@ use tauri::{
     tray::TrayIconBuilder,
     AppHandle, Emitter, Manager,
 };
+use std::sync::Mutex;
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
 
 const JANELA: &str = janelas::HUD;
 
+/// Item "Modo invisível" da bandeja, guardado para o painel poder mudar a marca.
+pub struct Bandeja(pub Mutex<Option<CheckMenuItem<tauri::Wry>>>);
+
 fn alternar_visibilidade(app: &AppHandle) {
+    // Com o modo invisível ligado, o atalho e a bandeja só revelam ou escondem (o widget nunca é escondido de verdade).
+    let invisivel = comandos::ler_config_valor(app)
+        .ok()
+        .and_then(|c| c.get("invisivel").and_then(|v| v.as_bool()))
+        .unwrap_or(false);
+    if invisivel {
+        let _ = app.emit_to(JANELA, "alternar-revelacao", ());
+        return;
+    }
     if let Some(w) = app.get_webview_window(JANELA) {
         if w.is_visible().unwrap_or(false) {
             let _ = w.hide();
@@ -61,15 +74,20 @@ fn registrar_atalhos(app: &AppHandle, config: &Value) {
     }
 }
 
-fn criar_bandeja(app: &AppHandle, no_topo: bool) -> tauri::Result<()> {
+fn criar_bandeja(app: &AppHandle, no_topo: bool, invisivel_ligado: bool) -> tauri::Result<()> {
     let mostrar = MenuItem::with_id(app, "mostrar", "Mostrar/ocultar", true, None::<&str>)?;
     let topo = CheckMenuItem::with_id(app, "topo", "Sempre no topo", true, no_topo, None::<&str>)?;
+    let invisivel = CheckMenuItem::with_id(app, "invisivel", "Modo invisível", true, invisivel_ligado, None::<&str>)?;
     let config = MenuItem::with_id(app, "config", "Configurações", true, None::<&str>)?;
     let sala = MenuItem::with_id(app, "sala", "Tela cheia", true, None::<&str>)?;
     let sair = MenuItem::with_id(app, "sair", "Sair", true, None::<&str>)?;
-    let menu = Menu::with_items(app, &[&mostrar, &topo, &config, &sala, &sair])?;
+    let menu = Menu::with_items(app, &[&mostrar, &topo, &invisivel, &config, &sala, &sair])?;
 
     let topo_ref = topo.clone();
+    let inv_ref = invisivel.clone();
+    if let Ok(mut g) = app.state::<Bandeja>().0.lock() {
+        *g = Some(invisivel);
+    }
     let mut b = TrayIconBuilder::with_id("hud")
         .tooltip("Vard")
         .menu(&menu)
@@ -82,6 +100,14 @@ fn criar_bandeja(app: &AppHandle, no_topo: bool) -> tauri::Result<()> {
                 }
                 let _ = app.emit_to(JANELA, "sempre-no-topo", ligado);
                 let _ = app.emit_to(janelas::CONFIG, "sempre-no-topo", ligado);
+            }
+            "invisivel" => {
+                let ligado = inv_ref.is_checked().unwrap_or(false);
+                if let Err(e) = comandos::mesclar_config(app, serde_json::json!({ "invisivel": ligado })) {
+                    eprintln!("invisível: {e}");
+                }
+                let _ = app.emit_to(JANELA, "invisivel", ligado);
+                let _ = app.emit_to(janelas::CONFIG, "invisivel", ligado);
             }
             "config" => {
                 if let Err(e) = janelas::abrir_configuracoes(app) {
@@ -105,6 +131,7 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .manage(comandos::FalhasDeAtalho::default())
+        .manage(Bandeja(Mutex::new(None)))
         .invoke_handler(tauri::generate_handler![
             comandos::ler_config,
             comandos::gravar_config,
@@ -120,7 +147,9 @@ pub fn run() {
             comandos::dock_em_cima,
             comandos::abrir_configuracoes,
             comandos::alternar_sala,
-            comandos::listar_monitores
+            comandos::listar_monitores,
+            comandos::definir_invisivel,
+            comandos::marcar_invisivel_na_bandeja
         ])
         .setup(|app| {
             let handle = app.handle().clone();
@@ -132,7 +161,11 @@ pub fn run() {
             if let Some(w) = handle.get_webview_window(JANELA) {
                 let _ = w.set_always_on_top(no_topo);
             }
-            criar_bandeja(&handle, no_topo)?;
+            let invisivel = config
+                .get("invisivel")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false);
+            criar_bandeja(&handle, no_topo, invisivel)?;
             registrar_atalhos(&handle, &config);
             Ok(())
         })

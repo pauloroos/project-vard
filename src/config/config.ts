@@ -9,7 +9,7 @@ export interface Config {
   /** Serviço de voz próprio (POST /falar); vazio desliga e a voz fica sempre a do OpenJarvis. */
   voz_url: string;
   nome: string; usuario: string; variantes: string[]; idioma: string; voz: string; velocidade: number;
-  finish_ms: number; limiar_vad: number; sempre_no_topo: boolean; click_through: boolean;
+  finish_ms: number; limiar_vad: number; sempre_no_topo: boolean; click_through: boolean; invisivel: boolean;
   posicao: { x: number; y: number } | null;
   /** Tamanho do widget: preset ou "personalizado" (usa tamanho_px, lado em px lógicos). */
   tamanho: (typeof TAMANHOS)[number]; tamanho_px: number;
@@ -35,7 +35,7 @@ export const CONFIG_PADRAO: Config = {
   openjarvis_url: "http://127.0.0.1:8000", gui_url: "http://127.0.0.1:5173", ponte_url: "http://127.0.0.1:4700",
   voz_url: "http://127.0.0.1:4710",
   nome: "vard", usuario: "", variantes: ["vard", "varde", "vardi", "ward", "bard"], idioma: "pt", voz: "pm_alex", velocidade: 1.05,
-  finish_ms: 900, limiar_vad: 0.02, sempre_no_topo: true, click_through: false, posicao: null,
+  finish_ms: 900, limiar_vad: 0.02, sempre_no_topo: true, click_through: false, invisivel: false, posicao: null,
   tamanho: "medio", tamanho_px: 320, compacto: false,
   atalhos: {
     falar: "Ctrl+Alt+Space", parar: "Ctrl+Alt+Period", mostrar: "Ctrl+Alt+V",
@@ -126,7 +126,7 @@ export function avisosDeUrl(c: Pick<Config, "openjarvis_url" | "gui_url" | "pont
 }
 
 /** Chaves que o widget aplica na hora (evento config-salva). O resto só vale depois de reiniciar. */
-export const CHAVES_AO_VIVO = ["tamanho", "tamanho_px", "compacto", "sempre_no_topo", "click_through", "usuario", "modelo", "conversa_ms"] as const satisfies readonly (keyof Config)[];
+export const CHAVES_AO_VIVO = ["tamanho", "tamanho_px", "compacto", "sempre_no_topo", "click_through", "invisivel", "usuario", "modelo", "conversa_ms"] as const satisfies readonly (keyof Config)[];
 export type ChaveAoVivo = (typeof CHAVES_AO_VIVO)[number];
 
 /** Copia para a config viva do widget só as chaves ao vivo; devolve as que mudaram. */
@@ -166,10 +166,10 @@ export function lerConfigAoVivo(x: unknown): Pick<Config, ChaveAoVivo> | null {
   const px = o.tamanho_px;
   if (!(TAMANHOS as readonly unknown[]).includes(o.tamanho)) return null;
   if (typeof px !== "number" || !Number.isFinite(px)) return null;
-  if (typeof o.compacto !== "boolean" || typeof o.sempre_no_topo !== "boolean" || typeof o.click_through !== "boolean") return null;
+  if (typeof o.compacto !== "boolean" || typeof o.sempre_no_topo !== "boolean" || typeof o.click_through !== "boolean" || typeof o.invisivel !== "boolean") return null;
   if (typeof o.usuario !== "string" || typeof o.modelo !== "string") return null;
   if (typeof o.conversa_ms !== "number" || !Number.isFinite(o.conversa_ms) || o.conversa_ms < 0) return null;
-  return { tamanho: o.tamanho as Config["tamanho"], tamanho_px: limitarLado(px), compacto: o.compacto, sempre_no_topo: o.sempre_no_topo, click_through: o.click_through, usuario: o.usuario, modelo: o.modelo, conversa_ms: Math.round(o.conversa_ms) };
+  return { tamanho: o.tamanho as Config["tamanho"], tamanho_px: limitarLado(px), compacto: o.compacto, sempre_no_topo: o.sempre_no_topo, click_through: o.click_through, invisivel: o.invisivel, usuario: o.usuario, modelo: o.modelo, conversa_ms: Math.round(o.conversa_ms) };
 }
 
 /** Valida o payload de config-mudou-no-widget (topo e compacto); inválido devolve null. */

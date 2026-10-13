@@ -26,4 +26,8 @@ window.addEventListener("DOMContentLoaded", async () => {
     if (typeof ev.payload !== "boolean") { console.warn("sempre-no-topo ignorado: payload inválido"); return; }
     painel.mudouTopo(ev.payload);
   });
+  await listen<unknown>("invisivel", (ev) => {
+    if (typeof ev.payload !== "boolean") { console.warn("invisivel ignorado: payload inválido"); return; }
+    painel.mudouInvisivel(ev.payload);
+  });
 });
