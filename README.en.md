@@ -52,6 +52,14 @@ To build it yourself: `npm install` and `npm run tauri build` (installers land i
 
 Only one instance runs at a time: opening Vard again brings the window to the front. During development use `npm run tauri:dev` to coexist with the installed Vard.
 
+### What's new in 0.4.0
+
+- **Listening and speaking split:** "Don't listen" turns the microphone off; "Don't speak" shows the answer as text only. Buttons on the widget, tray items and the `Ctrl+Alt+N` shortcut; the state is remembered.
+- **Notice center (with the private install):** a discreet unread counter and a "Notices" tab in the panel (see result, mark as read). Nothing is spoken unless you turn on "Speak notices" (never while "Don't speak" is on).
+- **Waiting:** a discreet badge with the number of running tasks; hover for the list.
+- **Meeting:** a "Meeting" tab (start, stop, make minutes, last meeting); while a meeting runs the widget stays quiet and shows "meeting".
+- **Panel:** recognition language as a list and a "What I can do" tab.
+
 ### Shortcuts
 
 | Shortcut | Action |
@@ -61,6 +69,7 @@ Only one instance runs at a time: opening Vard again brings the window to the fr
 | `Ctrl+Alt+V` | Show or hide the widget |
 | `Ctrl+Alt+P` | Open or close the settings |
 | `Ctrl+Alt+L` | Start listening (opens the microphone) or toggle mute |
+| `Ctrl+Alt+N` | Toggle "Don't speak" (answers as text only) |
 | `Ctrl+Alt+F` | Toggle full screen (sala) |
 
 All of them can be changed in the Atalhos tab: click the field and press the new combination (Ctrl, Alt or Win plus a key). The panel rejects duplicates and marks any shortcut Windows refused (another program owns it). Changes apply after restarting Vard.

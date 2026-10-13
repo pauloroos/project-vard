@@ -50,6 +50,14 @@ Para gerar você mesmo: `npm install` e `npm run tauri build` (os instaladores s
 
 Só uma instância roda por vez: abrir o Vard de novo traz a janela para a frente. Em desenvolvimento use `npm run tauri:dev` para coexistir com o Vard instalado.
 
+### Novidades da 0.4.0
+
+- **Ouvir e falar separados:** "Não ouvir" desliga o microfone; "Não falar" mostra a resposta só em texto. Botões no widget, itens na bandeja e atalho `Ctrl+Alt+N`; o estado fica salvo.
+- **Central de avisos (com a instalação privada):** contador discreto de avisos não lidos e aba "Avisos" no painel (ver resultado, marcar lidos). Nada é falado, a não ser que você ligue "Falar os avisos" (e nunca com "Não falar" ligado).
+- **Aguardando:** sinal discreto com o número de tarefas em andamento; passe o mouse para ver a lista.
+- **Reunião:** aba "Reunião" (iniciar, encerrar, gerar ata, última reunião); com a reunião ativa o widget fica mudo e mostra "reunião".
+- **Painel:** idioma do reconhecimento em lista e aba "O que eu sei fazer".
+
 ### Atalhos
 
 | Atalho | O que faz |
@@ -59,6 +67,7 @@ Só uma instância roda por vez: abrir o Vard de novo traz a janela para a frent
 | `Ctrl+Alt+V` | Mostra ou oculta o widget |
 | `Ctrl+Alt+P` | Abre ou fecha as configurações |
 | `Ctrl+Alt+L` | Liga a escuta (abre o microfone) ou alterna o mudo |
+| `Ctrl+Alt+N` | Liga ou desliga o "Não falar" (resposta só em texto) |
 | `Ctrl+Alt+F` | Liga ou desliga a tela cheia (sala) |
 
 Todos podem ser trocados na aba Atalhos: clique no campo e pressione a nova combinação (Ctrl, Alt ou Win mais uma tecla). O painel recusa combinações repetidas e marca o atalho que o Windows não aceitou (outro programa já usa). Valem depois de reiniciar o Vard.
