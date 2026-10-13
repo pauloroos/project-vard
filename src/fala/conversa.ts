@@ -81,7 +81,7 @@ export class Conversa {
 
   private abrirCanal() {
     const ms = this.d.config.conversa_ms;
-    if (!(ms > 0)) return;
+    if (!(ms > 0)) { this.fecharCanal(); return; } // conversa_ms mudou para 0 ao vivo: não deixa o canal aberto
     const estava = this.canalAte > 0; // simétrico ao fecharCanal: não depende do relógio
     this.canalAte = Date.now() + ms;
     if (this.relogioCanal) clearTimeout(this.relogioCanal);

@@ -581,6 +581,14 @@ describe("modo conversa", () => {
     await c.aoTextoTranscrito("e amanhã", false);
     expect(oj.perguntar).toHaveBeenCalledTimes(1);
   });
+  it("conversa_ms_zero_ao_vivo_fecha_o_canal_aberto", async () => {
+    await c.aoTextoTranscrito("Vard, que horas são", false);
+    expect(c.canalAberto()).toBe(true);
+    deps.config.conversa_ms = 0;
+    await c.aoTextoTranscrito("e amanhã", false);
+    expect(c.canalAberto()).toBe(false);
+    expect(canal).toEqual([true, false]);
+  });
   it("frase_de_encerramento_fala_e_muta_com_ou_sem_o_nome", async () => {
     await c.aoTextoTranscrito("Vard, pode parar de me ouvir", false);
     expect(ultimaFala).toBe(FALAS.pareiDeOuvir);
