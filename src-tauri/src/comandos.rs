@@ -10,14 +10,15 @@ use std::{
 use tauri::Manager;
 
 /// Ações com atalho global: chave em `atalhos` na config e o padrão. Mesma ordem de ACOES_ATALHO no front.
+/// Ordem canônica dos modificadores: Ctrl, Alt, Shift, Super (igual ao normalizarAtalho do front).
 pub const ATALHOS: [(&str, &str); 7] = [
-    ("falar", "Ctrl+Alt+Space"),
-    ("parar", "Ctrl+Alt+Period"),
-    ("mostrar", "Ctrl+Alt+V"),
-    ("config", "Ctrl+Alt+P"),
-    ("escuta", "Ctrl+Alt+L"),
-    ("sala", "Ctrl+Alt+F"),
-    ("naofalar", "Ctrl+Alt+N"),
+    ("falar", "Alt+Super+Space"),
+    ("parar", "Alt+Super+Period"),
+    ("mostrar", "Alt+Super+V"),
+    ("config", "Shift+Super+K"),
+    ("escuta", "Alt+Super+L"),
+    ("sala", "Shift+Super+G"),
+    ("naofalar", "Alt+Super+N"),
 ];
 
 #[derive(Serialize, Clone, Debug, PartialEq)]
@@ -706,31 +707,31 @@ mod testes {
     }
 
     #[test]
-    fn atalho_do_nao_falar_e_ctrl_alt_n_por_ultimo() {
-        assert_eq!(*ATALHOS.last().unwrap(), ("naofalar", "Ctrl+Alt+N"));
+    fn atalho_do_nao_falar_e_alt_super_n_por_ultimo() {
+        assert_eq!(*ATALHOS.last().unwrap(), ("naofalar", "Alt+Super+N"));
     }
 
     #[test]
     fn combinacao_invalida_e_recusada() {
-        assert!(validar_combinacao("Ctrl+Alt+Banana").is_err());
+        assert!(validar_combinacao("Alt+Super+Banana").is_err());
         assert!(validar_combinacao("").is_err());
     }
 
     #[test]
     fn atalho_da_config_usa_salvo_ou_padrao() {
         let c = serde_json::json!({ "atalhos": { "escuta": "Ctrl+Shift+L" } });
-        assert_eq!(atalho_da_config(&c, "escuta", "Ctrl+Alt+L"), "Ctrl+Shift+L");
-        assert_eq!(atalho_da_config(&c, "config", "Ctrl+Alt+P"), "Ctrl+Alt+P");
-        assert_eq!(atalho_da_config(&Value::Null, "falar", "Ctrl+Alt+Space"), "Ctrl+Alt+Space");
+        assert_eq!(atalho_da_config(&c, "escuta", "Alt+Super+L"), "Ctrl+Shift+L");
+        assert_eq!(atalho_da_config(&c, "config", "Shift+Super+K"), "Shift+Super+K");
+        assert_eq!(atalho_da_config(&Value::Null, "falar", "Alt+Super+Space"), "Alt+Super+Space");
     }
 
     #[test]
     fn painel_antigo_ctrl_alt_virgula_migra_e_escolha_do_usuario_fica() {
         let antigo = serde_json::json!({ "atalhos": { "config": "Ctrl+Alt+Comma" } });
-        assert_eq!(atalho_da_config(&antigo, "config", "Ctrl+Alt+P"), "Ctrl+Alt+P");
+        assert_eq!(atalho_da_config(&antigo, "config", "Shift+Super+K"), "Shift+Super+K");
         let outro = serde_json::json!({ "atalhos": { "config": "Ctrl+Shift+K", "escuta": "Ctrl+Alt+Comma" } });
-        assert_eq!(atalho_da_config(&outro, "config", "Ctrl+Alt+P"), "Ctrl+Shift+K");
-        assert_eq!(atalho_da_config(&outro, "escuta", "Ctrl+Alt+L"), "Ctrl+Alt+Comma");
+        assert_eq!(atalho_da_config(&outro, "config", "Shift+Super+K"), "Ctrl+Shift+K");
+        assert_eq!(atalho_da_config(&outro, "escuta", "Alt+Super+L"), "Ctrl+Alt+Comma");
     }
 
     #[test]
