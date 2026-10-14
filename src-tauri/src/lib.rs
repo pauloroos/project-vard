@@ -1,3 +1,4 @@
+mod cofre;
 mod comandos;
 mod janelas;
 
@@ -223,10 +224,14 @@ pub fn run() {
             comandos::definir_invisivel,
             comandos::marcar_invisivel_na_bandeja,
             comandos::sincronizar_bandeja,
-            comandos::definir_tarefas_bandeja
+            comandos::definir_tarefas_bandeja,
+            cofre::cofre_existe,
+            cofre::cofre_gravar,
+            cofre::cofre_apagar
         ])
         .setup(|app| {
             let handle = app.handle().clone();
+            cofre::migrar_no_arranque(&handle);
             let config = comandos::ler_config_valor(&handle).unwrap_or(Value::Null);
             let no_topo = config
                 .get("sempre_no_topo")
