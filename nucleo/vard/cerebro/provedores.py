@@ -689,6 +689,6 @@ class AdaptadorFalso(AdaptadorProvedor):
         cancelamento: Optional[asyncio.Event] = None,
     ) -> AsyncIterator[EventoInferencia]:
         if self._falhar:
-            raise ErroProvedor("falha_simulada", False, "erro de teste")
+            raise ErroProvedor("conexao", True, "erro de teste simulado")
         yield EventoInferencia("texto", {"conteudo": self._resposta})
         yield EventoInferencia("fim", {})
