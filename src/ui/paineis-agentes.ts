@@ -68,7 +68,7 @@ export class AbaPaineisAgentes {
     });
   }
 
-  private salvarAgente(ag: Agente, btn: HTMLElement) {
+  private salvarAgente(ag: Agente, _btn: HTMLElement) {
     const fieldset = this.raiz.querySelector(`fieldset[data-agente="${ag}"]`)!;
     const padrao = (fieldset.querySelector(".inp-padrao") as HTMLInputElement).value.trim();
     const modelosRaw = (fieldset.querySelector(".inp-modelos") as HTMLInputElement).value.trim();

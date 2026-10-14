@@ -232,7 +232,7 @@ export function lerEstado(): PaineisEstado {
     const txt = readFileSync(caminho, "utf-8");
     return validarEstado(JSON.parse(txt));
   } catch (e) {
-    if ((e as NodeJS.ErrnoException).code === "ENOENT") return structuredClone(ESTADO_PADRAO);
+    if ((e as { code?: string }).code === "ENOENT") return structuredClone(ESTADO_PADRAO);
     throw e;
   }
 }

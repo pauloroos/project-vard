@@ -39,7 +39,7 @@ export class AbaPaineisVozes {
       TIPOS_VOZ.includes(p.tipo as TipoVoz),
     );
 
-    const linhas = vozes.map((p, i) => {
+    const linhas = vozes.map((p) => {
       // Índice real no array completo de provedores
       const idxReal = this.cfg.provedores.indexOf(p);
       return `
