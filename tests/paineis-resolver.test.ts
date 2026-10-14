@@ -1,5 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
+vi.mock("@tauri-apps/api/core", () => ({
+  invoke: vi.fn().mockImplementation((cmd: string) => {
+    if (cmd === "ler_paineis") return Promise.resolve(null);
+    if (cmd === "gravar_paineis") return Promise.resolve(undefined);
+    return Promise.resolve(null);
+  }),
+}));
+
 vi.mock("../src/config/segredos", () => ({
   cofreExiste: vi.fn(),
   cofreLer: vi.fn(),

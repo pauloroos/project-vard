@@ -32,7 +32,7 @@ export class AbaPaineisAgentes {
   ) {}
 
   async montar() {
-    this.cfg = lerPaineis();
+    this.cfg = await lerPaineis();
     this.desenhar();
   }
 
@@ -86,7 +86,7 @@ export class AbaPaineisAgentes {
     this.cfg.agentes[ag] = escolha;
 
     try {
-      gravarPaineis(this.cfg);
+      void gravarPaineis(this.cfg);
       this.deps.aoMudar?.();
       this.msgLocal(fieldset, "Salvo.");
     } catch (e) {

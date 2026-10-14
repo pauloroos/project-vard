@@ -26,7 +26,7 @@ export class AbaPaineisMcps {
   ) {}
 
   async montar() {
-    this.cfg = lerPaineis();
+    this.cfg = await lerPaineis();
     this.desenhar();
   }
 
@@ -208,7 +208,7 @@ export class AbaPaineisMcps {
 
   private persistir() {
     try {
-      gravarPaineis(this.cfg);
+      void gravarPaineis(this.cfg);
       this.deps.aoMudar?.();
       this.desenhar();
       this.msg("Salvo.");

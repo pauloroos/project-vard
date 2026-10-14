@@ -5,9 +5,11 @@
  * Estado:  `%LOCALAPPDATA%\rdl-vard\paineis-estado.json` (ou VARD_DADOS/paineis-estado.json).
  *
  * Nenhum segredo no JSON; credenciais são referências ao cofre (tipo/id).
+ *
+ * Leitura/escrita via comandos Rust ler_paineis/gravar_paineis (invoke),
+ * sem dependência de node:fs no WebView do Tauri.
  */
-import { readFileSync, writeFileSync, mkdirSync, existsSync, renameSync } from "node:fs";
-import { join, dirname } from "node:path";
+import { invoke } from "@tauri-apps/api/core";
 
 // --- Contrato (spec 0.6) ---
 
@@ -54,33 +56,6 @@ export interface PaineisEstado {
   ativo_efetivo: string | null;
   reserva_efetiva: string | null;
   erro?: string;
-}
-
-// --- Caminhos ---
-
-function lerEnv(chave: string): string | undefined {
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const p = (globalThis as any).process as { env?: Record<string, string | undefined> } | undefined;
-    return p?.env?.[chave];
-  } catch {
-    return undefined;
-  }
-}
-
-function baseUsuario(): string {
-  const local = lerEnv("LOCALAPPDATA") || lerEnv("HOME") || ".";
-  return join(local, "rdl-vard");
-}
-
-export function caminhoPaineis(): string {
-  const override = (lerEnv("VARD_CONFIG") || "").trim();
-  return override ? join(override, "paineis.json") : join(baseUsuario(), "config", "paineis.json");
-}
-
-export function caminhoEstado(): string {
-  const override = (lerEnv("VARD_DADOS") || "").trim();
-  return override ? join(override, "paineis-estado.json") : join(baseUsuario(), "paineis-estado.json");
 }
 
 // --- Padrões ---
@@ -212,46 +187,26 @@ export function validarEstado(raw: unknown): PaineisEstado {
   return obj as unknown as PaineisEstado;
 }
 
-// --- Leitura / Escrita ---
+// --- Leitura / Escrita (via invoke Rust) ---
 
-export function lerPaineis(): PaineisConfig {
-  const caminho = caminhoPaineis();
-  if (!existsSync(caminho)) return structuredClone(PAINEIS_PADRAO);
-  try {
-    const txt = readFileSync(caminho, "utf-8");
-    return validarPaineis(JSON.parse(txt));
-  } catch (e) {
-    if ((e as { code?: string }).code === "ENOENT") return structuredClone(PAINEIS_PADRAO);
-    throw e;
-  }
+export async function lerPaineis(): Promise<PaineisConfig> {
+  const raw = await invoke<unknown>("ler_paineis", { arquivo: "config" });
+  if (raw === null || raw === undefined) return structuredClone(PAINEIS_PADRAO);
+  return validarPaineis(raw);
 }
 
-export function gravarPaineis(cfg: PaineisConfig): void {
+export async function gravarPaineis(cfg: PaineisConfig): Promise<void> {
   validarPaineis(cfg); // valida antes de escrever
-  const caminho = caminhoPaineis();
-  mkdirSync(dirname(caminho), { recursive: true });
-  const tmp = `${caminho}.tmp`;
-  writeFileSync(tmp, JSON.stringify(cfg, null, 2), "utf-8");
-  renameSync(tmp, caminho);
+  await invoke("gravar_paineis", { arquivo: "config", valor: cfg });
 }
 
-export function lerEstado(): PaineisEstado {
-  const caminho = caminhoEstado();
-  if (!existsSync(caminho)) return structuredClone(ESTADO_PADRAO);
-  try {
-    const txt = readFileSync(caminho, "utf-8");
-    return validarEstado(JSON.parse(txt));
-  } catch (e) {
-    if ((e as { code?: string }).code === "ENOENT") return structuredClone(ESTADO_PADRAO);
-    throw e;
-  }
+export async function lerEstado(): Promise<PaineisEstado> {
+  const raw = await invoke<unknown>("ler_paineis", { arquivo: "estado" });
+  if (raw === null || raw === undefined) return structuredClone(ESTADO_PADRAO);
+  return validarEstado(raw);
 }
 
-export function gravarEstado(estado: PaineisEstado): void {
+export async function gravarEstado(estado: PaineisEstado): Promise<void> {
   validarEstado(estado);
-  const caminho = caminhoEstado();
-  mkdirSync(dirname(caminho), { recursive: true });
-  const tmp = `${caminho}.tmp`;
-  writeFileSync(tmp, JSON.stringify(estado, null, 2), "utf-8");
-  renameSync(tmp, caminho);
+  await invoke("gravar_paineis", { arquivo: "estado", valor: estado });
 }
