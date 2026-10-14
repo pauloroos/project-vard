@@ -1,10 +1,10 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { mkdtempSync, rmSync, readFileSync, existsSync } from "node:fs";
+import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 vi.mock("@tauri-apps/api/core", () => ({
-  invoke: vi.fn().mockImplementation((cmd: string, args?: Record<string, unknown>) => {
+  invoke: vi.fn().mockImplementation((cmd: string) => {
     if (cmd === "ler_paineis") return Promise.resolve(null);
     if (cmd === "gravar_paineis") return Promise.resolve(undefined);
     return Promise.resolve(null);
