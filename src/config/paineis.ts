@@ -58,21 +58,28 @@ export interface PaineisEstado {
 
 // --- Caminhos ---
 
+function lerEnv(chave: string): string | undefined {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const p = (globalThis as any).process as { env?: Record<string, string | undefined> } | undefined;
+    return p?.env?.[chave];
+  } catch {
+    return undefined;
+  }
+}
+
 function baseUsuario(): string {
-  const env = globalThis.process?.env ?? {};
-  const local = (env as Record<string, string | undefined>).LOCALAPPDATA || (env as Record<string, string | undefined>).HOME || ".";
+  const local = lerEnv("LOCALAPPDATA") || lerEnv("HOME") || ".";
   return join(local, "rdl-vard");
 }
 
 export function caminhoPaineis(): string {
-  const env = globalThis.process?.env ?? {};
-  const override = ((env as Record<string, string | undefined>).VARD_CONFIG || "").trim();
+  const override = (lerEnv("VARD_CONFIG") || "").trim();
   return override ? join(override, "paineis.json") : join(baseUsuario(), "config", "paineis.json");
 }
 
 export function caminhoEstado(): string {
-  const env = globalThis.process?.env ?? {};
-  const override = ((env as Record<string, string | undefined>).VARD_DADOS || "").trim();
+  const override = (lerEnv("VARD_DADOS") || "").trim();
   return override ? join(override, "paineis-estado.json") : join(baseUsuario(), "paineis-estado.json");
 }
 
