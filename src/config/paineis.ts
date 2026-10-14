@@ -59,17 +59,20 @@ export interface PaineisEstado {
 // --- Caminhos ---
 
 function baseUsuario(): string {
-  const local = process.env.LOCALAPPDATA || process.env.HOME || ".";
+  const env = globalThis.process?.env ?? {};
+  const local = (env as Record<string, string | undefined>).LOCALAPPDATA || (env as Record<string, string | undefined>).HOME || ".";
   return join(local, "rdl-vard");
 }
 
 export function caminhoPaineis(): string {
-  const override = (process.env.VARD_CONFIG || "").trim();
+  const env = globalThis.process?.env ?? {};
+  const override = ((env as Record<string, string | undefined>).VARD_CONFIG || "").trim();
   return override ? join(override, "paineis.json") : join(baseUsuario(), "config", "paineis.json");
 }
 
 export function caminhoEstado(): string {
-  const override = (process.env.VARD_DADOS || "").trim();
+  const env = globalThis.process?.env ?? {};
+  const override = ((env as Record<string, string | undefined>).VARD_DADOS || "").trim();
   return override ? join(override, "paineis-estado.json") : join(baseUsuario(), "paineis-estado.json");
 }
 
@@ -211,7 +214,7 @@ export function lerPaineis(): PaineisConfig {
     const txt = readFileSync(caminho, "utf-8");
     return validarPaineis(JSON.parse(txt));
   } catch (e) {
-    if ((e as NodeJS.ErrnoException).code === "ENOENT") return structuredClone(PAINEIS_PADRAO);
+    if ((e as { code?: string }).code === "ENOENT") return structuredClone(PAINEIS_PADRAO);
     throw e;
   }
 }
