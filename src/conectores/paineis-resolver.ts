@@ -9,7 +9,7 @@
  * Nada aqui imprime segredos.
  */
 import { cofreExiste, cofreLer } from "../config/segredos";
-import type { PaineisConfig, Provedor, Mcp } from "../config/paineis";
+import type { PaineisConfig, Mcp } from "../config/paineis";
 import type { FonteDeVoz } from "./voz/fonte";
 import type { FalaEmFluxo } from "../fala/conversa";
 import { ErroVoz } from "./voz/cliente";
