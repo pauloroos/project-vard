@@ -117,3 +117,45 @@ export function validarAtalhos(atalhos: Record<AcaoAtalho, string>): Partial<Rec
   for (const [primeira, repetida] of conflitos(atalhos)) erros[repetida] ??= `Igual a "${ROTULOS_ATALHO[primeira]}".`;
   return erros;
 }
+
+// --- Migração 0.5 → 0.6 (Ctrl+Alt → Win) ---
+
+/** Padrões antigos da 0.5 (Ctrl+Alt). Usados como referência para migração automática. */
+export const ATALHOS_ANTIGOS: Record<AcaoAtalho, string> = {
+  falar: "Ctrl+Alt+Space",
+  parar: "Ctrl+Alt+Period",
+  mostrar: "Ctrl+Alt+V",
+  config: "Ctrl+Alt+P",
+  escuta: "Ctrl+Alt+L",
+  sala: "Ctrl+Alt+F",
+  naofalar: "Ctrl+Alt+N",
+};
+
+/** Novos padrões da 0.6 (Win+Alt / Win+Shift). */
+export const ATALHOS_NOVOS: Record<AcaoAtalho, string> = {
+  falar: "Super+Alt+Space",
+  parar: "Super+Alt+Period",
+  mostrar: "Super+Alt+V",
+  config: "Super+Shift+K",
+  escuta: "Super+Alt+L",
+  sala: "Super+Shift+G",
+  naofalar: "Super+Alt+N",
+};
+
+/**
+ * Migra atalhos da 0.5 para os novos padrões da 0.6.
+ * Só migra se o valor for exatamente o padrão antigo; personalizações são preservadas.
+ * Se já estiver usando Super (Win), não mexe.
+ */
+export function migrarAtalhosWin(atalhos: Record<AcaoAtalho, string>): Record<AcaoAtalho, string> {
+  const saida = { ...atalhos };
+  for (const acao of ACOES_ATALHO) {
+    const atual = normalizarAtalho(saida[acao]) ?? saida[acao];
+    const antigo = ATALHOS_ANTIGOS[acao];
+    // Só migra se for exatamente o padrão antigo
+    if (atual === antigo) {
+      saida[acao] = ATALHOS_NOVOS[acao];
+    }
+  }
+  return saida;
+}
