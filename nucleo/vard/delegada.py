@@ -691,6 +691,49 @@ def repetir(n: int, *, arq: Path | None = None, orca=None) -> str:
     return f"Tentando de novo a consulta {n} no {NOMES[novo.agente]}; aviso quando ele responder."
 
 
+def resolver_modelo_agente(agente: str, pedido: str | None = None) -> tuple[str, str | None]:
+    """Resolve o modelo para um agente conforme spec D6 (espelha escolherModelo TS).
+
+    Retorna (modelo, aviso) ou levanta ValueError se impossível.
+    Lê paineis.json via config.arquivo_config; falha claro se agente/modelo ausente.
+    """
+    import json as _json
+
+    cfg_path = config.arquivo_config("paineis.json")
+    if not cfg_path.is_file():
+        raise ValueError("paineis.json não encontrado na pasta de configuração")
+    with cfg_path.open("r", encoding="utf-8") as f:
+        dados = _json.load(f)
+    agentes_cfg = dados.get("agentes") or {}
+    if agente not in agentes_cfg:
+        raise ValueError(f"agente desconhecido: {agente}")
+    ag = agentes_cfg[agente]
+    modelos = list(ag.get("modelos") or [])
+    padrao = str(ag.get("padrao") or "")
+
+    if pedido is not None and pedido != "":
+        if pedido not in modelos:
+            raise ValueError(f'modelo "{pedido}" não está na lista do agente {agente}')
+        return pedido, None
+
+    if padrao:
+        return padrao, None
+
+    if not modelos:
+        raise ValueError(f"nenhum modelo configurado para o agente {agente}")
+    if len(modelos) == 1:
+        return modelos[0], None
+    return modelos[0], f"nenhum modelo padrão definido para {agente}; usando {modelos[0]} como sugestão"
+
+
+def despachar_tarefa(agente: str, tarefa: str, modelo_pedido: str | None = None) -> dict:
+    """Despacha uma tarefa resolvendo o modelo antes; falha claro se modelo indisponível."""
+    modelo, aviso = resolver_modelo_agente(agente, modelo_pedido)
+    if aviso:
+        log.info("delegada despacho agente=%s aviso=%s", agente, aviso)
+    return {"agente": agente, "tarefa": tarefa, "modelo": modelo}
+
+
 def limpar_antigas(*, arq: Path | None = None, agora: dt.datetime, conf: Conf | None = None) -> int:
     """Retenção: consulta delegada já decidida e parada há mais de `retencao_dias` perde a resposta (arquivo, resultado
     e resumo). Só apaga um arquivo chamado exatamente <n>.md. Loga só a contagem."""
