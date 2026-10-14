@@ -1,4 +1,7 @@
 {
   "identifier": "io.github.pauloroos.vard.dev",
-  "productName": "Vard Dev"
+  "productName": "Vard Dev",
+  "app": {
+    "withGlobalTauri": true
+  }
 }
