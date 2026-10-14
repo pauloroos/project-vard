@@ -1,0 +1,2 @@
+*.patch text eol=lf
+scripts/openjarvis/patches/openjarvis-chat-extra.patch -text
