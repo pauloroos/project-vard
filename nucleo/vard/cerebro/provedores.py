@@ -162,6 +162,7 @@ class AdaptadorOpenAICompat(AdaptadorProvedor):
         log.debug("OpenAICompat POST %s model=%s", _sem_segredo(url), self._modelo)
 
         chamadas_parciais: Dict[int, Dict[str, Any]] = {}
+        chamadas_emitidas: set[int] = set()
 
         async for linha in _stream_http(
             "POST", url,
@@ -207,8 +208,28 @@ class AdaptadorOpenAICompat(AdaptadorProvedor):
                     if fn.get("arguments"):
                         parcial["argumentos"] += fn["arguments"]
 
-        # Emite chamadas completas somente se argumentos forem JSON valido
+            # Emite chamadas completas somente se argumentos forem JSON valido
+            # e ainda nao foram emitidas (evita duplicacao a cada chunk)
+            for idx in sorted(chamadas_parciais.keys()):
+                if idx in chamadas_emitidas:
+                    continue
+                parcial = chamadas_parciais[idx]
+                args_str = parcial["argumentos"]
+                try:
+                    args = json.loads(args_str) if args_str else {}
+                except json.JSONDecodeError:
+                    continue
+                chamadas_emitidas.add(idx)
+                yield EventoInferencia("chamada", {
+                    "id": parcial["id"],
+                    "nome": parcial["nome"],
+                    "argumentos": args,
+                })
+
+        # Emite chamadas pendentes que so fecharam apos o fim do stream
         for idx in sorted(chamadas_parciais.keys()):
+            if idx in chamadas_emitidas:
+                continue
             parcial = chamadas_parciais[idx]
             args_str = parcial["argumentos"]
             try:
@@ -427,10 +448,11 @@ class AdaptadorAnthropic(AdaptadorProvedor):
                         argumentos = json.loads(args_raw) if args_raw else {}
                     except json.JSONDecodeError:
                         log.warning(
-                            "Tool call Anthropic com args invalidos: %s",
+                            "Tool call Anthropic com args invalidos ignorada: %s",
                             _sem_segredo(args_raw[:200]),
                         )
-                        argumentos = {"_raw": args_raw}
+                        tc_atual = None
+                        continue
                     yield EventoInferencia("chamada", {
                         "id": tc_atual["id"],
                         "nome": tc_atual["nome"],
