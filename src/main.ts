@@ -20,6 +20,7 @@ import { EstadoReuniao } from "./reuniao/estado";
 import { criarFonteDeVoz } from "./conectores/voz/escolher";
 import type { FonteDeVoz } from "./conectores/voz/fonte";
 import { Conversa, type Estado } from "./fala/conversa";
+import { criarMaquinaConversaAberta } from "./conversa/aberta";
 import { FALAS, saudacaoPara } from "./fala/falas";
 import { Adiador } from "./ui/dock";
 import { Hud } from "./ui/hud";
@@ -244,6 +245,13 @@ window.addEventListener("DOMContentLoaded", async () => {
       // Terminou de falar: descarta o pre-roll, que teria a cauda da própria voz (eco).
       if (estavaFalando && e !== "falando") { anel = []; anelAmostras = 0; }
       estavaFalando = e === "falando";
+      // T13: modo jogo desliga a conversa aberta automaticamente
+      if (e === "jogo" && conversaAberta.estado !== "desligado") {
+        conversaAberta.contextoMudou("jogo");
+        hud.setConversaAberta(false);
+        if (timerSilencioAberta) { clearTimeout(timerSilencioAberta); timerSilencioAberta = null; }
+        console.info("conversa aberta: desligada por jogo");
+      }
     },
     aoResposta: (t) => mostrarResposta(t),
     ponte, ponteNoAr: () => ponteNoAr,
@@ -256,9 +264,43 @@ window.addEventListener("DOMContentLoaded", async () => {
     abrirMicrofone: () => abrirSeFechado(),
     fecharMicrofone: () => fecharTudoDoMicrofone(),
     mutar: () => { definirMudo(true); hud.setMudo(true); },
-    aoCanal: (aberto) => { invisibilidade.definirCanal(aberto); console.info("modo conversa:", aberto ? "aberto" : "fechado"); },
+    aoCanal: (aberto) => {
+      invisibilidade.definirCanal(aberto);
+      console.info("modo conversa:", aberto ? "aberto" : "fechado");
+      // T13: frase de voz "fica me ouvindo" liga/desliga a conversa aberta contínua
+      if (aberto && conversaAberta.estado === "desligado") alternarConversaAberta();
+      if (!aberto && conversaAberta.estado !== "desligado") alternarConversaAberta();
+    },
   });
   olharTela = () => { void conversa.aoTextoTranscrito("olha a tela", true); };
+
+  // T13 — Conversa aberta contínua: máquina de estados pura ligada ao fluxo de transcrição.
+  const conversaAberta = criarMaquinaConversaAberta();
+  let timerSilencioAberta: ReturnType<typeof setTimeout> | null = null;
+  const rearmarTimerSilencioAberta = () => {
+    if (timerSilencioAberta) clearTimeout(timerSilencioAberta);
+    if (conversaAberta.estado !== "ouvindo") return;
+    timerSilencioAberta = setTimeout(() => {
+      conversaAberta.silencioExpirou();
+      hud.setConversaAberta(false);
+      console.info("conversa aberta: silêncio expirou");
+    }, 300_000); // 5 min padrão
+  };
+  const alternarConversaAberta = () => {
+    if (conversaAberta.estado === "desligado") {
+      conversaAberta.ligar();
+      hud.setConversaAberta(true);
+      rearmarTimerSilencioAberta();
+      console.info("conversa aberta: ligada");
+    } else {
+      conversaAberta.desligar();
+      hud.setConversaAberta(false);
+      if (timerSilencioAberta) { clearTimeout(timerSilencioAberta); timerSilencioAberta = null; }
+      console.info("conversa aberta: desligada");
+    }
+  };
+  await listen("alternar-conversa", () => alternarConversaAberta());
+
   const detector = new DetectorDeVoz({ limiar: cfg.limiar_vad, inicioMs: 150, fimMs: cfg.finish_ms, tetoMs: 12000 });
   // Descarta a captura em curso: a reunião que começa no meio dela (o VAD pararia de finalizar e o PCM
   // cresceria a reunião inteira) e o modo jogo que solta o microfone usam o mesmo caminho.
@@ -272,7 +314,17 @@ window.addEventListener("DOMContentLoaded", async () => {
   aoReuniao = (ativa) => {
     reuniaoAtiva = ativa;
     hud.setReuniao(ativa);
-    if (ativa) { descartarCaptura(); conversa.interromper(); } // corta o que estiver falando; o mudo do usuário não é mexido
+    if (ativa) {
+      descartarCaptura();
+      conversa.interromper();
+      // T13: reunião desliga a conversa aberta automaticamente
+      if (conversaAberta.estado !== "desligado") {
+        conversaAberta.contextoMudou("reuniao");
+        hud.setConversaAberta(false);
+        if (timerSilencioAberta) { clearTimeout(timerSilencioAberta); timerSilencioAberta = null; }
+        console.info("conversa aberta: desligada por reunião");
+      }
+    }
   };
 
   // Status da ponte a cada 10 s: mostra/esconde o botão Tela e acompanha o modo jogo. Nunca trava a conversa.
@@ -458,8 +510,8 @@ window.addEventListener("DOMContentLoaded", async () => {
       }
     };
     (window as unknown as { __vardPergunta?: (t: string) => Promise<void> }).__vardPergunta = (texto: string) => injetar(texto, true);
-    // Pelo caminho do VAD (sem push-to-talk): exige o nome, a menos que o modo conversa esteja aberto.
-    (window as unknown as { __vardOuvido?: (t: string) => Promise<void> }).__vardOuvido = (texto: string) => injetar(texto, false);
+    // Pelo caminho do VAD (sem push-to-talk): exige o nome, a menos que o modo conversa aberta esteja ligado.
+    (window as unknown as { __vardOuvido?: (t: string) => Promise<void> }).__vardOuvido = (texto: string) => injetar(texto, conversaAberta.estado !== "desligado");
     // Prova do dock: move a janela para uma posição física.
     (window as unknown as { __vardMover?: (x: number, y: number) => Promise<void> }).__vardMover = (x: number, y: number) => getCurrentWindow().setPosition(new PhysicalPosition(x, y));
   }

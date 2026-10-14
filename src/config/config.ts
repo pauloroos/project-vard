@@ -48,6 +48,7 @@ export const CONFIG_PADRAO: Config = {
   atalhos: {
     falar: "Alt+Super+Space", parar: "Alt+Super+Period", mostrar: "Alt+Super+V",
     config: "Shift+Super+K", escuta: "Alt+Super+L", sala: "Shift+Super+G", naofalar: "Alt+Super+N",
+    conversa: "Alt+Super+C",
   },
   instrucao_formato: "Responda em até duas frases, para ser lido em voz alta.",
   modelo: "",

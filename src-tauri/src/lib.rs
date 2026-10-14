@@ -68,6 +68,7 @@ fn acionar(app: &AppHandle, chave: &str, estado: ShortcutState) {
         ("mostrar", _) => alternar_visibilidade(app),
         ("escuta", _) => { let _ = app.emit_to(JANELA, "alternar-escuta", ()); }
         ("naofalar", _) => { let _ = app.emit_to(JANELA, "alternar-fala", ()); }
+        ("conversa", _) => { let _ = app.emit_to(JANELA, "alternar-conversa", ()); }
         ("config", _) => janelas::alternar_configuracoes(app),
         ("sala", _) => alternar_sala_e_avisar(app),
         _ => {}

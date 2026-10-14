@@ -155,6 +155,11 @@ export class Hud {
     if (!v && this.respostaEl.classList.contains("visivel")) this.agendarSumirResposta();
   }
 
+  /** Conversa aberta contínua (T13): anel do holograma aceso enquanto o modo estiver ligado. */
+  setConversaAberta(ligada: boolean) {
+    this.raiz.classList.toggle("conversa-aberta", ligada);
+  }
+
   /** Modo invisível: só opacidade (a janela nunca é escondida, para os timers do VAD seguirem). */
   setInvisivel(oculto: boolean) { this.raiz.classList.toggle("invisivel", oculto); }
 

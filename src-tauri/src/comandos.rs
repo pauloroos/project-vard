@@ -11,7 +11,7 @@ use tauri::Manager;
 
 /// Ações com atalho global: chave em `atalhos` na config e o padrão. Mesma ordem de ACOES_ATALHO no front.
 /// Ordem canônica dos modificadores: Ctrl, Alt, Shift, Super (igual ao normalizarAtalho do front).
-pub const ATALHOS: [(&str, &str); 7] = [
+pub const ATALHOS: [(&str, &str); 8] = [
     ("falar", "Alt+Super+Space"),
     ("parar", "Alt+Super+Period"),
     ("mostrar", "Alt+Super+V"),
@@ -19,6 +19,7 @@ pub const ATALHOS: [(&str, &str); 7] = [
     ("escuta", "Alt+Super+L"),
     ("sala", "Shift+Super+G"),
     ("naofalar", "Alt+Super+N"),
+    ("conversa", "Alt+Super+C"),
 ];
 
 #[derive(Serialize, Clone, Debug, PartialEq)]
@@ -707,8 +708,8 @@ mod testes {
     }
 
     #[test]
-    fn atalho_do_nao_falar_e_alt_super_n_por_ultimo() {
-        assert_eq!(*ATALHOS.last().unwrap(), ("naofalar", "Alt+Super+N"));
+    fn atalho_da_conversa_e_alt_super_c_por_ultimo() {
+        assert_eq!(*ATALHOS.last().unwrap(), ("conversa", "Alt+Super+C"));
     }
 
     #[test]

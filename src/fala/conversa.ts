@@ -227,8 +227,17 @@ export class Conversa {
       if (dentroDoPrazo && ehConfirmacao(extrairComando(bruto, v) ?? bruto)) { await this.ativarJogo(); return; }
     }
 
+    // T13: frase de ativação da conversa aberta ("fica me ouvindo" e variantes).
+    const comandoBruto = extrairComando(bruto, v) ?? bruto;
+    if (/fica\s+me\s+ouvindo|continua\s+me\s+ouvindo|pode\s+ficar\s+ouvindo/.test(comandoBruto.toLowerCase())) {
+      // O main escuta este evento para ligar a máquina ConversaAberta.
+      this.d.aoCanal?.(true);
+      await this.falarFixa(saudacaoPara(this.d.config.usuario));
+      return;
+    }
+
     // Frase de encerramento: com ou sem o nome na frente. Fala "Parei de ouvir." e muta até alguém reativar.
-    if (ehEncerramento(extrairComando(bruto, v) ?? bruto)) {
+    if (ehEncerramento(comandoBruto)) {
       this.fecharCanal();
       await this.falarFixa(FALAS.pareiDeOuvir);
       this.d.mutar?.();
@@ -326,6 +335,7 @@ export class Conversa {
     this.pergunta?.abort();
     this.pergunta = null;
     this.mudar("jogo");
+    // T13: modo jogo desliga a conversa aberta automaticamente (o main escuta este estado via aoEstado)
   }
 
   /** Resultado da sondagem da ponte (a cada 10 s). null = ponte ausente. Cuida de entrar e sair do modo jogo. */

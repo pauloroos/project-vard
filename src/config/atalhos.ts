@@ -1,7 +1,7 @@
 // Atalhos globais no formato do plugin global-shortcut do Tauri: normalização, captura pelo teclado e conflitos. Puro.
 
 /** Ações com atalho global, na ordem do painel (a mesma da tabela ATALHOS do Rust). */
-export const ACOES_ATALHO = ["falar", "parar", "mostrar", "config", "escuta", "sala", "naofalar"] as const;
+export const ACOES_ATALHO = ["falar", "parar", "mostrar", "config", "escuta", "sala", "naofalar", "conversa"] as const;
 export type AcaoAtalho = (typeof ACOES_ATALHO)[number];
 
 export const ROTULOS_ATALHO: Record<AcaoAtalho, string> = {
@@ -12,6 +12,7 @@ export const ROTULOS_ATALHO: Record<AcaoAtalho, string> = {
   escuta: "Ligar/desligar a escuta",
   sala: "Tela cheia (sala)",
   naofalar: "Não falar (ligar/desligar)",
+  conversa: "Conversa aberta (ligar/desligar)",
 };
 
 /** Atalho que o Rust não conseguiu registrar no arranque (comando falhas_de_atalho). */
@@ -129,17 +130,19 @@ export const ATALHOS_ANTIGOS: Record<AcaoAtalho, string> = {
   escuta: "Ctrl+Alt+L",
   sala: "Ctrl+Alt+F",
   naofalar: "Ctrl+Alt+N",
+  conversa: "",
 };
 
 /** Novos padrões da 0.6 (Win+Alt / Win+Shift). */
 export const ATALHOS_NOVOS: Record<AcaoAtalho, string> = {
-  falar: "Super+Alt+Space",
-  parar: "Super+Alt+Period",
-  mostrar: "Super+Alt+V",
-  config: "Super+Shift+K",
-  escuta: "Super+Alt+L",
-  sala: "Super+Shift+G",
-  naofalar: "Super+Alt+N",
+  falar: "Alt+Super+Space",
+  parar: "Alt+Super+Period",
+  mostrar: "Alt+Super+V",
+  config: "Shift+Super+K",
+  escuta: "Alt+Super+L",
+  sala: "Shift+Super+G",
+  naofalar: "Alt+Super+N",
+  conversa: "Alt+Super+C",
 };
 
 /**
