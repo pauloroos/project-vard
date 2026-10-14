@@ -1,7 +1,16 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { mkdtempSync, rmSync, readFileSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+
+vi.mock("@tauri-apps/api/core", () => ({
+  invoke: vi.fn().mockImplementation((cmd: string, args?: Record<string, unknown>) => {
+    if (cmd === "ler_paineis") return Promise.resolve(null);
+    if (cmd === "gravar_paineis") return Promise.resolve(undefined);
+    return Promise.resolve(null);
+  }),
+}));
+
 import {
   lerPaineis,
   gravarPaineis,
@@ -39,35 +48,39 @@ describe("paineis (configuração externa 0.6)", () => {
   });
 
   describe("leitura", () => {
-    it("retorna padrão quando arquivo não existe", () => {
-      expect(lerPaineis()).toEqual(PAINEIS_PADRAO);
+    it("retorna padrão quando invoke retorna null", async () => {
+      const { invoke } = await import("@tauri-apps/api/core");
+      vi.mocked(invoke).mockResolvedValueOnce(null);
+      expect(await lerPaineis()).toEqual(PAINEIS_PADRAO);
     });
 
-    it("lê e valida arquivo existente", () => {
+    it("lê e valida configuração existente via invoke", async () => {
       const cfg: PaineisConfig = {
         ...PAINEIS_PADRAO,
         provedores: [{ id: "suad", nome: "Suad", tipo: "local", url_base: "http://127.0.0.1:8000", modelo: "gemma" }],
       };
-      gravarPaineis(cfg);
-      expect(lerPaineis()).toEqual(cfg);
+      const { invoke } = await import("@tauri-apps/api/core");
+      vi.mocked(invoke).mockResolvedValueOnce(cfg);
+      expect(await lerPaineis()).toEqual(cfg);
     });
   });
 
   describe("escrita", () => {
-    it("cria arquivo e confirma leitura", () => {
+    it("chama invoke com arquivo=config e valor validado", async () => {
       const cfg: PaineisConfig = {
         ...PAINEIS_PADRAO,
         ativo: "suad",
         provedores: [{ id: "suad", nome: "Suad", tipo: "local", url_base: "http://127.0.0.1:8000", modelo: "gemma" }],
       };
-      gravarPaineis(cfg);
-      expect(existsSync(join(configDir, "paineis.json"))).toBe(true);
-      expect(lerPaineis()).toEqual(cfg);
+      const { invoke } = await import("@tauri-apps/api/core");
+      const mockInvoke = vi.mocked(invoke);
+      await gravarPaineis(cfg);
+      expect(mockInvoke).toHaveBeenCalledWith("gravar_paineis", { arquivo: "config", valor: cfg });
     });
 
-    it("escrita é atômica (tmp + rename)", () => {
-      gravarPaineis(PAINEIS_PADRAO);
-      expect(existsSync(join(configDir, "paineis.json.tmp"))).toBe(false);
+    it("valida antes de escrever (rejeita config inválida)", async () => {
+      const invalida = { ...PAINEIS_PADRAO, versao: 99 } as unknown as PaineisConfig;
+      await expect(gravarPaineis(invalida)).rejects.toThrow("versão desconhecida");
     });
   });
 
@@ -130,28 +143,26 @@ describe("paineis (configuração externa 0.6)", () => {
   });
 
   describe("estado", () => {
-    it("retorna padrão quando arquivo não existe", () => {
-      expect(lerEstado()).toEqual(ESTADO_PADRAO);
+    it("retorna padrão quando arquivo não existe", async () => {
+      expect(await lerEstado()).toEqual(ESTADO_PADRAO);
     });
 
-    it("transições pendente → aplicando → aplicado", () => {
+    it("valida transições de estado (pendente → aplicando → aplicado)", () => {
+      // A máquina de estados é validada pela função pura validarEstado;
+      // a persistência via invoke é coberta pelo mock roundtrip abaixo.
       const e1: PaineisEstado = { ...ESTADO_PADRAO, estado: "pendente" };
-      gravarEstado(e1);
-      expect(lerEstado().estado).toBe("pendente");
+      expect(validarEstado(e1).estado).toBe("pendente");
 
       const e2: PaineisEstado = { ...e1, estado: "aplicando", revisao: 1 };
-      gravarEstado(e2);
-      expect(lerEstado().estado).toBe("aplicando");
+      expect(validarEstado(e2).estado).toBe("aplicando");
 
       const e3: PaineisEstado = { ...e2, estado: "aplicado", revisao: 2, ativo_efetivo: "suad" };
-      gravarEstado(e3);
-      expect(lerEstado()).toEqual(e3);
+      expect(validarEstado(e3)).toEqual(e3);
     });
 
-    it("transição para erro com mensagem", () => {
+    it("valida transição para erro com mensagem", () => {
       const e: PaineisEstado = { ...ESTADO_PADRAO, estado: "erro", erro: "falha na recarga" };
-      gravarEstado(e);
-      expect(lerEstado().erro).toBe("falha na recarga");
+      expect(validarEstado(e).erro).toBe("falha na recarga");
     });
 
     it("recusa estado desconhecido", () => {
@@ -163,12 +174,39 @@ describe("paineis (configuração externa 0.6)", () => {
     });
   });
 
-  describe("respeita VARD_CONFIG e VARD_DADOS", () => {
-    it("usa caminhos das variáveis de ambiente", () => {
-      gravarPaineis(PAINEIS_PADRAO);
-      gravarEstado(ESTADO_PADRAO);
-      expect(existsSync(join(configDir, "paineis.json"))).toBe(true);
-      expect(existsSync(join(dadosDir, "paineis-estado.json"))).toBe(true);
+  describe("invoke roundtrip", () => {
+    it("gravarPaineis e lerPaineis chamam invoke com os argumentos corretos", async () => {
+      const { invoke } = await import("@tauri-apps/api/core");
+      const mockInvoke = vi.mocked(invoke);
+
+      // gravarPaineis chama invoke com arquivo=config
+      await gravarPaineis(PAINEIS_PADRAO);
+      expect(mockInvoke).toHaveBeenCalledWith("gravar_paineis", {
+        arquivo: "config",
+        valor: PAINEIS_PADRAO,
+      });
+
+      // lerPaineis chama invoke com arquivo=config e retorna null → padrão
+      mockInvoke.mockResolvedValueOnce(null);
+      const lido = await lerPaineis();
+      expect(mockInvoke).toHaveBeenCalledWith("ler_paineis", { arquivo: "config" });
+      expect(lido).toEqual(PAINEIS_PADRAO);
+    });
+
+    it("gravarEstado e lerEstado chamam invoke com arquivo=estado", async () => {
+      const { invoke } = await import("@tauri-apps/api/core");
+      const mockInvoke = vi.mocked(invoke);
+
+      await gravarEstado(ESTADO_PADRAO);
+      expect(mockInvoke).toHaveBeenCalledWith("gravar_paineis", {
+        arquivo: "estado",
+        valor: ESTADO_PADRAO,
+      });
+
+      mockInvoke.mockResolvedValueOnce(null);
+      const lido = await lerEstado();
+      expect(mockInvoke).toHaveBeenCalledWith("ler_paineis", { arquivo: "estado" });
+      expect(lido).toEqual(ESTADO_PADRAO);
     });
   });
 });

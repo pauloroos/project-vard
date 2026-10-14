@@ -209,6 +209,8 @@ pub fn run() {
             comandos::buscar_release,
             comandos::instalar_atualizacao,
             comandos::gravar_config,
+            comandos::ler_paineis,
+            comandos::gravar_paineis,
             comandos::definir_sempre_no_topo,
             comandos::definir_click_through,
             comandos::capturar_tela,

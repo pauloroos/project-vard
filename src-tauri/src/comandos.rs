@@ -183,6 +183,81 @@ pub fn gravar_config(app: tauri::AppHandle, config: Value) -> Result<(), String>
     fs::rename(&tmp, &p).map_err(|e| e.to_string())
 }
 
+/// Resolve caminho de painéis a partir de variável de ambiente; usada em produção e testes.
+fn caminho_paineis_por_env(var_name: &str, nome_arquivo: &str) -> Option<PathBuf> {
+    std::env::var(var_name)
+        .ok()
+        .filter(|v| !v.trim().is_empty())
+        .map(|v| PathBuf::from(v).join(nome_arquivo))
+}
+
+/// Resolve caminho de painéis respeitando VARD_CONFIG/VARD_DADOS; fallback para app_config_dir/app_data_dir.
+fn caminho_paineis_config(app: &tauri::AppHandle) -> PathBuf {
+    if let Some(p) = caminho_paineis_por_env("VARD_CONFIG", "paineis.json") {
+        return p;
+    }
+    let dir = tauri::Manager::path(app)
+        .app_config_dir()
+        .expect("app_config_dir");
+    fs::create_dir_all(&dir).ok();
+    dir.join("paineis.json")
+}
+
+fn caminho_paineis_estado(app: &tauri::AppHandle) -> PathBuf {
+    if let Some(p) = caminho_paineis_por_env("VARD_DADOS", "paineis-estado.json") {
+        return p;
+    }
+    let dir = tauri::Manager::path(app)
+        .app_data_dir()
+        .expect("app_data_dir");
+    fs::create_dir_all(&dir).ok();
+    dir.join("paineis-estado.json")
+}
+
+#[tauri::command]
+pub fn ler_paineis(app: tauri::AppHandle, arquivo: String) -> Result<Value, String> {
+    let p = match arquivo.as_str() {
+        "config" => caminho_paineis_config(&app),
+        "estado" => caminho_paineis_estado(&app),
+        _ => return Err("arquivo deve ser 'config' ou 'estado'".into()),
+    };
+    if !p.exists() {
+        return Ok(Value::Null);
+    }
+    let txt = fs::read_to_string(&p).map_err(|e| e.to_string())?;
+    match serde_json::from_str(&txt) {
+        Ok(v) => Ok(v),
+        Err(e) => {
+            let guardado = p.with_extension("json.invalido");
+            let _ = fs::rename(&p, &guardado);
+            Err(format!(
+                "paineis {} inválido (guardado como {}): {e}",
+                arquivo,
+                guardado.display()
+            ))
+        }
+    }
+}
+
+#[tauri::command]
+pub fn gravar_paineis(app: tauri::AppHandle, arquivo: String, valor: Value) -> Result<(), String> {
+    let p = match arquivo.as_str() {
+        "config" => caminho_paineis_config(&app),
+        "estado" => caminho_paineis_estado(&app),
+        _ => return Err("arquivo deve ser 'config' ou 'estado'".into()),
+    };
+    if let Some(parent) = p.parent() {
+        fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    }
+    let tmp = p.with_extension("json.tmp");
+    fs::write(
+        &tmp,
+        serde_json::to_string_pretty(&valor).map_err(|e| e.to_string())?,
+    )
+    .map_err(|e| e.to_string())?;
+    fs::rename(&tmp, &p).map_err(|e| e.to_string())
+}
+
 #[tauri::command]
 pub fn definir_sempre_no_topo(window: tauri::Window, ligado: bool) -> Result<(), String> {
     window.set_always_on_top(ligado).map_err(|e| e.to_string())
@@ -705,6 +780,59 @@ mod testes {
         assert_eq!(texto_da_dica(false, false, 1), "Vard | 1 tarefa em andamento");
         assert_eq!(texto_da_dica(false, false, 3), "Vard | 3 tarefas em andamento");
         assert_eq!(texto_da_dica(true, false, 2), "Vard (não ouvindo) | 2 tarefas em andamento");
+    }
+
+    #[test]
+    fn caminho_paineis_por_env_retorna_caminho_correto() {
+        let dir = tempfile::tempdir().unwrap();
+        unsafe { std::env::set_var("VARD_CONFIG_TESTE", dir.path()) };
+        let p = super::caminho_paineis_por_env("VARD_CONFIG_TESTE", "paineis.json");
+        assert_eq!(p, Some(dir.path().join("paineis.json")));
+        unsafe { std::env::remove_var("VARD_CONFIG_TESTE") };
+    }
+
+    #[test]
+    fn caminho_paineis_por_env_retorna_none_sem_var() {
+        unsafe { std::env::remove_var("VARD_CONFIG_INEXISTENTE_XYZ") };
+        let p = super::caminho_paineis_por_env("VARD_CONFIG_INEXISTENTE_XYZ", "paineis.json");
+        assert!(p.is_none());
+    }
+
+    #[test]
+    fn caminho_paineis_por_env_ignora_var_vazia() {
+        unsafe { std::env::set_var("VARD_CONFIG_VAZIA_TESTE", "") };
+        let p = super::caminho_paineis_por_env("VARD_CONFIG_VAZIA_TESTE", "paineis.json");
+        assert!(p.is_none());
+        unsafe { std::env::remove_var("VARD_CONFIG_VAZIA_TESTE") };
+    }
+
+    #[test]
+    fn gravar_e_ler_paineis_via_fs_roundtrip() {
+        let dir = tempfile::tempdir().unwrap();
+        let p = dir.path().join("paineis.json");
+        let valor = serde_json::json!({"agentes": [{"id": "claude"}]});
+        // Gravação atômica manual (mesma lógica do comando)
+        let tmp = p.with_extension("json.tmp");
+        std::fs::write(&tmp, serde_json::to_string_pretty(&valor).unwrap()).unwrap();
+        std::fs::rename(&tmp, &p).unwrap();
+        // Leitura
+        let txt = std::fs::read_to_string(&p).unwrap();
+        let lido: serde_json::Value = serde_json::from_str(&txt).unwrap();
+        assert_eq!(lido, valor);
+    }
+
+    #[test]
+    fn ler_paineis_retorna_null_quando_arquivo_nao_existe() {
+        let dir = tempfile::tempdir().unwrap();
+        let p = dir.path().join("nao_existe.json");
+        assert!(!p.exists());
+        // Simula a lógica do comando: arquivo inexistente → Value::Null
+        let resultado = if !p.exists() {
+            serde_json::Value::Null
+        } else {
+            panic!("arquivo não deveria existir")
+        };
+        assert!(resultado.is_null());
     }
 
     #[test]

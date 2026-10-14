@@ -1,4 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
+vi.mock("@tauri-apps/api/core", () => ({
+  invoke: vi.fn().mockResolvedValue(null),
+}));
 import { AbaAvisos, horaCurta } from "../src/ui/aba-avisos";
 import type { Aviso, ResultadoTarefa } from "../src/conectores/ponte/cliente";
 
