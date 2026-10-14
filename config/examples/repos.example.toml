@@ -1,0 +1,36 @@
+# Projetos que a oficina conhece: apelido falado -> pasta, repositório no GitHub e branch base.
+# Pedido com projeto fora desta lista: o Vard pergunta, não chuta. Apelidos em minúsculas, sem acento.
+# Caminhos fictícios: substitua pelas pastas dos seus projetos antes de usar.
+[github]
+dono = "seu-usuario"
+
+[repos.demo-app]
+caminho = "X:/dev/demo-app"
+github = "seu-usuario/demo-app"
+base = "main"
+apelidos = ["demo app", "aplicativo"]
+
+[repos.demo-site]
+caminho = "X:/dev/demo-site"
+github = "seu-usuario/demo-site"
+base = "main"
+apelidos = ["demo site", "site"]
+
+[repos.demo-cli]
+caminho = "X:/dev/demo-cli"
+github = ""
+base = "main"
+apelidos = ["demo cli", "ferramenta local"]
+
+[repos.demo-widget]
+# Widget de demonstração: aponte para a pasta que contém o código.
+caminho = "X:/dev/demo-widget"
+github = "seu-usuario/demo-widget"
+base = "main"
+apelidos = ["demo widget", "widget"]
+
+[repos.demo-api]
+caminho = "X:/dev/demo-api"
+github = "seu-usuario/demo-api"
+base = "main"
+apelidos = ["demo api", "api"]

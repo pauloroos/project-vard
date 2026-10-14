@@ -1,0 +1,28 @@
+# Copie para %LOCALAPPDATA%\rdl-vard\segredos.toml e preencha. Nunca versione o arquivo preenchido.
+[omniroute]
+url = ""            # opcional: endereço do roteador de modelos; vazio = visão em nuvem desligada
+chave = ""          # opcional: chave do roteador de modelos, se você usa um
+
+[lmstudio]
+chave = ""          # token da API do LM Studio (Developer > Server Settings)
+
+[telegram]
+token = ""          # token do bot
+chat_id = ""        # id do seu chat
+
+[ai_memory]
+url = ""            # opcional: endereço do servidor de memória
+token = ""
+
+[remoto]
+ssh_chave = ""      # opcional: caminho da chave SSH do agente remoto
+ssh_destino = ""    # usuario@host; vazio = agente remoto não configurado
+
+# Cada painel Coolify precisa de url E token (sem os dois ele é pulado).
+[coolify.exemplo]
+url = ""
+token = ""
+
+[google]
+client_id = ""
+client_secret = ""

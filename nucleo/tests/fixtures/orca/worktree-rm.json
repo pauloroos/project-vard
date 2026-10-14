@@ -1,0 +1,15 @@
+{
+  "id": "697c309c-a967-4630-ad8c-f04bd1163a4c",
+  "ok": true,
+  "result": {
+    "removed": true,
+    "removing": true,
+    "catalogVersion": {
+      "epoch": "696389e3-0a22-481c-be5a-f4b3291a2335",
+      "sequence": 83
+    }
+  },
+  "_meta": {
+    "runtimeId": "a5cb2b1a-e3fe-413d-80ff-5975003e7a24"
+  }
+}

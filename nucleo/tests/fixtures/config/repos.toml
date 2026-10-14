@@ -1,0 +1,21 @@
+# Repositórios fictícios só para os testes: nomes, caminhos e usuário de mentira.
+[github]
+dono = "seu-usuario"
+
+[repos.demo]
+caminho = "X:/dev/demo-app"
+github = "seu-usuario/demo-app"
+base = "main"
+apelidos = ["demo app", "aplicativo"]
+
+[repos.portfolio]
+caminho = "X:/dev/portfolio"
+github = "seu-usuario/portfolio"
+base = "main"
+apelidos = ["portifólio", "portfolio"]
+
+[repos.demo-team]
+caminho = "X:/dev/demo-team"
+github = ""
+base = "main"
+apelidos = ["demo team", "equipe demo"]

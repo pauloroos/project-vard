@@ -1,0 +1,5 @@
+# O serviço de voz é opcional e local (127.0.0.1). Não lê este arquivo: use variáveis de ambiente.
+#   VARD_VOZ_PORT=4710     porta do serviço
+#   VARD_VOZ_DEVICE=cuda   "cuda" ou "cpu"
+#   VARD_VOZ_DEBUG=1       log detalhado
+# A voz usada em cada fala é escolhida pelo widget (campo "voz" do POST /falar); sem escolha, vale a voz padrão do motor.

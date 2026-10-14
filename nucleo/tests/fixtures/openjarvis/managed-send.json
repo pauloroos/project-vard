@@ -1,0 +1,9 @@
+{
+ "id": "65f63f3ca6f44a0d",
+ "agent_id": "3f5afcae648c",
+ "direction": "user_to_agent",
+ "content": "Qual foi a cotação do dólar hoje? Cite a fonte em uma frase.",
+ "mode": "immediate",
+ "status": "pending",
+ "created_at": 1791851330.71595
+}

@@ -1,0 +1,89 @@
+{
+  "_nota": "Capturada de `orca worktree ps --json`, reduzida ao worktree do spike (outros removidos; campo preview anonimizado).",
+  "id": "8513a485-6ec2-4b25-a1f1-5a3d7fcc0fca",
+  "ok": true,
+  "result": {
+    "worktrees": [
+      {
+        "workspaceKind": "git",
+        "worktreeId": "ff60db9b-f3f9-4ebd-98bf-c82c9d957b0e::X:/DEV/vard-app/vard-0-spike",
+        "repoId": "ff60db9b-f3f9-4ebd-98bf-c82c9d957b0e",
+        "hostId": "local",
+        "terminalPlatform": "win32",
+        "repo": "vard-app",
+        "path": "X:/DEV/vard-app/vard-0-spike",
+        "branch": "refs/heads/usuario/vard-0-spike",
+        "isArchived": false,
+        "isMainWorktree": false,
+        "hasHostSidebarActivity": true,
+        "worktreeInstanceId": "5a91ff08-cf6a-4d5e-b1d9-47af1cf23f72",
+        "parentWorktreeId": null,
+        "childWorktreeIds": [],
+        "displayName": "vard-0-spike",
+        "workspaceStatus": "in-progress",
+        "sortOrder": 1791849766144,
+        "lastActivityAt": 1791849819400,
+        "createdAt": 1791849766144,
+        "creatorProvenance": {
+          "kind": "host"
+        },
+        "linkedIssue": null,
+        "linkedPR": null,
+        "linkedLinearIssue": null,
+        "linkedGitLabMR": null,
+        "linkedGitLabIssue": null,
+        "comment": "",
+        "isPinned": false,
+        "isActive": true,
+        "unread": true,
+        "liveTerminalCount": 2,
+        "hasAttachedPty": true,
+        "unverifiableTerminalCount": 0,
+        "lastOutputAt": 1791849818110,
+        "preview": "(removido da fixture)",
+        "status": "active",
+        "agents": [
+          {
+            "paneKey": "84264c6d-e802-4f6a-891c-0d5a6f7b8f6c:bbc11792-9ff4-4e6a-8db4-277a67ab5bfe",
+            "parentPaneKey": null,
+            "state": "done",
+            "agentType": "codex",
+            "prompt": "[Tarefa 0 do Vard] Responda só OK e não mexa em nenhum arquivo. Termine com RESUMO: nada feito.",
+            "taskTitle": null,
+            "displayName": null,
+            "lastAssistantMessage": "OK\n\nRESUMO: nada feito.",
+            "toolName": null,
+            "toolInput": null,
+            "interrupted": false,
+            "mainAgent": {
+              "state": "done",
+              "stateStartedAt": 1791849817755
+            },
+            "stateStartedAt": 1791849817755,
+            "updatedAt": 1791849817755
+          }
+        ],
+        "terminalVerdict": "live"
+      }
+    ],
+    "hostScope": {
+      "hostIds": [
+        "local"
+      ],
+      "omittedHostIds": [
+        "runtime:e629e62a-ec01-40ce-921c-6999c8a999c5"
+      ],
+      "omittedHostSelectors": [
+        {
+          "hostId": "runtime:e629e62a-ec01-40ce-921c-6999c8a999c5",
+          "selector": "--environment Servidor remoto"
+        }
+      ]
+    },
+    "totalCount": 22,
+    "truncated": false
+  },
+  "_meta": {
+    "runtimeId": "a5cb2b1a-e3fe-413d-80ff-5975003e7a24"
+  }
+}

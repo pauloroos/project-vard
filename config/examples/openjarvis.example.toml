@@ -1,0 +1,96 @@
+# Configuração do OpenJarvis para o Vard. Copie para %OPENJARVIS_HOME%/config.toml.
+# Edite a configuração de origem e reaplique; não altere a cópia gerada.
+# Endereços e modelos são fictícios: substitua-os antes de iniciar o serviço.
+[engine]
+default = "lmstudio"
+
+[engine.lmstudio]
+host = "http://exemplo.com:1234"
+
+[engine.vllm]
+# Provedor de reserva opcional, desativado. A chave vem da variável VLLM_API_KEY, nunca deste arquivo.
+host = ""
+
+[intelligence]
+default_model = "modelo-local"
+fallback_model = ""             # reserva opcional desativada
+temperature = 0.4
+max_tokens = 1024
+
+[agent]
+default_agent = "orchestrator"
+max_turns = 8
+# agent.tools é uma allowlist que também filtra ferramentas MCP: cada ferramenta precisa estar listada.
+# file_read fica fora até existir diretório permitido, para não ler segredos.toml.
+# Este exemplo cobre os cinco MCPs locais (mesa, oficina, consulta, memória e reunião).
+# Mantenha só ferramentas das integrações configuradas; a instalação antiga usa liv até a troca na T11 (adaptador legado).
+tools = "think,llm,hora_atual,abrir_url,abrir_programa,listar_janelas,focar_janela,fechar_janela,print_da_tela,disparar_tarefa,status_tarefa,resultado_tarefa,responder_tarefa,aprovar_tarefa,descartar_tarefa,listar_tarefas,github_prs,github_issues,deploys,relatorio,agente_remoto,delegar,rotina_manha,memoria_buscar,memoria_ler,memoria_gravar,reuniao_iniciar,reuniao_encerrar,reuniao_status,reuniao_ata,reuniao_falante,reuniao_guardar"
+objective = "Você é o Vard, assistente de Fulano. Use as ferramentas disponíveis quando precisar agir."
+context_from_memory = false     # memória opcional desativada
+# Persona em config/persona.md: a aplicação da configuração injeta seu conteúdo aqui.
+# default_system_prompt tem precedência no agente do servidor; system_prompt_path vale para operadores.
+default_system_prompt = '''__PERSONA_TEXTO__'''
+
+[tools.storage]
+default_backend = "sqlite"
+db_path = "X:/dev/demo-app/dados/memory.db"
+
+[tools.mcp]
+# Integração opcional desativada. Quando habilitada, servers recebe a configuração JSON dos servidores.
+enabled = false
+servers = "__MCP_JSON__"
+
+[analytics]
+# Telemetria opcional do upstream, desativada.
+enabled = false
+
+[server]
+host = "exemplo.com"            # endereço fictício: configure o endereço local antes de iniciar
+port = 8000
+agent = "orchestrator"
+
+[channel]
+# Canal opcional desativado; configure suas credenciais localmente antes de habilitar.
+enabled = false
+default_channel = "telegram"
+default_agent = "orchestrator"
+
+[channel.telegram]
+bot_token = ""
+allowed_chat_ids = ""          # vazio mantém o canal desligado
+parse_mode = "Markdown"
+
+[speech]
+# Fala do OpenJarvis: o widget usa /v1/speech/transcribe e /v1/speech/synthesize.
+# GPU requer as bibliotecas do backend no PATH; sem elas, a transcrição pode falhar.
+# Troque o modelo e a voz fictícios por identificadores instalados.
+backend = "faster-whisper"
+model = "modelo-local"
+language = "pt"
+device = "cuda"
+compute_type = "float16"
+tts_backend = "kokoro"
+voice_id = "voz-local"
+voice_speed = 1.0
+
+[digest]
+# Opcional, desativado: a vigia agenda a rotina em config/manha.toml.
+# O agendador do OpenJarvis não entrega o resumo no canal; reaplicar a configuração sobrescreve o horário.
+enabled = false
+timezone = "UTC"
+persona = "vard"                # persona-manha.md é copiada para prompts/personas/vard.md
+honorific = "Fulano"
+sections = ["messages", "calendar", "world"]
+tts_backend = "kokoro"          # local; o áudio do digest não é usado
+voice_id = "voz-local"
+
+[digest.messages]
+sources = []                    # integração opcional desativada
+max_items = 8
+
+[digest.calendar]
+sources = []                    # integração opcional desativada
+
+[digest.world]
+sources = []                    # feeds opcionais desativados
+max_items = 5

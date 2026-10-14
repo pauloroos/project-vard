@@ -1,0 +1,15 @@
+# Relatórios por nome falado (ferramenta `relatorio`). Cada seção é um relatório; começa sem nenhum.
+# Integrações opcionais desativadas: os exemplos abaixo são comentários.
+#
+# O identificador técnico "agente_remoto" indica consulta ao agente-remoto; a resposta chega depois pelos canais configurados.
+#   [demo-remoto]
+#   tipo = "agente_remoto"
+#   apelidos = ["relatorio remoto"]
+#   pedido = "Resuma as tarefas do projeto demo-app em três linhas."
+#
+# Tipo "comando": roda no computador (até 120 s) e abre o PDF. Relatório novo = uma seção aqui.
+#   [demo-local]
+#   tipo = "comando"
+#   apelidos = ["relatorio demo"]
+#   comando = ["uv", "run", "--project", "X:/dev/demo-app", "python", "gerar.py"]
+#   pdf = "X:/dev/demo-app/saida/relatorio.pdf"

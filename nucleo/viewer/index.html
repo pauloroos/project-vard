@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Vard</title>
+<style>
+  :root { --fundo: #0b0e14; --texto: #e6e6e6; --fraco: #8a93a6; --acento: #f2b134; --alerta: #e5484d; }
+  html, body { margin: 0; background: var(--fundo); color: var(--texto); font: 16px/1.5 system-ui, sans-serif; }
+  main { max-width: 720px; margin: 0 auto; padding: 24px 16px; }
+  #estado { font-size: 14px; color: var(--fraco); letter-spacing: .04em; text-transform: uppercase; }
+  #nucleo { width: 120px; height: 120px; border-radius: 50%; margin: 32px auto; border: 2px solid var(--acento); box-shadow: 0 0 24px rgba(242,177,52,.35); transition: box-shadow .3s; }
+  #nucleo.ouvindo { box-shadow: 0 0 48px rgba(242,177,52,.8); }
+  #nucleo.falando { background: rgba(242,177,52,.15); }
+  #log { min-height: 160px; white-space: pre-wrap; }
+  #log .eu { color: var(--fraco); }
+  #tela { display: none; background: var(--alerta); color: #fff; padding: 6px 10px; border-radius: 6px; font-weight: 600; }
+  #tela.ativo { display: inline-block; }
+  button { background: #161b26; color: var(--texto); border: 1px solid #2a3140; padding: 8px 14px; border-radius: 8px; cursor: pointer; }
+  #servicos { font-size: 13px; color: var(--fraco); }
+  video { display: none; }
+</style>
+</head>
+<body>
+<main>
+  <div id="estado">iniciando</div>
+  <div id="nucleo"></div>
+  <p>
+    <button id="btn-iniciar">Ligar o ouvido</button>
+    <button id="btn-tela">Compartilhar tela</button>
+    <span id="tela">● TELA COMPARTILHADA</span>
+  </p>
+  <div id="log"></div>
+  <p id="servicos"></p>
+  <video id="video" autoplay muted playsinline></video>
+</main>
+<script type="module" src="/viewer/app.js"></script>
+</body>
+</html>

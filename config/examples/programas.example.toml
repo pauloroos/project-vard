@@ -1,0 +1,13 @@
+# Copie para %LOCALAPPDATA%\rdl-vard\config\programas.toml e ajuste. Nunca versione o arquivo preenchido.
+# Os [sites] do usuário sobrescrevem e estendem os embutidos (youtube, gmail, github, whatsapp, chatgpt, claude).
+
+[apelidos]
+vscode = "code"                  # o que falar -> o que abrir (caminho, comando ou .lnk)
+chrome = "chrome"
+explorador = "explorer"
+terminal = "wt.exe"
+"bloco de notas" = "notepad.exe"
+calculadora = "calc.exe"
+
+[sites]
+meuapp = "https://app.exemplo.com"

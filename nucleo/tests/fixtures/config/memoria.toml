@@ -1,0 +1,4 @@
+# Memória fictícia só para os testes.
+[memoria]
+workspace = "default"
+projeto = "demo"

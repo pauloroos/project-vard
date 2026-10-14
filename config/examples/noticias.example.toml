@@ -1,0 +1,19 @@
+# Fontes fixas de manchetes da rotina da manhã (RSS/Atom).
+# A aplicação da configuração grava a lista em %OPENJARVIS_HOME%/connectors/news_rss.json,
+# lida pelo digest do OpenJarvis. Trocar fontes = editar aqui.
+# Integração opcional desativada: preencha as URLs com seus feeds antes de usar.
+[[feeds]]
+nome = "Notícias de demonstração"
+url = ""
+
+[[feeds]]
+nome = "Economia de demonstração"
+url = ""
+
+[[feeds]]
+nome = "Tecnologia de demonstração"
+url = ""
+
+[[feeds]]
+nome = "Desenvolvimento de demonstração"
+url = ""

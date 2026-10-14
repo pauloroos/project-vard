@@ -1,0 +1,18 @@
+  nothing to commit, working tree clean
+  Você está na branch usuário/vard-0-spike e não há alterações pendentes. O último
+  commit é o 765fea7 (fix(ciclo): HUD renomeado para Vard).
+✻ Crunched for 6s · done 8:05 PM
+❯ Crie o arquivo teste-vard.txt com o texto oi.
+● Write(teste-vard.txt)
+────────────────────────────────────────────────────────────────────────────────
+ Create file
+ teste-vard.txt
+╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
+  1 oi
+╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
+ Do you want to create teste-vard.txt?
+ ❯ 1. Yes
+   2. Yes, and switch to accept edits (auto-approve file edits and common file
+      commands) for this session (shift+tab)
+   3. No
+ Esc to cancel · Tab to amend

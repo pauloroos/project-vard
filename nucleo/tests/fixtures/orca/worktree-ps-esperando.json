@@ -1,0 +1,89 @@
+{
+  "_nota": "Capturada de `orca worktree ps --json`, reduzida ao worktree do spike (outros removidos; campo preview anonimizado).",
+  "id": "5eaead72-fae5-486c-b4db-b39b08210b4d",
+  "ok": true,
+  "result": {
+    "worktrees": [
+      {
+        "workspaceKind": "git",
+        "worktreeId": "ff60db9b-f3f9-4ebd-98bf-c82c9d957b0e::X:/DEV/vard-app/vard-0-spike",
+        "repoId": "ff60db9b-f3f9-4ebd-98bf-c82c9d957b0e",
+        "hostId": "local",
+        "terminalPlatform": "win32",
+        "repo": "vard-app",
+        "path": "X:/DEV/vard-app/vard-0-spike",
+        "branch": "refs/heads/usuario/vard-0-spike",
+        "isArchived": false,
+        "isMainWorktree": false,
+        "hasHostSidebarActivity": true,
+        "worktreeInstanceId": "16569dda-d4eb-49ee-8e66-0a005bdb0e3a",
+        "parentWorktreeId": null,
+        "childWorktreeIds": [],
+        "displayName": "vard-0-spike",
+        "workspaceStatus": "in-progress",
+        "sortOrder": 1791849881269,
+        "lastActivityAt": 1791849941402,
+        "createdAt": 1791849881269,
+        "creatorProvenance": {
+          "kind": "host"
+        },
+        "linkedIssue": null,
+        "linkedPR": null,
+        "linkedLinearIssue": null,
+        "linkedGitLabMR": null,
+        "linkedGitLabIssue": null,
+        "comment": "",
+        "isPinned": false,
+        "isActive": true,
+        "unread": true,
+        "liveTerminalCount": 2,
+        "hasAttachedPty": true,
+        "unverifiableTerminalCount": 0,
+        "lastOutputAt": 1791849986598,
+        "preview": "(removido da fixture)",
+        "status": "permission",
+        "agents": [
+          {
+            "paneKey": "cb169aa6-2192-4f35-a9c7-585e191b8f77:2888e5b8-bc88-4233-90ea-7978ac94fc6b",
+            "parentPaneKey": null,
+            "state": "waiting",
+            "agentType": "claude",
+            "prompt": "Crie o arquivo teste-vard.txt com o texto oi.",
+            "taskTitle": null,
+            "displayName": null,
+            "lastAssistantMessage": null,
+            "toolName": "Write",
+            "toolInput": "X:\\DEV\\vard-app\\vard-0-spike\\teste-vard.txt",
+            "interrupted": false,
+            "mainAgent": {
+              "state": "waiting",
+              "stateStartedAt": 1791849952208
+            },
+            "stateStartedAt": 1791849952209,
+            "updatedAt": 1791849952209
+          }
+        ],
+        "terminalVerdict": "live"
+      }
+    ],
+    "hostScope": {
+      "hostIds": [
+        "local"
+      ],
+      "omittedHostIds": [
+        "runtime:e629e62a-ec01-40ce-921c-6999c8a999c5"
+      ],
+      "omittedHostSelectors": [
+        {
+          "hostId": "runtime:e629e62a-ec01-40ce-921c-6999c8a999c5",
+          "selector": "--environment Servidor remoto"
+        }
+      ]
+    },
+    "totalCount": 22,
+    "truncated": false
+  },
+  "_meta": {
+    "runtimeId": "a5cb2b1a-e3fe-413d-80ff-5975003e7a24"
+  }
+}

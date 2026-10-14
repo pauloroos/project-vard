@@ -1,0 +1,15 @@
+{
+  "id": "53ea38ba-42cb-4600-a2d0-abb971b1ba40",
+  "ok": true,
+  "result": {
+    "close": {
+      "handle": "term_4c66c60c-e756-4904-8e02-018b79077893",
+      "tabId": "84264c6d-e802-4f6a-891c-0d5a6f7b8f6c",
+      "closeMode": "tab",
+      "ptyKilled": false
+    }
+  },
+  "_meta": {
+    "runtimeId": "a5cb2b1a-e3fe-413d-80ff-5975003e7a24"
+  }
+}

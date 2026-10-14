@@ -1,0 +1,5 @@
+{"type":"thread.started","thread_id":"t-teste"}
+{"type":"turn.started"}
+{"type":"item.completed","item":{"id":"item_0","type":"mcp_tool_call","server":"codex_apps","tool":"microsoft_outlook_email.list_messages","arguments":{},"result":{"content":[{"type":"text","text":"[]"}]},"error":null,"status":"completed"}}
+{"type":"item.completed","item":{"id":"item_1","type":"agent_message","text":"RESUMO: Nenhum e-mail chegou hoje."}}
+{"type":"turn.completed","usage":{"input_tokens":128839,"cached_input_tokens":107520,"output_tokens":218}}

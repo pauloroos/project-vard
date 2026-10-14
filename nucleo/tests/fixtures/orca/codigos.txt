@@ -1,0 +1,17 @@
+worktree-create rc=0
+worktree-show rc=0
+terminal-create rc=0
+wait-tui-idle-timeout rc=1
+wait-tui-idle-ok rc=1
+terminal-read rc=0
+terminal-read-screen rc=0
+wait-tui-idle-ok(2) rc=0
+terminal-read rc=0
+terminal-send rc=0
+terminal-read-screen-pergunta rc=0
+terminal-close rc=0
+wait-exit-depois-de-fechar rc=0
+worktree-rm rc=0
+wait-exit-timeout rc=1
+wait-tui-idle-bloqueado rc=1 (reconstruído do original; ok:true, satisfied:false)
+wait-exit-terminal-sumido rc=1 (handle inexistente/fechado há tempo)

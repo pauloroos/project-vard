@@ -1,0 +1,18 @@
+{
+  "_nota": "RECONSTRUIDA, nao capturada em arquivo: o conteudo e o JSON que o orca imprimiu na tela durante o spike de 12/10 (copiado a mao).",
+  "id": "e5b9a810-4ed3-4890-b7c7-e9042cf3f72a",
+  "ok": true,
+  "result": {
+    "wait": {
+      "handle": "term_4c66c60c-e756-4904-8e02-018b79077893",
+      "condition": "tui-idle",
+      "satisfied": false,
+      "status": "running",
+      "exitCode": null,
+      "blockedReason": "agent-trust-workspace"
+    }
+  },
+  "_meta": {
+    "runtimeId": "a5cb2b1a-e3fe-413d-80ff-5975003e7a24"
+  }
+}

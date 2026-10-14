@@ -1,0 +1,61 @@
+# Consulta delegada fictícia só para os testes: executáveis vazios, travas de só leitura preservadas.
+[delegada]
+padrao = "claude"
+reserva = "agy"
+login_repo = "demo-app"    # repositório do repos.toml onde abrir a aba de login
+timeout_s = 180
+fala_max = 300
+telegram_max = 1500
+resultado_max = 6000
+arquivo_max = 50000
+pergunta_max = 2000
+retencao_dias = 30
+
+# Palavra da pergunta, sem acento e em minúsculas -> agentes em ordem.
+[conectores]
+linear = ["claude", "codex"]
+notion = ["claude"]
+figma = ["codex"]
+agenda = ["codex"]
+calendario = ["codex"]
+slack = ["codex"]
+
+# Claude: pergunta pelo stdin, sem ferramentas de escrita e com hooks desativados.
+[agentes.claude]
+exe = ""
+modelo_padrao = "sonnet"
+modelos = { "sonnet" = 1, "opus" = 2, "fable" = 2 }
+args = ["-p", "--output-format", "stream-json", "--verbose", "--tools", "",
+        "--permission-mode", "dontAsk", "--no-session-persistence", "--disable-slash-commands",
+        "--settings", "{\"disableAllHooks\": true}"]
+permitir = ["mcp__claude_ai_Linear__list_*", "mcp__claude_ai_Linear__get_*", "mcp__claude_ai_Linear__search_*"]
+negar = ["mcp__claude_ai_Figma", "mcp__claude_ai_Claude_Docs", "mcp__ai-memory", "mcp__plugin_*",
+         "mcp__*__save_*", "mcp__*__create_*", "mcp__*__delete_*", "mcp__*__update_*", "mcp__*__merge_*",
+         "mcp__*__mark_*", "mcp__*__share_*", "mcp__*__unshare_*", "mcp__*__submit_*", "mcp__*__resolve_*",
+         "mcp__*__restore_*", "mcp__*__retire_*", "mcp__*__prepare_*", "mcp__*__send_*",
+         "mcp__*__authenticate", "mcp__*__complete_authentication"]
+login = "claude"
+link_conectores = "https://claude.ai/customize/connectors"
+
+# Codex: sandbox read-only explícita, pergunta pelo stdin, hooks e operações destrutivas desativados.
+[agentes.codex]
+exe = ""
+args = ["exec", "-s", "read-only", "--skip-git-repo-check", "--ephemeral", "--color", "never", "--json",
+        "--disable", "hooks", "-c", "approval_policy=\"never\"", "-c", "apps._default.destructive_enabled=false",
+        "-c", "apps._default.open_world_enabled=false", "-c", "mcp_servers.ai-memory.enabled=false"]
+login = "codex login"
+link_conectores = ""
+
+# Antigravity: sandbox e modo plan. Sem --disable-slash-commands, que pode anular esse modo.
+[agentes.agy]
+exe = ""
+args = ["--output-format", "json", "--print-timeout", "170s", "--sandbox", "--mode", "plan"]
+login = "agy"
+link_conectores = ""
+
+# OpenCode: agente consulta com permissões negadas.
+[agentes.opencode]
+exe = ""
+args = ["run", "--agent", "consulta", "--format", "json", "--pure", "-m", "provedor/modelo-local"]
+login = "opencode auth login"
+link_conectores = ""

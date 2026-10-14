@@ -1,0 +1,67 @@
+{
+  "id": "6d44429c-1303-4cbf-82dc-aeeab305f9db",
+  "ok": true,
+  "result": {
+    "worktree": {
+      "id": "ff60db9b-f3f9-4ebd-98bf-c82c9d957b0e::X:/DEV/vard-app/vard-0-spike",
+      "identity": {
+        "key": "wt2:local:5a91ff08-cf6a-4d5e-b1d9-47af1cf23f72",
+        "executionHostId": "local",
+        "instanceId": "5a91ff08-cf6a-4d5e-b1d9-47af1cf23f72"
+      },
+      "instanceId": "5a91ff08-cf6a-4d5e-b1d9-47af1cf23f72",
+      "repoId": "ff60db9b-f3f9-4ebd-98bf-c82c9d957b0e",
+      "projectId": "repo:ff60db9b-f3f9-4ebd-98bf-c82c9d957b0e",
+      "hostId": "local",
+      "projectHostSetupId": "ff60db9b-f3f9-4ebd-98bf-c82c9d957b0e",
+      "creatorProvenance": {
+        "kind": "host"
+      },
+      "path": "X:/DEV/vard-app/vard-0-spike",
+      "head": "765fea782ad17ad3965fe7499a5e14c3692a1eb1",
+      "branch": "refs/heads/usuario/vard-0-spike",
+      "isBare": false,
+      "isMainWorktree": false,
+      "displayName": "vard-0-spike",
+      "displayNameMode": "fixed",
+      "comment": "",
+      "linkedIssue": null,
+      "linkedPR": null,
+      "linkedLinearIssue": null,
+      "linkedLinearIssueWorkspaceId": null,
+      "linkedLinearIssueOrganizationUrlKey": null,
+      "linkedGitLabMR": null,
+      "linkedGitLabIssue": null,
+      "linkedBitbucketPR": null,
+      "linkedAzureDevOpsPR": null,
+      "linkedGiteaPR": null,
+      "linkedWorkItem": null,
+      "linkedTaskSourceContext": null,
+      "isArchived": false,
+      "isUnread": false,
+      "isPinned": false,
+      "sortOrder": 1791849766144,
+      "lastActivityAt": 1791849766144,
+      "createdAt": 1791849766144,
+      "cliProvenance": {
+        "kind": "created-by-cli",
+        "createdAt": 1791849764323
+      },
+      "baseRef": "main",
+      "workspaceStatus": "in-progress",
+      "parentWorktreeId": null,
+      "childWorktreeIds": [],
+      "lineage": null,
+      "git": {
+        "path": "X:/DEV/vard-app/vard-0-spike",
+        "head": "765fea782ad17ad3965fe7499a5e14c3692a1eb1",
+        "branch": "refs/heads/usuario/vard-0-spike",
+        "isBare": false,
+        "isMainWorktree": false
+      }
+    }
+  },
+  "_meta": {
+    "runtimeId": "a5cb2b1a-e3fe-413d-80ff-5975003e7a24"
+  }
+}

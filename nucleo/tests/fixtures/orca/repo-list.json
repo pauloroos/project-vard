@@ -1,0 +1,24 @@
+{
+  "id": "ff9236a0-9e74-4ea9-825d-07b4744876a4",
+  "ok": true,
+  "result": {
+    "repos": [
+      {
+        "id": "00000000-0000-0000-0000-000000000001",
+        "path": "X:\\exemplo\\projeto-a",
+        "displayName": "projeto-a",
+        "kind": "git"
+      },
+      {
+        "id": "00000000-0000-0000-0000-000000000002",
+        "path": "X:\\exemplo\\projeto-b",
+        "displayName": "projeto-b",
+        "kind": "git"
+      }
+    ]
+  },
+  "_meta": {
+    "runtimeId": "a5cb2b1a-e3fe-413d-80ff-5975003e7a24"
+  },
+  "_nota": "Reduzida de uma captura real de `orca repo list --json`: so 2 entradas, caminhos neutros, sem identidade do usuario."
+}

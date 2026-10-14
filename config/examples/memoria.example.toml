@@ -1,0 +1,5 @@
+# Memória longa (ai-memory): onde buscar e onde gravar. Copie para a pasta de configuração do
+# usuário e ajuste. Sem o projeto, as ferramentas respondem que a memória não está configurada.
+[memoria]
+workspace = "default"
+projeto = "meu-projeto"

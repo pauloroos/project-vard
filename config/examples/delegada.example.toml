@@ -1,0 +1,75 @@
+# Consulta delegada: resposta somente em texto, com ferramentas de só leitura.
+# O código recusa execução se as travas de leitura forem removidas.
+# Integrações opcionais desativadas: executáveis vazios e conectores sem agentes.
+[delegada]
+padrao = "claude"        # identificador técnico padrão, sem executável configurado
+reserva = ""              # reserva opcional desativada
+login_repo = ""  # opcional: chave do repos.toml onde abrir a aba de login
+timeout_s = 180
+fala_max = 300            # caracteres da frase falada, na linha RESUMO:
+telegram_max = 1500
+resultado_max = 6000      # limite entregue por resultado_tarefa
+arquivo_max = 50000       # limite do arquivo de resposta em tarefas/<n>.md
+pergunta_max = 2000
+retencao_dias = 30        # a vigia apaga respostas mais antigas
+
+# Palavra inteira da pergunta, sem acento e em minúsculas -> agentes em ordem. Opcional.
+[conectores]
+linear = []
+notion = []
+asana = []
+jira = []
+confluence = []
+atlassian = []
+monday = []
+hubspot = []
+figma = []
+agenda = []
+calendario = []
+compromisso = []
+compromissos = []
+slack = []
+
+# Claude: pergunta pelo stdin; sem ferramentas locais, sem persistência e com hooks desativados.
+# --model e orçamento são acrescentados pelo código; modelos mapeia identificador -> teto em US$.
+# Não use flags que removam os conectores. dontAsk nega tudo fora de permitir.
+[agentes.claude]
+exe = ""
+modelo_padrao = "modelo-local"
+modelos = { "modelo-local" = 1 }
+args = ["-p", "--output-format", "stream-json", "--verbose", "--tools", "",
+        "--permission-mode", "dontAsk", "--no-session-persistence", "--disable-slash-commands",
+        "--settings", "{\"disableAllHooks\": true}"]
+# Allowlist somente de leitura; configure e autorize o conector antes de habilitar.
+permitir = ["mcp__claude_ai_Linear__list_*", "mcp__claude_ai_Linear__get_*", "mcp__claude_ai_Linear__search_*"]
+# Negar remove do contexto servidores alheios à consulta e ferramentas de escrita ou autenticação.
+negar = ["mcp__claude_ai_Figma", "mcp__claude_ai_Claude_Docs", "mcp__ai-memory", "mcp__plugin_*",
+         "mcp__*__save_*", "mcp__*__create_*", "mcp__*__delete_*", "mcp__*__update_*", "mcp__*__merge_*",
+         "mcp__*__mark_*", "mcp__*__share_*", "mcp__*__unshare_*", "mcp__*__submit_*", "mcp__*__resolve_*",
+         "mcp__*__restore_*", "mcp__*__retire_*", "mcp__*__prepare_*", "mcp__*__send_*",
+         "mcp__*__authenticate", "mcp__*__complete_authentication"]
+login = "claude"
+link_conectores = ""
+
+# Codex: sandbox read-only explícita, pergunta pelo stdin, hooks e operações destrutivas desativados.
+[agentes.codex]
+exe = ""
+args = ["exec", "-s", "read-only", "--skip-git-repo-check", "--ephemeral", "--color", "never", "--json",
+        "--disable", "hooks", "-c", "approval_policy=\"never\"", "-c", "apps._default.destructive_enabled=false",
+        "-c", "apps._default.open_world_enabled=false", "-c", "mcp_servers.ai-memory.enabled=false"]
+login = "codex login"
+link_conectores = ""
+
+# Antigravity: sandbox e modo plan. Não use --disable-slash-commands, que pode anular esse modo.
+[agentes.agy]
+exe = ""
+args = ["--output-format", "json", "--print-timeout", "170s", "--sandbox", "--mode", "plan"]
+login = "agy"
+link_conectores = ""
+
+# OpenCode: configure o executável direto, sem wrappers de shell; agente consulta com permissões negadas.
+[agentes.opencode]
+exe = ""
+args = ["run", "--agent", "consulta", "--format", "json", "--pure", "-m", "provedor/modelo-local"]
+login = "opencode auth login"
+link_conectores = ""

@@ -1,0 +1,5 @@
+{"type":"thread.started","thread_id":"t-teste"}
+{"type":"turn.started"}
+{"type":"item.completed","item":{"id":"item_1","type":"mcp_tool_call","server":"codex_apps","tool":"linear.list_issues","arguments":{"assignee":"me"},"result":{"content":[{"type":"text","text":"This app connection requires reauthentication. Reconnect the app and try again."}],"_meta":{"_codex_apps":{"connector_auth_failure":{"is_auth_failure":true,"auth_reason":"reauthentication_required","connector_id":"asdk_app_teste","connector_name":"Linear","install_url":"https://chatgpt.com/plugins/plugin_asdk_app_teste","message":"Reconnect Linear on ChatGPT to use it in Codex."}}},"structured_content":{"error":"This app connection requires reauthentication. Reconnect the app and try again.","error_code":"UNAUTHORIZED"}},"error":null,"status":"failed"}}
+{"type":"item.completed","item":{"id":"item_2","type":"agent_message","text":"O conector do Linear requer reautenticação (UNAUTHORIZED)."}}
+{"type":"turn.completed","usage":{"input_tokens":123468,"cached_input_tokens":103296,"output_tokens":176}}

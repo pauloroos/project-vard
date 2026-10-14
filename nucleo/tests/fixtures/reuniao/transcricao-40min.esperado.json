@@ -1,0 +1,86 @@
+{
+ "decisoes": [
+  {
+   "texto": "Então fica decidido: o orçamento do trimestre fecha em R$ 45 mil, sem complemento, e a gente vive com isso.",
+   "palavras_chave": [
+    "45 mil",
+    "45.000",
+    "45000"
+   ]
+  },
+  {
+   "texto": "Decidido também: a gente cancela a licença extra do Figma, porque ninguém está usando aquela vaga.",
+   "palavras_chave": [
+    "figma",
+    "licença"
+   ]
+  },
+  {
+   "texto": "Fechado então, a paginação da listagem de clientes vai ser entregue até 30 de outubro, sem exceção.",
+   "palavras_chave": [
+    "30/10",
+    "30 de outubro",
+    "outubro"
+   ]
+  },
+  {
+   "texto": "Decisão tomada: a reunião semanal passa para terça-feira às 10h, porque segunda de manhã ninguém consegue.",
+   "palavras_chave": [
+    "terça"
+   ]
+  },
+  {
+   "texto": "Combinado, o bug de sessão expirando entra antes de qualquer funcionalidade nova no próximo ciclo.",
+   "palavras_chave": [
+    "sessão",
+    "sessao"
+   ]
+  },
+  {
+   "texto": "Então a decisão é contratar uma pessoa de QA, e não mais um desenvolvedor, para reduzir o retrabalho.",
+   "palavras_chave": [
+    "qa"
+   ]
+  }
+ ],
+ "pendencias": [
+  {
+   "texto": "Ana, a planilha do orçamento revisada fica comigo, entrego até sexta-feira. Pode anotar o meu nome.",
+   "responsavel": "Ana",
+   "palavras_chave": [
+    "planilha"
+   ]
+  },
+  {
+   "texto": "Eu fico com o protótipo da paginação e mostro para todo mundo até 25 de outubro, pode anotar.",
+   "responsavel": "Bruno",
+   "palavras_chave": [
+    "protótipo",
+    "prototipo"
+   ]
+  },
+  {
+   "texto": "Eu mesmo vou reproduzir o bug do login em produção até quarta-feira e trago os registros.",
+   "responsavel": "Carlos",
+   "palavras_chave": [
+    "reproduzir",
+    "login"
+   ]
+  },
+  {
+   "texto": "Eu abro a vaga de QA no LinkedIn amanhã e já deixo o roteiro de entrevista combinado.",
+   "responsavel": "Ana",
+   "palavras_chave": [
+    "vaga"
+   ]
+  },
+  {
+   "texto": "Eu peço a cotação do Figma ao financeiro até o fim da semana, para a gente comparar os planos.",
+   "responsavel": "Bruno",
+   "palavras_chave": [
+    "cotação",
+    "cotacao"
+   ]
+  }
+ ]
+}

@@ -1,0 +1,242 @@
+{"t0": 0.0, "t1": 0.0, "trilha": "sistema", "falante": null, "texto": "reunião iniciada"}
+{"t0": 0.0, "t1": 8.0, "trilha": "eu", "falante": null, "texto": "Eu abri a planilha ontem à noite e as despesas de marketing passaram do limite que combinamos no começo do mês."}
+{"t0": 10.0, "t1": 18.0, "trilha": "eu", "falante": null, "texto": "Na real, alguns contratos renovam sozinhos e a gente só descobre quando a cobrança aparece no cartão da empresa, entende?"}
+{"t0": 20.1, "t1": 26.1, "trilha": "eu", "falante": null, "texto": "Então, alguns contratos renovam sozinhos e a gente só descobre quando a cobrança aparece no cartão da empresa."}
+{"t0": 28.1, "t1": 35.1, "trilha": "eu", "falante": null, "texto": "Vale separar o que é gasto fixo do que é gasto de projeto, senão a planilha fica impossível de ler."}
+{"t0": 37.1, "t1": 43.1, "trilha": "outros", "falante": 2, "texto": "Olha, o financeiro pediu que a gente justifique cada linha acima de dois mil reais antes de aprovar o próximo repasse."}
+{"t0": 45.2, "t1": 52.2, "trilha": "outros", "falante": 2, "texto": "Na real, comparando com o trimestre passado, a diferença maior está nas assinaturas de software que ninguém revisou."}
+{"t0": 54.2, "t1": 60.2, "trilha": "outros", "falante": 1, "texto": "Olha, a previsão de receita ainda é conservadora, então não dá para contar com sobra no fim do período, entende?"}
+{"t0": 62.3, "t1": 68.3, "trilha": "eu", "falante": null, "texto": "Alguns contratos renovam sozinhos e a gente só descobre quando a cobrança aparece no cartão da empresa, né?"}
+{"t0": 70.3, "t1": 75.3, "trilha": "eu", "falante": null, "texto": "O orçamento do trimestre está apertado porque o custo com infraestrutura subiu bem mais do que a gente previa, né?"}
+{"t0": 77.3, "t1": 89.3, "trilha": "outros", "falante": 1, "texto": "Alguns contratos renovam sozinhos e a gente só descobre quando a cobrança aparece no cartão da empresa, né?"}
+{"t0": 91.4, "t1": 98.4, "trilha": "eu", "falante": null, "texto": "Olha, eu entendo a preocupação, mas qualidade não pode cair só porque a conta apertou neste trimestre, entende?"}
+{"t0": 100.4, "t1": 108.4, "trilha": "eu", "falante": null, "texto": "Sinceramente, o orçamento do trimestre está apertado porque o custo com infraestrutura subiu bem mais do que a gente previa."}
+{"t0": 110.4, "t1": 114.4, "trilha": "outros", "falante": 2, "texto": "Então, a gente já cortou o que dava nas viagens, agora o corte tem que vir de ferramentas e de serviço terceirizado."}
+{"t0": 116.5, "t1": 126.5, "trilha": "eu", "falante": null, "texto": "Veja bem, o financeiro pediu que a gente justifique cada linha acima de dois mil reais antes de aprovar o próximo repasse, entende?"}
+{"t0": 128.5, "t1": 134.5, "trilha": "outros", "falante": 1, "texto": "O financeiro pediu que a gente justifique cada linha acima de dois mil reais antes de aprovar o próximo repasse."}
+{"t0": 136.6, "t1": 140.6, "trilha": "outros", "falante": 2, "texto": "Acho que eu prefiro cortar agora do que pedir complemento de verba daqui a dois meses e ouvir um não."}
+{"t0": 142.6, "t1": 150.6, "trilha": "eu", "falante": null, "texto": "Olha, vale separar o que é gasto fixo do que é gasto de projeto, senão a planilha fica impossível de ler."}
+{"t0": 152.6, "t1": 158.6, "trilha": "outros", "falante": 2, "texto": "Então, alguns contratos renovam sozinhos e a gente só descobre quando a cobrança aparece no cartão da empresa."}
+{"t0": 160.7, "t1": 165.7, "trilha": "outros", "falante": 2, "texto": "Olha, a gente já cortou o que dava nas viagens, agora o corte tem que vir de ferramentas e de serviço terceirizado."}
+{"t0": 167.7, "t1": 175.7, "trilha": "outros", "falante": 1, "texto": "Então, se a gente não segurar os gastos com ferramentas, vai faltar verba para a campanha de novembro."}
+{"t0": 177.7, "t1": 188.7, "trilha": "outros", "falante": 1, "texto": "Sinceramente, a gente já cortou o que dava nas viagens, agora o corte tem que vir de ferramentas e de serviço terceirizado."}
+{"t0": 190.8, "t1": 200.8, "trilha": "outros", "falante": 2, "texto": "Acho que eu prefiro cortar agora do que pedir complemento de verba daqui a dois meses e ouvir um não, entende?"}
+{"t0": 202.8, "t1": 208.8, "trilha": "eu", "falante": null, "texto": "Então fica decidido: o orçamento do trimestre fecha em R$ 45 mil, sem complemento, e a gente vive com isso."}
+{"t0": 210.9, "t1": 218.9, "trilha": "outros", "falante": 2, "texto": "Sinceramente, a previsão de receita ainda é conservadora, então não dá para contar com sobra no fim do período."}
+{"t0": 220.9, "t1": 229.9, "trilha": "eu", "falante": null, "texto": "Sinceramente, comparando com o trimestre passado, a diferença maior está nas assinaturas de software que ninguém revisou."}
+{"t0": 231.9, "t1": 238.9, "trilha": "eu", "falante": null, "texto": "O financeiro pediu que a gente justifique cada linha acima de dois mil reais antes de aprovar o próximo repasse."}
+{"t0": 241.0, "t1": 252.0, "trilha": "eu", "falante": null, "texto": "Alguns contratos renovam sozinhos e a gente só descobre quando a cobrança aparece no cartão da empresa, entende?"}
+{"t0": 254.0, "t1": 266.0, "trilha": "eu", "falante": null, "texto": "Eu entendo a preocupação, mas qualidade não pode cair só porque a conta apertou neste trimestre, entende?"}
+{"t0": 268.0, "t1": 278.0, "trilha": "eu", "falante": null, "texto": "Acho que o diretor quer ver um número fechado até o fim da reunião, nada de faixa de valores ou estimativa vaga."}
+{"t0": 280.1, "t1": 289.1, "trilha": "outros", "falante": 2, "texto": "Olha, o orçamento do trimestre está apertado porque o custo com infraestrutura subiu bem mais do que a gente previa."}
+{"t0": 291.1, "t1": 301.1, "trilha": "outros", "falante": 1, "texto": "Ana, a planilha do orçamento revisada fica comigo, entrego até sexta-feira. Pode anotar o meu nome."}
+{"t0": 303.2, "t1": 312.2, "trilha": "outros", "falante": 2, "texto": "Sinceramente, o financeiro pediu que a gente justifique cada linha acima de dois mil reais antes de aprovar o próximo repasse, entende?"}
+{"t0": 314.2, "t1": 319.2, "trilha": "outros", "falante": 1, "texto": "O financeiro pediu que a gente justifique cada linha acima de dois mil reais antes de aprovar o próximo repasse."}
+{"t0": 321.2, "t1": 330.2, "trilha": "outros", "falante": 2, "texto": "Vale separar o que é gasto fixo do que é gasto de projeto, senão a planilha fica impossível de ler, entende?"}
+{"t0": 332.3, "t1": 340.3, "trilha": "outros", "falante": 1, "texto": "Então, o orçamento do trimestre está apertado porque o custo com infraestrutura subiu bem mais do que a gente previa."}
+{"t0": 342.3, "t1": 353.3, "trilha": "outros", "falante": 1, "texto": "O financeiro pediu que a gente justifique cada linha acima de dois mil reais antes de aprovar o próximo repasse, entende?"}
+{"t0": 355.4, "t1": 367.4, "trilha": "outros", "falante": 1, "texto": "Na real, eu entendo a preocupação, mas qualidade não pode cair só porque a conta apertou neste trimestre."}
+{"t0": 369.4, "t1": 375.4, "trilha": "outros", "falante": 1, "texto": "O orçamento do trimestre está apertado porque o custo com infraestrutura subiu bem mais do que a gente previa."}
+{"t0": 377.4, "t1": 388.4, "trilha": "eu", "falante": null, "texto": "Eu entendo a preocupação, mas qualidade não pode cair só porque a conta apertou neste trimestre, entende?"}
+{"t0": 390.5, "t1": 401.5, "trilha": "eu", "falante": null, "texto": "Veja bem, o financeiro pediu que a gente justifique cada linha acima de dois mil reais antes de aprovar o próximo repasse."}
+{"t0": 403.5, "t1": 415.5, "trilha": "eu", "falante": null, "texto": "Sinceramente, a previsão de receita ainda é conservadora, então não dá para contar com sobra no fim do período."}
+{"t0": 417.5, "t1": 423.5, "trilha": "eu", "falante": null, "texto": "Olha, eu abri a planilha ontem à noite e as despesas de marketing passaram do limite que combinamos no começo do mês."}
+{"t0": 425.6, "t1": 433.6, "trilha": "outros", "falante": 1, "texto": "Comparando com o trimestre passado, a diferença maior está nas assinaturas de software que ninguém revisou."}
+{"t0": 435.6, "t1": 442.6, "trilha": "outros", "falante": 1, "texto": "Veja bem, eu abri a planilha ontem à noite e as despesas de marketing passaram do limite que combinamos no começo do mês."}
+{"t0": 444.7, "t1": 450.7, "trilha": "outros", "falante": 1, "texto": "Eu entendo a preocupação, mas qualidade não pode cair só porque a conta apertou neste trimestre, né?"}
+{"t0": 452.7, "t1": 464.7, "trilha": "eu", "falante": null, "texto": "Acho que o financeiro pediu que a gente justifique cada linha acima de dois mil reais antes de aprovar o próximo repasse, entende?"}
+{"t0": 466.7, "t1": 475.7, "trilha": "outros", "falante": 2, "texto": "Pois é, eu abri a planilha ontem à noite e as despesas de marketing passaram do limite que combinamos no começo do mês."}
+{"t0": 477.8, "t1": 485.8, "trilha": "outros", "falante": 2, "texto": "Eu entendo a preocupação, mas qualidade não pode cair só porque a conta apertou neste trimestre."}
+{"t0": 487.8, "t1": 496.8, "trilha": "eu", "falante": null, "texto": "Decidido também: a gente cancela a licença extra do Figma, porque ninguém está usando aquela vaga."}
+{"t0": 498.8, "t1": 509.8, "trilha": "outros", "falante": 1, "texto": "Acho que o orçamento do trimestre está apertado porque o custo com infraestrutura subiu bem mais do que a gente previa, entende?"}
+{"t0": 511.9, "t1": 519.9, "trilha": "eu", "falante": null, "texto": "Sinceramente, se a gente não segurar os gastos com ferramentas, vai faltar verba para a campanha de novembro."}
+{"t0": 521.9, "t1": 529.9, "trilha": "eu", "falante": null, "texto": "Na real, a previsão de receita ainda é conservadora, então não dá para contar com sobra no fim do período."}
+{"t0": 532.0, "t1": 542.0, "trilha": "eu", "falante": null, "texto": "Pois é, eu prefiro cortar agora do que pedir complemento de verba daqui a dois meses e ouvir um não."}
+{"t0": 544.0, "t1": 550.0, "trilha": "outros", "falante": 1, "texto": "Então, o diretor quer ver um número fechado até o fim da reunião, nada de faixa de valores ou estimativa vaga."}
+{"t0": 552.0, "t1": 563.0, "trilha": "outros", "falante": 1, "texto": "Na real, eu abri a planilha ontem à noite e as despesas de marketing passaram do limite que combinamos no começo do mês, entende?"}
+{"t0": 565.1, "t1": 577.1, "trilha": "outros", "falante": 2, "texto": "Então, o diretor quer ver um número fechado até o fim da reunião, nada de faixa de valores ou estimativa vaga, entende?"}
+{"t0": 579.1, "t1": 586.1, "trilha": "outros", "falante": 1, "texto": "Na real, eu prefiro cortar agora do que pedir complemento de verba daqui a dois meses e ouvir um não, entende?"}
+{"t0": 588.1, "t1": 595.1, "trilha": "eu", "falante": null, "texto": "Sinceramente, o financeiro pediu que a gente justifique cada linha acima de dois mil reais antes de aprovar o próximo repasse, entende?"}
+{"t0": 597.2, "t1": 604.2, "trilha": "outros", "falante": 2, "texto": "Sinceramente, o orçamento do trimestre está apertado porque o custo com infraestrutura subiu bem mais do que a gente previa, entende?"}
+{"t0": 606.2, "t1": 615.2, "trilha": "outros", "falante": 1, "texto": "Então, vale separar o que é gasto fixo do que é gasto de projeto, senão a planilha fica impossível de ler."}
+{"t0": 617.3, "t1": 623.3, "trilha": "eu", "falante": null, "texto": "O desenho novo prevê rolagem infinita no celular e botões de página no computador, o que complica um pouco, entende?"}
+{"t0": 625.3, "t1": 630.3, "trilha": "outros", "falante": 1, "texto": "Veja bem, precisamos combinar o formato da resposta da API com o pessoal do aplicativo, senão eles refazem tudo depois."}
+{"t0": 632.3, "t1": 642.3, "trilha": "eu", "falante": null, "texto": "Acho que precisamos combinar o formato da resposta da API com o pessoal do aplicativo, senão eles refazem tudo depois, né?"}
+{"t0": 644.4, "t1": 655.4, "trilha": "eu", "falante": null, "texto": "Olha, precisamos combinar o formato da resposta da API com o pessoal do aplicativo, senão eles refazem tudo depois, né?"}
+{"t0": 657.4, "t1": 667.4, "trilha": "outros", "falante": 1, "texto": "Na real, precisamos combinar o formato da resposta da API com o pessoal do aplicativo, senão eles refazem tudo depois."}
+{"t0": 669.4, "t1": 673.4, "trilha": "eu", "falante": null, "texto": "Na real, o desenho novo prevê rolagem infinita no celular e botões de página no computador, o que complica um pouco."}
+{"t0": 675.5, "t1": 685.5, "trilha": "outros", "falante": 2, "texto": "Se a gente entregar a paginação incompleta, o cliente grande vai continuar reclamando da lentidão toda semana, né?"}
+{"t0": 687.5, "t1": 691.5, "trilha": "outros", "falante": 2, "texto": "Na real, eu pensei em reaproveitar o componente de tabela que já existe, só trocando a fonte dos dados por uma chamada paginada."}
+{"t0": 693.6, "t1": 700.6, "trilha": "outros", "falante": 2, "texto": "Se a gente entregar a paginação incompleta, o cliente grande vai continuar reclamando da lentidão toda semana, entende?"}
+{"t0": 702.6, "t1": 708.6, "trilha": "outros", "falante": 1, "texto": "Eu pensei em reaproveitar o componente de tabela que já existe, só trocando a fonte dos dados por uma chamada paginada, né?"}
+{"t0": 710.6, "t1": 721.6, "trilha": "outros", "falante": 1, "texto": "Depois de pronto, a gente mede de novo com o volume real de produção antes de dar o trabalho por encerrado, entende?"}
+{"t0": 723.7, "t1": 734.7, "trilha": "outros", "falante": 1, "texto": "A paginação da listagem de clientes está lenta porque ela ainda carrega todos os registros antes de cortar a página, entende?"}
+{"t0": 736.7, "t1": 744.7, "trilha": "outros", "falante": 1, "texto": "Acho que se a gente entregar a paginação incompleta, o cliente grande vai continuar reclamando da lentidão toda semana."}
+{"t0": 746.7, "t1": 752.7, "trilha": "outros", "falante": 1, "texto": "Olha, eu testei a consulta com índice e o tempo caiu para trezentos milissegundos, então o gargalo era mesmo o banco, entende?"}
+{"t0": 754.8, "t1": 764.8, "trilha": "eu", "falante": null, "texto": "Então, a ideia é paginar no servidor e devolver só vinte itens por vez, com o total calculado numa consulta separada."}
+{"t0": 766.8, "t1": 774.8, "trilha": "outros", "falante": 1, "texto": "Eu testei a consulta com índice e o tempo caiu para trezentos milissegundos, então o gargalo era mesmo o banco."}
+{"t0": 776.9, "t1": 785.9, "trilha": "outros", "falante": 1, "texto": "Acho que a paginação da listagem de clientes está lenta porque ela ainda carrega todos os registros antes de cortar a página, né?"}
+{"t0": 787.9, "t1": 794.9, "trilha": "outros", "falante": 1, "texto": "Acho que no ambiente de teste, a tela com dez mil clientes leva mais de oito segundos para abrir, o que é inaceitável."}
+{"t0": 796.9, "t1": 805.9, "trilha": "eu", "falante": null, "texto": "Na real, eu pensei em reaproveitar o componente de tabela que já existe, só trocando a fonte dos dados por uma chamada paginada."}
+{"t0": 808.0, "t1": 820.0, "trilha": "eu", "falante": null, "texto": "Depois de pronto, a gente mede de novo com o volume real de produção antes de dar o trabalho por encerrado."}
+{"t0": 822.0, "t1": 828.0, "trilha": "outros", "falante": 2, "texto": "Olha, depois de pronto, a gente mede de novo com o volume real de produção antes de dar o trabalho por encerrado, entende?"}
+{"t0": 830.0, "t1": 837.0, "trilha": "outros", "falante": 1, "texto": "Então, se a gente entregar a paginação incompleta, o cliente grande vai continuar reclamando da lentidão toda semana, né?"}
+{"t0": 839.1, "t1": 850.1, "trilha": "eu", "falante": null, "texto": "Fechado então, a paginação da listagem de clientes vai ser entregue até 30 de outubro, sem exceção."}
+{"t0": 852.1, "t1": 859.1, "trilha": "outros", "falante": 1, "texto": "Então, o desenho novo prevê rolagem infinita no celular e botões de página no computador, o que complica um pouco, né?"}
+{"t0": 861.2, "t1": 865.2, "trilha": "outros", "falante": 1, "texto": "Sinceramente, depois de pronto, a gente mede de novo com o volume real de produção antes de dar o trabalho por encerrado, entende?"}
+{"t0": 867.2, "t1": 871.2, "trilha": "eu", "falante": null, "texto": "Na real, a ordenação por coluna também precisa ir para o servidor, porque ordenar só a página atual confunde o usuário, entende?"}
+{"t0": 873.2, "t1": 882.2, "trilha": "outros", "falante": 1, "texto": "Veja bem, eu testei a consulta com índice e o tempo caiu para trezentos milissegundos, então o gargalo era mesmo o banco, entende?"}
+{"t0": 884.3, "t1": 893.3, "trilha": "eu", "falante": null, "texto": "Se a gente entregar a paginação incompleta, o cliente grande vai continuar reclamando da lentidão toda semana, entende?"}
+{"t0": 895.3, "t1": 901.3, "trilha": "outros", "falante": 2, "texto": "Então, eu testei a consulta com índice e o tempo caiu para trezentos milissegundos, então o gargalo era mesmo o banco."}
+{"t0": 903.3, "t1": 911.3, "trilha": "outros", "falante": 1, "texto": "Olha, eu pensei em reaproveitar o componente de tabela que já existe, só trocando a fonte dos dados por uma chamada paginada."}
+{"t0": 913.4, "t1": 920.4, "trilha": "eu", "falante": null, "texto": "Então, precisamos combinar o formato da resposta da API com o pessoal do aplicativo, senão eles refazem tudo depois."}
+{"t0": 922.4, "t1": 928.4, "trilha": "eu", "falante": null, "texto": "Acho que a paginação da listagem de clientes está lenta porque ela ainda carrega todos os registros antes de cortar a página, entende?"}
+{"t0": 930.5, "t1": 942.5, "trilha": "outros", "falante": 2, "texto": "Eu fico com o protótipo da paginação e mostro para todo mundo até 25 de outubro, pode anotar."}
+{"t0": 944.5, "t1": 949.5, "trilha": "outros", "falante": 1, "texto": "Então, a paginação da listagem de clientes está lenta porque ela ainda carrega todos os registros antes de cortar a página."}
+{"t0": 951.5, "t1": 958.5, "trilha": "eu", "falante": null, "texto": "No ambiente de teste, a tela com dez mil clientes leva mais de oito segundos para abrir, o que é inaceitável."}
+{"t0": 960.6, "t1": 966.6, "trilha": "outros", "falante": 2, "texto": "Então, depois de pronto, a gente mede de novo com o volume real de produção antes de dar o trabalho por encerrado, né?"}
+{"t0": 968.6, "t1": 973.6, "trilha": "outros", "falante": 2, "texto": "Se a gente entregar a paginação incompleta, o cliente grande vai continuar reclamando da lentidão toda semana, né?"}
+{"t0": 975.6, "t1": 985.6, "trilha": "eu", "falante": null, "texto": "Sinceramente, depois de pronto, a gente mede de novo com o volume real de produção antes de dar o trabalho por encerrado."}
+{"t0": 987.7, "t1": 999.7, "trilha": "outros", "falante": 2, "texto": "Na real, precisamos combinar o formato da resposta da API com o pessoal do aplicativo, senão eles refazem tudo depois."}
+{"t0": 1001.7, "t1": 1013.7, "trilha": "eu", "falante": null, "texto": "Então, no ambiente de teste, a tela com dez mil clientes leva mais de oito segundos para abrir, o que é inaceitável, né?"}
+{"t0": 1015.8, "t1": 1019.8, "trilha": "outros", "falante": 2, "texto": "Na real, a ordenação por coluna também precisa ir para o servidor, porque ordenar só a página atual confunde o usuário."}
+{"t0": 1021.8, "t1": 1032.8, "trilha": "eu", "falante": null, "texto": "Na real, o desenho novo prevê rolagem infinita no celular e botões de página no computador, o que complica um pouco, entende?"}
+{"t0": 1034.8, "t1": 1043.8, "trilha": "eu", "falante": null, "texto": "Sinceramente, precisamos combinar o formato da resposta da API com o pessoal do aplicativo, senão eles refazem tudo depois."}
+{"t0": 1045.9, "t1": 1050.9, "trilha": "outros", "falante": 1, "texto": "Veja bem, se a gente entregar a paginação incompleta, o cliente grande vai continuar reclamando da lentidão toda semana."}
+{"t0": 1052.9, "t1": 1064.9, "trilha": "outros", "falante": 2, "texto": "Na real, eu pensei em reaproveitar o componente de tabela que já existe, só trocando a fonte dos dados por uma chamada paginada."}
+{"t0": 1066.9, "t1": 1070.9, "trilha": "outros", "falante": 2, "texto": "Olha, o time de suporte já recebeu onze reclamações por causa dessa tela só nesta semana, vale priorizar mesmo."}
+{"t0": 1073.0, "t1": 1079.0, "trilha": "eu", "falante": null, "texto": "Eu testei a consulta com índice e o tempo caiu para trezentos milissegundos, então o gargalo era mesmo o banco, entende?"}
+{"t0": 1081.0, "t1": 1089.0, "trilha": "eu", "falante": null, "texto": "Então, eu pensei em reaproveitar o componente de tabela que já existe, só trocando a fonte dos dados por uma chamada paginada."}
+{"t0": 1091.1, "t1": 1096.1, "trilha": "eu", "falante": null, "texto": "Veja bem, depois de pronto, a gente mede de novo com o volume real de produção antes de dar o trabalho por encerrado, entende?"}
+{"t0": 1098.1, "t1": 1108.1, "trilha": "eu", "falante": null, "texto": "Na real, a ideia é paginar no servidor e devolver só vinte itens por vez, com o total calculado numa consulta separada, entende?"}
+{"t0": 1110.1, "t1": 1118.1, "trilha": "outros", "falante": 2, "texto": "Então, a ideia é paginar no servidor e devolver só vinte itens por vez, com o total calculado numa consulta separada."}
+{"t0": 1120.2, "t1": 1128.2, "trilha": "outros", "falante": 1, "texto": "Olha, eu testei a consulta com índice e o tempo caiu para trezentos milissegundos, então o gargalo era mesmo o banco, né?"}
+{"t0": 1130.2, "t1": 1135.2, "trilha": "eu", "falante": null, "texto": "Decisão tomada: a reunião semanal passa para terça-feira às 10h, porque segunda de manhã ninguém consegue."}
+{"t0": 1137.2, "t1": 1148.2, "trilha": "eu", "falante": null, "texto": "O problema é que o filtro por data quebra a contagem total quando o usuário troca de página depressa."}
+{"t0": 1150.3, "t1": 1162.3, "trilha": "outros", "falante": 2, "texto": "Olha, eu testei a consulta com índice e o tempo caiu para trezentos milissegundos, então o gargalo era mesmo o banco."}
+{"t0": 1164.3, "t1": 1173.3, "trilha": "eu", "falante": null, "texto": "Sinceramente, o time de suporte já recebeu onze reclamações por causa dessa tela só nesta semana, vale priorizar mesmo."}
+{"t0": 1175.4, "t1": 1179.4, "trilha": "outros", "falante": 1, "texto": "Olha, eu testei a consulta com índice e o tempo caiu para trezentos milissegundos, então o gargalo era mesmo o banco."}
+{"t0": 1181.4, "t1": 1185.4, "trilha": "outros", "falante": 2, "texto": "Então, no ambiente de teste, a tela com dez mil clientes leva mais de oito segundos para abrir, o que é inaceitável, entende?"}
+{"t0": 1187.4, "t1": 1196.4, "trilha": "eu", "falante": null, "texto": "Veja bem, o problema é que o filtro por data quebra a contagem total quando o usuário troca de página depressa, né?"}
+{"t0": 1198.5, "t1": 1207.5, "trilha": "outros", "falante": 1, "texto": "Na real, eu testei a consulta com índice e o tempo caiu para trezentos milissegundos, então o gargalo era mesmo o banco."}
+{"t0": 1209.5, "t1": 1215.5, "trilha": "eu", "falante": null, "texto": "Acho que nos registros de erro aparece um token vencido sendo reenviado, e o servidor responde com erro de autorização."}
+{"t0": 1217.5, "t1": 1228.5, "trilha": "eu", "falante": null, "texto": "Outra opção seria avisar o usuário que a sessão acabou e guardar o rascunho localmente para ele não perder nada."}
+{"t0": 1230.6, "t1": 1242.6, "trilha": "eu", "falante": null, "texto": "O pessoal do suporte disse que a maioria dos chamados vem de segunda de manhã, quando as sessões do fim de semana vencem."}
+{"t0": 1244.6, "t1": 1256.6, "trilha": "eu", "falante": null, "texto": "Olha, vamos precisar de um teste automático para esse cenário, senão o bug volta na próxima refatoração sem ninguém notar, né?"}
+{"t0": 1258.6, "t1": 1270.6, "trilha": "outros", "falante": 2, "texto": "O pessoal do suporte disse que a maioria dos chamados vem de segunda de manhã, quando as sessões do fim de semana vencem."}
+{"t0": 1272.7, "t1": 1283.7, "trilha": "eu", "falante": null, "texto": "Na real, isso afeta principalmente quem usa o sistema o dia inteiro, que é justamente o nosso cliente mais importante, entende?"}
+{"t0": 1285.7, "t1": 1292.7, "trilha": "eu", "falante": null, "texto": "Na real, eu não queria mexer em autenticação perto de uma entrega grande, o risco de quebrar o acesso de todo mundo é real."}
+{"t0": 1294.8, "t1": 1301.8, "trilha": "eu", "falante": null, "texto": "Na real, já tem gente pedindo para aumentar o tempo da sessão, mas isso só esconde o problema e piora a segurança, né?"}
+{"t0": 1303.8, "t1": 1311.8, "trilha": "outros", "falante": 1, "texto": "Então, a sessão expira no servidor, mas a tela continua parecendo logada, e o usuário perde o que digitou."}
+{"t0": 1313.8, "t1": 1317.8, "trilha": "outros", "falante": 2, "texto": "Pois é, outra opção seria avisar o usuário que a sessão acabou e guardar o rascunho localmente para ele não perder nada, entende?"}
+{"t0": 1319.9, "t1": 1329.9, "trilha": "eu", "falante": null, "texto": "Sinceramente, isso afeta principalmente quem usa o sistema o dia inteiro, que é justamente o nosso cliente mais importante."}
+{"t0": 1331.9, "t1": 1343.9, "trilha": "outros", "falante": 1, "texto": "Olha, enquanto não corrige, dá para orientar o suporte a pedir que o cliente recarregue a página antes de salvar, entende?"}
+{"t0": 1345.9, "t1": 1351.9, "trilha": "outros", "falante": 1, "texto": "Olha, a sessão expira no servidor, mas a tela continua parecendo logada, e o usuário perde o que digitou, entende?"}
+{"t0": 1354.0, "t1": 1360.0, "trilha": "outros", "falante": 2, "texto": "Na real, vamos precisar de um teste automático para esse cenário, senão o bug volta na próxima refatoração sem ninguém notar."}
+{"t0": 1362.0, "t1": 1370.0, "trilha": "outros", "falante": 2, "texto": "Acho que o bug do login aparece quando a pessoa deixa a aba aberta por mais de uma hora e tenta salvar alguma coisa."}
+{"t0": 1372.1, "t1": 1382.1, "trilha": "eu", "falante": null, "texto": "Acho que a correção provável é renovar o token de forma silenciosa um pouco antes de vencer, sem deslogar ninguém."}
+{"t0": 1384.1, "t1": 1391.1, "trilha": "outros", "falante": 2, "texto": "Veja bem, enquanto não corrige, dá para orientar o suporte a pedir que o cliente recarregue a página antes de salvar."}
+{"t0": 1393.1, "t1": 1401.1, "trilha": "outros", "falante": 1, "texto": "Então, o bug do login aparece quando a pessoa deixa a aba aberta por mais de uma hora e tenta salvar alguma coisa."}
+{"t0": 1403.2, "t1": 1413.2, "trilha": "outros", "falante": 2, "texto": "Olha, o pessoal do suporte disse que a maioria dos chamados vem de segunda de manhã, quando as sessões do fim de semana vencem."}
+{"t0": 1415.2, "t1": 1422.2, "trilha": "eu", "falante": null, "texto": "Já tem gente pedindo para aumentar o tempo da sessão, mas isso só esconde o problema e piora a segurança."}
+{"t0": 1424.2, "t1": 1433.2, "trilha": "eu", "falante": null, "texto": "Na real, já tem gente pedindo para aumentar o tempo da sessão, mas isso só esconde o problema e piora a segurança, entende?"}
+{"t0": 1435.3, "t1": 1442.3, "trilha": "outros", "falante": 1, "texto": "Na real, a sessão expira no servidor, mas a tela continua parecendo logada, e o usuário perde o que digitou."}
+{"t0": 1444.3, "t1": 1452.3, "trilha": "eu", "falante": null, "texto": "Combinado, o bug de sessão expirando entra antes de qualquer funcionalidade nova no próximo ciclo."}
+{"t0": 1454.4, "t1": 1464.4, "trilha": "eu", "falante": null, "texto": "Olha, a sessão expira no servidor, mas a tela continua parecendo logada, e o usuário perde o que digitou."}
+{"t0": 1466.4, "t1": 1473.4, "trilha": "outros", "falante": 2, "texto": "Na real, nos registros de erro aparece um token vencido sendo reenviado, e o servidor responde com erro de autorização."}
+{"t0": 1475.4, "t1": 1484.4, "trilha": "eu", "falante": null, "texto": "Então, enquanto não corrige, dá para orientar o suporte a pedir que o cliente recarregue a página antes de salvar."}
+{"t0": 1486.5, "t1": 1496.5, "trilha": "eu", "falante": null, "texto": "Na real, eu não queria mexer em autenticação perto de uma entrega grande, o risco de quebrar o acesso de todo mundo é real."}
+{"t0": 1498.5, "t1": 1502.5, "trilha": "outros", "falante": 1, "texto": "Na real, o bug do login aparece quando a pessoa deixa a aba aberta por mais de uma hora e tenta salvar alguma coisa, entende?"}
+{"t0": 1504.5, "t1": 1513.5, "trilha": "outros", "falante": 2, "texto": "Veja bem, a correção provável é renovar o token de forma silenciosa um pouco antes de vencer, sem deslogar ninguém."}
+{"t0": 1515.6, "t1": 1525.6, "trilha": "outros", "falante": 2, "texto": "Já tem gente pedindo para aumentar o tempo da sessão, mas isso só esconde o problema e piora a segurança."}
+{"t0": 1527.6, "t1": 1538.6, "trilha": "eu", "falante": null, "texto": "Eu mesmo vou reproduzir o bug do login em produção até quarta-feira e trago os registros."}
+{"t0": 1540.7, "t1": 1545.7, "trilha": "outros", "falante": 1, "texto": "Então, outra opção seria avisar o usuário que a sessão acabou e guardar o rascunho localmente para ele não perder nada, entende?"}
+{"t0": 1547.7, "t1": 1552.7, "trilha": "outros", "falante": 2, "texto": "Veja bem, já tem gente pedindo para aumentar o tempo da sessão, mas isso só esconde o problema e piora a segurança, né?"}
+{"t0": 1554.7, "t1": 1558.7, "trilha": "eu", "falante": null, "texto": "Veja bem, isso afeta principalmente quem usa o sistema o dia inteiro, que é justamente o nosso cliente mais importante."}
+{"t0": 1560.8, "t1": 1564.8, "trilha": "outros", "falante": 2, "texto": "Sinceramente, o bug do login aparece quando a pessoa deixa a aba aberta por mais de uma hora e tenta salvar alguma coisa."}
+{"t0": 1566.8, "t1": 1574.8, "trilha": "outros", "falante": 1, "texto": "Sinceramente, a correção provável é renovar o token de forma silenciosa um pouco antes de vencer, sem deslogar ninguém."}
+{"t0": 1576.8, "t1": 1583.8, "trilha": "outros", "falante": 2, "texto": "Na real, vamos precisar de um teste automático para esse cenário, senão o bug volta na próxima refatoração sem ninguém notar."}
+{"t0": 1585.9, "t1": 1596.9, "trilha": "outros", "falante": 2, "texto": "Sinceramente, vamos precisar de um teste automático para esse cenário, senão o bug volta na próxima refatoração sem ninguém notar."}
+{"t0": 1598.9, "t1": 1609.9, "trilha": "outros", "falante": 1, "texto": "Veja bem, a correção provável é renovar o token de forma silenciosa um pouco antes de vencer, sem deslogar ninguém."}
+{"t0": 1612.0, "t1": 1624.0, "trilha": "outros", "falante": 1, "texto": "Sinceramente, o bug do login aparece quando a pessoa deixa a aba aberta por mais de uma hora e tenta salvar alguma coisa."}
+{"t0": 1626.0, "t1": 1636.0, "trilha": "eu", "falante": null, "texto": "Eu não queria mexer em autenticação perto de uma entrega grande, o risco de quebrar o acesso de todo mundo é real, entende?"}
+{"t0": 1638.0, "t1": 1647.0, "trilha": "eu", "falante": null, "texto": "Acho que já tem gente pedindo para aumentar o tempo da sessão, mas isso só esconde o problema e piora a segurança."}
+{"t0": 1649.1, "t1": 1653.1, "trilha": "outros", "falante": 2, "texto": "Eu consegui reproduzir três vezes no meu computador, sempre depois de a sessão ficar parada por bastante tempo."}
+{"t0": 1655.1, "t1": 1663.1, "trilha": "outros", "falante": 2, "texto": "Veja bem, o bug do login aparece quando a pessoa deixa a aba aberta por mais de uma hora e tenta salvar alguma coisa, né?"}
+{"t0": 1665.1, "t1": 1677.1, "trilha": "eu", "falante": null, "texto": "A correção provável é renovar o token de forma silenciosa um pouco antes de vencer, sem deslogar ninguém, entende?"}
+{"t0": 1679.2, "t1": 1689.2, "trilha": "eu", "falante": null, "texto": "O bug do login aparece quando a pessoa deixa a aba aberta por mais de uma hora e tenta salvar alguma coisa, entende?"}
+{"t0": 1691.2, "t1": 1697.2, "trilha": "eu", "falante": null, "texto": "Acho que eu não queria mexer em autenticação perto de uma entrega grande, o risco de quebrar o acesso de todo mundo é real."}
+{"t0": 1699.3, "t1": 1705.3, "trilha": "outros", "falante": 1, "texto": "O bug do login aparece quando a pessoa deixa a aba aberta por mais de uma hora e tenta salvar alguma coisa."}
+{"t0": 1707.3, "t1": 1711.3, "trilha": "eu", "falante": null, "texto": "A correção provável é renovar o token de forma silenciosa um pouco antes de vencer, sem deslogar ninguém."}
+{"t0": 1713.3, "t1": 1718.3, "trilha": "eu", "falante": null, "texto": "Na real, outra opção seria avisar o usuário que a sessão acabou e guardar o rascunho localmente para ele não perder nada."}
+{"t0": 1720.4, "t1": 1729.4, "trilha": "eu", "falante": null, "texto": "Sinceramente, nos registros de erro aparece um token vencido sendo reenviado, e o servidor responde com erro de autorização."}
+{"t0": 1731.4, "t1": 1737.4, "trilha": "eu", "falante": null, "texto": "Na real, eu consegui reproduzir três vezes no meu computador, sempre depois de a sessão ficar parada por bastante tempo."}
+{"t0": 1739.4, "t1": 1746.4, "trilha": "outros", "falante": 2, "texto": "Sinceramente, nos registros de erro aparece um token vencido sendo reenviado, e o servidor responde com erro de autorização, né?"}
+{"t0": 1748.5, "t1": 1756.5, "trilha": "eu", "falante": null, "texto": "Veja bem, o bug do login aparece quando a pessoa deixa a aba aberta por mais de uma hora e tenta salvar alguma coisa."}
+{"t0": 1758.5, "t1": 1766.5, "trilha": "outros", "falante": 1, "texto": "O pessoal do suporte disse que a maioria dos chamados vem de segunda de manhã, quando as sessões do fim de semana vencem."}
+{"t0": 1768.6, "t1": 1778.6, "trilha": "outros", "falante": 2, "texto": "Acho que o pessoal do suporte disse que a maioria dos chamados vem de segunda de manhã, quando as sessões do fim de semana vencem, né?"}
+{"t0": 1780.6, "t1": 1788.6, "trilha": "outros", "falante": 1, "texto": "Acho que vamos precisar de um teste automático para esse cenário, senão o bug volta na próxima refatoração sem ninguém notar."}
+{"t0": 1790.6, "t1": 1794.6, "trilha": "eu", "falante": null, "texto": "Pois é, eu não queria mexer em autenticação perto de uma entrega grande, o risco de quebrar o acesso de todo mundo é real."}
+{"t0": 1796.7, "t1": 1805.7, "trilha": "outros", "falante": 2, "texto": "Na real, a correção provável é renovar o token de forma silenciosa um pouco antes de vencer, sem deslogar ninguém."}
+{"t0": 1807.7, "t1": 1813.7, "trilha": "eu", "falante": null, "texto": "Então, nos registros de erro aparece um token vencido sendo reenviado, e o servidor responde com erro de autorização."}
+{"t0": 1815.7, "t1": 1820.7, "trilha": "outros", "falante": 1, "texto": "Acho que contratar alguém sênior demora, em média, dois meses entre abrir a vaga e a pessoa começar a trabalhar, né?"}
+{"t0": 1822.8, "t1": 1831.8, "trilha": "eu", "falante": null, "texto": "Então, sobre a contratação, o time está sobrecarregado e a gente precisa decidir que perfil falta mais agora."}
+{"t0": 1833.8, "t1": 1844.8, "trilha": "outros", "falante": 2, "texto": "Pois é, eu sinto que o gargalo não é escrever código novo, é garantir que o que a gente já escreve funcione direito, né?"}
+{"t0": 1846.9, "t1": 1857.9, "trilha": "eu", "falante": null, "texto": "Pois é, a vaga pode ser remota, o que amplia bastante o número de candidatos e ajuda a fechar mais rápido, né?"}
+{"t0": 1859.9, "t1": 1869.9, "trilha": "outros", "falante": 2, "texto": "Olha, sobre a contratação, o time está sobrecarregado e a gente precisa decidir que perfil falta mais agora, né?"}
+{"t0": 1871.9, "t1": 1875.9, "trilha": "eu", "falante": null, "texto": "Sinceramente, a faixa salarial que o financeiro liberou cobre uma pessoa pleno, não duas, então a escolha precisa ser cuidadosa, entende?"}
+{"t0": 1878.0, "t1": 1887.0, "trilha": "outros", "falante": 1, "texto": "Sinceramente, sobre a contratação, o time está sobrecarregado e a gente precisa decidir que perfil falta mais agora."}
+{"t0": 1889.0, "t1": 1901.0, "trilha": "eu", "falante": null, "texto": "Pois é, o último ciclo teve muito retrabalho porque os erros só apareciam depois que o cliente já tinha usado a funcionalidade."}
+{"t0": 1903.0, "t1": 1911.0, "trilha": "outros", "falante": 2, "texto": "Acho que no fim das contas, o que importa é reduzir o retrabalho e ganhar previsibilidade nas entregas do time."}
+{"t0": 1913.1, "t1": 1919.1, "trilha": "eu", "falante": null, "texto": "Então, se a gente trouxer mais um desenvolvedor, ele vai gastar o primeiro mês só aprendendo o sistema com a gente ao lado, né?"}
+{"t0": 1921.1, "t1": 1925.1, "trilha": "outros", "falante": 1, "texto": "Olha, no fim das contas, o que importa é reduzir o retrabalho e ganhar previsibilidade nas entregas do time, né?"}
+{"t0": 1927.2, "t1": 1936.2, "trilha": "outros", "falante": 1, "texto": "Se a gente trouxer mais um desenvolvedor, ele vai gastar o primeiro mês só aprendendo o sistema com a gente ao lado."}
+{"t0": 1938.2, "t1": 1944.2, "trilha": "eu", "falante": null, "texto": "Acho que a faixa salarial que o financeiro liberou cobre uma pessoa pleno, não duas, então a escolha precisa ser cuidadosa, né?"}
+{"t0": 1946.2, "t1": 1958.2, "trilha": "outros", "falante": 2, "texto": "Acho que sobre a contratação, o time está sobrecarregado e a gente precisa decidir que perfil falta mais agora, entende?"}
+{"t0": 1960.3, "t1": 1966.3, "trilha": "outros", "falante": 2, "texto": "Sinceramente, eu sinto que o gargalo não é escrever código novo, é garantir que o que a gente já escreve funcione direito."}
+{"t0": 1968.3, "t1": 1972.3, "trilha": "outros", "falante": 2, "texto": "Acho que contratar alguém sênior demora, em média, dois meses entre abrir a vaga e a pessoa começar a trabalhar."}
+{"t0": 1974.3, "t1": 1981.3, "trilha": "outros", "falante": 2, "texto": "Olha, eu gostaria de que a pessoa nova começasse antes do fim do ano, para pegar o planejamento do próximo trimestre desde o início."}
+{"t0": 1983.4, "t1": 1989.4, "trilha": "outros", "falante": 2, "texto": "Na real, o último ciclo teve muito retrabalho porque os erros só apareciam depois que o cliente já tinha usado a funcionalidade."}
+{"t0": 1991.4, "t1": 1996.4, "trilha": "outros", "falante": 2, "texto": "O processo seletivo precisa ser curto, no máximo três etapas, senão perdemos bons candidatos para empresas maiores, entende?"}
+{"t0": 1998.5, "t1": 2009.5, "trilha": "eu", "falante": null, "texto": "Vale combinar com o pessoal de recursos humanos quem participa das entrevistas técnicas para não repetir perguntas, entende?"}
+{"t0": 2011.5, "t1": 2020.5, "trilha": "eu", "falante": null, "texto": "Então a decisão é contratar uma pessoa de QA, e não mais um desenvolvedor, para reduzir o retrabalho."}
+{"t0": 2022.5, "t1": 2027.5, "trilha": "outros", "falante": 1, "texto": "A vaga pode ser remota, o que amplia bastante o número de candidatos e ajuda a fechar mais rápido, né?"}
+{"t0": 2029.6, "t1": 2038.6, "trilha": "outros", "falante": 2, "texto": "Olha, sobre a contratação, o time está sobrecarregado e a gente precisa decidir que perfil falta mais agora."}
+{"t0": 2040.6, "t1": 2048.6, "trilha": "outros", "falante": 1, "texto": "O processo seletivo precisa ser curto, no máximo três etapas, senão perdemos bons candidatos para empresas maiores, entende?"}
+{"t0": 2050.6, "t1": 2057.6, "trilha": "eu", "falante": null, "texto": "A vaga pode ser remota, o que amplia bastante o número de candidatos e ajuda a fechar mais rápido."}
+{"t0": 2059.7, "t1": 2063.7, "trilha": "outros", "falante": 1, "texto": "Eu abro a vaga de QA no LinkedIn amanhã e já deixo o roteiro de entrevista combinado."}
+{"t0": 2065.7, "t1": 2072.7, "trilha": "outros", "falante": 1, "texto": "A vaga pode ser remota, o que amplia bastante o número de candidatos e ajuda a fechar mais rápido."}
+{"t0": 2074.8, "t1": 2081.8, "trilha": "eu", "falante": null, "texto": "Veja bem, o último ciclo teve muito retrabalho porque os erros só apareciam depois que o cliente já tinha usado a funcionalidade, né?"}
+{"t0": 2083.8, "t1": 2095.8, "trilha": "eu", "falante": null, "texto": "Sinceramente, a vaga pode ser remota, o que amplia bastante o número de candidatos e ajuda a fechar mais rápido, entende?"}
+{"t0": 2097.8, "t1": 2108.8, "trilha": "eu", "falante": null, "texto": "Então, vale combinar com o pessoal de recursos humanos quem participa das entrevistas técnicas para não repetir perguntas."}
+{"t0": 2110.9, "t1": 2117.9, "trilha": "eu", "falante": null, "texto": "Sinceramente, a vaga pode ser remota, o que amplia bastante o número de candidatos e ajuda a fechar mais rápido, entende?"}
+{"t0": 2119.9, "t1": 2129.9, "trilha": "eu", "falante": null, "texto": "Veja bem, o processo seletivo precisa ser curto, no máximo três etapas, senão perdemos bons candidatos para empresas maiores, né?"}
+{"t0": 2131.9, "t1": 2135.9, "trilha": "eu", "falante": null, "texto": "Eu conversei com dois candidatos indicados e ambos têm experiência com automação de testes, o que ajudaria bastante."}
+{"t0": 2138.0, "t1": 2150.0, "trilha": "outros", "falante": 1, "texto": "Pois é, contratar alguém sênior demora, em média, dois meses entre abrir a vaga e a pessoa começar a trabalhar."}
+{"t0": 2152.0, "t1": 2156.0, "trilha": "outros", "falante": 1, "texto": "Pois é, contratar alguém sênior demora, em média, dois meses entre abrir a vaga e a pessoa começar a trabalhar."}
+{"t0": 2158.1, "t1": 2163.1, "trilha": "eu", "falante": null, "texto": "Veja bem, sobre a contratação, o time está sobrecarregado e a gente precisa decidir que perfil falta mais agora."}
+{"t0": 2165.1, "t1": 2171.1, "trilha": "eu", "falante": null, "texto": "O processo seletivo precisa ser curto, no máximo três etapas, senão perdemos bons candidatos para empresas maiores."}
+{"t0": 2173.1, "t1": 2185.1, "trilha": "outros", "falante": 2, "texto": "A vaga pode ser remota, o que amplia bastante o número de candidatos e ajuda a fechar mais rápido."}
+{"t0": 2187.2, "t1": 2196.2, "trilha": "outros", "falante": 2, "texto": "Pois é, vale combinar com o pessoal de recursos humanos quem participa das entrevistas técnicas para não repetir perguntas."}
+{"t0": 2198.2, "t1": 2210.2, "trilha": "eu", "falante": null, "texto": "Na real, o último ciclo teve muito retrabalho porque os erros só apareciam depois que o cliente já tinha usado a funcionalidade, né?"}
+{"t0": 2212.2, "t1": 2222.2, "trilha": "outros", "falante": 1, "texto": "Pois é, no fim das contas, o que importa é reduzir o retrabalho e ganhar previsibilidade nas entregas do time."}
+{"t0": 2224.3, "t1": 2232.3, "trilha": "eu", "falante": null, "texto": "O último ciclo teve muito retrabalho porque os erros só apareciam depois que o cliente já tinha usado a funcionalidade, entende?"}
+{"t0": 2234.3, "t1": 2240.3, "trilha": "eu", "falante": null, "texto": "Eu sinto que o gargalo não é escrever código novo, é garantir que o que a gente já escreve funcione direito."}
+{"t0": 2242.4, "t1": 2254.4, "trilha": "eu", "falante": null, "texto": "Acho que o processo seletivo precisa ser curto, no máximo três etapas, senão perdemos bons candidatos para empresas maiores."}
+{"t0": 2256.4, "t1": 2264.4, "trilha": "outros", "falante": 1, "texto": "Sinceramente, o último ciclo teve muito retrabalho porque os erros só apareciam depois que o cliente já tinha usado a funcionalidade."}
+{"t0": 2266.4, "t1": 2274.4, "trilha": "outros", "falante": 2, "texto": "Eu peço a cotação do Figma ao financeiro até o fim da semana, para a gente comparar os planos."}
+{"t0": 2276.5, "t1": 2281.5, "trilha": "outros", "falante": 1, "texto": "Acho que eu gostaria de que a pessoa nova começasse antes do fim do ano, para pegar o planejamento do próximo trimestre desde o início."}
+{"t0": 2283.5, "t1": 2292.5, "trilha": "outros", "falante": 2, "texto": "Pois é, a vaga pode ser remota, o que amplia bastante o número de candidatos e ajuda a fechar mais rápido."}
+{"t0": 2294.5, "t1": 2298.5, "trilha": "outros", "falante": 1, "texto": "Veja bem, no fim das contas, o que importa é reduzir o retrabalho e ganhar previsibilidade nas entregas do time, né?"}
+{"t0": 2300.6, "t1": 2304.6, "trilha": "outros", "falante": 2, "texto": "Veja bem, sobre a contratação, o time está sobrecarregado e a gente precisa decidir que perfil falta mais agora, entende?"}
+{"t0": 2306.6, "t1": 2312.6, "trilha": "outros", "falante": 1, "texto": "Veja bem, contratar alguém sênior demora, em média, dois meses entre abrir a vaga e a pessoa começar a trabalhar."}
+{"t0": 2314.7, "t1": 2318.7, "trilha": "eu", "falante": null, "texto": "Veja bem, o processo seletivo precisa ser curto, no máximo três etapas, senão perdemos bons candidatos para empresas maiores."}
+{"t0": 2320.7, "t1": 2325.7, "trilha": "outros", "falante": 1, "texto": "Pois é, vale combinar com o pessoal de recursos humanos quem participa das entrevistas técnicas para não repetir perguntas."}
+{"t0": 2327.7, "t1": 2339.7, "trilha": "eu", "falante": null, "texto": "Pois é, a vaga pode ser remota, o que amplia bastante o número de candidatos e ajuda a fechar mais rápido."}
+{"t0": 2341.8, "t1": 2349.8, "trilha": "eu", "falante": null, "texto": "Olha, no fim das contas, o que importa é reduzir o retrabalho e ganhar previsibilidade nas entregas do time, né?"}
+{"t0": 2351.8, "t1": 2356.8, "trilha": "outros", "falante": 1, "texto": "Veja bem, vale combinar com o pessoal de recursos humanos quem participa das entrevistas técnicas para não repetir perguntas, né?"}
+{"t0": 2358.8, "t1": 2367.8, "trilha": "outros", "falante": 2, "texto": "Sinceramente, o processo seletivo precisa ser curto, no máximo três etapas, senão perdemos bons candidatos para empresas maiores."}
+{"t0": 2369.9, "t1": 2379.9, "trilha": "outros", "falante": 2, "texto": "Então, se a gente trouxer mais um desenvolvedor, ele vai gastar o primeiro mês só aprendendo o sistema com a gente ao lado, entende?"}
+{"t0": 2381.9, "t1": 2387.9, "trilha": "eu", "falante": null, "texto": "Veja bem, o último ciclo teve muito retrabalho porque os erros só apareciam depois que o cliente já tinha usado a funcionalidade."}
+{"t0": 2390.0, "t1": 2398.0, "trilha": "outros", "falante": 2, "texto": "Veja bem, sobre a contratação, o time está sobrecarregado e a gente precisa decidir que perfil falta mais agora."}
+{"t0": 2400.0, "t1": 2400.0, "trilha": "sistema", "falante": null, "texto": "reunião encerrada"}

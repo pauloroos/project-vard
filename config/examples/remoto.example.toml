@@ -1,0 +1,12 @@
+# Integração SSH opcional, desativada enquanto destino e comando estiverem vazios.
+# Copie para a pasta de configuração do usuário como remoto.toml.
+[remoto]
+destino = ""                 # exemplo fictício: "usuario@exemplo.com"
+chave = ""                   # opcional: caminho da chave; vazio usa o agente SSH
+comando = ""                 # comando remoto completo; pedido sempre por stdin
+container_prefixo = ""       # opcional: "agente-" descobre exatamente um container
+# Exemplo opcional: comando = "sudo docker exec -i {container} agente --stdin"
+# container_prefixo = "agente-"
+container_excluir = []       # opcional: ignora containers cujo nome contém algum destes trechos
+timeout_s = 180
+nome = "o agente remoto"     # nome usado nas mensagens

@@ -1,0 +1,2 @@
+{"type":"system","subtype":"init","session_id":"s-teste","tools":[],"mcp_servers":[{"name":"claude.ai Notion","status":"needs-auth","source":"claudeai"}]}
+{"type":"result","subtype":"success","is_error":false,"result":"PRECISA_LOGIN: Notion - autorize o conector do Notion no claude.ai","num_turns":1,"total_cost_usd":0.02,"permission_denials":[],"usage":{"input_tokens":4,"output_tokens":40}}

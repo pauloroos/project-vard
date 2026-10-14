@@ -1,0 +1,19 @@
+{
+  "id": "8b2f6ae9-2dd8-4f7d-ba74-5903efa9659e",
+  "ok": true,
+  "result": {
+    "terminal": {
+      "handle": "term_4c66c60c-e756-4904-8e02-018b79077893",
+      "tabId": "84264c6d-e802-4f6a-891c-0d5a6f7b8f6c",
+      "worktreeId": "ff60db9b-f3f9-4ebd-98bf-c82c9d957b0e::X:/DEV/vard-app/vard-0-spike",
+      "title": "Vard #0 Codex",
+      "executionHostId": "local",
+      "incarnationId": "799c26a0-bb15-458d-a6f1-d9a7498b8ae9",
+      "hostPlatform": "win32",
+      "surface": "visible"
+    }
+  },
+  "_meta": {
+    "runtimeId": "a5cb2b1a-e3fe-413d-80ff-5975003e7a24"
+  }
+}

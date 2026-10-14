@@ -1,0 +1,30 @@
+# Comandos fictícios só para os testes: o que interessa é a forma (comando, flags e pedido no fim).
+# `prompt` é o que entra antes do pedido; "posicional" significa pedido como único argumento.
+
+[agentes.claude]
+comando = "claude --permission-mode bypassPermissions"
+terminal = "claude --print"
+prompt = "posicional"
+
+[agentes.codex]
+comando = "codex --dangerously-bypass-approvals-and-sandbox --dangerously-bypass-hook-trust"
+terminal = "codex exec --dangerously-bypass-approvals-and-sandbox --dangerously-bypass-hook-trust"
+prompt = "posicional"
+
+[agentes.opencode]
+comando = "opencode --auto -m opencode-go/deepseek-v4.1-flash"
+terminal = "opencode run"
+prompt = "--prompt"
+
+[agentes.agy]
+comando = "agy --dangerously-skip-permissions"
+terminal = "agy --dangerously-skip-permissions -p"
+prompt = "-i"
+
+[oficina]
+executor = "auto"
+shell = "powershell.exe"
+carencia_s = 60
+travou_apos_s = 600
+telegram = "nunca"
+telegram_apos_min = 3

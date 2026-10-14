@@ -1,0 +1,9 @@
+# Rotina da manhã: a vigia dispara neste horário, só com o computador ligado e o Vard no ar.
+# O resumo usa os canais configurados; "Vard, bom dia, vamos começar o dia" dispara pela voz.
+ativo = false                 # opcional: habilite ap?s configurar o resumo
+hora = "08:00"
+ate = "11:00"                   # depois disso, não manda o resumo atrasado
+dias = [0, 1, 2, 3, 4]          # 0 = segunda ... 6 = domingo
+# Integração opcional com agente-remoto, desativada. Os nomes das chaves são contratos do código.
+perguntar_remoto = false
+pedido_remoto = ""

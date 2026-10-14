@@ -1,0 +1,12 @@
+{
+  "_nota": "RECONSTRUIDA, nao capturada em arquivo: o conteudo e o JSON que o orca imprimiu na tela durante o spike de 12/10 (copiado a mao).",
+  "id": "e50b22ab-8d70-4d6f-9ddf-fc154e3d60d2",
+  "ok": false,
+  "error": {
+    "code": "terminal_handle_stale",
+    "message": "terminal_handle_stale"
+  },
+  "_meta": {
+    "runtimeId": "a5cb2b1a-e3fe-413d-80ff-5975003e7a24"
+  }
+}

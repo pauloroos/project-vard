@@ -1,0 +1,22 @@
+{
+ "id": "3f5afcae648c",
+ "name": "vard-pesquisa-spike",
+ "agent_type": "deep_research",
+ "config": {
+  "tools": "web_search,think",
+  "schedule_type": "manual"
+ },
+ "status": "idle",
+ "summary_memory": "",
+ "created_at": 1791851324.7015016,
+ "updated_at": 1791851324.7015016,
+ "total_tokens": 0,
+ "total_cost": 0.0,
+ "total_runs": 0,
+ "last_run_at": null,
+ "last_activity_at": null,
+ "stall_retries": 0,
+ "current_activity": "",
+ "input_tokens": 0,
+ "output_tokens": 0
+}

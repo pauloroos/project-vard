@@ -1,0 +1,38 @@
+# Como a oficina abre cada agente num terminal (PowerShell).
+# Integrações opcionais desativadas: preencha comando e terminal após instalar e configurar o agente.
+# O worktree isolado, a aba visível e o aviso da tarefa ajudam a acompanhar a execução.
+# Confira as flags na versão instalada e escolha as permissões antes de habilitar.
+# Linha interativa: <comando> <pedido como literal PowerShell>; exit.
+# `terminal` é a linha sem interatividade: o executor grava a saída num log e termina com o agente.
+# O pedido entra como argumento posicional no fim no executor terminal.
+[agentes.claude]
+comando = ""
+terminal = ""
+prompt = "posicional"
+
+[agentes.codex]
+comando = ""
+terminal = ""
+prompt = "posicional"
+
+# OpenCode: se escolher um modelo, use um identificador configurado, como provedor/modelo-local.
+# Evite carregar outro modelo na GPU sem descarregar o anterior.
+[agentes.opencode]
+comando = ""
+terminal = ""
+prompt = "--prompt"
+
+# Antigravity: -i mantém a interface interativa; -p executa sem interatividade.
+# Confira a confiança da pasta do worktree na configuração local antes de habilitar.
+[agentes.agy]
+comando = ""
+terminal = ""
+prompt = "-i"
+
+[oficina]
+executor = "auto"       # "auto" = Orca se o CLI existir e responder, senão terminal; também "orca" ou "terminal"
+shell = "powershell.exe"
+carencia_s = 60         # nos primeiros 60 s o agente ocioso ainda está abrindo, não terminou
+travou_apos_s = 600     # 10 min sem saída = travou (só aviso)
+telegram = "nunca"      # integração opcional desativada; opções: "sempre", "auto" ou "nunca"
+telegram_apos_min = 3   # no modo "auto": duração mínima; origem Telegram e tarefas esperando também enviam

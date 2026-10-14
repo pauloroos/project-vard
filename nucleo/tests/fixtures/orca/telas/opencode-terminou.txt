@@ -1,0 +1,13 @@
+  ┃
+  ┃  [Tarefa 0 do Vard] Responda só OK. Termine com RESUMO: nada feito.
+  ┃
+     + Thought: 315ms
+     OK
+     RESUMO: nada feito.
+     ▣  Build · DeepSeek V4 Flash · 9.2s
+  ┃
+  ┃
+  ┃
+  ┃  Build auto · DeepSeek V4 Flash OpenCode Go
+  ╹▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+   X:\DEV\vard-app\vard-0-spike                                                    42.3K (4%) · $0.01  ctrl+p commands

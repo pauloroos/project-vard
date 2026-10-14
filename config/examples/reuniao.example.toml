@@ -1,0 +1,25 @@
+# Modo reunião. Lido pelo serviço vard-reuniao (4720) no início de cada reunião e pela ata (vard/reuniao.py).
+[audio]
+guardar_audio = false        # false: tmp\*.flac some depois da ata ou em apagar_audio_horas
+apagar_audio_horas = 24
+reter_dias = 90              # transcrições e atas mais velhas são apagadas pela vigia (0 desliga)
+
+[vad]
+limiar = 0.5
+min_silencio_ms = 700
+min_fala_ms = 250
+max_fala_s = 20.0
+
+[transcricao]
+confianca_minima = 0.3
+# Frases típicas de alucinação do whisper em silêncio (comparação sem acento, minúsculas, por "contém").
+bloqueio = ["legendas pela comunidade", "obrigado por assistir", "inscreva-se no canal", "tchau tchau", "amara.org"]
+# Alucinação típica de silêncio: o texto INTEIRO (sem acento/pontuação) é só isto. "Obrigado pela ajuda" passa.
+bloqueio_exato = ["obrigado", "obrigada", "tchau", "amém", "legendas"]
+eco_limiar = 0.8             # fala de "eu" parecida com uma de "outros" sobreposta no tempo é eco
+
+[ata]
+bloco_chars = 9000           # ~2.500 tokens (~10 min de fala); abaixo de 1 bloco pula o passe 1
+
+[diarizacao]
+ligada = false               # fase 2, opt-in; só vale com o modelo baixado; instale o modelo antes de habilitar
