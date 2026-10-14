@@ -86,7 +86,19 @@ async def executar_pedido(
                 erro_stream: str | None = None
 
                 try:
-                    resultado_chamada = adaptador.inferir(mensagens, ferramentas=None)
+                    # Repassa ferramentas ao adaptador se disponíveis (bug da revisão)
+                    ferramentas_schema = None
+                    if gerenciador_ferramentas is not None:
+                        todas = await gerenciador_ferramentas.listar_todas()
+                        ferramentas_schema = [
+                            {
+                                "name": f["nome"],
+                                "description": f.get("descricao", f.get("description", "")),
+                                "parameters": f.get("schema", f.get("inputSchema", {"type": "object", "properties": {}})),
+                            }
+                            for f in todas
+                        ]
+                    resultado_chamada = adaptador.inferir(mensagens, ferramentas=ferramentas_schema)
                     # Contrato antigo: coroutine que retorna ResultadoInferencia
                     if inspect.iscoroutine(resultado_chamada):
                         resultado_chamada = await resultado_chamada
@@ -187,8 +199,9 @@ async def executar_pedido(
                     except Exception as exc:  # noqa: BLE001
                         res_ferramenta = {"erro": str(exc)[:200]}
 
-                    # Registra resultado ou marca incerto
-                    if res_ferramenta and "erro" not in res_ferramenta:
+                    # Registra resultado ou marca incerto (usa flag explícita, não chave "erro")
+                    falha_execucao = isinstance(res_ferramenta, dict) and "erro" in res_ferramenta and len(res_ferramenta) == 1
+                    if res_ferramenta and not falha_execucao:
                         diario.registrar_resultado(pedido.pedido_id, chave, res_ferramenta)
                     else:
                         # Efeito pode ter ocorrido mas resultado não foi gravado → incerto
