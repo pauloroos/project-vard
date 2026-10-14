@@ -1,11 +1,12 @@
 ﻿# Troca da instalação do Vard para este repositório, com retorno em um passo.
 # Uso: trocar-instalacao.ps1 -Candidato | -Promover | -Reverter | -Status [-Raiz <pasta>] [-Antigo <vard-modo.ps1 antigo>]
+#   -Base <json>: campos do instalacao.json a aproveitar (openjarvis_src, servicos...) quando ainda não existe um ativo.
 #   -Candidato: backup + gera a config do OpenJarvis para esta raiz + recarrega OpenJarvis e ponte por ela, SEM trocar a
 #               instalação ativa (usa um instalacao.json temporário). Rode o preflight depois. Nada de jogo/parar.
 #   -Promover:  só depois do preflight verde: grava instalacao.json (atômico) e aponta logon e atalhos para este script.
 #   -Reverter:  restaura config do OpenJarvis, variáveis, atalhos e instalacao.json do backup e recarrega pelo script antigo.
 # Não mexe em tarefas, atas nem schemas de dados. Código e venvs antigos ficam intactos.
-param([switch]$Candidato, [switch]$Promover, [switch]$Reverter, [switch]$Status, [string]$Raiz = "", [string]$Antigo = "")
+param([switch]$Candidato, [switch]$Promover, [switch]$Reverter, [switch]$Status, [string]$Raiz = "", [string]$Antigo = "", [string]$Base = "")
 $ErrorActionPreference = "Stop"
 $Raiz = if ($Raiz) { $Raiz } else { Split-Path (Split-Path $PSScriptRoot -Parent) -Parent }
 $Pasta = Join-Path $env:LOCALAPPDATA "rdl-vard"
@@ -54,7 +55,7 @@ function Restaurar-Backup($dir) {
   foreach ($n in $Variaveis) { [Environment]::SetEnvironmentVariable($n, $vars.$n, "User") }
 }
 function Instalacao-Candidata() {
-  $base = Ler-Json $InstAtiva
+  $base = if ($Base) { Ler-Json $Base } else { Ler-Json $InstAtiva }
   $o = [ordered]@{ raiz_codigo = $Raiz; openjarvis_src = ""; openjarvis_home = (Pasta-OpenJarvis); modelo = ""; contexto = 0; servicos = @{} }
   if ($base) { foreach ($p in $base.PSObject.Properties) { $o[$p.Name] = $p.Value }; $o["raiz_codigo"] = $Raiz }
   return $o

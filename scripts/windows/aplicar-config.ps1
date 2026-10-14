@@ -71,9 +71,9 @@ $tgTok  = uv run --project $nucleo python -c "from vard import segredos as s; pr
 $tgChat = uv run --project $nucleo python -c "from vard import segredos as s; print(s.chat_id_telegram())"; Exigir "ler chat_id do Telegram"
 $toml = $toml.Replace("__TELEGRAM_TOKEN__", "$tgTok".Trim()).Replace("__TELEGRAM_CHAT__", "$tgChat".Trim())
 # Falha fechado: sem o patch allowed_chat_ids no OpenJarvis instalado, o bot atenderia qualquer chat.
-# O código fica em <openjarvis_src>/src/src/openjarvis/system (instalacao.json; sem ele, ao lado de OPENJARVIS_HOME).
+# O código fica em <openjarvis_src>/src/openjarvis/system (openjarvis_src = clone; instalacao.json; sem ele, ao lado de OPENJARVIS_HOME).
 $srcOj = (uv run --project $nucleo python -c "from vard import instalacao; print(instalacao.ler().get('openjarvis_src', ''))" | Out-String).Trim(); Exigir "ler openjarvis_src"
-if ($srcOj) { $kwargsOj = Join-Path $srcOj "src/src/openjarvis/system/_channel_kwargs.py" }
+if ($srcOj) { $kwargsOj = Join-Path $srcOj "src/openjarvis/system/_channel_kwargs.py" }
 else { $kwargsOj = Join-Path (Split-Path $destino -Parent) "src/src/openjarvis/system/_channel_kwargs.py" }
 $patchOk = (Test-Path $kwargsOj) -and (Get-Content $kwargsOj -Raw -Encoding UTF8).Contains('kw["allowed_chat_ids"]')
 $motivo = ""
