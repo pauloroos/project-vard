@@ -612,6 +612,11 @@ window.addEventListener("DOMContentLoaded", async () => {
           const wav = await fixa(acao.texto);
           await boca.tocar(wav);
         } catch { /* sem voz, o aviso já está na tela */ }
+        // Após ler o aviso, transiciona para conversando se estiver em lendo_aviso
+        if (fluxoChamada.estado === "lendo_aviso") {
+          const acoesLeitura = fluxoChamada.leituraConcluida();
+          void executarAcoesChamada(acoesLeitura);
+        }
       } else if (acao.tipo === "abrir_escuta") {
         // Abre escuta curta para resposta de presença ou conversa pós-aviso.
         // O VAD já está ativo; aqui só sinalizamos que o próximo texto transcrito

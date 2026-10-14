@@ -93,7 +93,7 @@ export function criarServidor({ log = () => {}, release = false } = {}) {
           const resp = await fetch(`http://127.0.0.1:${pontePorta}/emitir-aviso`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ resumo: "Aviso de teste CDP", id: Date.now(), estado: "concluida" }),
+            body: JSON.stringify({ resumo: "Aviso de teste CDP", id: Date.now(), estado: "terminou" }),
           });
           const dados = await resp.json().catch(() => ({}));
           return json({ ok: true, via: "ponte", ...dados });
