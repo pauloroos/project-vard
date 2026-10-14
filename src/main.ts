@@ -16,7 +16,7 @@ import { Ponte } from "./conectores/ponte/cliente";
 import { CentralAvisos } from "./avisos/central";
 import { EmAndamento, textoDaDica as dicaDeAndamento } from "./avisos/andamento";
 import { deveFalarAviso, AvisoPorVez } from "./avisos/fala";
-import { criarFluxoChamada, type FluxoChamada } from "./avisos/chamada";
+import { criarFluxoChamada } from "./avisos/chamada";
 import { EstadoReuniao } from "./reuniao/estado";
 import { criarFonteDeVoz } from "./conectores/voz/escolher";
 import type { FonteDeVoz } from "./conectores/voz/fonte";
@@ -417,6 +417,14 @@ window.addEventListener("DOMContentLoaded", async () => {
       }
       console.log("ouvi:", texto);
       if (texto) mostrarOuvido(texto);
+      // T14: se o fluxo de chamada está aguardando resposta ou conversando, roteia para ele antes da conversa normal
+      if (fluxoChamada.estado === "aguardando_resposta" || fluxoChamada.estado === "conversando") {
+        const acoes = fluxoChamada.usuarioRespondeu(texto);
+        if (acoes.length) {
+          void executarAcoesChamada(acoes);
+          return; // não envia para a conversa normal
+        }
+      }
       await conversa.aoTextoTranscrito(texto, pushToTalk);
     } catch (erro) {
       console.error("ciclo de fala falhou", erro);
@@ -500,12 +508,8 @@ window.addEventListener("DOMContentLoaded", async () => {
         const acoes = fluxoChamada.usuarioRespondeu(texto);
         if (acoes.length) {
           void executarAcoesChamada(acoes);
-          // Se passou para lendo_aviso, arma timeout da conversa após a leitura
-          if (fluxoChamada.estado === "lendo_aviso") {
-            // A leitura termina quando a boca parar de falar; aqui simplificamos
-            // com um timeout fixo baseado no tamanho do texto lido.
-            // Em produção, o fim da fala seria sinalizado pela boca.
-          }
+          // Após usuarioRespondeu com presença, o fluxo vai para lendo_aviso;
+          // o timer de conversa é armado no listener de aviso quando leituraConcluida for chamada.
           return; // não envia para a conversa normal
         }
         // Se não foi resposta de presença, cai na conversa normal
@@ -579,6 +583,10 @@ window.addEventListener("DOMContentLoaded", async () => {
   try { if (salaExiste(await WebviewWindow.getByLabel("sala"))) retomarSala(); } catch { /* sem sala */ }
   await listen("sala-fechada", () => { salaAberta = false; clearInterval(relogioSala); });
   // T14 — Chamada proativa: quando um aviso chega e o contexto permite, a Aurora chama o usuário.
+  let chamarQuandoPronto = true; // padrão ligado; atualizado pelo checkbox da aba Avisos via gravar_config
+  await listen<{ chamar_quando_pronto?: boolean }>("config-salva", (ev) => {
+    if (typeof ev.payload?.chamar_quando_pronto === "boolean") chamarQuandoPronto = ev.payload.chamar_quando_pronto;
+  });
   const fluxoChamada = criarFluxoChamada();
   let timerChamada: ReturnType<typeof setTimeout> | null = null;
   const executarAcoesChamada = async (acoes: { tipo: string; texto?: string }[]) => {
@@ -601,21 +609,32 @@ window.addEventListener("DOMContentLoaded", async () => {
   await listen<unknown>("aviso", (ev) => {
     if (typeof ev.payload !== "string") { console.warn("aviso ignorado: payload inválido"); return; }
     hud.avisar(ev.payload);
-    // T14: alimenta o fluxo de chamada proativa
-    if (fluxoChamada.estado === "inativo" || fluxoChamada.estado === "conversando") {
+    // T14: alimenta o fluxo de chamada proativa (respeita o checkbox da aba Avisos)
+    if (chamarQuandoPronto && (fluxoChamada.estado === "inativo" || fluxoChamada.estado === "conversando")) {
       const acoes = fluxoChamada.avisoRecebido(
         { id: Date.now().toString(), resumo: ev.payload },
         { falarLiberado: !naoFalar && !cfg.nao_falar, emReuniao: reuniaoAtiva },
       );
       void executarAcoesChamada(acoes);
+      // O estado pode ter mudado dentro de avisoRecebido; lemos novamente sem narrowing.
+      const estadoPosAviso: string = fluxoChamada.estado;
       // Arma timeout de espera se entrou em aguardando_resposta
-      if (fluxoChamada.estado === "aguardando_resposta") {
+      if (estadoPosAviso === "aguardando_resposta") {
         if (timerChamada) clearTimeout(timerChamada);
         timerChamada = setTimeout(() => {
           const acoesTimeout = fluxoChamada.timeoutEspera();
           void executarAcoesChamada(acoesTimeout);
           timerChamada = null;
         }, 30_000);
+      }
+      // Arma timeout de conversa se entrou em conversando após leitura
+      if (estadoPosAviso === "conversando") {
+        if (timerChamada) clearTimeout(timerChamada);
+        timerChamada = setTimeout(() => {
+          const acoesEncerra = fluxoChamada.conversaEncerrada();
+          void executarAcoesChamada(acoesEncerra);
+          timerChamada = null;
+        }, 15_000);
       }
     }
   });
