@@ -35,17 +35,25 @@ export class CentralAvisos {
     return true;
   }
 
-  /** Evento ao vivo (oficina/reuniao): entra no fim da lista se tiver id novo; ignora duplicado; guarda no máximo LIMITE_AVISOS. */
-  aplicarEvento(tipo: string, dados: unknown) {
+  /**
+   * Evento ao vivo (oficina/reuniao): entra no fim da lista se tiver id novo; ignora duplicado; guarda no máximo LIMITE_AVISOS.
+   * Retorna true se o aviso foi realmente adicionado (id novo e estado final que interessa); false se ignorado/duplicado/em-andamento.
+   */
+  aplicarEvento(tipo: string, dados: unknown): boolean {
     const mapeado = tipo === "oficina" ? "tarefa" : tipo;
     const bruto = typeof dados === "object" && dados !== null ? { tipo: mapeado, ...(dados as Record<string, unknown>) } : { tipo: mapeado };
     const a = normalizarAviso(bruto);
-    if (!a) return; // sem id não dá para deduplicar
-    if (this.avisos.some((x) => x.id === a.id)) return;
+    if (!a) return false; // sem id não dá para deduplicar
+    if (this.avisos.some((x) => x.id === a.id)) return false;
+    // Só considera "aviso novo de verdade" estados finais de tarefa ou eventos de reunião relevantes.
+    // Estados intermediários (em_andamento, iniciada) não devem disparar chamada nem fala.
+    const estadosFinaisTarefa = ["terminou", "falhou", "esperando"];
+    if (a.tipo === "tarefa" && !estadosFinaisTarefa.includes(a.estado ?? "")) return false;
     this.avisos.push(a);
     while (this.avisos.length > LIMITE_AVISOS) this.avisos.shift();
     if (!a.lido) this.naoLidos++;
     this.aoMudar?.();
+    return true;
   }
 
   /** Marca lidos na ponte e espelha aqui. false = ponte fora (nada muda). */

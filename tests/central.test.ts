@@ -36,7 +36,7 @@ describe("CentralAvisos", () => {
   it("evento_novo_entra_com_tipo_mapeado_e_conta_nao_lido", async () => {
     const c = new CentralAvisos(ponteFake([], 0));
     c.aoMudar = () => { mudou++; };
-    c.aplicarEvento("oficina", { id: 5, hora: "11:20:00", n: 5, resumo: "terminou" });
+    c.aplicarEvento("oficina", { id: 5, hora: "11:20:00", n: 5, resumo: "terminou", estado: "terminou" });
     expect(c.avisos).toHaveLength(1);
     expect(c.avisos[0]).toMatchObject({ id: 5, tipo: "tarefa", n: 5, resumo: "terminou", lido: false });
     expect(c.naoLidos).toBe(1);
@@ -49,17 +49,51 @@ describe("CentralAvisos", () => {
     expect(c.avisos).toEqual([]);
   });
 
-  it("evento_duplicado_nao_entra_duas_vezes", async () => {
+  it("evento_duplicado_nao_entra_duas_vezes_e_retorna_false", async () => {
     const c = new CentralAvisos(ponteFake([], 0));
-    c.aplicarEvento("reuniao", { id: 7, hora: "12:00" });
-    c.aplicarEvento("reuniao", { id: 7, hora: "12:00" });
+    expect(c.aplicarEvento("reuniao", { id: 7, hora: "12:00" })).toBe(true);
+    expect(c.aplicarEvento("reuniao", { id: 7, hora: "12:00" })).toBe(false);
     expect(c.avisos).toHaveLength(1);
     expect(c.naoLidos).toBe(1);
   });
 
+  it("evento_em_andamento_retorna_false_e_nao_adiciona", () => {
+    const c = new CentralAvisos(ponteFake([], 0));
+    const resultado = c.aplicarEvento("oficina", { id: 99, estado: "em_andamento", resumo: "rodando" });
+    expect(resultado).toBe(false);
+    expect(c.avisos).toHaveLength(0);
+    expect(c.naoLidos).toBe(0);
+  });
+
+  it("evento_iniciada_retorna_false_e_nao_adiciona", () => {
+    const c = new CentralAvisos(ponteFake([], 0));
+    const resultado = c.aplicarEvento("oficina", { id: 100, estado: "iniciada", resumo: "começou" });
+    expect(resultado).toBe(false);
+    expect(c.avisos).toHaveLength(0);
+  });
+
+  it("aviso_novo_com_estado_final_retorna_true", () => {
+    const c = new CentralAvisos(ponteFake([], 0));
+    expect(c.aplicarEvento("oficina", { id: 101, estado: "terminou", resumo: "pronto" })).toBe(true);
+    expect(c.avisos).toHaveLength(1);
+    expect(c.naoLidos).toBe(1);
+  });
+
+  it("aviso_falhou_retorna_true", () => {
+    const c = new CentralAvisos(ponteFake([], 0));
+    expect(c.aplicarEvento("oficina", { id: 102, estado: "falhou", resumo: "erro" })).toBe(true);
+    expect(c.avisos).toHaveLength(1);
+  });
+
+  it("aviso_esperando_retorna_true", () => {
+    const c = new CentralAvisos(ponteFake([], 0));
+    expect(c.aplicarEvento("oficina", { id: 103, estado: "esperando", resumo: "aguardando" })).toBe(true);
+    expect(c.avisos).toHaveLength(1);
+  });
+
   it("lista_passa_do_limite_guarda_so_os_ultimos", async () => {
     const c = new CentralAvisos(ponteFake([], 0));
-    for (let i = 1; i <= LIMITE_AVISOS + 5; i++) c.aplicarEvento("oficina", { id: i });
+    for (let i = 1; i <= LIMITE_AVISOS + 5; i++) c.aplicarEvento("oficina", { id: i, estado: "terminou" });
     expect(c.avisos).toHaveLength(LIMITE_AVISOS);
     expect(c.avisos[0].id).toBe(6);
     expect(c.avisos[c.avisos.length - 1].id).toBe(LIMITE_AVISOS + 5);
