@@ -8,7 +8,7 @@
  *
  * Nada aqui imprime segredos.
  */
-import { cofreExiste } from "../config/segredos";
+import { cofreExiste, cofreLer } from "../config/segredos";
 import type { PaineisConfig, Provedor, Mcp } from "../config/paineis";
 import type { FonteDeVoz } from "./voz/fonte";
 import type { FalaEmFluxo } from "../fala/conversa";
@@ -79,21 +79,25 @@ export async function criarFonteDeVozComCofre(
   if (!credencialRef) {
     return new FonteSemCredencial(provedorNome, "(nenhuma ref informada)");
   }
-  const existe = await credencialExiste(credencialRef);
-  if (!existe) {
+  const p = parseRef(credencialRef);
+  if (!p) return new FonteSemCredencial(provedorNome, credencialRef);
+  try {
+    const valor = await cofreLer(p.tipo, p.id);
+    if (!valor) return new FonteSemCredencial(provedorNome, credencialRef);
+    return factory(valor);
+  } catch {
     return new FonteSemCredencial(provedorNome, credencialRef);
   }
-  // Na implementação real, aqui chamaríamos cofre_ler (interno) para obter o valor.
-  // Para esta tarefa, validamos apenas a existência; a leitura real será integrada na T4.
-  // O factory recebe um placeholder seguro — a chamada real só acontece após confirmação.
-  return factory("__RESOLVIDO__");
 }
 
 /** Resolve Bearer/token de MCP via cofre antes do handshake. */
 export async function resolverCredencialMcp(mcp: Mcp): Promise<string | null> {
   if (!mcp.credencial_ref) return null;
-  const existe = await credencialExiste(mcp.credencial_ref);
-  if (!existe) return null;
-  // Placeholder: na T4, retorna o valor real lido do cofre.
-  return "__RESOLVIDO__";
+  const p = parseRef(mcp.credencial_ref);
+  if (!p) return null;
+  try {
+    return await cofreLer(p.tipo, p.id);
+  } catch {
+    return null;
+  }
 }

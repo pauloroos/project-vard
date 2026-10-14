@@ -227,7 +227,8 @@ pub fn run() {
             comandos::definir_tarefas_bandeja,
             cofre::cofre_existe,
             cofre::cofre_gravar,
-            cofre::cofre_apagar
+            cofre::cofre_apagar,
+            cofre::cofre_ler
         ])
         .setup(|app| {
             let handle = app.handle().clone();

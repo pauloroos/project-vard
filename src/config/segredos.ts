@@ -56,3 +56,15 @@ export async function cofreApagar(tipo: string, id: string): Promise<void> {
   validarId(id);
   await invoke("cofre_apagar", { tipo: t, id });
 }
+
+/** Lê o valor de uma credencial. Apenas a janela de configurações pode chamar.
+ * O valor nunca é logado ou impresso em erros. */
+export async function cofreLer(tipo: string, id: string): Promise<string | null> {
+  try {
+    const t = validarTipo(tipo);
+    validarId(id);
+    return await invoke<string | null>("cofre_ler", { tipo: t, id });
+  } catch {
+    return null;
+  }
+}

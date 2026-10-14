@@ -5,7 +5,7 @@ vi.mock("@tauri-apps/api/core", () => ({
 }));
 
 import { invoke } from "@tauri-apps/api/core";
-import { cofreExiste, cofreGravar, cofreApagar } from "../src/config/segredos";
+import { cofreExiste, cofreGravar, cofreApagar, cofreLer } from "../src/config/segredos";
 
 const mockInvoke = vi.mocked(invoke);
 
@@ -125,6 +125,35 @@ describe("segredos (cofre generalizado)", () => {
       expect(mockInvoke).toHaveBeenCalledTimes(2);
       expect(mockInvoke).toHaveBeenNthCalledWith(1, "cofre_gravar", { tipo: "provedor", id: "a", valor: "va" });
       expect(mockInvoke).toHaveBeenNthCalledWith(2, "cofre_gravar", { tipo: "provedor", id: "b", valor: "vb" });
+    });
+  });
+
+  describe("cofreLer", () => {
+    it("retorna valor quando credencial existe", async () => {
+      mockInvoke.mockResolvedValue("chave-secreta");
+      const resultado = await cofreLer("provedor", "suad");
+      expect(resultado).toBe("chave-secreta");
+      expect(mockInvoke).toHaveBeenCalledWith("cofre_ler", { tipo: "provedor", id: "suad" });
+    });
+
+    it("retorna null quando credencial não existe", async () => {
+      mockInvoke.mockResolvedValue(null);
+      expect(await cofreLer("provedor", "inexistente")).toBeNull();
+    });
+
+    it("retorna null para tipo desconhecido sem chamar invoke", async () => {
+      expect(await cofreLer("agente", "claude")).toBeNull();
+      expect(mockInvoke).not.toHaveBeenCalled();
+    });
+
+    it("retorna null para id vazio sem chamar invoke", async () => {
+      expect(await cofreLer("provedor", "")).toBeNull();
+      expect(mockInvoke).not.toHaveBeenCalled();
+    });
+
+    it("retorna null quando invoke falha", async () => {
+      mockInvoke.mockRejectedValue(new Error("cofre indisponível"));
+      expect(await cofreLer("provedor", "x")).toBeNull();
     });
   });
 });

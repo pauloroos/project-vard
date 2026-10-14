@@ -2,9 +2,10 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 
 vi.mock("../src/config/segredos", () => ({
   cofreExiste: vi.fn(),
+  cofreLer: vi.fn(),
 }));
 
-import { cofreExiste } from "../src/config/segredos";
+import { cofreExiste, cofreLer } from "../src/config/segredos";
 import {
   parseRef,
   credencialExiste,
@@ -18,10 +19,12 @@ import type { FonteDeVoz } from "../src/conectores/voz/fonte";
 import { ErroVoz } from "../src/conectores/voz/cliente";
 
 const mockCofreExiste = vi.mocked(cofreExiste);
+const mockCofreLer = vi.mocked(cofreLer);
 
 describe("paineis-resolver (T3)", () => {
   beforeEach(() => {
     mockCofreExiste.mockReset();
+    mockCofreLer.mockReset();
   });
 
   describe("parseRef", () => {
@@ -111,7 +114,7 @@ describe("paineis-resolver (T3)", () => {
     });
 
     it("falha claro quando credencial ausente", async () => {
-      mockCofreExiste.mockResolvedValue(false);
+      mockCofreLer.mockResolvedValue(null);
       const fonte = await criarFonteDeVozComCofre("elevenlabs", "voz:el", factoryMock);
       expect(fonte.nome).toContain("sem-credencial");
       await expect(fonte.falar("teste", 1)).rejects.toThrow(ErroVoz);
@@ -124,11 +127,18 @@ describe("paineis-resolver (T3)", () => {
       await expect(fonte.falarWav("teste", 1)).rejects.toThrow(/credencial ausente/);
     });
 
-    it("chama factory com placeholder quando credencial existe", async () => {
-      mockCofreExiste.mockResolvedValue(true);
+    it("passa valor real do cofre para factory quando credencial existe", async () => {
+      mockCofreLer.mockResolvedValue("chave-real-elevenlabs");
       const fonte = await criarFonteDeVozComCofre("elevenlabs", "voz:el", factoryMock);
-      expect(fonte.nome).toBe("mock:__RESOLVIDO__");
-      expect((await fonte.saude())).toBe(true);
+      expect(fonte.nome).toBe("mock:chave-real-elevenlabs");
+      expect(await fonte.saude()).toBe(true);
+      expect(mockCofreLer).toHaveBeenCalledWith("voz", "el");
+    });
+
+    it("falha claro quando cofre_ler lança exceção", async () => {
+      mockCofreLer.mockRejectedValue(new Error("cofre indisponível"));
+      const fonte = await criarFonteDeVozComCofre("elevenlabs", "voz:el", factoryMock);
+      expect(fonte.nome).toContain("sem-credencial");
     });
   });
 
@@ -136,19 +146,26 @@ describe("paineis-resolver (T3)", () => {
     it("retorna null quando mcp sem credencial_ref", async () => {
       const mcp: Mcp = { id: "fs", nome: "FS", habilitado: true, command: "node" };
       expect(await resolverCredencialMcp(mcp)).toBeNull();
-      expect(mockCofreExiste).not.toHaveBeenCalled();
+      expect(mockCofreLer).not.toHaveBeenCalled();
     });
 
     it("retorna null quando credencial ausente", async () => {
-      mockCofreExiste.mockResolvedValue(false);
+      mockCofreLer.mockResolvedValue(null);
       const mcp: Mcp = { id: "api", nome: "API", habilitado: true, url: "https://x", credencial_ref: "mcp:api" };
       expect(await resolverCredencialMcp(mcp)).toBeNull();
     });
 
-    it("retorna placeholder quando credencial existe", async () => {
-      mockCofreExiste.mockResolvedValue(true);
+    it("retorna token real lido do cofre quando credencial existe", async () => {
+      mockCofreLer.mockResolvedValue("bearer-token-real");
       const mcp: Mcp = { id: "api", nome: "API", habilitado: true, url: "https://x", credencial_ref: "mcp:api" };
-      expect(await resolverCredencialMcp(mcp)).toBe("__RESOLVIDO__");
+      expect(await resolverCredencialMcp(mcp)).toBe("bearer-token-real");
+      expect(mockCofreLer).toHaveBeenCalledWith("mcp", "api");
+    });
+
+    it("retorna null quando cofre_ler lança exceção", async () => {
+      mockCofreLer.mockRejectedValue(new Error("cofre indisponível"));
+      const mcp: Mcp = { id: "api", nome: "API", habilitado: true, url: "https://x", credencial_ref: "mcp:api" };
+      expect(await resolverCredencialMcp(mcp)).toBeNull();
     });
   });
 });

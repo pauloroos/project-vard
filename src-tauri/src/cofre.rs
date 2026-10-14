@@ -240,6 +240,19 @@ pub async fn cofre_apagar(window: tauri::WebviewWindow, tipo: String, id: String
         .map_err(|_| ERRO_COFRE.to_string())?
 }
 
+/// Lê o valor de uma credencial. Apenas a janela de configurações pode chamar.
+/// O valor nunca é logado ou impresso em erros.
+#[tauri::command]
+pub async fn cofre_ler(window: tauri::WebviewWindow, tipo: String, id: String) -> Result<Option<String>, String> {
+    if !janela_pode_gravar(window.label()) {
+        return Err("janela sem permissão para ler do cofre".into());
+    }
+    let alvo = alvo(&tipo, &id)?;
+    tauri::async_runtime::spawn_blocking(move || CofreWindows.ler(&alvo))
+        .await
+        .map_err(|_| ERRO_COFRE.to_string())?
+}
+
 /// Migração de arranque: move chaves legadas para o cofre sem expor valores.
 pub fn migrar_no_arranque(app: &tauri::AppHandle) {
     let resultado = (|| {
