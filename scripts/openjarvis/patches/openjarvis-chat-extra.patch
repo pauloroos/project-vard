@@ -1,0 +1,58 @@
+diff --git a/src/openjarvis/engine/_openai_compat.py b/src/openjarvis/engine/_openai_compat.py
+index db57eb4..36ef50c 100644
+--- a/src/openjarvis/engine/_openai_compat.py
++++ b/src/openjarvis/engine/_openai_compat.py
+@@ -4,6 +4,7 @@ from __future__ import annotations
+ 
+ import json
+ import logging
++import os
+ from collections.abc import AsyncIterator, Sequence
+ from typing import Any, Dict, List
+ 
+@@ -27,6 +28,21 @@ from openjarvis.intelligence.model_catalog import resolve_model_id_for_engine
+ logger = logging.getLogger(__name__)
+ 
+ 
++def _chat_extra() -> Dict[str, Any]:
++    """Patch Vard: campos extras do corpo (ex.: reasoning_effort) vindos de OPENJARVIS_CHAT_EXTRA (JSON)."""
++    bruto = os.environ.get("OPENJARVIS_CHAT_EXTRA", "").strip()
++    if not bruto:
++        return {}
++    try:
++        extra = json.loads(bruto)
++        if isinstance(extra, dict):
++            return extra
++    except ValueError:
++        pass
++    logging.getLogger(__name__).warning("OPENJARVIS_CHAT_EXTRA invalido (esperado objeto JSON); ignorado")
++    return {}
++
++
+ class _OpenAICompatibleEngine(AsyncHTTPEngineMixin, InferenceEngine):
+     """Base for engines that serve the OpenAI ``/v1/chat/completions`` API."""
+ 
+@@ -95,6 +111,7 @@ class _OpenAICompatibleEngine(AsyncHTTPEngineMixin, InferenceEngine):
+             "max_tokens": max_tokens,
+             "stream": False,
+             **kwargs,
++            **_chat_extra(),
+         }
+         # Default to tool_choice=auto when tools are provided
+         if "tools" in payload and "tool_choice" not in payload:
+@@ -187,6 +204,7 @@ class _OpenAICompatibleEngine(AsyncHTTPEngineMixin, InferenceEngine):
+             "max_tokens": max_tokens,
+             "stream": True,
+             **kwargs,
++            **_chat_extra(),
+         }
+         # Default to tool_choice=auto when tools are provided
+         if "tools" in payload and "tool_choice" not in payload:
+@@ -251,6 +269,7 @@ class _OpenAICompatibleEngine(AsyncHTTPEngineMixin, InferenceEngine):
+             "max_tokens": max_tokens,
+             "stream": True,
+             **kwargs,
++            **_chat_extra(),
+         }
+         if "tools" in payload and "tool_choice" not in payload:
+             payload["tool_choice"] = "auto"

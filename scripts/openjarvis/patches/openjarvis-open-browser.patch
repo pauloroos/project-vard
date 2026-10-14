@@ -1,0 +1,20 @@
+diff --git a/src/openjarvis/core/utils.py b/src/openjarvis/core/utils.py
+index 5418013..b4cd8d0 100644
+--- a/src/openjarvis/core/utils.py
++++ b/src/openjarvis/core/utils.py
+@@ -106,9 +106,12 @@ def open_browser(url: str) -> None:
+     """
+     if platform.system() == "Windows":
+         try:
+-            # The empty title argument after ``start`` is required: ``start``
+-            # treats a single quoted argument as a window title, not a URL.
+-            subprocess.run(["cmd", "/c", "start", "", url], check=False)
++            # ``cmd /c start "" URL`` cortava a URL no primeiro ``&`` (o cmd
++            # trata ``&`` como separador de comandos e o subprocess não põe
++            # aspas numa URL sem espaços): a tela de consentimento do Google
++            # abria sem redirect_uri/scope. ShellExecute via os.startfile
++            # entrega a URL inteira ao navegador padrão.
++            os.startfile(url)  # noqa: S606 - URL, não executável
+             return
+         except Exception:  # noqa: BLE001 - any spawn failure -> fall back
+             pass

@@ -1,0 +1,58 @@
+--- a/src/openjarvis/channels/telegram.py
++++ b/src/openjarvis/channels/telegram.py
+@@ -3,10 +3,14 @@
+ from __future__ import annotations
+
+ import asyncio
++import json
+ import logging
+ import os
++import tempfile
+ import textwrap
+ import threading
++import time
++from pathlib import Path
+ from typing import Any, Dict, List, Optional
+
+ from openjarvis.channels._stubs import (
+@@ -19,6 +23,32 @@
+ from openjarvis.core.registry import ChannelRegistry
+
+ logger = logging.getLogger(__name__)
++
++
++def _vard_marcar_telegram() -> None:
++    """VARD_MARCA_TELEGRAM: registra a origem antes de entregar ao agente."""
++    caminho = os.environ.get("VARD_MARCA_TELEGRAM")
++    if not caminho:
++        return
++    temporario = None
++    try:
++        alvo = Path(caminho)
++        alvo.parent.mkdir(parents=True, exist_ok=True)
++        with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", dir=alvo.parent,
++                                         suffix=".tmp", delete=False) as arquivo:
++            temporario = arquivo.name
++            json.dump({"ts": time.time()}, arquivo)
++            arquivo.flush()
++            os.fsync(arquivo.fileno())
++        os.replace(temporario, alvo)
++    except Exception:
++        pass  # A marca nunca deve interromper o canal.
++    finally:
++        if temporario:
++            try:
++                os.unlink(temporario)
++            except OSError:
++                pass
+
+
+ @ChannelRegistry.register("telegram")
+@@ -407,6 +437,7 @@
+                             cm.conversation_id,
+                         )
+                         return
++                _vard_marcar_telegram()
+                 for handler in self._handlers:
+                     try:
+                         handler(cm)

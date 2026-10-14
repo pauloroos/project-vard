@@ -1,0 +1,13 @@
+diff --git a/src/openjarvis/system/_channel_kwargs.py b/src/openjarvis/system/_channel_kwargs.py
+index bcd92f2..6618ecc 100644
+--- a/src/openjarvis/system/_channel_kwargs.py
++++ b/src/openjarvis/system/_channel_kwargs.py
+@@ -11,6 +11,8 @@ def _telegram(c: Any) -> Dict[str, Any]:
+         kw["bot_token"] = c.bot_token
+     if c.parse_mode:
+         kw["parse_mode"] = c.parse_mode
++    if getattr(c, "allowed_chat_ids", ""):      # patch Vard: sem isso o bot atende qualquer chat
++        kw["allowed_chat_ids"] = c.allowed_chat_ids
+     return kw
+ 
+ 
