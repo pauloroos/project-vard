@@ -1,0 +1,1 @@
+"""Cérebro próprio do Vard: laço assíncrono, sessões isoladas e despacho de pedidos."""
