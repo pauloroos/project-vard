@@ -63,6 +63,76 @@ pub fn falhas_de_atalho(estado: tauri::State<'_, FalhasDeAtalho>) -> Vec<FalhaAt
     estado.0.lock().map(|v| v.clone()).unwrap_or_default()
 }
 
+/// Resultado da sondagem de uma combinação candidata.
+#[derive(Serialize, Clone, Debug, PartialEq)]
+pub struct ResultadoSondagem {
+    pub combinacao: String,
+    /// "livre" | "ocupado" | "usado_pelo_vard"
+    pub estado: String,
+    /// Mensagem de erro quando ocupado; vazia quando livre ou usado pelo Vard.
+    pub erro: String,
+}
+
+/// Tenta registrar cada combinação candidata e solta na hora (sondagem).
+/// Não dispara nem injeta atalhos: só registra e desfaz o registro para descobrir
+/// se o Windows aceita a combinação naquele instante.
+#[tauri::command]
+pub fn sondar_atalhos(
+    app: tauri::AppHandle,
+    candidatas: Vec<String>,
+) -> Vec<ResultadoSondagem> {
+    use tauri_plugin_global_shortcut::GlobalShortcutExt;
+    let gs = app.global_shortcut();
+
+    // Conjunto dos atalhos já registrados pelo Vard (para marcar "usado_pelo_vard").
+    let config = ler_config_valor(&app).unwrap_or(Value::Null);
+    let mut usados: std::collections::HashSet<String> = std::collections::HashSet::new();
+    for (chave, padrao) in ATALHOS {
+        let c = atalho_da_config(&config, chave, padrao);
+        if let Ok(s) = c.parse::<tauri_plugin_global_shortcut::Shortcut>() {
+            usados.insert(s.to_string());
+        }
+    }
+
+    let mut resultados = Vec::with_capacity(candidatas.len());
+    for combinacao in candidatas {
+        // Normaliza para comparar com os usados pelo Vard.
+        let normalizada = combinacao
+            .parse::<tauri_plugin_global_shortcut::Shortcut>()
+            .map(|s| s.to_string())
+            .unwrap_or_else(|_| combinacao.clone());
+
+        if usados.contains(&normalizada) {
+            resultados.push(ResultadoSondagem {
+                combinacao,
+                estado: "usado_pelo_vard".to_string(),
+                erro: String::new(),
+            });
+            continue;
+        }
+
+        // Tenta registrar; se conseguir, solta na hora. Se falhar, marca como ocupado.
+        match gs.register(combinacao.as_str()) {
+            Ok(_) => {
+                let _ = gs.unregister(combinacao.as_str());
+                resultados.push(ResultadoSondagem {
+                    combinacao,
+                    estado: "livre".to_string(),
+                    erro: String::new(),
+                });
+            }
+            Err(e) => {
+                resultados.push(ResultadoSondagem {
+                    combinacao,
+                    estado: "ocupado".to_string(),
+                    erro: e.to_string(),
+                });
+            }
+        }
+    }
+    resultados
+}
+
 /// Caminho do arquivo de config dentro de um diretório (separado para ser testável).
 pub fn caminho_em(dir: &Path) -> PathBuf {
     dir.join("hud.config.json")
@@ -687,6 +757,20 @@ mod testes {
         assert!(!host_permitido("https://api.github.com.evil.com/", false));
         assert!(!host_permitido("https://user@api.github.com/", false));
         assert!(!host_permitido("ftp://github.com/", false));
+    }
+
+    #[test]
+    fn resultado_sondagem_livre_tem_estado_e_erro_vazios() {
+        let r = ResultadoSondagem { combinacao: "Ctrl+Alt+Z".into(), estado: "livre".into(), erro: String::new() };
+        assert_eq!(r.estado, "livre");
+        assert!(r.erro.is_empty());
+    }
+
+    #[test]
+    fn resultado_sondagem_usado_pelo_vard_identifica_conflito_interno() {
+        let r = ResultadoSondagem { combinacao: "Ctrl+Alt+Space".into(), estado: "usado_pelo_vard".into(), erro: String::new() };
+        assert_eq!(r.estado, "usado_pelo_vard");
+        assert!(r.erro.is_empty());
     }
 
     #[test]

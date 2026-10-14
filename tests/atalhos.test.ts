@@ -25,7 +25,8 @@ describe("atalhos", () => {
   });
   it("conflito_detectado", () => {
     expect(conflitos(CONFIG_PADRAO.atalhos)).toEqual([]);
-    const a = { ...CONFIG_PADRAO.atalhos, escuta: "ctrl+alt+v" };
+    // Usa o novo padrão Alt+Super+V como base; outra tecla com mesma combinação deve conflitar
+    const a = { ...CONFIG_PADRAO.atalhos, escuta: "alt+super+v" };
     expect(conflitos(a)).toEqual([["mostrar", "escuta"]]);
     expect(validarAtalhos(a).escuta).toContain("Mostrar/ocultar");
     expect(validarAtalhos({ ...CONFIG_PADRAO.atalhos, config: "M" }).config).toContain("inválida");

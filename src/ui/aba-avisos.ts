@@ -1,7 +1,8 @@
 import { CentralAvisos, rotuloDoAviso, type PonteAvisos } from "../avisos/central";
 import type { Aviso } from "../conectores/ponte/cliente";
+import { formatarHoraAviso } from "../avisos/formata-hora";
 
-/** "10:32:05" vira "10:32"; hora malformada fica como está. */
+/** "10:32:05" vira "10:32"; hora malformada fica como está. Mantida para compatibilidade. */
 export function horaCurta(hora: string): string {
   const m = /^(\d{2}:\d{2})/.exec(hora);
   return m ? m[1] : hora;
@@ -79,7 +80,7 @@ export class AbaAvisos {
   private linha(a: Aviso): HTMLElement {
     const div = document.createElement("div");
     div.className = `aviso-linha${a.lido ? "" : " novo"}`;
-    const hora = document.createElement("span"); hora.className = "hora"; hora.textContent = horaCurta(a.hora);
+    const hora = document.createElement("span"); hora.className = "hora"; hora.textContent = formatarHoraAviso(a.hora) || horaCurta(a.hora);
     const tipo = document.createElement("span"); tipo.className = "tipo"; tipo.textContent = rotuloDoAviso(a);
     const resumo = document.createElement("span"); resumo.className = "resumo"; resumo.textContent = a.resumo;
     div.append(hora, tipo, resumo);

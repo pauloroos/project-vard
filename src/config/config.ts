@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { PROVEDORES_VOZ, type ProvedorVoz } from "../conectores/voz/escolher";
-import { normalizarAtalho, type AcaoAtalho } from "./atalhos";
+import { migrarAtalhosWin, normalizarAtalho, type AcaoAtalho } from "./atalhos";
 
 export const TAMANHOS = ["pequeno", "medio", "grande", "personalizado"] as const;
 
@@ -46,8 +46,8 @@ export const CONFIG_PADRAO: Config = {
   finish_ms: 900, limiar_vad: 0.02, sempre_no_topo: true, click_through: false, invisivel: false, posicao: null,
   tamanho: "medio", tamanho_px: 320, compacto: false,
   atalhos: {
-    falar: "Ctrl+Alt+Space", parar: "Ctrl+Alt+Period", mostrar: "Ctrl+Alt+V",
-    config: "Ctrl+Alt+P", escuta: "Ctrl+Alt+L", sala: "Ctrl+Alt+F", naofalar: "Ctrl+Alt+N",
+    falar: "Alt+Super+Space", parar: "Alt+Super+Period", mostrar: "Alt+Super+V",
+    config: "Shift+Super+K", escuta: "Alt+Super+L", sala: "Shift+Super+G", naofalar: "Alt+Super+N",
   },
   instrucao_formato: "Responda em até duas frases, para ser lido em voz alta.",
   modelo: "",
@@ -75,6 +75,8 @@ function mesclar(salvo: unknown): Config {
         const at = saida.atalhos as Record<string, string>;
         if (at.config === "Ctrl+Alt+Comma") at.config = CONFIG_PADRAO.atalhos.config;
       }
+      // Migração 0.6 → 0.6.1: Ctrl+Alt antigos viram Win+Alt/Win+Shift novos; personalizados ficam.
+      saida.atalhos = migrarAtalhosWin(saida.atalhos as Record<AcaoAtalho, string>);
     } else if (k === "posicao") {
       const p = v as { x?: unknown; y?: unknown } | null;
       if (p === null || (typeof p === "object" && typeof p.x === "number" && typeof p.y === "number")) saida[k] = v;
