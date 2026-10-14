@@ -1,6 +1,6 @@
 /// <reference types="vite/client" />
 import { invoke } from "@tauri-apps/api/core";
-import { emitTo, listen } from "@tauri-apps/api/event";
+import { emit, emitTo, listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { PhysicalPosition } from "@tauri-apps/api/dpi";
 import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
@@ -205,7 +205,13 @@ window.addEventListener("DOMContentLoaded", async () => {
   const estadoReuniao = new EstadoReuniao((ativa) => aoReuniao(ativa));
   if (cfg.ponte_url) ponte.eventos((tipo, dados) => {
     if (tipo === "oficina" || tipo === "reuniao") { avisos.aplicarEvento(tipo, dados); void falarAviso(tipo, dados); }
-    if (tipo === "oficina") void emAndamento.aplicarEvento(tipo); // qualquer estado recarrega a lista
+    if (tipo === "oficina") {
+      void emAndamento.aplicarEvento(tipo); // qualquer estado recarrega a lista
+      // T14/CDP item 2: emite evento Tauri "aviso" para que o listener da linha 609 dispare a chamada proativa.
+      const d = typeof dados === "object" && dados !== null ? (dados as Record<string, unknown>) : {};
+      const resumo = typeof d.resumo === "string" ? d.resumo : JSON.stringify(dados ?? {});
+      void emit("aviso", resumo).catch(() => {});
+    }
     if (tipo === "reuniao") estadoReuniao.aplicarEvento(dados);
   });
   let ponteNoAr = true; // desconhecida até a 1ª sondagem (já disparada abaixo): tenta a ponte em vez de dizer que não há

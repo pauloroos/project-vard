@@ -86,7 +86,8 @@ export function criarServidor({ log = () => {}, release = false } = {}) {
 }
 
 /** Ponte falsa do Vard (porta 4700 no uso real): /status, /see, /modo e /events. Guarda a origem e o modo em `estado`. */
-export function criarPonteFalsa({ estado = { modo: "ligado", pedidos: [] } } = {}) {
+export function criarPonteFalsa({ estado = { modo: "ligado", pedidos: [], sseClientes: [] } } = {}) {
+  if (!estado.sseClientes) estado.sseClientes = [];
   const srv = http.createServer(async (req, res) => {
     const caminho = new URL(req.url, "http://x").pathname;
     const origem = req.headers.origin;
@@ -108,9 +109,26 @@ export function criarPonteFalsa({ estado = { modo: "ligado", pedidos: [] } } = {
       return json({ ok: true, pid: 1 });
     }
     if (caminho === "/events") {
-      res.writeHead(200, { "Content-Type": "text/event-stream", ...cors });
+      res.writeHead(200, { "Content-Type": "text/event-stream", "Cache-Control": "no-cache", Connection: "keep-alive", ...cors });
       res.write(["event: ping", "data: {}", "", ""].join(String.fromCharCode(10)));
+      estado.sseClientes.push(res);
+      req.on("close", () => {
+        const idx = estado.sseClientes.indexOf(res);
+        if (idx >= 0) estado.sseClientes.splice(idx, 1);
+      });
       return;
+    }
+    // Rota de teste CDP: emite evento SSE "oficina" para todos os clientes conectados via /events.
+    if (req.method === "POST" && caminho === "/emitir-aviso") {
+      const corpo = await lerCorpo(req);
+      let dados = {};
+      try { dados = JSON.parse(corpo.toString("utf8") || "{}"); } catch { /* corpo inválido usa objeto vazio */ }
+      const payload = JSON.stringify(dados);
+      const msg = ["event: oficina", `data: ${payload}`, "", ""].join(String.fromCharCode(10));
+      for (const cliente of estado.sseClientes) {
+        try { cliente.write(msg); } catch { /* cliente desconectado */ }
+      }
+      return json({ ok: true, enviados: estado.sseClientes.length });
     }
     json({ detail: "Not Found" }, 404);
   });
