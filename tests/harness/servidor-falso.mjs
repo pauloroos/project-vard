@@ -81,6 +81,28 @@ export function criarServidor({ log = () => {}, release = false } = {}) {
       res.end(senoideWav());
       return;
     }
+    // Rota de teste CDP item 2: emite evento SSE "oficina" via ponte falsa se estiver ativa.
+    // Quando o harness roda só na porta 8765 (sem PONTE=4700), esta rota age como proxy
+    // para manter a API única; o app consome SSE da ponte, não do OpenJarvis falso.
+    if (req.method === "POST" && caminho === "/emitir-aviso") {
+      await lerCorpo(req);
+      // Se a ponte falsa estiver rodando, repassa; senão retorna ok com nota.
+      const pontePorta = process.env.PONTE;
+      if (pontePorta) {
+        try {
+          const resp = await fetch(`http://127.0.0.1:${pontePorta}/emitir-aviso`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ resumo: "Aviso de teste CDP", id: Date.now(), estado: "concluida" }),
+          });
+          const dados = await resp.json().catch(() => ({}));
+          return json({ ok: true, via: "ponte", ...dados });
+        } catch (e) {
+          return json({ ok: false, erro: String(e) }, 502);
+        }
+      }
+      return json({ ok: false, nota: "PONTE não configurada; inicie com PONTE=4700 para /emitir-aviso funcionar" }, 503);
+    }
     json({ detail: "Not Found" }, 404);
   });
 }
