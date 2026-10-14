@@ -20,6 +20,7 @@ from typing import Any, Callable
 
 from .contratos import EventoPedido, Pedido, TipoEvento
 from .provedores import AdaptadorProvedor, ErroProvedor, ResultadoInferencia
+from . import diario
 
 log = logging.getLogger(__name__)
 
@@ -28,17 +29,24 @@ CODIGOS_NAO_RECUPERAVEIS = frozenset({"schema_invalido", "contexto_excedido", "c
 
 
 def _eh_recuperavel(erro: str | None) -> bool:
-    """Verifica se o código de erro é recuperável (aciona reserva)."""
+    """Verifica se o código de erro é recuperável (aciona reserva).
+    Usa match exato nos códigos conhecidos; fallback genérico só se nenhum
+    código não-recuperável estiver presente na string."""
     if not erro:
         return False
-    erro_lower = erro.lower()
+    erro_lower = erro.lower().strip()
+    # Match exato nos códigos não-recuperáveis primeiro
+    for codigo in CODIGOS_NAO_RECUPERAVEIS:
+        if erro_lower == codigo or erro_lower.startswith(codigo + ":") or erro_lower.startswith(codigo + "_"):
+            return False
+    # Match exato nos códigos recuperáveis
+    for codigo in CODIGOS_RECUPERAVEIS:
+        if erro_lower == codigo or erro_lower.startswith(codigo + ":") or erro_lower.startswith(codigo + "_"):
+            return True
+    # Fallback genérico: só se NÃO contiver nenhum termo não-recuperável
     for codigo in CODIGOS_NAO_RECUPERAVEIS:
         if codigo in erro_lower:
             return False
-    for codigo in CODIGOS_RECUPERAVEIS:
-        if codigo in erro_lower:
-            return True
-    # Erros genéricos de rede/timeout são considerados recuperáveis
     return any(kw in erro_lower for kw in ("connection", "timeout", "503", "502", "500", "429", "401", "403"))
 
 
@@ -89,11 +97,18 @@ async def _trocar_motor_local(
     modelo_reserva: str,
     cronologia: list[str],
 ) -> bool:
-    """Coordena troca de motor local: bloqueia → espera → descarrega → carrega → confirma.
+    """Coordena troca de motor local usando método atômico se disponível.
     Retorna True se troca foi bem-sucedida. Se descarga falhar, não carrega."""
     if controle is None:
         return True  # API-only, sem motor local para trocar
 
+    # Usa método atômico se disponível (lock de escopo amplo impede intercalação)
+    if hasattr(controle, "trocar_modelo"):
+        ok = await controle.trocar_modelo(modelo_reserva)
+        cronologia.extend(controle.cronologia)
+        return ok
+
+    # Fallback: sequência manual (sem proteção contra concorrência entre sessões)
     await controle.bloquear_inferencias()
     cronologia.append("bloqueado")
 
@@ -146,17 +161,31 @@ async def inferir_com_reserva(
     """
     seq = seq_inicial
     texto_ja_entregue = False
-    tem_incerto = False
 
-    # Verifica estado prévio: texto parcial ou incerto impedem reserva
+    # Verifica estado prévio: texto parcial em mensagens históricas impede reserva
     for msg in mensagens:
         if msg.get("role") == "assistant" and msg.get("content"):
             texto_ja_entregue = True
+            break
+
+    # Verifica ferramenta incerta no diário ANTES de tentar inferência
+    efeitos = diario.listar_efeitos(pedido.pedido_id)
+    for efeito in efeitos:
+        if efeito.get("tipo") == "incerto":
+            log.warning("Reserva: ferramenta incerta pendente no diário; encerrando sem retomar")
+            return ResultadoInferencia(
+                provedor=getattr(ativo, "nome", ""),
+                erro=f"efeito_incerto_{efeito.get('chave', '')}",
+            ), seq
 
     resultado = await _consumir_stream(ativo, mensagens, ferramentas)
 
     if resultado.ok:
         return resultado, seq
+
+    # Detecta texto parcial entregue via streaming nesta chamada
+    if resultado.texto:
+        texto_ja_entregue = True
 
     # Verifica se erro é recuperável
     if not _eh_recuperavel(resultado.erro):

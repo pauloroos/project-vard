@@ -146,3 +146,33 @@ class ControleMotorFalso(ControleMotorLocal):
         async with self._lock:
             self._cronologia.append("confirmar_prontidao")
             return self._estado.pronto
+
+    async def trocar_modelo(self, modelo: str) -> bool:
+        """Troca atômica: bloqueia → espera → descarrega → carrega → confirma → desbloqueia.
+        Lock de escopo amplo impede intercalação entre sessões concorrentes.
+        Se o modelo já estiver carregado, pula a troca (idempotente)."""
+        async with self._lock:
+            # Idempotência: se já estamos no modelo alvo, não faz nada
+            if self._estado.modelo_carregado == modelo and self._estado.pronto:
+                self._cronologia.append(f"troca_redundante:{modelo}")
+                return True
+            self._estado.bloqueado = True
+            self._cronologia.append("bloqueado")
+            self._cronologia.append("esperar_ativas")
+            # Descarrega
+            if self._estado.modelo_carregado is not None:
+                self._descargas += 1
+                self._estado.modelo_carregado = None
+                self._estado.pronto = False
+                self._cronologia.append("descarregar:ok")
+            else:
+                self._cronologia.append("descarregar:vazio")
+            # Carrega novo modelo
+            self._cargas += 1
+            self._estado.modelo_carregado = modelo
+            self._estado.pronto = True
+            self._cronologia.append(f"carregar:{modelo}")
+            self._cronologia.append("confirmar_prontidao")
+            self._estado.bloqueado = False
+            self._cronologia.append("desbloqueado")
+            return True

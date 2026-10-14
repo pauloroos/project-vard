@@ -342,9 +342,16 @@ class TestCoordenacaoMotorLocal:
         """Se descarga falhar, não carrega o novo modelo."""
 
         class ControleDescargaFalha(ControleMotorFalso):
-            async def descarregar(self) -> bool:
-                self._cronologia.append("descarregar:falhou")
-                return False
+            async def trocar_modelo(self, modelo: str) -> bool:
+                """Simula falha na descarga dentro da troca atômica."""
+                async with self._lock:
+                    self._estado.bloqueado = True
+                    self._cronologia.append("bloqueado")
+                    self._cronologia.append("esperar_ativas")
+                    self._cronologia.append("descarregar:falhou")
+                    self._estado.bloqueado = False
+                    self._cronologia.append("desbloqueado")
+                    return False
 
         controle = ControleDescargaFalha()
         eventos: list[Any] = []
@@ -361,8 +368,12 @@ class TestCoordenacaoMotorLocal:
         assert "descarregar:falhou" in controle.cronologia
 
     async def test_duas_sessoes_nao_geram_duas_cargas(self):
-        """Duas sessões tentando reserva local juntas: apenas uma carga ocorre."""
+        """Duas sessões tentando reserva local juntas: apenas uma carga ocorre (lock atômico)."""
         controle = ControleMotorFalso()
+        # Pré-carrega para que descarga seja real e trocar_modelo registre descarregar:ok
+        await controle.carregar("modelo-a")
+        cargas_antes = controle.total_cargas
+
         ped1 = _pedido("p1", "s1")
         ped2 = _pedido("p2", "s2")
 
@@ -376,9 +387,9 @@ class TestCoordenacaoMotorLocal:
         # Lança duas reservas concorrentes
         r1, r2 = await asyncio.gather(tentar_reserva(ped1), tentar_reserva(ped2))
 
-        # Ambas devem ter obtido resultado (uma pode falhar na troca, outra succeeds)
-        # O importante: total de cargas ≤ 2 (idealmente 1 devido ao lock)
-        assert controle.total_cargas <= 2
+        # Com trocar_modelo atômico, apenas UMA troca completa ocorre
+        cargas_novas = controle.total_cargas - cargas_antes
+        assert cargas_novas == 1, f"Esperado 1 carga, obtido {cargas_novas}; cronologia={controle.cronologia}"
 
 
 # ---------------------------------------------------------------------------
