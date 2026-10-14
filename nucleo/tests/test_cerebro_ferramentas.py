@@ -360,6 +360,42 @@ class TestSequenciaProtocolo:
 # Credenciais só em memória (não vazam em log)
 # ---------------------------------------------------------------------------
 
+class TestFerramentasInternas:
+    async def test_hora_atual_registrada_e_chamavel(self):
+        """Função interna hora_atual é registrada e chamável via GerenciadorFerramentas."""
+        import time
+        gm = GerenciadorFerramentas()
+        gm.registrar_interna(
+            nome="hora_atual",
+            fn=lambda: time.strftime("%Y-%m-%dT%H:%M:%S"),
+            descricao="Devolve a hora atual.",
+        )
+        ferramentas = await gm.listar_todas()
+        assert any(f["nome"] == "hora_atual" and f["identificador"] == "interno" for f in ferramentas)
+        resultado = await gm.chamar("interno", "hora_atual", {})
+        assert len(resultado) == 19  # formato ISO-8601 YYYY-MM-DDTHH:MM:SS
+
+    async def test_mcp_quebrado_nao_impede_interna(self):
+        """Servidor MCP externo quebrado não impede chamada de ferramenta interna."""
+        import time
+        gm = GerenciadorFerramentas()
+        gm.registrar_interna(
+            nome="hora_atual",
+            fn=lambda: time.strftime("%Y-%m-%dT%H:%M:%S"),
+            descricao="Devolve a hora atual.",
+        )
+        # Tenta adicionar MCP quebrado; deve levantar ServidorIndisponivelError
+        with pytest.raises(ServidorIndisponivelError):
+            await gm.adicionar_stdio(
+                identificador="quebrado",
+                comando="COMANDO_INEXISTENTE_99999",
+                args=[],
+            )
+        # A interna continua funcionando
+        resultado = await gm.chamar("interno", "hora_atual", {})
+        assert len(resultado) == 19
+
+
 class TestCredenciaisEmMemoria:
     @respx.mock
     async def test_token_nao_vaza_em_log(self, caplog):

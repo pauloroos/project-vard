@@ -233,6 +233,36 @@ class GerenciadorFerramentas:
     def __init__(self) -> None:
         self._clientes: Dict[str, _ClienteStdio | _ClienteHTTP] = {}
         self._processos: Dict[str, asyncio.subprocess.Process] = {}
+        self._internas: Dict[str, Dict[str, Any]] = {}
+
+    def registrar_interna(
+        self,
+        nome: str,
+        fn: Callable[..., Any],
+        descricao: str = "",
+        schema: Optional[Dict[str, Any]] = None,
+    ) -> None:
+        """Registra função interna como ferramenta do cérebro."""
+        self._internas[nome] = {
+            "nome": nome,
+            "fn": fn,
+            "descricao": descricao,
+            "schema": schema or {"type": "object", "properties": {}},
+            "identificador": "interno",
+        }
+
+    async def chamar_interna(self, nome: str, argumentos: Dict[str, Any]) -> str:
+        """Chama ferramenta interna registrada."""
+        entrada = self._internas.get(nome)
+        if entrada is None:
+            raise ValueError(f"ferramenta interna desconhecida: {nome}")
+        fn = entrada["fn"]
+        loop = asyncio.get_running_loop()
+        try:
+            resultado = await loop.run_in_executor(None, lambda: fn(**argumentos))
+        except Exception as exc:  # noqa: BLE001
+            raise RuntimeError(str(exc)[:200]) from exc
+        return str(resultado) if resultado is not None else ""
 
     async def adicionar_stdio(
         self,
@@ -259,8 +289,12 @@ class GerenciadorFerramentas:
         self._clientes[identificador] = cliente
 
     async def listar_todas(self) -> List[Dict[str, Any]]:
-        """Lista todas as ferramentas habilitadas de todos os servidores."""
+        """Lista todas as ferramentas habilitadas (internas + MCPs externos)."""
         resultado: List[Dict[str, Any]] = []
+        # Ferramentas internas primeiro
+        for entrada in self._internas.values():
+            resultado.append(dict(entrada))
+        # Depois MCPs externos
         for identificador, cliente in self._clientes.items():
             for f in cliente.listar_ferramentas():
                 entrada = dict(f)
@@ -278,6 +312,8 @@ class GerenciadorFerramentas:
         argumentos: Dict[str, Any],
     ) -> str:
         """Chama ferramenta pelo identificador do servidor + nome."""
+        if identificador == "interno":
+            return await self.chamar_interna(nome, argumentos)
         cliente = self._clientes.get(identificador)
         if cliente is None:
             raise ValueError(f"servidor desconhecido: {identificador}")

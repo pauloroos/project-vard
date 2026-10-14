@@ -103,7 +103,8 @@ async def test_sem_reserva_nao_emite_evento():
 
 async def test_diario_conservado_na_troca():
     """Efeitos registrados antes da falha permanecem no diário após troca para reserva."""
-    diario.registrar_efeito("p1", {"acao": "antes", "ok": True})
+    chave = diario.registrar_intencao("p1", "acao", {"ok": True})
+    diario.registrar_resultado("p1", chave, {"status": "antes"})
     eventos: list[Any] = []
     ativo = AdaptadorFalso(falhar=True)
     reserva = AdaptadorFalso(resposta="depois")
@@ -112,6 +113,6 @@ async def test_diario_conservado_na_troca():
         ped, [], None, ativo, reserva, lambda ev: eventos.append(ev), seq_inicial=0,
     )
     assert res.ok
-    efeitos = diario.listar_efeitos("p1")
-    assert any(e.get("acao") == "antes" for e in efeitos)
+    # Resultado confirmado permanece no diário após troca
+    assert diario.obter_resultado("p1", chave) == {"status": "antes"}
     diario.limpar_diario("p1")
