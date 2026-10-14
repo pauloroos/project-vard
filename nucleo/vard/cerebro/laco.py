@@ -18,7 +18,7 @@ from .contratos import (
     Pedido,
     TipoEvento,
 )
-from .provedores import AdaptadorProvedor, ResultadoInferencia
+from .provedores import AdaptadorProvedor, ErroProvedor, EventoInferencia
 from . import pedidos as modulo_pedidos
 from . import sessoes
 
@@ -45,10 +45,42 @@ async def executar_pedido(
 
     try:
         for turno in range(LIMITE_TURNOS):
-            resultado: ResultadoInferencia = await adaptador.inferir(mensagens, ferramentas=None)
+            # Consome o stream do adaptador e coleta resultados
+            texto_acumulado: list[str] = []
+            chamadas_coletadas: list[dict[str, Any]] = []
+            erro_stream: str | None = None
+            try:
+                import inspect
+                resultado_chamada = adaptador.inferir(mensagens, ferramentas=None)
+                # Contrato antigo: coroutine que retorna ResultadoInferencia
+                from .provedores import ResultadoInferencia as _RI
+                if inspect.iscoroutine(resultado_chamada):
+                    resultado_chamada = await resultado_chamada
+                if isinstance(resultado_chamada, _RI):
+                    if not resultado_chamada.ok:
+                        erro_stream = resultado_chamada.erro or "erro_desconhecido"
+                    else:
+                        if resultado_chamada.texto:
+                            texto_acumulado.append(resultado_chamada.texto)
+                        chamadas_coletadas.extend(resultado_chamada.chamadas_ferramenta)
+                else:
+                    # Contrato novo: async generator
+                    async for ev in resultado_chamada:
+                        if ev.tipo == "texto":
+                            conteudo = ev.dados.get("conteudo", "")
+                            if conteudo:
+                                texto_acumulado.append(conteudo)
+                        elif ev.tipo == "chamada":
+                            chamadas_coletadas.append(ev.dados)
+                        elif ev.tipo == "fim":
+                            break
+            except ErroProvedor as ep:
+                erro_stream = ep.codigo
+            except Exception as exc:  # noqa: BLE001
+                erro_stream = str(exc)[:200]
 
-            if not resultado.ok:
-                erro_final = resultado.erro or "erro_desconhecido"
+            if erro_stream:
+                erro_final = erro_stream
                 seq += 1
                 emitir(EventoPedido(
                     pedido_id=pedido.pedido_id,
@@ -60,8 +92,8 @@ async def executar_pedido(
                 break
 
             # Chamadas de ferramenta
-            if resultado.chamadas_ferramenta:
-                for chamada in resultado.chamadas_ferramenta:
+            if chamadas_coletadas:
+                for chamada in chamadas_coletadas:
                     seq += 1
                     emitir(EventoPedido(
                         pedido_id=pedido.pedido_id,
@@ -83,7 +115,7 @@ async def executar_pedido(
                 continue
 
             # Resposta textual final
-            texto = resultado.texto or ""
+            texto = "".join(texto_acumulado)
             if texto:
                 seq += 1
                 emitir(EventoPedido(
@@ -138,7 +170,7 @@ async def executar_pedido(
     else:
         info.estado = EstadoPedido.CONCLUIDO
         info.resposta = resposta_final
-    info.provedor_usado = adaptador.nome
+    info.provedor_usado = getattr(adaptador, 'nome', '') or type(adaptador).__name__
     modulo_pedidos._gravar_info(info)
 
 
