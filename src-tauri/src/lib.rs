@@ -216,6 +216,7 @@ pub fn run() {
             comandos::definir_inicio_no_logon,
             comandos::validar_atalho,
             comandos::falhas_de_atalho,
+            comandos::sondar_atalhos,
             comandos::redimensionar_janela,
             comandos::dock_em_cima,
             comandos::abrir_configuracoes,

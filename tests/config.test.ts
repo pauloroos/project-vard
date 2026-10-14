@@ -64,19 +64,23 @@ describe("carregarConfig", () => {
     expect((await carregarConfig()).atualizacao_ao_abrir).toBe(true);
   });
 
-  it("atalhos novos têm padrão e o salvo antigo (só três) continua valendo", async () => {
-    invoke.mockResolvedValue({ atalhos: { falar: "Ctrl+Shift+F", parar: "Ctrl+Alt+Period", mostrar: "Ctrl+Alt+V" } });
+  it("atalhos novos têm padrão Super e o salvo personalizado continua valendo", async () => {
+    // Ctrl+Shift+F não é padrão antigo → preservado; os demais caem no padrão novo Super (ordem canônica)
+    invoke.mockResolvedValue({ atalhos: { falar: "Ctrl+Shift+F" } });
     const c = await carregarConfig();
     expect(c.atalhos.falar).toBe("Ctrl+Shift+F");
-    expect(c.atalhos.config).toBe("Ctrl+Alt+P");
-    expect(c.atalhos.escuta).toBe("Ctrl+Alt+L");
+    expect(c.atalhos.config).toBe("Shift+Super+K");
+    expect(c.atalhos.escuta).toBe("Alt+Super+L");
   });
 
-  it("migra o painel Ctrl+Alt+Comma (antigo padrão, roubava o ç) e preserva escolha do usuário", async () => {
+  it("migra padrões antigos Ctrl+Alt para Super e preserva personalizações", async () => {
+    // Ctrl+Alt+Comma era o antigo padrão do painel; agora migra para Shift+Super+K (ordem canônica)
     invoke.mockResolvedValue({ atalhos: { config: "Ctrl+Alt+Comma", escuta: "Ctrl+Alt+Comma" } });
     const c = await carregarConfig();
-    expect(c.atalhos.config).toBe("Ctrl+Alt+P");
+    expect(c.atalhos.config).toBe("Shift+Super+K");
+    // escuta com valor personalizado (não é padrão antigo de escuta) → preservado
     expect(c.atalhos.escuta).toBe("Ctrl+Alt+Comma");
+    // Personalização explícita do usuário → preservada
     invoke.mockResolvedValue({ atalhos: { config: "Ctrl+Shift+K" } });
     expect((await carregarConfig()).atalhos.config).toBe("Ctrl+Shift+K");
   });
@@ -262,8 +266,10 @@ describe("atualizarConfig", () => {
 
 describe("reinício e atalhos normalizados", () => {
   it("o mesmo atalho escrito de outro jeito não pede reinício; um diferente pede", () => {
-    const a = { ...CONFIG_PADRAO, atalhos: { ...CONFIG_PADRAO.atalhos, mostrar: "ctrl + alt + v" } };
+    // Usa o novo padrão Super+Alt como base; variação de espaçamento/case não deve pedir reinício
+    const a = { ...CONFIG_PADRAO, atalhos: { ...CONFIG_PADRAO.atalhos, mostrar: "super + alt + v" } };
     expect(mudancasQueExigemReinicio(a, CONFIG_PADRAO)).toEqual([]);
-    expect(mudancasQueExigemReinicio(CONFIG_PADRAO, { ...CONFIG_PADRAO, atalhos: { ...CONFIG_PADRAO.atalhos, mostrar: "Ctrl+Alt+J" } })).toEqual(["atalhos"]);
+    // Mudança para outra tecla deve pedir reinício
+    expect(mudancasQueExigemReinicio(CONFIG_PADRAO, { ...CONFIG_PADRAO, atalhos: { ...CONFIG_PADRAO.atalhos, mostrar: "Super+Alt+J" } })).toEqual(["atalhos"]);
   });
 });

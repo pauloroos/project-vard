@@ -10,14 +10,15 @@ use std::{
 use tauri::Manager;
 
 /// Ações com atalho global: chave em `atalhos` na config e o padrão. Mesma ordem de ACOES_ATALHO no front.
+/// Ordem canônica dos modificadores: Ctrl, Alt, Shift, Super (igual ao normalizarAtalho do front).
 pub const ATALHOS: [(&str, &str); 7] = [
-    ("falar", "Ctrl+Alt+Space"),
-    ("parar", "Ctrl+Alt+Period"),
-    ("mostrar", "Ctrl+Alt+V"),
-    ("config", "Ctrl+Alt+P"),
-    ("escuta", "Ctrl+Alt+L"),
-    ("sala", "Ctrl+Alt+F"),
-    ("naofalar", "Ctrl+Alt+N"),
+    ("falar", "Alt+Super+Space"),
+    ("parar", "Alt+Super+Period"),
+    ("mostrar", "Alt+Super+V"),
+    ("config", "Shift+Super+K"),
+    ("escuta", "Alt+Super+L"),
+    ("sala", "Shift+Super+G"),
+    ("naofalar", "Alt+Super+N"),
 ];
 
 #[derive(Serialize, Clone, Debug, PartialEq)]
@@ -61,6 +62,76 @@ pub fn validar_atalho(combinacao: String) -> Result<(), String> {
 #[tauri::command]
 pub fn falhas_de_atalho(estado: tauri::State<'_, FalhasDeAtalho>) -> Vec<FalhaAtalho> {
     estado.0.lock().map(|v| v.clone()).unwrap_or_default()
+}
+
+/// Resultado da sondagem de uma combinação candidata.
+#[derive(Serialize, Clone, Debug, PartialEq)]
+pub struct ResultadoSondagem {
+    pub combinacao: String,
+    /// "livre" | "ocupado" | "usado_pelo_vard"
+    pub estado: String,
+    /// Mensagem de erro quando ocupado; vazia quando livre ou usado pelo Vard.
+    pub erro: String,
+}
+
+/// Tenta registrar cada combinação candidata e solta na hora (sondagem).
+/// Não dispara nem injeta atalhos: só registra e desfaz o registro para descobrir
+/// se o Windows aceita a combinação naquele instante.
+#[tauri::command]
+pub fn sondar_atalhos(
+    app: tauri::AppHandle,
+    candidatas: Vec<String>,
+) -> Vec<ResultadoSondagem> {
+    use tauri_plugin_global_shortcut::GlobalShortcutExt;
+    let gs = app.global_shortcut();
+
+    // Conjunto dos atalhos já registrados pelo Vard (para marcar "usado_pelo_vard").
+    let config = ler_config_valor(&app).unwrap_or(Value::Null);
+    let mut usados: std::collections::HashSet<String> = std::collections::HashSet::new();
+    for (chave, padrao) in ATALHOS {
+        let c = atalho_da_config(&config, chave, padrao);
+        if let Ok(s) = c.parse::<tauri_plugin_global_shortcut::Shortcut>() {
+            usados.insert(s.to_string());
+        }
+    }
+
+    let mut resultados = Vec::with_capacity(candidatas.len());
+    for combinacao in candidatas {
+        // Normaliza para comparar com os usados pelo Vard.
+        let normalizada = combinacao
+            .parse::<tauri_plugin_global_shortcut::Shortcut>()
+            .map(|s| s.to_string())
+            .unwrap_or_else(|_| combinacao.clone());
+
+        if usados.contains(&normalizada) {
+            resultados.push(ResultadoSondagem {
+                combinacao,
+                estado: "usado_pelo_vard".to_string(),
+                erro: String::new(),
+            });
+            continue;
+        }
+
+        // Tenta registrar; se conseguir, solta na hora. Se falhar, marca como ocupado.
+        match gs.register(combinacao.as_str()) {
+            Ok(_) => {
+                let _ = gs.unregister(combinacao.as_str());
+                resultados.push(ResultadoSondagem {
+                    combinacao,
+                    estado: "livre".to_string(),
+                    erro: String::new(),
+                });
+            }
+            Err(e) => {
+                resultados.push(ResultadoSondagem {
+                    combinacao,
+                    estado: "ocupado".to_string(),
+                    erro: e.to_string(),
+                });
+            }
+        }
+    }
+    resultados
 }
 
 /// Caminho do arquivo de config dentro de um diretório (separado para ser testável).
@@ -636,31 +707,31 @@ mod testes {
     }
 
     #[test]
-    fn atalho_do_nao_falar_e_ctrl_alt_n_por_ultimo() {
-        assert_eq!(*ATALHOS.last().unwrap(), ("naofalar", "Ctrl+Alt+N"));
+    fn atalho_do_nao_falar_e_alt_super_n_por_ultimo() {
+        assert_eq!(*ATALHOS.last().unwrap(), ("naofalar", "Alt+Super+N"));
     }
 
     #[test]
     fn combinacao_invalida_e_recusada() {
-        assert!(validar_combinacao("Ctrl+Alt+Banana").is_err());
+        assert!(validar_combinacao("Alt+Super+Banana").is_err());
         assert!(validar_combinacao("").is_err());
     }
 
     #[test]
     fn atalho_da_config_usa_salvo_ou_padrao() {
         let c = serde_json::json!({ "atalhos": { "escuta": "Ctrl+Shift+L" } });
-        assert_eq!(atalho_da_config(&c, "escuta", "Ctrl+Alt+L"), "Ctrl+Shift+L");
-        assert_eq!(atalho_da_config(&c, "config", "Ctrl+Alt+P"), "Ctrl+Alt+P");
-        assert_eq!(atalho_da_config(&Value::Null, "falar", "Ctrl+Alt+Space"), "Ctrl+Alt+Space");
+        assert_eq!(atalho_da_config(&c, "escuta", "Alt+Super+L"), "Ctrl+Shift+L");
+        assert_eq!(atalho_da_config(&c, "config", "Shift+Super+K"), "Shift+Super+K");
+        assert_eq!(atalho_da_config(&Value::Null, "falar", "Alt+Super+Space"), "Alt+Super+Space");
     }
 
     #[test]
     fn painel_antigo_ctrl_alt_virgula_migra_e_escolha_do_usuario_fica() {
         let antigo = serde_json::json!({ "atalhos": { "config": "Ctrl+Alt+Comma" } });
-        assert_eq!(atalho_da_config(&antigo, "config", "Ctrl+Alt+P"), "Ctrl+Alt+P");
+        assert_eq!(atalho_da_config(&antigo, "config", "Shift+Super+K"), "Shift+Super+K");
         let outro = serde_json::json!({ "atalhos": { "config": "Ctrl+Shift+K", "escuta": "Ctrl+Alt+Comma" } });
-        assert_eq!(atalho_da_config(&outro, "config", "Ctrl+Alt+P"), "Ctrl+Shift+K");
-        assert_eq!(atalho_da_config(&outro, "escuta", "Ctrl+Alt+L"), "Ctrl+Alt+Comma");
+        assert_eq!(atalho_da_config(&outro, "config", "Shift+Super+K"), "Ctrl+Shift+K");
+        assert_eq!(atalho_da_config(&outro, "escuta", "Alt+Super+L"), "Ctrl+Alt+Comma");
     }
 
     #[test]
@@ -687,6 +758,20 @@ mod testes {
         assert!(!host_permitido("https://api.github.com.evil.com/", false));
         assert!(!host_permitido("https://user@api.github.com/", false));
         assert!(!host_permitido("ftp://github.com/", false));
+    }
+
+    #[test]
+    fn resultado_sondagem_livre_tem_estado_e_erro_vazios() {
+        let r = ResultadoSondagem { combinacao: "Ctrl+Alt+Z".into(), estado: "livre".into(), erro: String::new() };
+        assert_eq!(r.estado, "livre");
+        assert!(r.erro.is_empty());
+    }
+
+    #[test]
+    fn resultado_sondagem_usado_pelo_vard_identifica_conflito_interno() {
+        let r = ResultadoSondagem { combinacao: "Ctrl+Alt+Space".into(), estado: "usado_pelo_vard".into(), erro: String::new() };
+        assert_eq!(r.estado, "usado_pelo_vard");
+        assert!(r.erro.is_empty());
     }
 
     #[test]
