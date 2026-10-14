@@ -204,13 +204,23 @@ window.addEventListener("DOMContentLoaded", async () => {
   let aoReuniao: (ativa: boolean) => void = () => {};
   const estadoReuniao = new EstadoReuniao((ativa) => aoReuniao(ativa));
   if (cfg.ponte_url) ponte.eventos((tipo, dados) => {
-    if (tipo === "oficina" || tipo === "reuniao") { avisos.aplicarEvento(tipo, dados); void falarAviso(tipo, dados); }
-    if (tipo === "oficina") {
-      void emAndamento.aplicarEvento(tipo); // qualquer estado recarrega a lista
-      // T14/CDP item 2: emite evento Tauri "aviso" para que o listener da linha 609 dispare a chamada proativa.
-      const d = typeof dados === "object" && dados !== null ? (dados as Record<string, unknown>) : {};
-      const resumo = typeof d.resumo === "string" ? d.resumo : JSON.stringify(dados ?? {});
-      void emit("aviso", resumo).catch(() => {});
+    if (tipo === "oficina" || tipo === "reuniao") {
+      // aplicarEvento retorna true apenas se o aviso foi realmente adicionado (id novo + estado final).
+      // Estados intermediários (em_andamento, iniciada) e duplicatas retornam false e não devem disparar fala nem chamada.
+      const avisoNovo = avisos.aplicarEvento(tipo, dados);
+      // Evita fala dupla: com "me chamar quando algo ficar pronto" ligado, a chamada proativa já fala o resumo;
+      // falarAviso só toca quando a opção está desligada.
+      if (!chamarQuandoPronto) void falarAviso(tipo, dados);
+      if (tipo === "oficina") {
+        void emAndamento.aplicarEvento(tipo); // qualquer estado recarrega a lista
+        // T14/CDP item 2: emite evento Tauri "aviso" APENAS para avisos novos de verdade,
+        // evitando chamar "Paulo?" a cada mudança de estado intermediário.
+        if (avisoNovo) {
+          const d = typeof dados === "object" && dados !== null ? (dados as Record<string, unknown>) : {};
+          const resumo = typeof d.resumo === "string" ? d.resumo : JSON.stringify(dados ?? {});
+          void emit("aviso", resumo).catch(() => {});
+        }
+      }
     }
     if (tipo === "reuniao") estadoReuniao.aplicarEvento(dados);
   });
