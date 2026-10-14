@@ -192,6 +192,10 @@ With a cloud provider on, the fixed phrases ("Voltei." and the others) are synth
 
 Vard talks to assistants through connectors. Today there is only one, OpenJarvis (`src/conectores/openjarvis/cliente.ts`). Others are welcome: implement the `Conector` interface in `src/conectores/conector.ts` (`saude`, `modelos`, `definirModelo`, `transcrever`, `perguntar`, `sintetizar`). `definirModelo` stores the preferred model (empty = the first from `modelos()`) and takes effect on the next question. Warning: in the panel's Models tab, picking a non-default model, or pressing Test on it, may make the LLM server (for example LM Studio) load a second model into the GPU and use its memory.
 
+## Core (bridge, MCPs and services)
+
+The Python core, the optional voice and meeting services and the Windows scripts live in this repository (`nucleo/`, `voz/`, `reuniao/`, `scripts/`). User configuration and data stay outside it (`%LOCALAPPDATA%dl-vard`, or `VARD_CONFIG` and `VARD_DADOS`). Layout, tests and the switch-over with rollback are described in [docs/fusao.md](docs/fusao.md) (in Portuguese).
+
 ## Development
 
 See [CONTRIBUTING.md](CONTRIBUTING.md). License: MIT.

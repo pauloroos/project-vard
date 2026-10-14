@@ -190,6 +190,10 @@ Com um provedor na nuvem ligado, as falas fixas ("Voltei." e as outras) são sin
 
 O Vard fala com assistentes por conectores. Hoje existe um só, o OpenJarvis (`src/conectores/openjarvis/cliente.ts`). Outros são bem-vindos: basta implementar a interface `Conector` em `src/conectores/conector.ts` (`saude`, `modelos`, `definirModelo`, `transcrever`, `perguntar`, `sintetizar`). `definirModelo` guarda o modelo preferido (vazio = o primeiro de `modelos()`) e vale na próxima pergunta. Atenção: na aba Modelos do painel, escolher um modelo diferente do automático, ou clicar em Testar nele, pode fazer o servidor de LLM (por exemplo o LM Studio) carregar um segundo modelo na GPU e consumir memória.
 
+## Núcleo (ponte, MCPs e serviços)
+
+O código do núcleo em Python, a voz e a reunião opcionais e os scripts do Windows vivem neste repositório (`nucleo/`, `voz/`, `reuniao/`, `scripts/`). Configuração e dados do usuário ficam fora dele (`%LOCALAPPDATA%dl-vard`, ou `VARD_CONFIG` e `VARD_DADOS`). Estrutura, testes e a troca de instalação com retorno estão em [docs/fusao.md](docs/fusao.md).
+
 ## Desenvolvimento
 
 Veja [CONTRIBUTING.md](CONTRIBUTING.md). Licença: MIT.
