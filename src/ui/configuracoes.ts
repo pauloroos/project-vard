@@ -10,6 +10,9 @@ import type { PonteAvisos } from "../avisos/central";
 import { AbaAtualizacao } from "./aba-atualizacao";
 import { AbaAvisos } from "./aba-avisos";
 import { AbaModelos } from "./aba-modelos";
+import { AbaPaineisMcps } from "./paineis-mcps";
+import { AbaPaineisProvedores } from "./paineis-provedores";
+import { AbaPaineisVozes } from "./paineis-vozes";
 import { AbaReuniao, type PonteReuniao } from "./aba-reuniao";
 import { AbaSaber } from "./aba-saber";
 import { AbaSistema } from "./aba-sistema";
@@ -35,8 +38,12 @@ export interface DepsConfiguracoes {
 /** Monitor como o comando listar_monitores devolve (pixels físicos). */
 export interface MonitorInfo { nome: string; x: number; y: number; largura: number; altura: number; escala: number; principal: boolean }
 
-export type Aba = "geral" | "voz" | "atalhos" | "saber" | "modelos" | "sistema" | "reuniao" | "avisos" | "atualizacao";
-const ABAS: [Aba, string][] = [["geral", "Geral"], ["voz", "Voz"], ["atalhos", "Atalhos"], ["saber", "O que eu sei fazer"], ["modelos", "Modelos"], ["sistema", "Sistema"], ["reuniao", "Reunião"], ["avisos", "Avisos"], ["atualizacao", "Atualização"]];
+export type Aba = "geral" | "voz" | "atalhos" | "saber" | "modelos" | "paineis-provedores" | "paineis-vozes" | "paineis-mcps" | "sistema" | "reuniao" | "avisos" | "atualizacao";
+const ABAS: [Aba, string][] = [
+  ["geral", "Geral"], ["voz", "Voz"], ["atalhos", "Atalhos"], ["saber", "O que eu sei fazer"], ["modelos", "Modelos"],
+  ["paineis-provedores", "Painéis: Provedores"], ["paineis-vozes", "Painéis: Vozes"], ["paineis-mcps", "Painéis: MCPs"],
+  ["sistema", "Sistema"], ["reuniao", "Reunião"], ["avisos", "Avisos"], ["atualizacao", "Atualização"],
+];
 const OPCOES_TAMANHO: [Config["tamanho"], string][] = [
   ["pequeno", "Pequeno (240 px)"], ["medio", "Médio (320 px)"], ["grande", "Grande (480 px)"], ["personalizado", "Personalizado"],
 ];
@@ -57,6 +64,9 @@ export class Configuracoes {
   private saber: AbaSaber | null = null;
   private atualizacao: AbaAtualizacao | null = null;
   private abaVoz!: AbaVoz;
+  private paineisProvedores!: AbaPaineisProvedores;
+  private paineisVozes!: AbaPaineisVozes;
+  private paineisMcps!: AbaPaineisMcps;
   private linhasAtalho = new Map<AcaoAtalho, { campo: HTMLButtonElement; motivo: HTMLElement }>();
 
   constructor(private cfg: Config, private raiz: HTMLElement, private deps: DepsConfiguracoes) {
@@ -78,6 +88,9 @@ export class Configuracoes {
       statusPonte: () => this.deps.statusPonte(this.cfg.ponte_url),
     });
     void this.modelos.carregar();
+    this.paineisProvedores = new AbaPaineisProvedores(this.raiz.querySelector<HTMLElement>("#cfg-paineis-provedores")!);
+    this.paineisVozes = new AbaPaineisVozes(this.raiz.querySelector<HTMLElement>("#cfg-paineis-vozes")!);
+    this.paineisMcps = new AbaPaineisMcps(this.raiz.querySelector<HTMLElement>("#cfg-paineis-mcps")!);
     const urlPonte = () => this.el("ponte_url").value.trim(); // vazio = sem ponte (desliga), não "usar a salva"
     this.sistema = new AbaSistema(this.raiz.querySelector<HTMLElement>("#cfg-sistema")!, {
       statusPonte: () => this.deps.statusPonte(urlPonte()),
@@ -118,6 +131,9 @@ export class Configuracoes {
   abrirAba(aba: Aba) {
     for (const s of this.raiz.querySelectorAll<HTMLElement>("section[data-aba]")) s.hidden = s.dataset.aba !== aba;
     for (const b of this.raiz.querySelectorAll<HTMLButtonElement>("nav button")) b.classList.toggle("ativa", b.dataset.aba === aba);
+    if (aba === "paineis-provedores") void this.paineisProvedores?.montar();
+    if (aba === "paineis-vozes") void this.paineisVozes?.montar();
+    if (aba === "paineis-mcps") void this.paineisMcps?.montar();
     if (aba === "sistema") this.sistema?.ativar(); else this.sistema?.desativar();
     if (aba === "reuniao") this.reuniao?.ativar(); else this.reuniao?.desativar();
     if (aba === "avisos") this.avisos?.ativar(); else this.avisos?.desativar();
@@ -193,6 +209,9 @@ export class Configuracoes {
           ${this.marca("falar_avisos", "Falar os avisos de tarefas (desligado por padrão)", c.falar_avisos)}
         </fieldset>
       </section>
+      <section data-aba="paineis-provedores"><div id="cfg-paineis-provedores"></div></section>
+      <section data-aba="paineis-vozes"><div id="cfg-paineis-vozes"></div></section>
+      <section data-aba="paineis-mcps"><div id="cfg-paineis-mcps"></div></section>
       <section data-aba="voz">
         <fieldset><legend>Fala</legend>
           ${this.campo("velocidade", "Velocidade da fala", c.velocidade, "number", 'step="0.05" min="0.5" max="2"')}
