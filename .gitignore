@@ -7,3 +7,8 @@ src-tauri/gen
 *.log
 .DS_Store
 .idea
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+segredos.toml

@@ -1,0 +1,28 @@
+# Permitidos da busca de vazamento (scripts/busca-vazamento.mjs). Formato: arquivo<TAB>trecho.
+# "arquivo" e o caminho relativo a raiz do repositorio, com "/"; "*" vale para qualquer arquivo.
+# O achado e ignorado se o "trecho" estiver contido no texto do PROPRIO achado (nao da linha): uma entrada nao esconde outro vazamento na mesma linha.
+# Linhas vazias e linhas que comecam com "#" sao ignoradas.
+# Cada entrada abaixo e amostra falsa de teste ou texto legal; resíduo pessoal real nunca entra aqui.
+*	X:\
+*	X:/
+LICENSE	usuário Roos
+src-tauri/Cargo.toml	usuário Roos
+src-tauri/tauri.conf.json	128x128@2x.png
+tests/vazamento.test.ts	203.0.113.7
+tests/vazamento.test.ts	1.2.3.4
+tests/vazamento.test.ts	Q:\
+tests/vazamento.test.ts	E:\
+tests/vazamento.test.ts	C:\
+tests/vazamento.test.ts	sk-proj-ABCDEFGHIJKLMNOPQRST
+tests/vazamento.test.ts	Bearer abcdefghijklmnopqrstuvwxyz
+tests/vazamento.test.ts	fulano@empresa.com
+src-tauri/src/comandos.rs	user@api.github.com
+src-tauri/src/comandos.rs	user@github.com
+src-tauri/src/comandos.rs	senha@github.com
+tests/config.test.ts	10.0.0.5
+tests/config.test.ts	192.168.0.9
+nucleo/vard/delegada.py	O:\
+voz/tests/test_normalizar.py	a@b.
+nucleo/vard/reuniao.py	C:\
+reuniao/pyproject.toml	0.2.12.9
+scripts/windows/vard-modo.ps1	C:\

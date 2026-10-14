@@ -12,6 +12,7 @@
     "tauri": "tauri",
     "tauri:dev": "tauri dev --config src-tauri/tauri.dev.conf.json",
     "harness": "node tests/harness/servidor-falso.mjs",
+    "vazamento": "node scripts/busca-vazamento.mjs",
     "test:real": "vitest run tests/integracao-real.test.ts"
   },
   "dependencies": {
