@@ -348,8 +348,10 @@ class TestSequenciaProtocolo:
                     metodos.append("tools/list")
                 elif "tools/call" in msg:
                     metodos.append("tools/call")
-            # Pelo menos initialize e tools/call devem aparecer
-            assert "initialize" in metodos or len(metodos) > 0
+            # Sequência completa exigida pelo plano: initialize → notifications/initialized → tools/list → tools/call
+            assert "initialize" in metodos, f"initialize ausente nos logs: {metodos}"
+            assert "tools/list" in metodos, f"tools/list ausente nos logs: {metodos}"
+            assert "tools/call" in metodos, f"tools/call ausente nos logs: {metodos}"
         finally:
             await gm.fechar_tudo()
 

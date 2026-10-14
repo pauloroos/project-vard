@@ -188,7 +188,7 @@ class _ClienteHTTP:
         from vard.mcp_http import ClienteMCP, ErroMCP
 
         self._cliente = ClienteMCP(self._url, self._token)
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         try:
             await loop.run_in_executor(None, self._cliente.iniciar)
             log.debug("MCP HTTP [%s] initialize ok", self.identificador)
@@ -203,7 +203,7 @@ class _ClienteHTTP:
     async def chamar(self, nome: str, argumentos: Dict[str, Any]) -> str:
         from vard.mcp_http import ErroMCP
 
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         try:
             return await loop.run_in_executor(None, self._cliente.chamar, nome, argumentos)
         except ErroMCP as exc:
