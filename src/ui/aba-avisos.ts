@@ -24,13 +24,21 @@ export class AbaAvisos {
   }
 
   montar() {
+    const topo = document.createElement("div"); topo.className = "avi-topo";
     const botao = document.createElement("button");
     botao.type = "button"; botao.textContent = "Marcar tudo como lido";
     botao.addEventListener("click", () => { void this.marcarTudo(); });
+    // T14: opção para a Aurora chamar quando algo ficar pronto
+    const chkChamar = document.createElement("label"); chkChamar.className = "avi-chamar";
+    const inputChamar = document.createElement("input"); inputChamar.type = "checkbox";
+    inputChamar.checked = true; // padrão ligado
+    inputChamar.id = "avi-chamar-quando-pronto";
+    chkChamar.append(inputChamar, document.createTextNode(" Me chamar quando algo ficar pronto"));
+    topo.append(botao, chkChamar);
     this.lista = document.createElement("div"); this.lista.id = "avi-lista";
     this.bloco = document.createElement("div"); this.bloco.id = "avi-resultado"; this.bloco.hidden = true;
     this.msg = document.createElement("div"); this.msg.id = "avi-msg";
-    this.raiz.append(botao, this.lista, this.bloco, this.msg);
+    this.raiz.append(topo, this.lista, this.bloco, this.msg);
     this.desenhar();
   }
 

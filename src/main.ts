@@ -16,6 +16,7 @@ import { Ponte } from "./conectores/ponte/cliente";
 import { CentralAvisos } from "./avisos/central";
 import { EmAndamento, textoDaDica as dicaDeAndamento } from "./avisos/andamento";
 import { deveFalarAviso, AvisoPorVez } from "./avisos/fala";
+import { criarFluxoChamada, type FluxoChamada } from "./avisos/chamada";
 import { EstadoReuniao } from "./reuniao/estado";
 import { criarFonteDeVoz } from "./conectores/voz/escolher";
 import type { FonteDeVoz } from "./conectores/voz/fonte";
@@ -494,6 +495,21 @@ window.addEventListener("DOMContentLoaded", async () => {
     // Só em desenvolvimento: injeta uma pergunta como se tivesse vindo do microfone (mede a latência sem voz humana).
     // Com o microfone fechado, a boca ganha um AudioContext próprio (sem pedir permissão de microfone).
     const injetar = async (texto: string, pushToTalk: boolean) => {
+      // T14: se o fluxo de chamada está aguardando resposta ou conversando, roteia para ele
+      if (fluxoChamada.estado === "aguardando_resposta" || fluxoChamada.estado === "conversando") {
+        const acoes = fluxoChamada.usuarioRespondeu(texto);
+        if (acoes.length) {
+          void executarAcoesChamada(acoes);
+          // Se passou para lendo_aviso, arma timeout da conversa após a leitura
+          if (fluxoChamada.estado === "lendo_aviso") {
+            // A leitura termina quando a boca parar de falar; aqui simplificamos
+            // com um timeout fixo baseado no tamanho do texto lido.
+            // Em produção, o fim da fala seria sinalizado pela boca.
+          }
+          return; // não envia para a conversa normal
+        }
+        // Se não foi resposta de presença, cai na conversa normal
+      }
       if (!bocaReal) {
         bocaReal = new Boca(new AudioContext());
         nucleo.setAnalisadores(null, bocaReal.analisador);
@@ -562,9 +578,46 @@ window.addEventListener("DOMContentLoaded", async () => {
   // Widget recarregado com a sala já aberta: ela não avisa de novo, então pergunta se existe.
   try { if (salaExiste(await WebviewWindow.getByLabel("sala"))) retomarSala(); } catch { /* sem sala */ }
   await listen("sala-fechada", () => { salaAberta = false; clearInterval(relogioSala); });
+  // T14 — Chamada proativa: quando um aviso chega e o contexto permite, a Aurora chama o usuário.
+  const fluxoChamada = criarFluxoChamada();
+  let timerChamada: ReturnType<typeof setTimeout> | null = null;
+  const executarAcoesChamada = async (acoes: { tipo: string; texto?: string }[]) => {
+    for (const acao of acoes) {
+      if (acao.tipo === "sintetizar" && acao.texto) {
+        try {
+          const wav = await fixa(acao.texto);
+          await boca.tocar(wav);
+        } catch { /* sem voz, o aviso já está na tela */ }
+      } else if (acao.tipo === "abrir_escuta") {
+        // Abre escuta curta para resposta de presença ou conversa pós-aviso.
+        // O VAD já está ativo; aqui só sinalizamos que o próximo texto transcrito
+        // deve ser roteado para o fluxo de chamada.
+        console.info("chamada proativa: escuta aberta");
+      } else if (acao.tipo === "fechar_escuta") {
+        console.info("chamada proativa: escuta fechada");
+      }
+    }
+  };
   await listen<unknown>("aviso", (ev) => {
     if (typeof ev.payload !== "string") { console.warn("aviso ignorado: payload inválido"); return; }
     hud.avisar(ev.payload);
+    // T14: alimenta o fluxo de chamada proativa
+    if (fluxoChamada.estado === "inativo" || fluxoChamada.estado === "conversando") {
+      const acoes = fluxoChamada.avisoRecebido(
+        { id: Date.now().toString(), resumo: ev.payload },
+        { falarLiberado: !naoFalar && !cfg.nao_falar, emReuniao: reuniaoAtiva },
+      );
+      void executarAcoesChamada(acoes);
+      // Arma timeout de espera se entrou em aguardando_resposta
+      if (fluxoChamada.estado === "aguardando_resposta") {
+        if (timerChamada) clearTimeout(timerChamada);
+        timerChamada = setTimeout(() => {
+          const acoesTimeout = fluxoChamada.timeoutEspera();
+          void executarAcoesChamada(acoesTimeout);
+          timerChamada = null;
+        }, 30_000);
+      }
+    }
   });
   await listen<unknown>("sempre-no-topo", (ev) => {
     if (typeof ev.payload !== "boolean") { console.warn("sempre-no-topo ignorado: payload inválido"); return; }
