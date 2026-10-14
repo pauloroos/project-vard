@@ -8,7 +8,7 @@ import { OpenJarvis } from "./conectores/openjarvis/cliente";
 import { Ponte } from "./conectores/ponte/cliente";
 import { Configuracoes, type Aba } from "./ui/configuracoes";
 
-const ABAS: Aba[] = ["geral", "voz", "atalhos", "modelos", "paineis-provedores", "paineis-vozes", "paineis-mcps", "sistema", "reuniao", "avisos", "atualizacao"];
+const ABAS: Aba[] = ["geral", "voz", "atalhos", "modelos", "paineis-provedores", "paineis-vozes", "paineis-mcps", "paineis-agentes", "sistema", "reuniao", "avisos", "atualizacao"];
 
 window.addEventListener("DOMContentLoaded", async () => {
   const cfg = await carregarConfig();

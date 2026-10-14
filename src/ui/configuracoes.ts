@@ -10,6 +10,7 @@ import type { PonteAvisos } from "../avisos/central";
 import { AbaAtualizacao } from "./aba-atualizacao";
 import { AbaAvisos } from "./aba-avisos";
 import { AbaModelos } from "./aba-modelos";
+import { AbaPaineisAgentes } from "./paineis-agentes";
 import { AbaPaineisMcps } from "./paineis-mcps";
 import { AbaPaineisProvedores } from "./paineis-provedores";
 import { AbaPaineisVozes } from "./paineis-vozes";
@@ -38,10 +39,10 @@ export interface DepsConfiguracoes {
 /** Monitor como o comando listar_monitores devolve (pixels físicos). */
 export interface MonitorInfo { nome: string; x: number; y: number; largura: number; altura: number; escala: number; principal: boolean }
 
-export type Aba = "geral" | "voz" | "atalhos" | "saber" | "modelos" | "paineis-provedores" | "paineis-vozes" | "paineis-mcps" | "sistema" | "reuniao" | "avisos" | "atualizacao";
+export type Aba = "geral" | "voz" | "atalhos" | "saber" | "modelos" | "paineis-provedores" | "paineis-vozes" | "paineis-mcps" | "paineis-agentes" | "sistema" | "reuniao" | "avisos" | "atualizacao";
 const ABAS: [Aba, string][] = [
   ["geral", "Geral"], ["voz", "Voz"], ["atalhos", "Atalhos"], ["saber", "O que eu sei fazer"], ["modelos", "Modelos"],
-  ["paineis-provedores", "Painéis: Provedores"], ["paineis-vozes", "Painéis: Vozes"], ["paineis-mcps", "Painéis: MCPs"],
+  ["paineis-provedores", "Painéis: Provedores"], ["paineis-vozes", "Painéis: Vozes"], ["paineis-mcps", "Painéis: MCPs"], ["paineis-agentes", "Painéis: Agentes"],
   ["sistema", "Sistema"], ["reuniao", "Reunião"], ["avisos", "Avisos"], ["atualizacao", "Atualização"],
 ];
 const OPCOES_TAMANHO: [Config["tamanho"], string][] = [
@@ -67,6 +68,7 @@ export class Configuracoes {
   private paineisProvedores!: AbaPaineisProvedores;
   private paineisVozes!: AbaPaineisVozes;
   private paineisMcps!: AbaPaineisMcps;
+  private paineisAgentes!: AbaPaineisAgentes;
   private linhasAtalho = new Map<AcaoAtalho, { campo: HTMLButtonElement; motivo: HTMLElement }>();
 
   constructor(private cfg: Config, private raiz: HTMLElement, private deps: DepsConfiguracoes) {
@@ -91,6 +93,7 @@ export class Configuracoes {
     this.paineisProvedores = new AbaPaineisProvedores(this.raiz.querySelector<HTMLElement>("#cfg-paineis-provedores")!);
     this.paineisVozes = new AbaPaineisVozes(this.raiz.querySelector<HTMLElement>("#cfg-paineis-vozes")!);
     this.paineisMcps = new AbaPaineisMcps(this.raiz.querySelector<HTMLElement>("#cfg-paineis-mcps")!);
+    this.paineisAgentes = new AbaPaineisAgentes(this.raiz.querySelector<HTMLElement>("#cfg-paineis-agentes")!);
     const urlPonte = () => this.el("ponte_url").value.trim(); // vazio = sem ponte (desliga), não "usar a salva"
     this.sistema = new AbaSistema(this.raiz.querySelector<HTMLElement>("#cfg-sistema")!, {
       statusPonte: () => this.deps.statusPonte(urlPonte()),
@@ -134,6 +137,7 @@ export class Configuracoes {
     if (aba === "paineis-provedores") void this.paineisProvedores?.montar();
     if (aba === "paineis-vozes") void this.paineisVozes?.montar();
     if (aba === "paineis-mcps") void this.paineisMcps?.montar();
+    if (aba === "paineis-agentes") void this.paineisAgentes?.montar();
     if (aba === "sistema") this.sistema?.ativar(); else this.sistema?.desativar();
     if (aba === "reuniao") this.reuniao?.ativar(); else this.reuniao?.desativar();
     if (aba === "avisos") this.avisos?.ativar(); else this.avisos?.desativar();
@@ -212,6 +216,7 @@ export class Configuracoes {
       <section data-aba="paineis-provedores"><div id="cfg-paineis-provedores"></div></section>
       <section data-aba="paineis-vozes"><div id="cfg-paineis-vozes"></div></section>
       <section data-aba="paineis-mcps"><div id="cfg-paineis-mcps"></div></section>
+      <section data-aba="paineis-agentes"><div id="cfg-paineis-agentes"></div></section>
       <section data-aba="voz">
         <fieldset><legend>Fala</legend>
           ${this.campo("velocidade", "Velocidade da fala", c.velocidade, "number", 'step="0.05" min="0.5" max="2"')}

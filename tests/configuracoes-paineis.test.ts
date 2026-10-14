@@ -126,4 +126,30 @@ describe("configuracoes-paineis (T8)", () => {
     expect(container.innerHTML.length).toBeGreaterThan(0);
     expect(container.textContent).toContain("MCP");
   });
+
+  it("aba paineis-agentes aparece na navegação", async () => {
+    const raiz = criarRaiz();
+    const painel = new Configuracoes({ ...CONFIG_PADRAO } as Config, raiz, criarDeps());
+    await painel.montar();
+    const botoes = Array.from(raiz.querySelectorAll<HTMLButtonElement>("nav button")).map((b) => b.dataset.aba);
+    expect(botoes).toContain("paineis-agentes");
+  });
+
+  it("container cfg-paineis-agentes existe", async () => {
+    const raiz = criarRaiz();
+    const painel = new Configuracoes({ ...CONFIG_PADRAO } as Config, raiz, criarDeps());
+    await painel.montar();
+    expect(raiz.querySelector("#cfg-paineis-agentes")).toBeTruthy();
+  });
+
+  it("abrir aba paineis-agentes renderiza conteúdo", async () => {
+    const raiz = criarRaiz();
+    const painel = new Configuracoes({ ...CONFIG_PADRAO } as Config, raiz, criarDeps());
+    await painel.montar();
+    painel.abrirAba("paineis-agentes" as Aba);
+    await new Promise((r) => setTimeout(r, 50));
+    const container = raiz.querySelector("#cfg-paineis-agentes") as HTMLElement;
+    expect(container.innerHTML.length).toBeGreaterThan(0);
+    expect(container.textContent).toContain("Claude");
+  });
 });
