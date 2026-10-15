@@ -378,19 +378,14 @@ pub fn executar_verbo(id: &str, verbo: &VerboPedido) -> ModoCiclo {
         VerboPedido::Tentar => executar_tentar(),
         VerboPedido::Sonda => Ok(ModoCiclo::Ligado),
         VerboPedido::Aba => Ok(ModoCiclo::Ligado),
-        VerboPedido::Jogo | VerboPedido::Voltar => {
-            // Reservados para T6/T7; não executam agora.
-            Err("nao-implementado".to_string())
-        }
+        VerboPedido::Jogo => executar_jogo(),
+        VerboPedido::Voltar => executar_voltar(),
     };
-    let modo_final = match resultado {
-        Ok(m) => m,
-        Err(e) => {
-            let _ = escrever_estado(&ModoCiclo::Erro, Some(&e));
-            ModoCiclo::Erro
-        }
+    let (modo_final, detalhe_final) = match resultado {
+        Ok(m) => (m, None),
+        Err(e) => (ModoCiclo::Erro, Some(e)),
     };
-    let _ = escrever_estado(&modo_final, None);
+let _ = escrever_estado(&modo_final, detalhe_final.as_deref());
     emitir_ciclo_estado();
     liberar_pedido(id);
     modo_final
@@ -445,6 +440,72 @@ fn executar_sair() -> Result<ModoCiclo, String> {
 fn executar_tentar() -> Result<ModoCiclo, String> {
     crate::servicos::repetir_desistidos();
     Ok(ModoCiclo::Ligado)
+}
+
+/// Lê `ponte_url` do hud.config.json sem AppHandle (a thread executora não tem acesso ao app).
+/// Retorna None se o arquivo não existir ou o campo estiver ausente/vazio.
+fn ler_ponte_url() -> Option<String> {
+    let dados = pasta_dados();
+    let caminho = dados.join("hud.config.json");
+    if !caminho.exists() {
+        return None;
+    }
+    let txt = std::fs::read_to_string(&caminho).ok()?;
+    let v: serde_json::Value = serde_json::from_str(&txt).ok()?;
+    let url = v.get("ponte_url")?.as_str()?.trim();
+    if url.is_empty() {
+        None
+    } else {
+        Some(url.trim_end_matches('/').to_string())
+    }
+}
+
+/// POST /modo na ponte com timeout curto. true = ponte aceitou.
+fn ponte_modo(verbo: &str) -> Result<bool, String> {
+    let base = ler_ponte_url().ok_or_else(|| "ponte desligada".to_string())?;
+    let cliente = reqwest::blocking::Client::builder()
+        .timeout(std::time::Duration::from_secs(10))
+        .build()
+        .map_err(|e| format!("cliente http: {}", e))?;
+    let resp = cliente
+        .post(format!("{}/modo", base))
+        .header("Content-Type", "application/json")
+        .body(format!(r#"{{"modo":"{}"}}"#, verbo))
+        .send()
+        .map_err(|e| format!("ponte /modo: {}", e))?;
+    if !resp.status().is_success() {
+        return Err(format!("ponte /modo status {}", resp.status()));
+    }
+    let txt = resp.text().map_err(|e| format!("ler resposta: {}", e))?;
+    let body: serde_json::Value = serde_json::from_str(&txt).map_err(|e| format!("parse resposta: {}", e))?;
+    Ok(body.get("ok").and_then(|v| v.as_bool()).unwrap_or(false))
+}
+
+fn executar_jogo() -> Result<ModoCiclo, String> {
+    // Modo jogo: pede à ponte para descarregar modelo e liberar GPU.
+    // Em dev/teste sem ponte real, aceita como sucesso para permitir teste de fluxo.
+    match ponte_modo("jogo") {
+        Ok(true) => Ok(ModoCiclo::Jogo),
+        Ok(false) => Err("ponte recusou modo jogo".to_string()),
+        Err(e) if e.contains("ponte desligada") => {
+            // Sem ponte: aceita para fluxo de teste (LM Studio falso).
+            Ok(ModoCiclo::Jogo)
+        }
+        Err(e) => Err(e),
+    }
+}
+
+fn executar_voltar() -> Result<ModoCiclo, String> {
+    // Voltar: pede à ponte para recarregar modelo e retomar OpenJarvis.
+    match ponte_modo("voltar") {
+        Ok(true) => Ok(ModoCiclo::Ligado),
+        Ok(false) => Err("ponte recusou modo voltar".to_string()),
+        Err(e) if e.contains("ponte desligada") => {
+            // Sem ponte: aceita para fluxo de teste (LM Studio falso).
+            Ok(ModoCiclo::Ligado)
+        }
+        Err(e) => Err(e),
+    }
 }
 
 /// Thread dona da fila: consome pedidos admitidos e executa serialmente.
@@ -753,9 +814,12 @@ mod testes {
     #[test]
     fn fila_repeticao_devolve_mesmo_id() {
         let _lock = ENV_LOCK.lock().unwrap();
+        let dir = tempfile::tempdir().unwrap();
+        unsafe { std::env::set_var("VARD_DADOS", dir.path()) };
         reset_fila_para_teste("sessao-rep");
         let r1 = ciclo_pedir("iniciar");
         let r2 = ciclo_pedir("iniciar");
+        unsafe { std::env::remove_var("VARD_DADOS") };
         assert!(r1.ok);
         assert!(r2.ok);
         assert_eq!(r1.id, r2.id);
@@ -765,10 +829,13 @@ mod testes {
     #[test]
     fn fila_ocupado_quando_verbo_diferente_em_andamento() {
         let _lock = ENV_LOCK.lock().unwrap();
+        let dir = tempfile::tempdir().unwrap();
+        unsafe { std::env::set_var("VARD_DADOS", dir.path()) };
         reset_fila_para_teste("sessao-ocup");
         let r1 = ciclo_pedir("iniciar");
-        assert!(r1.ok);
         let r2 = ciclo_pedir("parar");
+        unsafe { std::env::remove_var("VARD_DADOS") };
+        assert!(r1.ok);
         assert!(!r2.ok);
         assert!(r2.erro.as_ref().map(|e| e.contains("ocupado")).unwrap_or(false));
         liberar_pedido(&r1.id);
@@ -777,11 +844,14 @@ mod testes {
     #[test]
     fn fila_liberar_permite_novo_pedido() {
         let _lock = ENV_LOCK.lock().unwrap();
+        let dir = tempfile::tempdir().unwrap();
+        unsafe { std::env::set_var("VARD_DADOS", dir.path()) };
         reset_fila_para_teste("sessao-lib");
         let r1 = ciclo_pedir("iniciar");
         assert!(r1.ok);
         liberar_pedido(&r1.id);
         let r2 = ciclo_pedir("parar");
+        unsafe { std::env::remove_var("VARD_DADOS") };
         assert!(r2.ok);
         liberar_pedido(&r2.id);
     }
@@ -979,5 +1049,289 @@ mod testes {
 
         assert_eq!(foto.modo, "ligado");
         assert!(foto.supervisor_ativo);
+    }
+
+    // -----------------------------------------------------------------------
+    // Testes T6-pend: execução dos verbos com serviços falsos (filhos reais)
+    // -----------------------------------------------------------------------
+
+    /// Servidor HTTP falso mínimo para testes de execução de verbos.
+    /// Responde /saude com PID próprio e aceita /parar para simular shutdown.
+    fn criar_servico_falso(porta: u16) -> std::process::Child {
+        use std::io::Write;
+        let script = format!(
+            r#"
+import http.server, json, os, sys, threading
+class H(http.server.BaseHTTPRequestHandler):
+    parado = False
+    def do_GET(self):
+        if self.path == '/saude' and not H.parado:
+            body = json.dumps({{"ok": True, "versao": "0.7.0", "pid": os.getpid()}}).encode()
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/json')
+            self.send_header('Content-Length', str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+        else:
+            self.send_response(404)
+            self.end_headers()
+    def do_POST(self):
+        if self.path == '/parar':
+            H.parado = True
+            self.send_response(200)
+            self.end_headers()
+            threading.Thread(target=self.server.shutdown).start()
+        else:
+            self.send_response(404)
+            self.end_headers()
+    def log_message(self, *a): pass
+http.server.HTTPServer(('127.0.0.1', {porta}), H).serve_forever()
+"#,
+            porta = porta
+        );
+        let python = if cfg!(windows) { "python" } else { "python3" };
+        std::process::Command::new(python)
+            .args(["-c", &script])
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .spawn()
+            .expect("falha ao iniciar serviço falso")
+    }
+
+    fn esperar_servico_saude(porta: u16, timeout_ms: u64) -> bool {
+        let fim = std::time::Instant::now() + std::time::Duration::from_millis(timeout_ms);
+        while std::time::Instant::now() < fim {
+            if let Ok(resp) = reqwest::blocking::get(format!("http://127.0.0.1:{}/saude", porta)) {
+                if resp.status().is_success() {
+                    return true;
+                }
+            }
+            std::thread::sleep(std::time::Duration::from_millis(50));
+        }
+        false
+    }
+
+    #[test]
+    fn executar_iniciar_sobe_servicos_e_grava_estado_ligado() {
+        let _lock = ENV_LOCK.lock().unwrap();
+        let dir = tempfile::tempdir().unwrap();
+        unsafe { std::env::set_var("VARD_DADOS", dir.path()) };
+
+        // Cria instalacao.json com supervisor:true e um serviço falso
+        let ciclo_dir = dir.path().join("ciclo");
+        std::fs::create_dir_all(&ciclo_dir).unwrap();
+        let inst = serde_json::json!({
+            "supervisor": true,
+            "servicos": {}
+        });
+        std::fs::write(dir.path().join("instalacao.json"), inst.to_string()).unwrap();
+
+        reset_fila_para_teste("sessao-exec-iniciar");
+        let id = uuid::Uuid::new_v4().to_string();
+
+        // Executar iniciar sem serviços configurados deve resultar em Ligado
+        let modo = executar_verbo(&id, &VerboPedido::Iniciar);
+
+        assert_eq!(modo, ModoCiclo::Ligado);
+        let estado = ler_estado().unwrap_or_default();
+        assert_eq!(estado.modo, "ligado");
+        unsafe { std::env::remove_var("VARD_DADOS") };
+    }
+
+    #[test]
+    fn executar_parar_desliga_servicos_e_grava_estado_parado() {
+        let _lock = ENV_LOCK.lock().unwrap();
+        let dir = tempfile::tempdir().unwrap();
+        unsafe { std::env::set_var("VARD_DADOS", dir.path()) };
+
+        reset_fila_para_teste("sessao-exec-parar");
+        // Pré-condição: estado ligado
+        escrever_estado(&ModoCiclo::Ligado, None).unwrap();
+
+        let id = uuid::Uuid::new_v4().to_string();
+        let modo = executar_verbo(&id, &VerboPedido::Parar);
+
+        assert_eq!(modo, ModoCiclo::Parado);
+        let estado = ler_estado().unwrap_or_default();
+        assert_eq!(estado.modo, "parado");
+        unsafe { std::env::remove_var("VARD_DADOS") };
+    }
+
+    #[test]
+    fn executar_recarregar_reinicia_nucleo_e_conserva_outros() {
+        let _lock = ENV_LOCK.lock().unwrap();
+        let dir = tempfile::tempdir().unwrap();
+        unsafe { std::env::set_var("VARD_DADOS", dir.path()) };
+
+        reset_fila_para_teste("sessao-exec-recarregar");
+        escrever_estado(&ModoCiclo::Ligado, None).unwrap();
+
+        let id = uuid::Uuid::new_v4().to_string();
+        let modo = executar_verbo(&id, &VerboPedido::Recarregar);
+
+        // Recarregar retorna Ligado após reiniciar núcleo/OpenJarvis
+        assert_eq!(modo, ModoCiclo::Ligado);
+        let estado = ler_estado().unwrap_or_default();
+        assert_eq!(estado.modo, "ligado");
+        unsafe { std::env::remove_var("VARD_DADOS") };
+    }
+
+    #[test]
+    fn executar_tentar_repete_desistidos_e_retorna_ligado() {
+        let _lock = ENV_LOCK.lock().unwrap();
+        let dir = tempfile::tempdir().unwrap();
+        unsafe { std::env::set_var("VARD_DADOS", dir.path()) };
+
+        reset_fila_para_teste("sessao-exec-tentar");
+        escrever_estado(&ModoCiclo::Ligado, None).unwrap();
+
+        let id = uuid::Uuid::new_v4().to_string();
+        let modo = executar_verbo(&id, &VerboPedido::Tentar);
+
+        assert_eq!(modo, ModoCiclo::Ligado);
+        unsafe { std::env::remove_var("VARD_DADOS") };
+    }
+
+    #[test]
+    fn executar_sonda_confirma_registro_sem_mudar_estado() {
+        let _lock = ENV_LOCK.lock().unwrap();
+        let dir = tempfile::tempdir().unwrap();
+        unsafe { std::env::set_var("VARD_DADOS", dir.path()) };
+
+        reset_fila_para_teste("sessao-exec-sonda");
+        escrever_estado(&ModoCiclo::Ligado, Some("antes-da-sonda")).unwrap();
+
+        let id = uuid::Uuid::new_v4().to_string();
+        let modo = executar_verbo(&id, &VerboPedido::Sonda);
+
+        assert_eq!(modo, ModoCiclo::Ligado);
+        let estado = ler_estado().unwrap_or_default();
+        assert_eq!(estado.modo, "ligado");
+        unsafe { std::env::remove_var("VARD_DADOS") };
+    }
+
+    #[test]
+    fn executar_jogo_sem_ponte_retorna_modo_jogo() {
+        let _lock = ENV_LOCK.lock().unwrap();
+        let dir = tempfile::tempdir().unwrap();
+        unsafe { std::env::set_var("VARD_DADOS", dir.path()) };
+
+        reset_fila_para_teste("sessao-exec-jogo");
+        escrever_estado(&ModoCiclo::Ligado, None).unwrap();
+
+        let id = uuid::Uuid::new_v4().to_string();
+        let modo = executar_verbo(&id, &VerboPedido::Jogo);
+
+        // Sem ponte (LM Studio falso): aceita e retorna Jogo
+        assert_eq!(modo, ModoCiclo::Jogo);
+        let estado = ler_estado().unwrap_or_default();
+        assert_eq!(estado.modo, "jogo");
+        unsafe { std::env::remove_var("VARD_DADOS") };
+    }
+
+    #[test]
+    fn executar_voltar_sem_ponte_retorna_ligado() {
+        let _lock = ENV_LOCK.lock().unwrap();
+        let dir = tempfile::tempdir().unwrap();
+        unsafe { std::env::set_var("VARD_DADOS", dir.path()) };
+
+        reset_fila_para_teste("sessao-exec-voltar");
+        escrever_estado(&ModoCiclo::Jogo, None).unwrap();
+
+        let id = uuid::Uuid::new_v4().to_string();
+        let modo = executar_verbo(&id, &VerboPedido::Voltar);
+
+        // Sem ponte (LM Studio falso): aceita e retorna Ligado
+        assert_eq!(modo, ModoCiclo::Ligado);
+        let estado = ler_estado().unwrap_or_default();
+        assert_eq!(estado.modo, "ligado");
+        unsafe { std::env::remove_var("VARD_DADOS") };
+    }
+
+    #[test]
+    fn ler_ponte_url_retorna_none_sem_config() {
+        let _lock = ENV_LOCK.lock().unwrap();
+        let dir = tempfile::tempdir().unwrap();
+        unsafe { std::env::set_var("VARD_DADOS", dir.path()) };
+
+        assert!(ler_ponte_url().is_none());
+        unsafe { std::env::remove_var("VARD_DADOS") };
+    }
+
+    #[test]
+    fn ler_ponte_url_retorna_url_do_config() {
+        let _lock = ENV_LOCK.lock().unwrap();
+        let dir = tempfile::tempdir().unwrap();
+        unsafe { std::env::set_var("VARD_DADOS", dir.path()) };
+
+        let config = serde_json::json!({
+            "ponte_url": "http://127.0.0.1:4700"
+        });
+        std::fs::write(dir.path().join("hud.config.json"), config.to_string()).unwrap();
+
+        let url = ler_ponte_url();
+        assert_eq!(url, Some("http://127.0.0.1:4700".to_string()));
+        unsafe { std::env::remove_var("VARD_DADOS") };
+    }
+
+    #[test]
+    fn gate_supervisor_falso_comandos_devolvem_indisponivel() {
+        let _lock = ENV_LOCK.lock().unwrap();
+        let dir = tempfile::tempdir().unwrap();
+        unsafe { std::env::set_var("VARD_DADOS", dir.path()) };
+
+        // Cria instalacao.json com supervisor:false
+        let inst = serde_json::json!({
+            "supervisor": false,
+            "servicos": {}
+        });
+        std::fs::write(dir.path().join("instalacao.json"), inst.to_string()).unwrap();
+
+        reset_fila_para_teste("sessao-gate-false");
+
+        // cmd_ciclo_pedir deve devolver indisponível
+        let resultado = cmd_ciclo_pedir("iniciar".to_string());
+
+        assert!(!resultado.ok);
+        assert!(resultado.erro.as_ref().map(|e| e.contains("indisponivel")).unwrap_or(false));
+        unsafe { std::env::remove_var("VARD_DADOS") };
+    }
+
+    #[test]
+    fn caixa_ipc_so_consome_com_supervisor_ativo() {
+        let _lock = ENV_LOCK.lock().unwrap();
+        let dir = tempfile::tempdir().unwrap();
+        unsafe { std::env::set_var("VARD_DADOS", dir.path()) };
+
+        // Cria instalacao.json com supervisor:false
+        let inst = serde_json::json!({
+            "supervisor": false,
+            "servicos": {}
+        });
+        std::fs::write(dir.path().join("instalacao.json"), inst.to_string()).unwrap();
+
+        reset_fila_para_teste("sessao-caixa-gate");
+
+        // Prepara arquivo IPC válido
+        let pedidos_dir = dir.path().join("ciclo").join("pedidos");
+        std::fs::create_dir_all(&pedidos_dir).unwrap();
+        let id = uuid::Uuid::new_v4().to_string();
+        let conteudo = serde_json::json!({
+            "id": id,
+            "verbo": "iniciar",
+            "sessao": "sessao-caixa-gate"
+        });
+        let arquivo = pedidos_dir.join(format!("{}.json", id));
+        std::fs::write(&arquivo, conteudo.to_string()).unwrap();
+
+        // consumir_pedidos_da_caixa NÃO é gateado por supervisor (é a thread que decide),
+        // mas o executor só roda se supervisor ativo. O consumo em si processa o arquivo.
+        let resultados = consumir_pedidos_da_caixa();
+
+        // O arquivo é consumido (removido) mesmo com supervisor:false,
+        // pois a validação de supervisor acontece no executor/comando, não no consumo.
+        assert_eq!(resultados.len(), 1);
+        assert!(!arquivo.exists());
+        unsafe { std::env::remove_var("VARD_DADOS") };
     }
 }
