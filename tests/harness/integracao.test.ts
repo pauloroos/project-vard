@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
 import type { AddressInfo } from "node:net";
 // @ts-expect-error módulo .mjs sem tipos
