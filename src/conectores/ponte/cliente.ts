@@ -279,6 +279,37 @@ export class Ponte {
     } catch { return null; }
   }
 
+  /** Lê a preferência de dispositivos de áudio da reunião (GET /reuniao/dispositivos). */
+  async lerDispositivosReuniao(): Promise<{ microfone_id: string; microfone_rotulo: string; saida_id: string; saida_rotulo: string } | null> {
+    if (!this.base) return null;
+    try {
+      const r = await fetch(`${this.base}/reuniao/dispositivos`, { signal: AbortSignal.timeout(5000) });
+      if (!r.ok) return null;
+      const j = await r.json().catch(() => null);
+      if (!j || typeof j !== "object") return null;
+      return {
+        microfone_id: String((j as Record<string, unknown>).microfone_id ?? ""),
+        microfone_rotulo: String((j as Record<string, unknown>).microfone_rotulo ?? ""),
+        saida_id: String((j as Record<string, unknown>).saida_id ?? ""),
+        saida_rotulo: String((j as Record<string, unknown>).saida_rotulo ?? ""),
+      };
+    } catch { return null; }
+  }
+
+  /** Grava a preferência de dispositivos de áudio da reunião (POST /reuniao/dispositivos). */
+  async gravarDispositivosReuniao(pref: { microfone_id: string; microfone_rotulo: string; saida_id: string; saida_rotulo: string }): Promise<boolean> {
+    if (!this.base) return false;
+    try {
+      const r = await fetch(`${this.base}/reuniao/dispositivos`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(pref),
+        signal: AbortSignal.timeout(5000),
+      });
+      return r.ok;
+    } catch { return false; }
+  }
+
   /** Gera a ata ou o relatório (qual: "ultima"). A ponte responde a `frase` pronta em ok e em erro (404/409). */
   async gerarAta(tipo: "ata" | "relatorio", qual = "ultima"): Promise<ResultadoReuniao | null> {
     if (!this.base) return null;

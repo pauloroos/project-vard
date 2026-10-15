@@ -6,10 +6,10 @@ import { PhysicalPosition } from "@tauri-apps/api/dpi";
 import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { aplicarAoVivo, atualizarConfig, carregarConfig, lerConfigAoVivo } from "./config/config";
 import type { FalhaAtalho } from "./config/atalhos";
-import { abrirMicrofone, definirMudo, fecharMicrofone, estaMudo, onAmostras, rmsAtual, taxaAtual } from "./audio/microfone";
+import { abrirMicrofone, definirMudo, fecharMicrofone, estaMudo, onAmostras, rmsAtual, taxaAtual, definirMicrofonePreferido } from "./audio/microfone";
 import { DetectorDeVoz } from "./audio/vad";
 import { pcmParaWav, reamostrar } from "./audio/wav";
-import { Boca } from "./audio/boca";
+import { Boca, aplicarSaidaNoContexto } from "./audio/boca";
 import { falaFixa, type FonteDeFala } from "./audio/cache";
 import { OpenJarvis } from "./conectores/openjarvis/cliente";
 import { Ponte } from "./conectores/ponte/cliente";
@@ -28,6 +28,7 @@ import { Adiador } from "./ui/dock";
 import { Hud } from "./ui/hud";
 import { Invisibilidade } from "./ui/invisivel";
 import { Nucleo } from "./ui/nucleo";
+import { restaurarPreferencia, onDeviceChange, obterPreferencia } from "./audio/dispositivos";
 import { ladoDoTamanho, ladoMudou, medidasDoWidget } from "./ui/tamanho";
 import { ESPELHO_INICIAL, reduzir, salaExiste, type Espelho, type EventoEspelho } from "./sala/espelho";
 import { lerNiveis } from "./sala/espectro";
@@ -79,6 +80,25 @@ window.addEventListener("DOMContentLoaded", async () => {
     aoTela: () => olharTela(),
     aoConfigMudou: (c) => { void emitTo("configuracoes", "config-mudou-no-widget", { sempre_no_topo: c.sempre_no_topo, compacto: c.compacto }).catch(() => {}); },
   });
+  // Dispositivos de áudio: restaura a preferência salva e aplica o microfone escolhido.
+  restaurarPreferencia({
+    microfone_id: cfg.microfone_id,
+    microfone_rotulo: cfg.microfone_rotulo,
+    saida_id: cfg.saida_id,
+    saida_rotulo: cfg.saida_rotulo,
+  });
+  definirMicrofonePreferido(cfg.microfone_id);
+  // devicechange: revalida a preferência quando dispositivo reaparece ou some.
+  // No modo jogo o microfone está solto; não reabre captura aqui — alternarMicrofone já cuida disso ao sair do jogo.
+  let emModoJogo = false;
+  onDeviceChange(() => {
+    if (emModoJogo) return;
+    const pref = obterPreferencia();
+    definirMicrofonePreferido(pref.microfone_id);
+    // A reabertura da captura com o novo deviceId acontece naturalmente na próxima fala;
+    // não fechamos o microfone aqui para evitar cortes em conversas ativas.
+  });
+
   // "Não ouvir" salvo: o widget nasce com o microfone desligado (é assim que ele abre; o botão Mudo fica aceso).
   if (cfg.nao_ouvir) hud.setMudo(true);
   // Bandeja (comando do Rust): espelha os dois estados; erro ignorado enquanto ele não existe.
@@ -493,6 +513,7 @@ window.addEventListener("DOMContentLoaded", async () => {
       definirMudo(false);
       hud.setMudo(false);
       bocaReal = new Boca(mic.contexto);
+      void aplicarSaidaNoContexto(mic.contexto).catch(() => {});
       hud.setTaxa(mic.contexto.sampleRate);
       mostrarEstado(conversa.estado, conversa.detalhe);
       nucleo.setAnalisadores(mic.analisador, bocaReal.analisador);
@@ -526,7 +547,9 @@ window.addEventListener("DOMContentLoaded", async () => {
     // Com o microfone fechado, a boca ganha um AudioContext próprio (sem pedir permissão de microfone).
     const injetar = async (texto: string, pushToTalk: boolean) => {
       if (!bocaReal) {
-        bocaReal = new Boca(new AudioContext());
+        const ctxDev = new AudioContext();
+        void aplicarSaidaNoContexto(ctxDev).catch(() => {});
+        bocaReal = new Boca(ctxDev);
         nucleo.setAnalisadores(null, bocaReal.analisador);
       }
       ocupado = true;
