@@ -1,3 +1,4 @@
+mod bandeja;
 mod cofre;
 mod comandos;
 mod diagnostico;
@@ -249,12 +250,12 @@ pub fn run() {
             cofre::migrar_no_arranque(&handle);
 
             // T4: inicia serviços habilitados via instalacao.json
+            let recursos = handle.path().resource_dir().unwrap_or_default();
+            let raiz = instalacao::resolver_raiz(&recursos);
+            let dados = ciclo::pasta_dados();
+            let arquivo = instalacao::arquivo_instalacao();
+            let config_instalacao = instalacao::ler_instalacao(&arquivo).unwrap_or_default();
             {
-                let recursos = handle.path().resource_dir().unwrap_or_default();
-                let raiz = instalacao::resolver_raiz(&recursos);
-                let dados = ciclo::pasta_dados();
-                let arquivo = instalacao::arquivo_instalacao();
-                let config_instalacao = instalacao::ler_instalacao(&arquivo).unwrap_or_default();
                 let (_iniciados, avisos) = instalacao::iniciar_servicos(
                     &config_instalacao,
                     &recursos,
@@ -289,6 +290,16 @@ pub fn run() {
                 .unwrap_or(false);
             criar_bandeja(&handle, no_topo, invisivel, nao_ouvir, nao_falar)?;
             registrar_atalhos(&handle, &config);
+
+            // T8: registra AppHandle para emissão de eventos e inicializa ciclo se supervisor ativo
+            ciclo::registrar_app_handle(handle.clone());
+            if config_instalacao.supervisor {
+                let sessao = format!("{}-{}", std::process::id(), chrono::Utc::now().timestamp_millis());
+                ciclo::inicializar_fila(&sessao);
+                ciclo::iniciar_executor_da_fila();
+                ciclo::iniciar_consumidor_da_caixa();
+            }
+
             Ok(())
         })
         .run(tauri::generate_context!())
