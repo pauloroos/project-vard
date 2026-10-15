@@ -101,6 +101,53 @@ describe("AbaModelos", () => {
   });
 });
 
+describe("AbaModelos.cerebro", () => {
+  it("renderiza_dois_radios_de_cerebro_com_openjarvis_marcado_por_padrao", async () => {
+    const t = montar(["a"], null);
+    await t.aba.carregar();
+    const campo = t.raiz.querySelector("#mod-cerebro");
+    const radios = labels(campo).filter((l) => (l.filhos[0] as No).name === "cerebro");
+    expect(radios).toHaveLength(2);
+    expect(radios[0].filhos[0]).toMatchObject({ value: "openjarvis", checked: true });
+    expect(radios[1].filhos[0]).toMatchObject({ value: "proprio", checked: false });
+  });
+
+  it("respeita_cerebroInicial_proprio", async () => {
+    const raiz = new No();
+    const oj = { modelos: async () => [] } as unknown as OpenJarvis;
+    const aba = new AbaModelos(raiz as unknown as HTMLElement, "", { criarOj: () => oj, statusPonte: async () => null, cerebroInicial: "proprio" });
+    await aba.carregar();
+    const radios = labels(raiz.querySelector("#mod-cerebro")).filter((l) => (l.filhos[0] as No).name === "cerebro");
+    expect(radios[1].filhos[0]).toMatchObject({ value: "proprio", checked: true });
+    expect(aba.cerebro).toBe("proprio");
+  });
+
+  it("aoMudarCerebro_eh_chamado_ao_trocar_radio", async () => {
+    const cb = vi.fn();
+    const t = montar(["a"], null);
+    (t.aba as any).deps.aoMudarCerebro = cb;
+    await t.aba.carregar();
+    const radios = labels(t.raiz.querySelector("#mod-cerebro")).filter((l) => (l.filhos[0] as No).name === "cerebro");
+    const proprio = radios[1].filhos[0] as No;
+    proprio.checked = true;
+    proprio.ouvintes.change[0]();
+    expect(cb).toHaveBeenCalledWith("proprio");
+    expect(t.aba.cerebro).toBe("proprio");
+  });
+
+  it("nao_chama_aoMudarCerebro_quando_valor_nao_muda", async () => {
+    const cb = vi.fn();
+    const t = montar(["a"], null);
+    (t.aba as any).deps.aoMudarCerebro = cb;
+    await t.aba.carregar();
+    const radios = labels(t.raiz.querySelector("#mod-cerebro")).filter((l) => (l.filhos[0] as No).name === "cerebro");
+    const oj = radios[0].filhos[0] as No;
+    oj.checked = true;
+    oj.ouvintes.change[0]();
+    expect(cb).not.toHaveBeenCalled();
+  });
+});
+
 describe("agruparModelos", () => {
   it("separa_local_e_nuvem", () => {
     expect(agruparModelos(["a", "b", "c"], ["b"])).toEqual([{ titulo: "LM Studio (local)", ids: ["b"] }, { titulo: "OmniRouter (nuvem)", ids: ["a", "c"] }]);

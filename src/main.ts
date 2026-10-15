@@ -244,6 +244,10 @@ window.addEventListener("DOMContentLoaded", async () => {
       }
     }
     if (tipo === "reuniao") estadoReuniao.aplicarEvento(dados);
+    // Cérebro próprio: repassa eventos de pedido via MessageEvent para a conversa consumir.
+    if (tipo === "pedido") {
+      window.dispatchEvent(new MessageEvent("vard-evento-pedido", { data: JSON.stringify(dados) }));
+    }
   });
   let ponteNoAr = true; // desconhecida até a 1ª sondagem (já disparada abaixo): tenta a ponte em vez de dizer que não há
   const espera = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
@@ -272,12 +276,15 @@ window.addEventListener("DOMContentLoaded", async () => {
     });
   };
 
+  let sessaoVozId = crypto.randomUUID();
   const conversa = new Conversa({
     oj, boca, config: cfg,
     ...(voz ? { voz } : {}),
     falas: fixa,
     reuniaoAtiva: () => reuniaoAtiva,
     falarPermitida: () => !naoFalar,
+    cerebro: cfg.cerebro,
+    sessaoVoz: () => sessaoVozId,
     aoEstado: (e, detalhe) => {
       mostrarEstado(e, detalhe);
       // Terminou de falar: descarta o pre-roll, que teria a cauda da própria voz (eco).

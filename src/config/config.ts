@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { PROVEDORES_VOZ, type ProvedorVoz } from "../conectores/voz/escolher";
 import { migrarAtalhosWin, normalizarAtalho, type AcaoAtalho } from "./atalhos";
+import { CEREBRO_PADRAO, ehCerebro, type Cerebro } from "./cerebro";
 
 export const TAMANHOS = ["pequeno", "medio", "grande", "personalizado"] as const;
 
@@ -45,6 +46,8 @@ export interface Config {
   nao_falar: boolean;
   /** Fala os avisos que chegam da ponte (tarefa/reunião); nunca com nao_falar ligado. */
   falar_avisos: boolean;
+  /** Cérebro ativo: 'openjarvis' (padrão, nada muda) ou 'proprio' (usa rotas /pedidos do núcleo). */
+  cerebro: Cerebro;
 }
 
 export const CONFIG_PADRAO: Config = {
@@ -65,6 +68,7 @@ export const CONFIG_PADRAO: Config = {
   voz_provedor: "propria", voz_propria: "", elevenlabs_chave: "", elevenlabs_voz: "", gemini_chave: "", gemini_voz: "Kore",
   atualizacao_ao_abrir: false,
   nao_ouvir: false, nao_falar: false, falar_avisos: false,
+  cerebro: CEREBRO_PADRAO,
   microfone_id: "", microfone_rotulo: "", saida_id: "", saida_rotulo: "",
 };
 
@@ -148,7 +152,7 @@ export function avisosDeUrl(c: Pick<Config, "openjarvis_url" | "gui_url" | "pont
 }
 
 /** Chaves que o widget aplica na hora (evento config-salva). O resto só vale depois de reiniciar. */
-export const CHAVES_AO_VIVO = ["tamanho", "tamanho_px", "compacto", "sempre_no_topo", "click_through", "invisivel", "usuario", "modelo", "conversa_ms", "nao_ouvir", "nao_falar", "falar_avisos"] as const satisfies readonly (keyof Config)[];
+export const CHAVES_AO_VIVO = ["tamanho", "tamanho_px", "compacto", "sempre_no_topo", "click_through", "invisivel", "usuario", "modelo", "conversa_ms", "nao_ouvir", "nao_falar", "falar_avisos", "cerebro"] as const satisfies readonly (keyof Config)[];
 export type ChaveAoVivo = (typeof CHAVES_AO_VIVO)[number];
 
 /** Copia para a config viva do widget só as chaves ao vivo; devolve as que mudaram. */
@@ -192,7 +196,8 @@ export function lerConfigAoVivo(x: unknown): Pick<Config, ChaveAoVivo> | null {
   if (typeof o.usuario !== "string" || typeof o.modelo !== "string") return null;
   if (typeof o.conversa_ms !== "number" || !Number.isFinite(o.conversa_ms) || o.conversa_ms < 0) return null;
   if (typeof o.nao_ouvir !== "boolean" || typeof o.nao_falar !== "boolean" || typeof o.falar_avisos !== "boolean") return null;
-  return { tamanho: o.tamanho as Config["tamanho"], tamanho_px: limitarLado(px), compacto: o.compacto, sempre_no_topo: o.sempre_no_topo, click_through: o.click_through, invisivel: o.invisivel, usuario: o.usuario, modelo: o.modelo, conversa_ms: Math.round(o.conversa_ms), nao_ouvir: o.nao_ouvir, nao_falar: o.nao_falar, falar_avisos: o.falar_avisos };
+  const cerebro = ehCerebro(o.cerebro) ? o.cerebro : CEREBRO_PADRAO;
+  return { tamanho: o.tamanho as Config["tamanho"], tamanho_px: limitarLado(px), compacto: o.compacto, sempre_no_topo: o.sempre_no_topo, click_through: o.click_through, invisivel: o.invisivel, usuario: o.usuario, modelo: o.modelo, conversa_ms: Math.round(o.conversa_ms), nao_ouvir: o.nao_ouvir, nao_falar: o.nao_falar, falar_avisos: o.falar_avisos, cerebro };
 }
 
 /** Valida o payload de config-mudou-no-widget (topo e compacto); inválido devolve null. */
