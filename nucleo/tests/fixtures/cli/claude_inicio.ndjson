@@ -1,0 +1,1 @@
+{"type":"system","subtype":"init","cwd":"/tmp/vard-cli-teste","session_id":"sess-claude-001","tools":["Bash","Read","Write"],"mcp_servers":[{"name":"ai-memory","status":"connected","source":"user"}],"model":"claude-opus-5-5","permissionMode":"auto"}

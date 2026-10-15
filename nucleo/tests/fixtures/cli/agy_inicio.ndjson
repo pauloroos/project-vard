@@ -1,0 +1,1 @@
+{"event":"init","conversation_id":"conv-agy-001","init":{"model":"gemini-3.8-flash-low","cwd":"/tmp/vard-cli-teste","tools":["run_command","read_url_content","write_to_file"],"permission_mode":"request-review"}}

@@ -1,0 +1,2 @@
+{"event":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","id":"toolu-agy-001","name":"run_command","input":{"command":"echo oi"}}]}}
+{"event":"assistant","message":{"role":"assistant","content":[{"type":"tool_result","tool_use_id":"toolu-agy-001","content":"oi"}]}}

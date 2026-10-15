@@ -1,0 +1,2 @@
+{"type":"assistant","message":{"id":"msg-002","role":"assistant","content":[{"type":"server_tool_use","id":"toolu-001","name":"Bash","input":{"command":"echo oi"}}]}}
+{"type":"assistant","message":{"id":"msg-002","role":"assistant","content":[{"type":"bash_tool_result","tool_use_id":"toolu-001","content":"oi"}]}}
