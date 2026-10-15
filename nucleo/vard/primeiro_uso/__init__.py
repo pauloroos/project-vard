@@ -1,0 +1,1 @@
+"""Primeiro uso: assistente de configuração inicial retomável (T2 da 0.9)."""
