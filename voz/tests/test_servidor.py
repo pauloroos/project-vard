@@ -35,8 +35,8 @@ class MotorFalso:
         yield b"\x02\x00" * 5
 
 
-def cliente(motor):
-    return TestClient(criar_app(motor, carregar_em_thread=False), base_url="http://127.0.0.1:4710")
+def cliente(motor, motor_kokoro=None):
+    return TestClient(criar_app(motor, motor_kokoro=motor_kokoro, carregar_em_thread=False), base_url="http://127.0.0.1:4710")
 
 
 def test_saude_antes_do_aquecimento():
@@ -114,12 +114,14 @@ def test_motor_recebe_texto_normalizado_wav_e_pcm():
 
 
 def test_vozes_lista_e_atual():
-    r = cliente(MotorFalso()).get("/vozes")
+    # motor_kokoro=None isola o comportamento XTTS-only; com Kokoro ativo a lista inclui vozes Kokoro.
+    r = cliente(MotorFalso(), motor_kokoro=None).get("/vozes")
     assert r.status_code == 200 and r.json() == {"vozes": ["Suad Qasim", "Ana Florence"], "atual": "Suad Qasim"}
 
 
 def test_vozes_aquecendo_503():
-    assert cliente(MotorFalso(pronta=False)).get("/vozes").status_code == 503
+    # Sem Kokoro e XTTS não pronto → 503; com Kokoro ativo o endpoint retorna 200 (vozes Kokoro disponíveis).
+    assert cliente(MotorFalso(pronta=False), motor_kokoro=None).get("/vozes").status_code == 503
 
 
 def test_falar_com_voz_passa_ao_motor():
