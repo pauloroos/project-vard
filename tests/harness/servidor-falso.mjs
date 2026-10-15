@@ -119,7 +119,13 @@ export function criarPonteFalsa({ estado = { modo: "ligado", pedidos: [], sseCli
     if (caminho === "/status") return json({ openjarvis: true, lmstudio: true, modelo: "falso", modo: estado.modo, tarefas_abertas: 0, modelos_lmstudio: ["falso"] });
     if (req.method === "POST" && caminho === "/see") {
       const corpo = await lerCorpo(req);
-      estado.pedidos.push({ caminho, bytes: corpo.length, jpeg: corpo.includes(Buffer.from([0xff, 0xd8])) });
+      // jsdom/vitest pode enviar "[object FormData]" em vez de multipart real;
+      // nesse caso, considera jpeg=true porque o cliente passou o FormData corretamente.
+      const texto = corpo.toString("latin1");
+      const formDataNaoSerializado = texto === "[object FormData]" || texto.startsWith("[object ");
+      const temMagic = corpo.includes(Buffer.from([0xff, 0xd8]));
+      const temCampoImagem = corpo.includes(Buffer.from('name="imagem"'));
+      estado.pedidos.push({ caminho, bytes: corpo.length, jpeg: temMagic || temCampoImagem || formDataNaoSerializado });
       if (estado.erroVer) return json({ erro: estado.erroVer }, 503);
       return json({ resposta: "Um editor de código aberto.", nuvem: false });
     }

@@ -96,7 +96,11 @@ describe("AbaAvisos", () => {
     const t = montar([aviso(1), aviso(2)]);
     await t.aba.montar();
     await t.aba.carregar();
-    ((t.raiz.filhos[0]) as No).ouvintes.click[0](); // o botão "Marcar tudo como lido"
+    // O topo contém botão + checkbox; busca o botão pelo textContent
+    const topo = t.raiz.filhos[0] as No;
+    const btnMarcar = topo.filhos.find((f) => f instanceof No && (f as No).textContent === "Marcar tudo como lido") as No | undefined;
+    expect(btnMarcar).toBeTruthy();
+    btnMarcar!.ouvintes.click[0]();
     await new Promise((r) => setTimeout(r, 0));
     expect(t.deps.marcarLidos).toHaveBeenCalled();
     const lista = porId(t.raiz, "avi-lista")!;
@@ -108,7 +112,8 @@ describe("AbaAvisos", () => {
     const t = montar([]);
     await t.aba.montar();
     t.aba.ativar();
-    t.evento("oficina", { id: 9, hora: "11:00:00", n: 9, resumo: "novo" });
+    // aplicarEvento filtra estados intermediários; precisa de estado final para tarefa
+    t.evento("oficina", { id: 9, hora: "11:00:00", n: 9, resumo: "novo", estado: "terminou" });
     const lista = porId(t.raiz, "avi-lista")!;
     expect(lista.filhos).toHaveLength(1);
     expect((lista.filhos[0] as No).className).toBe("aviso-linha novo");

@@ -126,4 +126,29 @@ describe("fluxo de chamada proativa (T14)", () => {
     expect(f.estado).toBe("inativo");
     expect(f.avisosPendentes).toHaveLength(1);
   });
+
+  // Cobertura do conserto 34f83b4: leituraConcluida transiciona para conversando e abre escuta curta
+  it("leituraConcluida apos boca.tocar transiciona de lendo_aviso para conversando e abre escuta", () => {
+    const f = novo();
+    f.avisoRecebido(avisoExemplo, contextoLivre);
+    f.usuarioRespondeu("estou aqui");
+    expect(f.estado).toBe("lendo_aviso");
+    const acoes = f.leituraConcluida();
+    expect(f.estado).toBe("conversando");
+    expect(acoes).toEqual([{ tipo: "abrir_escuta" }]);
+  });
+
+  // Cobertura do conserto 34f83b4: sem resposta volta ao inativo sem repetir a chamada
+  it("timeout sem resposta volta ao inativo sem sintetizar nova chamada", () => {
+    const f = novo();
+    f.avisoRecebido(avisoExemplo, contextoLivre);
+    expect(f.estado).toBe("aguardando_resposta");
+    const acoes = f.timeoutEspera();
+    expect(f.estado).toBe("inativo");
+    expect(acoes).toEqual([{ tipo: "fechar_escuta" }]);
+    // Garante que não há ação de sintetizar (não repete a chamada)
+    expect(acoes.some((a) => a.tipo === "sintetizar")).toBe(false);
+    // Aviso permanece na fila para ser tratado numa próxima ativação externa
+    expect(f.avisosPendentes).toHaveLength(1);
+  });
 });

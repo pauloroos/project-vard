@@ -53,7 +53,7 @@ describe("paineis-vozes (T6)", () => {
     (raiz.querySelector("#btn-adicionar-voz") as HTMLButtonElement).click();
     (raiz.querySelector("#voz-id") as HTMLInputElement).value = "kokoro";
     (raiz.querySelector("#voz-nome") as HTMLInputElement).value = "Kokoro Local";
-    (raiz.querySelector("#voz-tipo") as HTMLInputElement).value = "local";
+    (raiz.querySelector("#voz-tipo") as HTMLSelectElement).value = "kokoro";
     (raiz.querySelector("#voz-url") as HTMLInputElement).value = "http://127.0.0.1:9000";
     (raiz.querySelector("#voz-modelo") as HTMLInputElement).value = "kokoro-v1";
     (raiz.querySelector("#btn-salvar-voz") as HTMLButtonElement).click();
@@ -67,7 +67,7 @@ describe("paineis-vozes (T6)", () => {
   it("editar voz existente atualiza config", async () => {
     cfgEmMemoria = {
       ...PAINEIS_PADRAO,
-      provedores: [{ id: "x", nome: "Antigo", tipo: "t", url_base: "u", modelo: "m" }],
+      provedores: [{ id: "x", nome: "Antigo", tipo: "suad", url_base: "u", modelo: "m" }],
     };
     const raiz = criarRaiz();
     const aba = new AbaPaineisVozes(raiz);
@@ -83,8 +83,8 @@ describe("paineis-vozes (T6)", () => {
     cfgEmMemoria = {
       ...PAINEIS_PADRAO,
       provedores: [
-        { id: "a", nome: "A", tipo: "t", url_base: "u", modelo: "m" },
-        { id: "b", nome: "B", tipo: "t", url_base: "u", modelo: "m" },
+        { id: "a", nome: "A", tipo: "suad", url_base: "u", modelo: "m" },
+        { id: "b", nome: "B", tipo: "kokoro", url_base: "u", modelo: "m" },
       ],
     };
     const raiz = criarRaiz();
@@ -99,7 +99,7 @@ describe("paineis-vozes (T6)", () => {
   it("selecionar voz ativa persiste", async () => {
     cfgEmMemoria = {
       ...PAINEIS_PADRAO,
-      provedores: [{ id: "s", nome: "S", tipo: "t", url_base: "u", modelo: "m" }],
+      provedores: [{ id: "s", nome: "S", tipo: "suad", url_base: "u", modelo: "m" }],
     };
     const raiz = criarRaiz();
     const aba = new AbaPaineisVozes(raiz);
@@ -114,7 +114,7 @@ describe("paineis-vozes (T6)", () => {
   it("formulário recusa ID duplicado em novo", async () => {
     cfgEmMemoria = {
       ...PAINEIS_PADRAO,
-      provedores: [{ id: "existente", nome: "E", tipo: "t", url_base: "u", modelo: "m" }],
+      provedores: [{ id: "existente", nome: "E", tipo: "suad", url_base: "u", modelo: "m" }],
     };
     const raiz = criarRaiz();
     const aba = new AbaPaineisVozes(raiz);
@@ -122,7 +122,7 @@ describe("paineis-vozes (T6)", () => {
     (raiz.querySelector("#btn-adicionar-voz") as HTMLButtonElement).click();
     (raiz.querySelector("#voz-id") as HTMLInputElement).value = "existente";
     (raiz.querySelector("#voz-nome") as HTMLInputElement).value = "N";
-    (raiz.querySelector("#voz-tipo") as HTMLInputElement).value = "t";
+    (raiz.querySelector("#voz-tipo") as HTMLSelectElement).value = "suad";
     (raiz.querySelector("#voz-url") as HTMLInputElement).value = "u";
     (raiz.querySelector("#voz-modelo") as HTMLInputElement).value = "m";
     (raiz.querySelector("#btn-salvar-voz") as HTMLButtonElement).click();
@@ -145,7 +145,7 @@ describe("paineis-vozes (T6)", () => {
     mockCofreExiste.mockResolvedValue(true);
     cfgEmMemoria = {
       ...PAINEIS_PADRAO,
-      provedores: [{ id: "s", nome: "S", tipo: "t", url_base: "u", modelo: "m", credencial_ref: "voz:s" }],
+      provedores: [{ id: "s", nome: "S", tipo: "suad", url_base: "u", modelo: "m", credencial_ref: "voz:s" }],
     };
     const raiz = criarRaiz();
     const aba = new AbaPaineisVozes(raiz);
