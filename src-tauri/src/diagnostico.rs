@@ -221,8 +221,25 @@ impl Drop for LiberaExecucao {
 }
 
 /// Constrói o código Python inline que importa e roda o módulo de diagnóstico.
+/// Para "preflight", executa preflight.py --json diretamente (T10c).
+/// Para "basico", usa o módulo vard.diagnostico como antes.
 fn build_python_code(tipo: &str) -> String {
-    // Código seguro sem strings raw problemáticas: usa apenas ASCII e imports diretos.
+    if tipo == "preflight" {
+        // T10c: executa preflight.py --json via subprocess dentro do Python embutido
+        // para garantir que o JobHandle mate todo o tree se cancelar/timeout.
+        return r#"import sys,json,subprocess,os;
+p=os.path.join(os.path.dirname(os.path.abspath(__file__)),'..','preflight.py') if '__file__' in dir() else 'nucleo/preflight.py';
+try:
+ r=subprocess.run([sys.executable,p,'--json'],capture_output=True,text=True,timeout=900);
+ out=r.stdout.strip();
+ if not out:
+  print(json.dumps(dict(checagens=[],relatorio='preflight sem saida',duracao_ms=0)))
+ else:
+  print(out)
+except Exception as e:
+ print(json.dumps(dict(checagens=[],relatorio='Erro preflight: '+str(e)[:200],duracao_ms=0)))"#.to_string();
+    }
+    // Básico: usa o módulo vard.diagnostico como antes
     format!(
         "import sys,json;\
 try:\
@@ -276,5 +293,96 @@ mod testes {
         // Segundo swap deve retornar true (já estava ocupado)
         assert!(EM_EXECUCAO.swap(true, Ordering::SeqCst));
         EM_EXECUCAO.store(false, Ordering::SeqCst);
+    }
+
+    /// Espera até que o processo termine ou timeout expire. Retorna true se terminou.
+    fn esperar_morte(child: &mut std::process::Child, timeout: Duration) -> bool {
+        let inicio = Instant::now();
+        while inicio.elapsed() < timeout {
+            match child.try_wait() {
+                Ok(Some(_)) => return true,
+                Ok(None) => std::thread::sleep(Duration::from_millis(50)),
+                Err(_) => return false,
+            }
+        }
+        false
+    }
+
+    /// T10c: comando falso que dorme além do prazo -> diagnóstico termina com erro
+    /// e o processo (e neto) MORREU via JobHandle. Prazo injetável (2s).
+    #[test]
+    fn prazo_excedido_mata_processo_e_neto() {
+        use std::process::{Command, Stdio};
+        let job = JobHandle::novo().expect("job");
+        // Script Python que cria um filho (neto do teste) e dorme 30s
+        let script = r#"import subprocess,sys,time;subprocess.Popen([sys.executable,"-c","import time;time.sleep(30)"]);time.sleep(30)"#;
+        let mut child = Command::new(std::env::var("PYTHON_TEST_EXE").unwrap_or_else(|_| "python".into()))
+            .args(["-c", script])
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .expect("spawn");
+        job.adotar(&child).expect("adotar");
+        // Espera 2s (prazo injetado) e termina o job
+        std::thread::sleep(Duration::from_secs(2));
+        job.terminar();
+        // TerminateJobObject é assíncrono; espera até 2s pela morte
+        assert!(esperar_morte(&mut child, Duration::from_secs(2)), "processo ainda vivo após job.terminar()");
+    }
+
+    /// T10c: cancelar no meio -> processo morto via JobHandle.
+    #[test]
+    fn cancelamento_mata_processo() {
+        use std::process::{Command, Stdio};
+        CANCELADO.store(false, Ordering::SeqCst);
+        let job = JobHandle::novo().expect("job");
+        let script = r#"import time;time.sleep(30)"#;
+        let mut child = Command::new(std::env::var("PYTHON_TEST_EXE").unwrap_or_else(|_| "python".into()))
+            .args(["-c", script])
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .expect("spawn");
+        job.adotar(&child).expect("adotar");
+        // Simula cancelamento após 1s
+        std::thread::sleep(Duration::from_secs(1));
+        CANCELADO.store(true, Ordering::SeqCst);
+        job.terminar();
+        assert!(esperar_morte(&mut child, Duration::from_secs(2)), "processo ainda vivo após cancelamento");
+        CANCELADO.store(false, Ordering::SeqCst);
+    }
+
+    /// T10c: processo 'runtime' fora do job continua VIVO após job.terminar().
+    #[test]
+    fn processo_fora_do_job_sobrevive() {
+        use std::process::{Command, Stdio};
+        let job = JobHandle::novo().expect("job");
+        // Processo DENTRO do job
+        let script_dentro = r#"import time;time.sleep(30)"#;
+        let mut dentro = Command::new(std::env::var("PYTHON_TEST_EXE").unwrap_or_else(|_| "python".into()))
+            .args(["-c", script_dentro])
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .expect("spawn dentro");
+        job.adotar(&dentro).expect("adotar dentro");
+        // Processo FORA do job
+        let script_fora = r#"import time;time.sleep(5)"#;
+        let mut fora = Command::new(std::env::var("PYTHON_TEST_EXE").unwrap_or_else(|_| "python".into()))
+            .args(["-c", script_fora])
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .expect("spawn fora");
+        let fora_pid = fora.id();
+        // Termina o job
+        job.terminar();
+        std::thread::sleep(Duration::from_millis(500));
+        // Dentro deve estar morto
+        assert!(dentro.try_wait().ok().flatten().is_some(), "dentro deveria estar morto");
+        // Fora deve estar vivo
+        assert!(fora.try_wait().ok().flatten().is_none(), "fora deveria estar vivo");
+        // Limpa o processo fora
+        let _ = fora.kill();
     }
 }

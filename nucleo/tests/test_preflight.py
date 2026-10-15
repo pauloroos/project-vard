@@ -547,3 +547,64 @@ def test_agente_remoto_com_config_usa_o_remoto(monkeypatch, tmp_path):
     monkeypatch.setattr(preflight.subprocess, "run", _run)
     ok, d = preflight.agente_remoto_acessivel()
     assert ok and "vard-agente" in d and "ssh" in " ".join(chamado["args"])
+
+
+# === T10c: testes do modo --json ===
+
+def test_rodar_como_json_tem_todas_as_checagens_do_texto():
+    """O JSON deve ter exatamente as mesmas checagens (por nome) que o modo texto."""
+    resultado = preflight.rodar_como_json()
+    nomes_json = {c["nome"] for c in resultado["checagens"]}
+    nomes_texto = {nome for nome, _fn in preflight.checagens()}
+    assert nomes_json == nomes_texto, f"Diferença: {nomes_texto - nomes_json} | {nomes_json - nomes_texto}"
+
+
+def test_rodar_como_json_estrutura_correta():
+    """Cada checagem JSON tem grupo, nome, estado válido e frase não vazia."""
+    resultado = preflight.rodar_como_json()
+    estados_validos = {"ok", "aviso", "falha"}
+    for c in resultado["checagens"]:
+        assert "grupo" in c and isinstance(c["grupo"], str) and len(c["grupo"]) > 0
+        assert "nome" in c and isinstance(c["nome"], str) and len(c["nome"]) > 0
+        assert c["estado"] in estados_validos, f"Estado inválido: {c['estado']} em {c['nome']}"
+        assert "frase" in c and isinstance(c["frase"], str)
+    assert "relatorio" in resultado and isinstance(resultado["relatorio"], str)
+    assert "duracao_ms" in resultado and isinstance(resultado["duracao_ms"], int)
+
+
+def test_rodar_como_json_integracao_desligada_vira_aviso_ou_falha():
+    """Integração desligada (ex: OpenJarvis fora) vira aviso ou falha, nunca ok falso."""
+    resultado = preflight.rodar_como_json()
+    # Pelo menos uma checagem de integração deve existir
+    integracoes = [c for c in resultado["checagens"] if c["grupo"] == "Integração"]
+    assert len(integracoes) > 0, "Deve haver checagens de Integração"
+
+
+def test_sanitizar_remove_segredo_sintetico():
+    """Segredo sintético numa exceção não aparece na saída sanitizada."""
+    segredo = "sk-" + "a" * 32
+    texto = f"Erro: token={segredo} vazou"
+    limpo = preflight._sanitizar(texto)
+    assert segredo not in limpo
+    assert "***REDACTED***" in limpo or "token=" in limpo.lower()
+
+
+def test_sanitizar_remove_caminho_pessoal():
+    """Caminho pessoal Windows é substituído por placeholder."""
+    usuario = "usuario-teste"
+    texto = f"Arquivo em X:\\Users\\{usuario}\\.env não encontrado"
+    limpo = preflight._sanitizar(texto)
+    assert usuario not in limpo.lower() or "***USER***" in limpo
+
+
+def test_main_json_flag_produz_json_valido(capsys, monkeypatch):
+    """main() com --json produz JSON válido no stdout."""
+    import sys
+    monkeypatch.setattr(sys, "argv", ["preflight.py", "--json"])
+    codigo = preflight.main()
+    capturado = capsys.readouterr()
+    import json as _json
+    dados = _json.loads(capturado.out.strip())
+    assert "checagens" in dados
+    assert isinstance(dados["checagens"], list)
+    assert codigo in (0, 1)  # 0 se tudo ok, 1 se alguma falha

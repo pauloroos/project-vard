@@ -1138,9 +1138,97 @@ def checagens() -> list[tuple[str, Callable[[], Check]]]:
     ]
 
 
+def _sanitizar(texto: str) -> str:
+    """Remove credenciais, tokens e caminhos pessoais da saída."""
+    import re as _re
+    # Tokens Bearer / API keys comuns
+    texto = _re.sub(r"(Bearer\s+)\S+", r"\1***REDACTED***", texto, flags=_re.IGNORECASE)
+    texto = _re.sub(r"(token|chave|secret|password|api[_-]?key)\s*[:=]\s*\S+", r"\1=***REDACTED***", texto, flags=_re.IGNORECASE)
+    # Caminhos absolutos Windows com usuário
+    texto = _re.sub(r"[A-Za-z]:\\Users\\[^\\]+", r"X:\\Users\\***USER***", texto)
+    # UUIDs e hashes longos que podem ser segredos
+    texto = _re.sub(r"[0-9a-fA-F]{32,}", "***HASH***", texto)
+    return texto
+
+
+def rodar_como_json() -> dict:
+    """Executa todas as checagens e devolve resultado estruturado em JSON.
+
+    Contrato T10c: {checagens: [{grupo, nome, estado, frase}], relatorio, duracao_ms}
+    - grupo: derivado do nome da checagem (primeira palavra ou prefixo conhecido)
+    - estado: "ok" | "aviso" | "falha"
+    - frase: sanitizada (sem credenciais nem caminhos pessoais)
+    """
+    import time as _time
+    inicio = _time.monotonic()
+    resultados = []
+    ok_count = falhas_count = avisos_count = 0
+
+    # Mapeamento de prefixos para grupos
+    def _grupo(nome: str) -> str:
+        n = nome.lower()
+        if n.startswith(("porta", "loopback")): return "Rede"
+        if n.startswith(("lm studio", "gemma", "modelo")): return "Modelo"
+        if n.startswith(("omni", "openjarvis", "ponte", "mesa", "oficina", "consulta", "delegada")): return "Integração"
+        if n.startswith(("fala", "voz", "transcreve", "sintetiza", "whisper", "kokoro", "xtts")): return "Áudio"
+        if n.startswith(("reunião", "reuniao", "ata", "diarização", "latência")): return "Reunião"
+        if n.startswith(("orca", "repo", "coolify", "ssh", "agente remoto")): return "Infra"
+        if n.startswith(("telegram", "bot")): return "Telegram"
+        if n.startswith(("memória", "memoria", "ai-memory")): return "Memória"
+        if n.startswith(("manhã", "rotina", "feed", "google", "digest")): return "Rotina"
+        if n.startswith(("vigia", "trava")): return "Segurança"
+        if n.startswith(("ciclo", "modo", "logon", "início")): return "Ciclo"
+        if n.startswith(("segredo", "arquivo servido", "mute", "patch")): return "Configuração"
+        if n.startswith(("hora", "contexto", "origin")): return "Runtime"
+        return "Geral"
+
+    for nome, fn in checagens():
+        try:
+            passou, detalhe = fn()
+        except Exception as exc:
+            passou, detalhe = False, f"{type(exc).__name__}: {_sanitizar(str(exc))}"[:200]
+
+        detalhe_sanitizado = _sanitizar(detalhe)
+        aviso = passou and "AVISO" in detalhe_sanitizado
+
+        if aviso:
+            estado = "aviso"
+            avisos_count += 1
+        elif passou:
+            estado = "ok"
+            ok_count += 1
+        else:
+            estado = "falha"
+            falhas_count += 1
+
+        resultados.append({
+            "grupo": _grupo(nome),
+            "nome": nome,
+            "estado": estado,
+            "frase": detalhe_sanitizado[:500],
+        })
+
+    duracao_ms = int((_time.monotonic() - inicio) * 1000)
+    relatorio = f"{ok_count} ok, {falhas_count} falhas, {avisos_count} avisos ({duracao_ms} ms)"
+
+    return {
+        "checagens": resultados,
+        "relatorio": relatorio,
+        "duracao_ms": duracao_ms,
+    }
+
+
 def main() -> int:
     for fluxo in (sys.stdout, sys.stderr):
         fluxo.reconfigure(encoding="utf-8", errors="replace")
+
+    # Modo JSON (--json): saída estruturada para diagnostico.rs
+    if "--json" in sys.argv:
+        resultado = rodar_como_json()
+        print(json.dumps(resultado, ensure_ascii=False))
+        return 1 if any(c["estado"] == "falha" for c in resultado["checagens"]) else 0
+
+    # Modo texto original (preservado)
     ok = falhas = avisos = 0
     for nome, fn in checagens():
         try:
