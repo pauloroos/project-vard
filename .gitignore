@@ -16,3 +16,4 @@ segredos.toml
 # worktrees e arquivos de coordenação (ledgers, relatórios, provas) ficam dentro do repo, fora do git
 .worktrees/
 .coordenacao/
+build/

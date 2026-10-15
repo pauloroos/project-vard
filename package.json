@@ -13,7 +13,8 @@
     "tauri:dev": "tauri dev --config src-tauri/tauri.dev.conf.json",
     "harness": "node tests/harness/servidor-falso.mjs",
     "vazamento": "node scripts/busca-vazamento.mjs",
-    "test:real": "vitest run tests/integracao-real.test.ts"
+    "test:real": "vitest run tests/integracao-real.test.ts",
+    "nucleo": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/windows/montar-nucleo.ps1"
   },
   "dependencies": {
     "@tauri-apps/api": "^2"

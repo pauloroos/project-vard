@@ -1,0 +1,5 @@
+# Python embutido no instalador (T2 do plano 0.7). Trocar de versão = trocar url e sha256 juntos e rodar npm run nucleo.
+[python]
+versao = "3.13.15"
+url = "https://github.com/astral-sh/python-build-standalone/releases/download/20260929/cpython-3.13.15+20260929-x86_64-pc-windows-msvc-install_only_stripped.tar.gz"
+sha256 = "d11d0d4b4fefa5df09e925dbd37600457f5488a9712a82f3f0dd1ff9431c2ccf"
