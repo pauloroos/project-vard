@@ -1,6 +1,8 @@
 mod cofre;
 mod comandos;
 mod janelas;
+pub mod supervisor;
+pub mod servicos;
 
 use serde_json::Value;
 use tauri::{

@@ -5723,8 +5723,10 @@ name = "vard"
 version = "0.6.1"
 dependencies = [
  "base64 0.23.1",
+ "getrandom 0.2.17",
  "image",
  "keyring",
+ "regex",
  "reqwest",
  "serde",
  "serde_json",
@@ -5736,6 +5738,7 @@ dependencies = [
  "tauri-plugin-single-instance",
  "tempfile",
  "url",
+ "windows-sys 0.59.0",
  "xcap",
 ]
 
