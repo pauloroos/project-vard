@@ -96,7 +96,13 @@ fn registrar_atalhos(app: &AppHandle, config: &Value) {
     }
 }
 
-fn criar_bandeja(app: &AppHandle, no_topo: bool, invisivel_ligado: bool, nao_ouvir_ligado: bool, nao_falar_ligado: bool) -> tauri::Result<()> {
+/// Cria a bandeja nativa. Com supervisor=true, monta menu dinâmico via itens_menu
+/// e despacha ciclo_pedir; com supervisor=false, preserva o menu antigo estático.
+fn criar_bandeja(app: &AppHandle, no_topo: bool, invisivel_ligado: bool, nao_ouvir_ligado: bool, nao_falar_ligado: bool, supervisor: bool) -> tauri::Result<()> {
+    if supervisor {
+        return criar_bandeja_supervisor(app, no_topo, invisivel_ligado, nao_ouvir_ligado, nao_falar_ligado);
+    }
+    // Menu antigo (supervisor=false): comportamento exato de antes da T8b
     let mostrar = MenuItem::with_id(app, "mostrar", "Mostrar/ocultar", true, None::<&str>)?;
     let nao_ouvir = CheckMenuItem::with_id(app, "nao_ouvir", "Não ouvir", true, nao_ouvir_ligado, None::<&str>)?;
     let nao_falar = CheckMenuItem::with_id(app, "nao_falar", "Não falar", true, nao_falar_ligado, None::<&str>)?;
@@ -176,6 +182,165 @@ fn criar_bandeja(app: &AppHandle, no_topo: bool, invisivel_ligado: bool, nao_ouv
     }
     b.build(app)?;
     Ok(())
+}
+
+/// Bandeja com supervisor ativo: menu dinâmico reconstruído a cada ciclo-estado,
+/// despacho de ciclo_pedir para verbos do ciclo e abertura de logs/janelas.
+fn criar_bandeja_supervisor(app: &AppHandle, no_topo: bool, invisivel_ligado: bool, nao_ouvir_ligado: bool, nao_falar_ligado: bool) -> tauri::Result<()> {
+    let foto_inicial = ciclo::ciclo_info(true);
+    let itens = bandeja::itens_menu(&foto_inicial, nao_ouvir_ligado, nao_falar_ligado, no_topo, invisivel_ligado);
+    let menu = montar_menu_supervisor(app, &itens)?;
+
+    // Guarda referências dos checks para sincronização externa (busca por ID via get + downcast)
+    {
+        use tauri::menu::IsMenuItem;
+        let estado = app.state::<Bandeja>();
+        if let Ok(mut g) = estado.nao_ouvir.lock() {
+            *g = menu.get("nao_ouvir").and_then(|i| i.as_check_menuitem().cloned());
+        }
+        if let Ok(mut g) = estado.nao_falar.lock() {
+            *g = menu.get("nao_falar").and_then(|i| i.as_check_menuitem().cloned());
+        }
+        if let Ok(mut g) = estado.invisivel.lock() {
+            *g = menu.get("invisivel").and_then(|i| i.as_check_menuitem().cloned());
+        }
+    }
+
+    let mut b = TrayIconBuilder::with_id("hud")
+        .tooltip(bandeja::dica(&foto_inicial, 0))
+        .menu(&menu)
+        .on_menu_event(move |app, ev| {
+            dispatch_menu_supervisor(app, ev.id().as_ref());
+        });
+    if let Some(icone) = app.default_window_icon() {
+        b = b.icon(icone.clone());
+    }
+    b.build(app)?;
+    Ok(())
+}
+
+/// Constrói um Menu Tauri a partir dos ItemMenu do bandeja.rs.
+fn montar_menu_supervisor(app: &AppHandle, itens: &[bandeja::ItemMenu]) -> tauri::Result<Menu<tauri::Wry>> {
+    use tauri::menu::IsMenuItem;
+    let mut filhos: Vec<Box<dyn IsMenuItem<tauri::Wry>>> = Vec::new();
+    for item in itens {
+        if item.id == "-" {
+            filhos.push(Box::new(MenuItem::with_id(app, "-", "", false, None::<&str>)?));
+            continue;
+        }
+        if let Some(marcado) = item.marcado {
+            let check = CheckMenuItem::with_id(app, &item.id, &item.rotulo, item.ativo, marcado, None::<&str>)?;
+            filhos.push(Box::new(check));
+        } else {
+            let mi = MenuItem::with_id(app, &item.id, &item.rotulo, item.ativo, None::<&str>)?;
+            filhos.push(Box::new(mi));
+        }
+    }
+    let refs: Vec<&dyn IsMenuItem<tauri::Wry>> = filhos.iter().map(|b| b.as_ref()).collect();
+    Menu::with_items(app, &refs)
+}
+
+/// Despacha clique do menu supervisor: verbos do ciclo vão para a fila;
+/// janelas/logs são abertos diretamente; em jogo, itens desabilitados não disparam.
+fn dispatch_menu_supervisor(app: &AppHandle, id: &str) {
+    match id {
+        // Verbos do ciclo → fila serial
+        "jogo" | "voltar" | "tentar" => {
+            let _ = ciclo::ciclo_pedir(id);
+        }
+        "sair" => {
+            // Sair pede à fila; o executor encerra jobs/servidor e termina o pai.
+            let _ = ciclo::ciclo_pedir("sair");
+        }
+        // Janelas e configuração
+        "config" => {
+            if let Err(e) = janelas::abrir_configuracoes(app) {
+                eprintln!("painel de configurações: {e}");
+            }
+        }
+        "sala" => alternar_sala_e_avisar(app),
+        "mostrar" => alternar_visibilidade(app),
+        // Checks de estado
+        "nao_ouvir" => {
+            let estado = app.state::<Bandeja>();
+            let ligado = estado.nao_ouvir.lock().ok()
+                .and_then(|g| g.as_ref().and_then(|i| i.is_checked().ok()))
+                .unwrap_or(false);
+            if let Err(e) = comandos::mesclar_config(app, serde_json::json!({ "nao_ouvir": ligado })) {
+                eprintln!("não ouvir: {e}");
+            }
+            let _ = app.emit_to(JANELA, "nao-ouvir", ligado);
+            let _ = app.emit_to(janelas::CONFIG, "nao-ouvir", ligado);
+        }
+        "nao_falar" => {
+            let estado = app.state::<Bandeja>();
+            let ligado = estado.nao_falar.lock().ok()
+                .and_then(|g| g.as_ref().and_then(|i| i.is_checked().ok()))
+                .unwrap_or(false);
+            if let Err(e) = comandos::mesclar_config(app, serde_json::json!({ "nao_falar": ligado })) {
+                eprintln!("não falar: {e}");
+            }
+            let _ = app.emit_to(JANELA, "nao-falar", ligado);
+            let _ = app.emit_to(janelas::CONFIG, "nao-falar", ligado);
+        }
+        "topo" => {
+            // Topo não está no Bandeja state; alterna baseado na janela atual
+            if let Some(w) = app.get_webview_window(JANELA) {
+                let atual = w.is_always_on_top().unwrap_or(false);
+                let _ = w.set_always_on_top(!atual);
+                let _ = app.emit_to(JANELA, "sempre-no-topo", !atual);
+                let _ = app.emit_to(janelas::CONFIG, "sempre-no-topo", !atual);
+            }
+        }
+        "invisivel" => {
+            let estado = app.state::<Bandeja>();
+            let ligado = estado.invisivel.lock().ok()
+                .and_then(|g| g.as_ref().and_then(|i| i.is_checked().ok()))
+                .unwrap_or(false);
+            if let Err(e) = comandos::mesclar_config(app, serde_json::json!({ "invisivel": ligado })) {
+                eprintln!("invisível: {e}");
+            }
+            let _ = app.emit_to(JANELA, "invisivel", ligado);
+            let _ = app.emit_to(janelas::CONFIG, "invisivel", ligado);
+        }
+        "log" => {
+            // Abre log do serviço com falha ou ciclo.log como fallback
+            let dados = ciclo::pasta_dados();
+            let ciclo_log = dados.join("ciclo.log");
+            let alvo = if ciclo_log.exists() { ciclo_log } else { dados.join("estado.json") };
+            if let Err(e) = comandos::abrir_log(&alvo) {
+                eprintln!("abrir log: {e}");
+            }
+        }
+        _ => {}
+    }
+}
+
+/// Reconstrói o menu da bandeja supervisor com base no novo estado do ciclo.
+/// Chamada pelo evento ciclo-estado quando supervisor está ativo.
+pub fn reconstruir_menu_bandeja(app: &AppHandle, foto: &ciclo::FotoCiclo) {
+    use tauri::Manager;
+    let Some(icone) = app.tray_by_id("hud") else { return };
+    let estado = app.state::<Bandeja>();
+    let (nao_ouvir, nao_falar, tarefas) = (
+        estado.nao_ouvir.lock().ok()
+            .and_then(|g| g.as_ref().and_then(|i| i.is_checked().ok()))
+            .unwrap_or(false),
+        estado.nao_falar.lock().ok()
+            .and_then(|g| g.as_ref().and_then(|i| i.is_checked().ok()))
+            .unwrap_or(false),
+        estado.tarefas.lock().map(|g| *g).unwrap_or(0),
+    );
+    // Lê topo/invisivel da config atual
+    let cfg = comandos::ler_config_valor(app).unwrap_or(Value::Null);
+    let topo = cfg.get("sempre_no_topo").and_then(|v| v.as_bool()).unwrap_or(true);
+    let invisivel = cfg.get("invisivel").and_then(|v| v.as_bool()).unwrap_or(false);
+
+    let itens = bandeja::itens_menu(foto, nao_ouvir, nao_falar, topo, invisivel);
+    if let Ok(menu) = montar_menu_supervisor(app, &itens) {
+        let _ = icone.set_menu(Some(menu));
+    }
+    let _ = icone.set_tooltip(Some(bandeja::dica(foto, tarefas)));
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -288,7 +453,8 @@ pub fn run() {
                 .get("nao_falar")
                 .and_then(|v| v.as_bool())
                 .unwrap_or(false);
-            criar_bandeja(&handle, no_topo, invisivel, nao_ouvir, nao_falar)?;
+            let supervisor = config_instalacao.supervisor;
+            criar_bandeja(&handle, no_topo, invisivel, nao_ouvir, nao_falar, supervisor)?;
             registrar_atalhos(&handle, &config);
 
             // T8: registra AppHandle para emissão de eventos e inicializa ciclo se supervisor ativo
