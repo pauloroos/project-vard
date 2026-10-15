@@ -56,15 +56,31 @@ impl Default for InstalacaoConfig {
     }
 }
 
-/// Resolve a raiz da instalação em tempo de execução.
-/// - Se `VARD_INSTALACAO` estiver definida, usa esse caminho (app instalado).
+/// Resolve o caminho do arquivo `instalacao.json` seguindo o contrato do Python:
+/// 1. Se `VARD_INSTALACAO` estiver definida, é o caminho direto do arquivo.
+/// 2. Senão, se `VARD_DADOS` estiver definida, usa `<VARD_DADOS>/instalacao.json`.
+/// 3. Senão, usa `%LOCALAPPDATA%/rdl-vard/instalacao.json` (app_data_dir padrão).
+///
+/// O arquivo pode não existir; o chamador decide como tratar (default ou erro).
+pub fn arquivo_instalacao(app_data: &Path) -> PathBuf {
+    if let Ok(p) = std::env::var("VARD_INSTALACAO") {
+        if !p.is_empty() {
+            return PathBuf::from(p);
+        }
+    }
+    if let Ok(d) = std::env::var("VARD_DADOS") {
+        if !d.is_empty() {
+            return PathBuf::from(d).join("instalacao.json");
+        }
+    }
+    app_data.join("instalacao.json")
+}
+
+/// Resolve a raiz do código/repo em tempo de execução (independente de VARD_INSTALACAO).
 /// - Se `VARD_RAIZ_DEV` estiver definida, usa esse caminho (dev).
-/// - Caso contrário, tenta achar o marcador do repo subindo a partir do executável.
+/// - Caso contrário, tenta achar o marcador do repo subindo a partir dos recursos.
 /// - Fallback: diretório corrente.
 pub fn resolver_raiz(recursos: &Path) -> PathBuf {
-    if let Ok(p) = std::env::var("VARD_INSTALACAO") {
-        return PathBuf::from(p);
-    }
     if let Ok(p) = std::env::var("VARD_RAIZ_DEV") {
         return PathBuf::from(p);
     }
@@ -629,6 +645,57 @@ mod testes {
             "deveria ter aviso sobre voz: {:?}",
             avisos
         );
+    }
+
+    // ----------------------------------------------------------------------------------------------
+    // Contrato de arquivo_instalacao (deve ser idêntico ao Python nucleo/vard/instalacao.py)
+    // ----------------------------------------------------------------------------------------------
+
+    #[test]
+    fn arquivo_instalacao_usa_vard_instalacao_quando_definido() {
+        let dir = tempfile::tempdir().unwrap();
+        let caminho = dir.path().join("custom").join("instalacao.json");
+        unsafe { std::env::set_var("VARD_INSTALACAO", &caminho) };
+        unsafe { std::env::remove_var("VARD_DADOS") };
+        let app_data = dir.path().join("appdata");
+        let resultado = super::arquivo_instalacao(&app_data);
+        unsafe { std::env::remove_var("VARD_INSTALACAO") };
+        assert_eq!(resultado, caminho);
+    }
+
+    #[test]
+    fn arquivo_instalacao_usa_vard_dados_quando_instalacao_ausente() {
+        let dir = tempfile::tempdir().unwrap();
+        unsafe { std::env::remove_var("VARD_INSTALACAO") };
+        let dados = dir.path().join("meus_dados");
+        unsafe { std::env::set_var("VARD_DADOS", &dados) };
+        let app_data = dir.path().join("appdata");
+        let resultado = super::arquivo_instalacao(&app_data);
+        unsafe { std::env::remove_var("VARD_DADOS") };
+        assert_eq!(resultado, dados.join("instalacao.json"));
+    }
+
+    #[test]
+    fn arquivo_instalacao_fallback_para_app_data() {
+        let dir = tempfile::tempdir().unwrap();
+        unsafe { std::env::remove_var("VARD_INSTALACAO") };
+        unsafe { std::env::remove_var("VARD_DADOS") };
+        let app_data = dir.path().join("localappdata").join("rdl-vard");
+        let resultado = super::arquivo_instalacao(&app_data);
+        assert_eq!(resultado, app_data.join("instalacao.json"));
+    }
+
+    #[test]
+    fn arquivo_instalacao_ignora_vard_instalacao_vazia() {
+        let dir = tempfile::tempdir().unwrap();
+        unsafe { std::env::set_var("VARD_INSTALACAO", "") };
+        let dados = dir.path().join("dados_env");
+        unsafe { std::env::set_var("VARD_DADOS", &dados) };
+        let app_data = dir.path().join("appdata");
+        let resultado = super::arquivo_instalacao(&app_data);
+        unsafe { std::env::remove_var("VARD_INSTALACAO") };
+        unsafe { std::env::remove_var("VARD_DADOS") };
+        assert_eq!(resultado, dados.join("instalacao.json"));
     }
 
     /// Prova de que o valor de CARGO_MANIFEST_DIR não vazou para o binário de release.
