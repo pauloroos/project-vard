@@ -93,9 +93,12 @@ def test_status_reporta_servicos(cliente, monkeypatch, tmp_path):
     respx.get("http://127.0.0.1:1234/v1/models").mock(return_value=httpx.Response(200, json={"data": [{"id": "gemma-4-12b-it-qat@q4_k_xl"}]}))
     respx.get("http://127.0.0.1:4720/status").mock(side_effect=httpx.ConnectError("x"))
     r = cliente.get("/status")
-    assert r.json() == {"openjarvis": True, "lmstudio": True, "modelo": "gemma-4-12b-it-qat@q4_k_xl", "modo": "desconhecido",
-                           "modelos_lmstudio": ["gemma-4-12b-it-qat@q4_k_xl"],
-                           "tarefas_abertas": 0, "reuniao": "ausente"}
+    corpo = r.json()
+    esperado = {"openjarvis": True, "lmstudio": True, "modelo": "gemma-4-12b-it-qat@q4_k_xl", "modo": "desconhecido",
+                "modelos_lmstudio": ["gemma-4-12b-it-qat@q4_k_xl"],
+                "tarefas_abertas": 0, "reuniao": "ausente",
+                "cerebro": {"ativo": False, "provedor": "", "sessoes": 0}}
+    assert corpo == esperado
 
 
 @respx.mock

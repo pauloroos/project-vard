@@ -20,6 +20,7 @@ from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
 from vard import avisos as vavisos, central, config, modelos, modo, oficina, perfil, reuniao, segredos, tarefas
+from vard.cerebro import contratos as cerebro_contratos, pedidos as cerebro_pedidos
 from vard.seguro import Frase
 
 # ----------------------------------------------------------------------------- PERSONA
@@ -204,7 +205,87 @@ async def status():
         _sondar_openjarvis(), _sondar_lmstudio(), _sondar_reuniao()
     )
     return {"openjarvis": ok_oj, "lmstudio": ok_lm, "modelo": modelo, "modo": modo.ler_estado()["modo"],
-            "modelos_lmstudio": ids, "tarefas_abertas": _tarefas_abertas(), "reuniao": reuniao}
+            "modelos_lmstudio": ids, "tarefas_abertas": _tarefas_abertas(), "reuniao": reuniao,
+            "cerebro": {"ativo": False, "provedor": "", "sessoes": 0}}
+
+
+# ----------------------------------------------------------------------------- PEDIDOS (T6)
+# Rotas do cérebro próprio: admissão, consulta, cancelamento e listagem por sessão.
+# O cérebro só atende quando explicitamente escolhido; /ask continua via OpenJarvis.
+
+@app.post("/pedidos", status_code=202)
+async def pedidos_admitir(corpo: dict):
+    """Admite um pedido no cérebro próprio. Devolve 202 antes da conclusão."""
+    try:
+        pedido = cerebro_contratos.Pedido(
+            pedido_id=str(corpo["pedido_id"]),
+            sessao_id=str(corpo["sessao_id"]),
+            origem=cerebro_contratos.Origem(str(corpo.get("origem", "painel"))),
+            texto=str(corpo.get("texto", "")).strip(),
+        )
+    except (KeyError, ValueError) as exc:
+        raise HTTPException(422, str(exc))
+    if not pedido.texto:
+        raise HTTPException(422, "texto vazio")
+    try:
+        info, criado = cerebro_pedidos.admitir(pedido)
+    except ValueError as exc:
+        raise HTTPException(409, str(exc))
+    return {
+        "pedido_id": info.pedido_id,
+        "sessao_id": info.sessao_id,
+        "estado": info.estado.value,
+        "criado": criado,
+    }
+
+
+@app.get("/pedidos/{pedido_id}")
+def pedidos_consultar(pedido_id: str):
+    """Consulta estado de um pedido por ID."""
+    info = cerebro_pedidos.consultar(pedido_id)
+    if info is None:
+        raise HTTPException(404, "pedido não encontrado")
+    return {
+        "pedido_id": info.pedido_id,
+        "sessao_id": info.sessao_id,
+        "estado": info.estado.value,
+        "resposta": info.resposta,
+        "erro": info.erro,
+        "ultimo_seq": info.ultimo_seq,
+    }
+
+
+@app.post("/pedidos/{pedido_id}/cancelar")
+def pedidos_cancelar(pedido_id: str):
+    """Cancela um pedido existente."""
+    info = cerebro_pedidos.cancelar(pedido_id)
+    if info is None:
+        raise HTTPException(404, "pedido não encontrado")
+    return {
+        "pedido_id": info.pedido_id,
+        "estado": info.estado.value,
+    }
+
+
+@app.get("/pedidos")
+def pedidos_listar(sessao_id: str = ""):
+    """Lista pedidos; filtro opcional por sessao_id."""
+    base = cerebro_pedidos._base()
+    itens = []
+    if base.exists():
+        for arq in sorted(base.glob("*.json")):
+            try:
+                dados = json.loads(arq.read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                continue
+            if sessao_id and dados.get("sessao_id") != sessao_id:
+                continue
+            itens.append({
+                "pedido_id": dados.get("pedido_id", ""),
+                "sessao_id": dados.get("sessao_id", ""),
+                "estado": dados.get("estado", ""),
+            })
+    return {"pedidos": itens}
 
 
 @app.get("/perfil/persona")
