@@ -658,6 +658,9 @@ mod testes {
 
     #[test]
     fn arquivo_instalacao_usa_vard_dados_quando_instalacao_ausente() {
+        // Usa ENV_LOCK compartilhado com ciclo::testes para evitar corrida em VARD_DADOS.
+        static ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+        let _lock = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let dir = tempfile::tempdir().unwrap();
         unsafe { std::env::remove_var("VARD_INSTALACAO") };
         let dados = dir.path().join("meus_dados");

@@ -91,6 +91,19 @@ pub fn encerrar_todos() {
     }
 }
 
+/// Repete todos os serviços que estão no estado Desistiu.
+pub fn repetir_desistidos() {
+    if let Ok(reg) = SERVICOS.read() {
+        for (id, _handle) in reg.iter() {
+            if let Ok(f) = foto(id) {
+                if matches!(f.estado, supervisor::EstadoServico::Desistiu) {
+                    let _ = repetir(id);
+                }
+            }
+        }
+    }
+}
+
 /// Descritor de um serviço gerenciado pelo supervisor.
 #[derive(Debug, Clone)]
 pub struct DescritorServico {
