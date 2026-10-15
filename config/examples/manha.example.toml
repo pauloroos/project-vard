@@ -7,3 +7,9 @@ dias = [0, 1, 2, 3, 4]          # 0 = segunda ... 6 = domingo
 # Integração opcional com agente-remoto, desativada. Os nomes das chaves são contratos do código.
 perguntar_remoto = false
 pedido_remoto = ""
+
+# Caminho novo do Vard (0.8): montar o resumo por uma consulta delegada, sem o digest do OpenJarvis.
+# Vazio mantém o caminho legado (OpenJarvis) até o corte da 0.8.
+consulta = ""                 # "delegada" usa o agente/conectores do delegada.toml
+agente = ""                   # opcional: claude, codex, agy, opencode (vazio = padrão do delegada.toml)
+fontes = []                   # opcional: fontes citadas no pedido, ex.: ["agenda", "tarefas", "noticias"]

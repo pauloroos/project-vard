@@ -19,6 +19,8 @@ ULTIMA = PASTA / "manha-ultima.txt"
 ESPERA_REMOTO_S = 60
 OPENJARVIS = "http://127.0.0.1:8000"
 SEM_GOOGLE = "Agenda: ainda não conectada."
+SEM_CONSULTA = ("Resumo do dia: nenhum agente nem conector está configurado para montar a agenda, "
+                "as tarefas e as notícias.")
 log = logging.getLogger("vard.manha")
 
 
@@ -95,6 +97,41 @@ def gerar_digest(base: str = OPENJARVIS, timeout: float = 600) -> str:
     return str(r.json().get("text", "")).strip()
 
 
+def usa_consulta_delegada(conf: dict) -> bool:
+    """Caminho novo (T10) da manhã: só quando `consulta = "delegada"` está explícito no manha.toml."""
+    return str(conf.get("consulta", "")).strip().lower() == "delegada"
+
+
+def montar_consulta(conf: dict) -> str:
+    """Pedido da consulta delegada: agenda, tarefas e notícias; sem pedir correio (e-mail está desligado)."""
+    fontes = conf.get("fontes", [])
+    if isinstance(fontes, str):
+        fontes = [fontes]
+    fontes = [str(f).strip() for f in fontes if str(f).strip()]
+    partes = ["Monte o resumo do dia para mim, por favor.",
+              "Traga a agenda e os compromissos de hoje, as tarefas pendentes e as notícias principais."]
+    if fontes:
+        partes.append("Use as fontes: " + ", ".join(fontes) + ".")
+    partes.append("Não consulte mensagens de correio.")
+    return " ".join(partes)
+
+
+def consulta_delegada(conf: dict, *, consultar=None, conf_delegada=None) -> str:
+    """Resumo por consulta delegada ao agente/conectores do delegada.toml. Vazio = ausência declarada."""
+    from vard import delegada
+    try:
+        conf_d = conf_delegada if conf_delegada is not None else delegada.carregar()
+    except Exception as exc:  # noqa: BLE001 — sem delegada.toml, a manhã sai declarando a ausência
+        log.warning("manhã sem consulta delegada: %s", type(exc).__name__)
+        return ""
+    agente = str(conf.get("agente") or conf_d.padrao)
+    s = (consultar or delegada.consultar)(agente, montar_consulta(conf), conf_d)
+    if s.estado != "terminou" or not s.texto.strip():
+        log.warning("manhã: a consulta delegada não terminou (%s)", s.estado)
+        return ""
+    return s.texto.strip()
+
+
 def google_conectado(home: Path | None = None) -> bool:
     """O `jarvis connect gmail` grava o token em <OPENJARVIS_HOME>/connectors. Sem ele, só notícias e agente remoto."""
     import os
@@ -114,7 +151,7 @@ def montar_texto(digest: str, remoto: str, *, remoto_pedido: bool = False, googl
 
 
 def executar(n: int, *, arq: Path | None = None, conf: dict | None = None, gerar=None,
-             perguntar_remoto=None) -> tarefas.Tarefa:
+             perguntar_remoto=None, consultar=None) -> tarefas.Tarefa:
     conf = carregar_conf() if conf is None else conf
     t = tarefas.obter(n, arq)
     if t is None:
@@ -125,6 +162,7 @@ def executar(n: int, *, arq: Path | None = None, conf: dict | None = None, gerar
     if not conf or conf.get("ativo") is False:
         return tarefas.atualizar(n, arq, se_estado="rodando", estado="terminou",
                                  resumo="A rotina da manhã não está configurada.")
+    delegada_manha = usa_consulta_delegada(conf)
     da_remoto: list[str] = []
     fio = None
     if conf.get("perguntar_remoto"):
@@ -142,7 +180,12 @@ def executar(n: int, *, arq: Path | None = None, conf: dict | None = None, gerar
         fio = threading.Thread(target=_remoto, daemon=True)
         fio.start()
     try:
-        digest = (gerar or gerar_digest)()
+        if delegada_manha:
+            digest = consulta_delegada(conf, consultar=consultar)
+            if not digest:                      # sem agente/conector: declara a ausência, não inventa resumo
+                digest = SEM_CONSULTA
+        else:
+            digest = (gerar or gerar_digest)()
     except (httpx.HTTPError, ValueError) as exc:
         log.warning("digest falhou: %s", type(exc).__name__)
         digest = ""
@@ -150,7 +193,7 @@ def executar(n: int, *, arq: Path | None = None, conf: dict | None = None, gerar
         fio.join(timeout=660)
     res = tarefas.arquivo_resultado(n)
     res.write_text(montar_texto(digest, da_remoto[0] if da_remoto else "", remoto_pedido=bool(conf.get("perguntar_remoto")),
-                                google=google_conectado()), encoding="utf-8")
+                                google=True if delegada_manha else google_conectado()), encoding="utf-8")
     if not digest and not da_remoto:
         return tarefas.atualizar(n, arq, se_estado="rodando", estado="falhou", resultado=str(res),
                                  resumo="nem o resumo do dia nem o agente remoto responderam")

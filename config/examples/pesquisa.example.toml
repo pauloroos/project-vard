@@ -1,0 +1,5 @@
+# Pesquisa (0.8): por padrão usa o agente de pesquisa do OpenJarvis (/v1/managed-agents).
+# Para deixar o OpenJarvis opcional, aponte a pesquisa para a consulta delegada: o agente de código
+# configurado no delegada.toml faz a busca com as ferramentas dele, só leitura.
+consulta = ""                 # "delegada" usa o agente de código do delegada.toml
+agente = ""                   # opcional: claude, codex, agy, opencode (vazio = padrão do delegada.toml)

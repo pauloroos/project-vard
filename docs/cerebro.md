@@ -28,8 +28,27 @@ para tarefas que dependem de módulos ainda não entregues ou renomeados.
 - Ponte/painel/voz conectados ao cérebro: T6 (fora do escopo da Parte A).
 - STT/Kokoro próprios: T7/T8 (voz/).
 - Telegram próprio: T9.
-- Manhã sem OpenJarvis: T10.
+- Manhã sem OpenJarvis: entregue na T10 como caminho novo opt-in (ver abaixo).
 - Retirada do OpenJarvis do caminho padrão: T11.
+
+## Manhã, pesquisa e remoto sem OpenJarvis (T10)
+
+O caminho novo é explícito e convive com o legado: nada muda por padrão até o corte da T11.
+
+- `nucleo/vard/manha.py` — com `consulta = "delegada"` no `manha.toml`, o resumo do dia vem de uma
+  consulta delegada (`delegada.consultar`) ao agente/conectores do `delegada.toml`; o pedido
+  (`manha.montar_consulta`) pede agenda, tarefas e notícias e nunca pede correio. Sem agente nem
+  conector configurado, o resumo declara a ausência (`manha.SEM_CONSULTA`); o caminho novo não chama
+  `/api/digest/generate`. Sem a chave, segue o `gerar_digest` legado do OpenJarvis.
+- `nucleo/vard/pesquisa.py` — com `consulta = "delegada"` no `pesquisa.toml`, a pesquisa roda pelo
+  agente do `delegada.toml` em vez de `/v1/managed-agents`. Sem a chave, segue o caminho legado.
+- `nucleo/vard/remoto.py` — `envelope = "openclaw"` normaliza o envelope JSON do CLI do OpenClaw
+  (`final`, ou os `payloads`); `{sessao}` vira sessão por tarefa (`sessao = "tarefa"`, padrão) ou o
+  perfil antigo (`sessao = "vard"`). O comando não pode usar `--deliver` nem `/hooks/agent`. Timeout
+  remoto não repete a chamada: a tarefa falha dizendo que só a espera local terminou.
+- Exemplos: `config/examples/{manha,pesquisa,remoto}.example.toml`.
+- Provas: `nucleo/tests/test_{manha,pesquisa,remoto}.py` (a manhã/pesquisa delegadas falham se
+  aparecer chamada ao OpenJarvis; nenhuma conta real, SSH real ou infraestrutura remota).
 
 ## Regras
 

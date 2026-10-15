@@ -131,3 +131,61 @@ def test_config_manha_e_noticias_do_usuario(config_usuario, tmp_path):
     assert manha.carregar_conf() == {"hora": "09:00"}
     (config_usuario / "noticias.toml").write_text('[[feeds]]\nnome="Demo"\nurl="https://exemplo.com/rss"\n', encoding="utf-8")
     assert manha.escrever_feeds(None, tmp_path / "feeds.json") == 1
+
+
+# --- T10: manhã por consulta delegada (OpenJarvis opcional) ---
+
+DELEGADA = {**CONF, "perguntar_remoto": False, "consulta": "delegada", "fontes": ["agenda", "tarefas", "noticias"]}
+
+
+def test_consulta_delegada_pede_agenda_tarefas_noticias_sem_correio():
+    from vard import delegada
+    prompt = manha.montar_consulta(DELEGADA)
+    assert "agenda" in prompt.lower() and "tarefas" in prompt.lower() and "notícias" in prompt.lower()
+    assert delegada.email_desligado(prompt) is False        # a pergunta não pede caixa de entrada
+
+
+def test_manha_delegada_usa_o_agente_configurado(loja, config_usuario):
+    from vard import delegada
+    chamadas = []
+
+    def consultar(agente, pergunta, conf_d):
+        chamadas.append((agente, pergunta, conf_d.padrao))
+        return delegada.Saida("terminou", texto="Bom dia. Duas reuniões hoje. Tarefas: uma. Notícias: duas.")
+
+    t = tarefas.nova("manha", "", "x")
+    u = manha.executar(t.n, conf=DELEGADA, consultar=consultar)
+    texto = open(u.resultado, encoding="utf-8").read()
+    assert u.estado == "terminou" and "Duas reuniões" in texto and "Notícias" in texto
+    assert chamadas and chamadas[0][0] == "claude" and "agenda" in chamadas[0][1]
+
+
+def test_manha_delegada_nao_chama_openjarvis(loja, config_usuario, monkeypatch):
+    from vard import delegada
+    monkeypatch.setattr(manha, "gerar_digest", lambda *a, **k: pytest.fail("não pode usar o digest do OpenJarvis"))
+    monkeypatch.setattr(manha.httpx, "post", lambda *a, **k: pytest.fail("não pode chamar HTTP"))
+    t = tarefas.nova("manha", "", "x")
+    u = manha.executar(t.n, conf=DELEGADA, consultar=lambda ag, p, c: delegada.Saida("terminou", texto="Bom dia."))
+    assert u.estado == "terminou" and "Bom dia." in open(u.resultado, encoding="utf-8").read()
+
+
+def test_manha_delegada_sem_config_declara_a_ausencia(loja):
+    t = tarefas.nova("manha", "", "x")
+    u = manha.executar(t.n, conf={**DELEGADA, "fontes": []})
+    texto = open(u.resultado, encoding="utf-8").read()
+    assert u.estado == "terminou" and manha.SEM_CONSULTA in texto
+
+
+def test_manha_delegada_que_falha_declara_a_ausencia(loja, config_usuario):
+    from vard import delegada
+    t = tarefas.nova("manha", "", "x")
+    u = manha.executar(t.n, conf=DELEGADA,
+                       consultar=lambda ag, p, c: delegada.Saida("falhou", motivo="sem conector"))
+    texto = open(u.resultado, encoding="utf-8").read()
+    assert u.estado == "terminou" and manha.SEM_CONSULTA in texto
+
+
+def test_manha_sem_consulta_mantem_o_caminho_legado(loja):
+    t = tarefas.nova("manha", "", "x")
+    u = manha.executar(t.n, conf={**CONF, "perguntar_remoto": False}, gerar=lambda: "Bom dia legado.")
+    assert u.estado == "terminou" and "Bom dia legado." in open(u.resultado, encoding="utf-8").read()

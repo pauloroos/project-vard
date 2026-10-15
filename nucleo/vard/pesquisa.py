@@ -1,5 +1,8 @@
 """Pesquisa pelo OpenJarvis: agente gerenciado `vard-pesquisa` (deep_research com web_search e think).
 
+T10: com `consulta = "delegada"` no pesquisa.toml, a pesquisa roda pelo agente de código do delegada.toml,
+sem `/v1/managed-agents`; o caminho do OpenJarvis continua o padrão até o corte da T11.
+
 Fluxo (OpenJarvis ccf02ec, server/agent_manager_routes.py; formatos reais em tests/fixtures/openjarvis/):
 POST /v1/managed-agents cria o agente uma vez; POST /{id}/messages com mode=immediate dispara o trabalho em
 segundo plano e responde na hora; a resposta aparece em GET /{id}/messages (da mais nova para a mais velha,
@@ -8,12 +11,13 @@ direction=agent_to_user, created_at em segundos float). Roda no trabalhador.
 from __future__ import annotations
 
 import time
+import tomllib
 from pathlib import Path
 from typing import Callable
 
 import httpx
 
-from vard import tarefas
+from vard import config, tarefas
 from vard.oficina import JaReivindicada
 
 OPENJARVIS = "http://127.0.0.1:8000"
@@ -46,14 +50,50 @@ def resposta_depois(mensagens: list[dict], desde) -> str | None:
     return str(min(candidatas, key=lambda m: m["created_at"])["content"]) if candidatas else None
 
 
+def carregar_conf(caminho: Path | None = None) -> dict:
+    alvo = Path(caminho) if caminho else config.arquivo_config("pesquisa.toml")
+    if not alvo.exists():
+        return {}
+    with alvo.open("rb") as f:
+        return tomllib.load(f)
+
+
+def usa_consulta_delegada(conf: dict) -> bool:
+    """Caminho novo (T10): só quando `consulta = "delegada"` está explícito no pesquisa.toml."""
+    return str(conf.get("consulta", "")).strip().lower() == "delegada"
+
+
+def consulta_delegada(n: int, arq: Path | None, t: tarefas.Tarefa, conf: dict, *, consultar=None) -> tarefas.Tarefa:
+    """Pesquisa pelo agente de código do delegada.toml, sem `/v1/managed-agents` do OpenJarvis."""
+    from vard import delegada
+    try:
+        conf_d = delegada.carregar()
+    except Exception as exc:  # noqa: BLE001 — sem delegada.toml, a pesquisa falha declarando o motivo
+        return tarefas.atualizar(n, arq, se_estado="rodando", estado="falhou",
+                                 resumo="a pesquisa delegada não está configurada", erro=str(exc)[:200])
+    agente = str(conf.get("agente") or conf_d.padrao)
+    s = (consultar or delegada.consultar)(agente, t.pedido, conf_d)
+    if s.estado != "terminou" or not s.texto.strip():
+        return tarefas.atualizar(n, arq, se_estado="rodando", estado="falhou",
+                                 resumo=(s.resumo or s.motivo or "a consulta delegada não respondeu")[:200],
+                                 erro=(s.motivo or s.estado)[:300])
+    arq_res = tarefas.arquivo_resultado(n)
+    arq_res.write_text(s.texto, encoding="utf-8")
+    return tarefas.atualizar(n, arq, se_estado="rodando", estado="terminou", resultado=str(arq_res),
+                             resumo=s.resumo or tarefas.resumir(s.texto))
+
+
 def executar(n: int, *, arq: Path | None = None, base: str = OPENJARVIS, dormir: Callable[[float], None] = time.sleep,
-             espera_s: float = ESPERA_S) -> tarefas.Tarefa:
+             espera_s: float = ESPERA_S, conf: dict | None = None, consultar=None) -> tarefas.Tarefa:
     t = tarefas.obter(n, arq)
     if t is None:
         raise KeyError(f"tarefa {n} não existe")
     if not tarefas.reivindicar(n, arq, se_estado="preparando", se_versao=t.versao):
         raise JaReivindicada(f"A pesquisa {n} já foi pega por outro trabalhador.")
     tarefas.atualizar(n, arq, se_estado="preparando", estado="rodando")
+    conf = carregar_conf() if conf is None else conf
+    if usa_consulta_delegada(conf):
+        return consulta_delegada(n, arq, t, conf, consultar=consultar)
     with httpx.Client(base_url=base, timeout=30, trust_env=False) as c:
         aid = garantir_agente(c)
         r = c.post(f"/v1/managed-agents/{aid}/messages", json={"content": t.pedido, "mode": "immediate"})

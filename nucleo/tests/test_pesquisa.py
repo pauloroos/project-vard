@@ -2,6 +2,7 @@ import json
 from pathlib import Path
 
 import httpx
+import pytest
 import respx
 
 from vard import pesquisa, tarefas
@@ -93,3 +94,28 @@ def test_pesquisa_ja_reivindicada(loja):
     tarefas.atualizar(t.n, estado="rodando")
     with pytest.raises(JaReivindicada):
         pesquisa.executar(t.n, dormir=lambda s: None, espera_s=0)
+
+
+# --- T10: pesquisa por consulta delegada (sem /v1/managed-agents) ---
+
+def test_pesquisa_delegada_nao_usa_managed_agents(loja, config_usuario, monkeypatch):
+    from vard import delegada
+    monkeypatch.setattr(httpx, "post", lambda *a, **k: pytest.fail("não pode chamar o OpenJarvis"))
+    monkeypatch.setattr(httpx, "get", lambda *a, **k: pytest.fail("não pode chamar o OpenJarvis"))
+    chamadas = []
+
+    def consultar(agente, pergunta, conf_d):
+        chamadas.append((agente, pergunta))
+        return delegada.Saida("terminou", texto="O dólar fechou a R$ 5,10. Fonte: BCB.",
+                              resumo="O dólar fechou a R$ 5,10.")
+
+    t = tarefas.nova("pesquisa", "", "dólar?")
+    u = pesquisa.executar(t.n, conf={"consulta": "delegada", "agente": "claude"}, consultar=consultar)
+    assert u.estado == "terminou" and "BCB" in open(u.resultado, encoding="utf-8").read()
+    assert chamadas == [("claude", "dólar?")]
+
+
+def test_pesquisa_delegada_sem_config_declara_a_falha(loja):
+    t = tarefas.nova("pesquisa", "", "dólar?")
+    u = pesquisa.executar(t.n, conf={"consulta": "delegada"})
+    assert u.estado == "falhou" and "delegada" in u.resumo

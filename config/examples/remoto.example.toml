@@ -10,3 +10,9 @@ container_prefixo = ""       # opcional: "agente-" descobre exatamente um contai
 container_excluir = []       # opcional: ignora containers cujo nome contém algum destes trechos
 timeout_s = 180
 nome = "o agente remoto"     # nome usado nas mensagens
+# T10: OpenClaw pelo mesmo transporte SSH. "openclaw" normaliza o envelope JSON do CLI (usa `final`;
+# sem ele, junta os `payloads`). A entrega é do Vard: o comando não pode usar --deliver nem /hooks/agent.
+envelope = "texto"           # "texto" (padrão) ou "openclaw"
+sessao = "tarefa"            # "tarefa" = sessão por tarefa; "vard" preserva o perfil antigo
+# Com envelope = "openclaw", o comando pode citar {sessao}:
+# comando = "openclaw agent --agent vard --session-key {sessao} --message-file - --json --timeout 180"

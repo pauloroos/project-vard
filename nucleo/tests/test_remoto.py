@@ -171,6 +171,77 @@ def test_descoberta_recusada_nao_executa_pedido(remoto_config, saida):
     assert len(chamadas) == 1 and chamadas[0][-1] == remoto.LISTAR
 
 
+# --- T10: OpenClaw opcional e conclusão remota desconhecida ---
+
+def test_normalizar_openclaw_usa_o_final():
+    assert remoto.normalizar_openclaw('{"ok":true,"status":"completed","final":"  pronto  ","sessionId":"s"}') == "pronto"
+
+
+def test_normalizar_openclaw_junta_payloads_sem_final():
+    corpo = '{"ok":true,"status":"completed","final":"","payloads":[{"text":"um"},{"text":"dois"}]}'
+    assert remoto.normalizar_openclaw(corpo) == "um\ndois"
+
+
+@pytest.mark.parametrize("saida", ["não é json", "[]", '{"ok":true,"final":"  "}'])
+def test_normalizar_openclaw_ilegivel_vira_frase(saida):
+    with pytest.raises(ErroConsulta):
+        remoto.normalizar_openclaw(saida)
+
+
+def _remoto_openclaw(pasta, comando="openclaw agent --session-key {sessao} --json", extra=""):
+    (pasta / "remoto.toml").write_text(
+        f'[remoto]\ndestino = "usuario@exemplo.com"\nchave = ""\ncomando = "{comando}"\n'
+        f'envelope = "openclaw"\n{extra}', encoding="utf-8")
+
+
+def test_comando_openclaw_com_deliver_e_recusado(remoto_config):
+    _remoto_openclaw(remoto_config, comando="openclaw agent --deliver telegram --json")
+    with pytest.raises(ErroConsulta, match="--deliver"):
+        remoto.perguntar("x", executar=lambda *a, **k: pytest.fail("não pode rodar"))
+
+
+def test_webhook_de_admissao_recusado(remoto_config):
+    _remoto_openclaw(remoto_config, comando="curl -s http://127.0.0.1:18789/hooks/agent")
+    with pytest.raises(ErroConsulta, match="webhook"):
+        remoto.perguntar("x", executar=lambda *a, **k: pytest.fail("não pode rodar"))
+
+
+def test_openclaw_normaliza_saida_json_e_usa_a_sessao_da_tarefa(remoto_config):
+    _remoto_openclaw(remoto_config)
+    chamadas = []
+
+    def executar(args, **kw):
+        chamadas.append((args, kw))
+        return SimpleNamespace(returncode=0, stdout='{"ok":true,"status":"completed","final":"card 42 em revisão","sessionId":"x"}', stderr="")
+
+    pedido = "e o card 42?"
+    assert remoto.perguntar(pedido, executar=executar, sessao="tarefa-9") == "card 42 em revisão"
+    args, kw = chamadas[-1]
+    assert args[-1] == "openclaw agent --session-key tarefa-9 --json"
+    assert kw["input"] == pedido
+
+
+def test_executar_remoto_usa_sessao_por_tarefa_por_padrao(loja, remoto_config, monkeypatch):
+    vistos = []
+    monkeypatch.setattr(remoto, "perguntar",
+                        lambda pedido, **kw: (vistos.append(remoto.sessao_atual()), "ok")[1])
+    t = tarefas.nova("agente_remoto", "", "x")
+    remoto.executar(t.n)
+    assert vistos == [f"tarefa-{t.n}"] and remoto.sessao_atual() is None
+
+
+def test_timeout_remoto_nao_repete_a_chamada(loja):
+    chamadas = []
+
+    def demora(p):
+        chamadas.append(p)
+        raise subprocess.TimeoutExpired(["ssh"], 180)
+
+    t = tarefas.nova("agente_remoto", "", "card 42?")
+    u = remoto.executar(t.n, perguntar_fn=demora)
+    assert u.estado == "falhou" and len(chamadas) == 1 and "espera local" in u.resumo
+
+
 def test_trava_impede_segunda_conversa(remoto_config, monkeypatch):
     import threading
     from vard import config
