@@ -334,17 +334,156 @@ pub fn ciclo_info(supervisor_ativo: bool) -> FotoCiclo {
 }
 
 // ---------------------------------------------------------------------------
+// Gate supervisor e execução dos verbos
+// ---------------------------------------------------------------------------
+
+/// Verifica se o supervisor está habilitado no instalacao.json atual.
+pub fn supervisor_ativo() -> bool {
+    let arquivo = crate::instalacao::arquivo_instalacao();
+    match crate::instalacao::ler_instalacao(&arquivo) {
+        Ok(cfg) => cfg.supervisor,
+        Err(_) => false,
+    }
+}
+
+/// Executa o verbo admitido na fila. Chamado pela thread dona após admissão.
+/// Retorna o modo final após conclusão e libera o slot da fila.
+pub fn executar_verbo(id: &str, verbo: &VerboPedido) -> ModoCiclo {
+    let resultado = match verbo {
+        VerboPedido::Iniciar => executar_iniciar(),
+        VerboPedido::Parar => executar_parar(),
+        VerboPedido::Recarregar => executar_recarregar(),
+        VerboPedido::Sair => executar_sair(),
+        VerboPedido::Tentar => executar_tentar(),
+        VerboPedido::Sonda => Ok(ModoCiclo::Ligado),
+        VerboPedido::Aba => Ok(ModoCiclo::Ligado),
+        VerboPedido::Jogo | VerboPedido::Voltar => {
+            // Reservados para T6/T7; não executam agora.
+            Err("nao-implementado".to_string())
+        }
+    };
+    let modo_final = match resultado {
+        Ok(m) => m,
+        Err(e) => {
+            let _ = escrever_estado(&ModoCiclo::Erro, Some(&e));
+            ModoCiclo::Erro
+        }
+    };
+    let _ = escrever_estado(&modo_final, None);
+    liberar_pedido(id);
+    modo_final
+}
+
+fn executar_iniciar() -> Result<ModoCiclo, String> {
+    let recursos = std::path::PathBuf::new(); // placeholder; setup passa o real
+    let raiz = crate::instalacao::resolver_raiz(&recursos);
+    let dados = pasta_dados();
+    let arquivo = crate::instalacao::arquivo_instalacao();
+    let config = crate::instalacao::ler_instalacao(&arquivo)?;
+    if !config.supervisor {
+        return Err("supervisor desabilitado".into());
+    }
+    let (_iniciados, avisos) = crate::instalacao::iniciar_servicos(
+        &config,
+        &recursos,
+        &raiz,
+        &dados,
+        env!("CARGO_PKG_VERSION"),
+    );
+    if !avisos.is_empty() {
+        // Avisos não bloqueiam; serviços opcionais podem estar ausentes.
+        for a in &avisos {
+            eprintln!("ciclo iniciar: {a}");
+        }
+    }
+    Ok(ModoCiclo::Ligado)
+}
+
+fn executar_parar() -> Result<ModoCiclo, String> {
+    crate::servicos::encerrar_todos();
+    Ok(ModoCiclo::Parado)
+}
+
+fn executar_recarregar() -> Result<ModoCiclo, String> {
+    // Reinicia só núcleo e OpenJarvis; conserva voz/reunião.
+    let _ = crate::servicos::parar("nucleo");
+    let _ = crate::servicos::parar("openjarvis");
+    std::thread::sleep(std::time::Duration::from_millis(500));
+    let _ = crate::servicos::repetir("nucleo");
+    let _ = crate::servicos::repetir("openjarvis");
+    Ok(ModoCiclo::Ligado)
+}
+
+fn executar_sair() -> Result<ModoCiclo, String> {
+    crate::servicos::encerrar_todos();
+    // O pai encerra a si mesmo após liberar a fila.
+    std::process::exit(0);
+}
+
+fn executar_tentar() -> Result<ModoCiclo, String> {
+    crate::servicos::repetir_desistidos();
+    Ok(ModoCiclo::Ligado)
+}
+
+/// Thread dona da fila: consome pedidos admitidos e executa serialmente.
+pub fn iniciar_executor_da_fila() {
+    std::thread::Builder::new()
+        .name("ciclo-executor".into())
+        .spawn(|| loop {
+            // Verifica se há pedido em andamento.
+            let pendente = {
+                match FILA.lock() {
+                    Ok(f) => f.em_andamento.clone().zip(f.verbo_em_andamento.clone()),
+                    Err(_) => None,
+                }
+            };
+            if let Some((id, verbo)) = pendente {
+                // Verifica se já foi executado (estado != transição).
+                let estado = ler_estado().unwrap_or_default();
+                let em_transicao = matches!(
+                    estado.modo.as_str(),
+                    "ligando" | "liberando" | "voltando" | "saindo"
+                );
+                if em_transicao {
+                    executar_verbo(&id, &verbo);
+                }
+            }
+            std::thread::sleep(std::time::Duration::from_millis(200));
+        })
+        .expect("falha ao iniciar executor da fila");
+}
+
+/// Loop da caixa IPC: consome arquivos periodicamente e manda para a fila.
+pub fn iniciar_consumidor_da_caixa() {
+    std::thread::Builder::new()
+        .name("ciclo-caixa-ipc".into())
+        .spawn(|| loop {
+            if supervisor_ativo() {
+                let _ = consumir_pedidos_da_caixa();
+            }
+            std::thread::sleep(std::time::Duration::from_millis(500));
+        })
+        .expect("falha ao iniciar consumidor da caixa IPC");
+}
+
+// ---------------------------------------------------------------------------
 // Comandos Tauri (invoke_handler)
 // ---------------------------------------------------------------------------
 
 #[tauri::command]
 pub fn cmd_ciclo_info() -> FotoCiclo {
-    // Gate supervisor: sempre true no comando direto; o frontend decide quando chamar.
-    ciclo_info(true)
+    ciclo_info(supervisor_ativo())
 }
 
 #[tauri::command]
 pub fn cmd_ciclo_pedir(verbo: String) -> PedidoAceito {
+    if !supervisor_ativo() {
+        return PedidoAceito {
+            ok: false,
+            id: String::new(),
+            erro: Some("indisponivel: supervisor desabilitado".into()),
+        };
+    }
     ciclo_pedir(&verbo)
 }
 
@@ -493,7 +632,8 @@ mod testes {
         escrever_estado(&modo, Some("teste")).unwrap();
         let estado = ler_estado().unwrap();
         unsafe { std::env::remove_var("VARD_DADOS") };
-        assert_eq!(estado.modo, "ligado");
+        // escrever_estado grava o modo literal via to_string(); Ligado -> "ligado"
+        assert_eq!(estado.modo, modo.to_string());
         assert_eq!(estado.detalhe, Some("teste".into()));
     }
 

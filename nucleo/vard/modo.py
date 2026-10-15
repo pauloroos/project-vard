@@ -1,24 +1,32 @@
-"""Estado do ciclo de vida (estado.json) e disparo do vard-modo.ps1.
+"""Estado do ciclo de vida (estado.json) e disparo do ciclo nativo ou vard-modo.ps1.
 
-O script PowerShell é a fonte de verdade; aqui só se lê o estado que ele grava e se
-dispara um verbo em processo separado, para a ponte (ou a bandeja) poder responder antes de cair.
+Quando o app novo (Tauri) está vivo com supervisor ativo, os pedidos são publicados
+na caixa IPC (VARD_DADOS/ciclo/pedidos/) para a fila serial do Rust consumir.
+Sem app vivo, mantém o comportamento legado (PowerShell via vard-modo.ps1).
 """
 from __future__ import annotations
 
 import base64
 import json
+import os
 import subprocess
+import uuid
 from pathlib import Path
 
 from vard.segredos import PASTA
 
 ARQUIVO_ESTADO = PASTA / "estado.json"
 SCRIPT = Path(__file__).resolve().parent.parent.parent / "scripts" / "windows" / "vard-modo.ps1"
-# sonda: só grava sonda.txt (preflight prova que o disparo roda de verdade).
-# aba: só abre a janela do Vard no Chrome se ela não existir (bandeja).
-VERBOS = ("jogo", "voltar", "parar", "recarregar", "sonda", "aba")
+# sonda: só confirma pedido→Rust→registro.
+# aba: confirma pedido→Rust→registro (UI fica no frontend).
+# iniciar/parar/recarregar/sair/tentar/jogo/voltar: verbos da fila serial.
+VERBOS = ("iniciar", "jogo", "voltar", "parar", "recarregar", "sonda", "aba", "tentar", "sair")
 DESCONHECIDO = {"modo": "desconhecido", "desde": "", "detalhe": "estado.json ausente ou ilegível"}
 ARQUIVO_SONDA = PASTA / "sonda.txt"
+
+# Caixa IPC: pasta onde o Rust consome pedidos atômicos.
+PASTA_PEDIDOS = PASTA / "ciclo" / "pedidos"
+ARQUIVO_APP = PASTA / "ciclo" / "app.json"
 
 # Sem janela, mas com console: o powershell.exe 5.1 lançado com DETACHED_PROCESS devolve 0 e
 # não roda nada (provado na revisão final do plano 2). Por isso CREATE_NO_WINDOW.
@@ -51,17 +59,61 @@ def comando_intermediario(alvo: Path, verbo: str) -> str:
     return f"Start-Process -FilePath powershell -ArgumentList @({lista}) -WindowStyle Hidden"
 
 
-def disparar(verbo: str, script: Path | None = None) -> int:
-    """Roda `vard-modo.ps1 <verbo>` fora da árvore de processos de quem chamou.
+def _app_vivo() -> dict | None:
+    """Lê app.json e devolve o conteúdo se o app novo estiver vivo com supervisor ativo."""
+    try:
+        dados = json.loads(ARQUIVO_APP.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    if not isinstance(dados, dict) or "sessao_id" not in dados:
+        return None
+    # Verifica supervisor no instalacao.json
+    from vard.segredos import PASTA as _P
+    inst = _P / "instalacao.json"
+    try:
+        cfg = json.loads(inst.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    if not cfg.get("supervisor", False):
+        return None
+    return dados
 
-    Lança um powershell INTERMEDIÁRIO que só faz Start-Process do script e sai na hora: o
-    script fica órfão e o `taskkill /T` que ele mesmo dá na ponte ou na bandeja não o alcança.
-    O comando vai em -EncodedCommand para o caminho passar intacto pelas duas camadas de
-    aspas (Python -> powershell -> Start-Process). Devolve o PID do intermediário (já morto
-    pouco depois); não é o PID do script.
+
+def publicar_pedido(verbo: str) -> dict:
+    """Publica pedido atômico na caixa IPC para a fila serial do Rust consumir.
+
+    Retorna {"ok": True, "id": "<uuid>"} em caso de sucesso.
+    Levanta ValueError para verbo desconhecido ou OSError para falha de escrita.
     """
     if verbo not in VERBOS:
         raise ValueError(f"verbo desconhecido: {verbo}")
+    app = _app_vivo()
+    if app is None:
+        raise RuntimeError("app novo indisponivel ou supervisor desabilitado")
+    pedido_id = str(uuid.uuid4())
+    PASTA_PEDIDOS.mkdir(parents=True, exist_ok=True)
+    conteudo = json.dumps({"id": pedido_id, "verbo": verbo, "sessao": app["sessao_id"]})
+    tmp = PASTA_PEDIDOS / f"{pedido_id}.tmp"
+    alvo = PASTA_PEDIDOS / f"{pedido_id}.json"
+    tmp.write_text(conteudo, encoding="utf-8")
+    tmp.rename(alvo)
+    return {"ok": True, "id": pedido_id}
+
+
+def disparar(verbo: str, script: Path | None = None) -> int | dict:
+    """Publica pedido na caixa IPC (app novo) ou roda vard-modo.ps1 (legado).
+
+    Com app novo vivo e supervisor ativo: publica na caixa e devolve {"ok": True, "id": uuid}.
+    Sem app novo: mantém comportamento legado (PowerShell) e devolve PID do intermediário.
+    """
+    if verbo not in VERBOS:
+        raise ValueError(f"verbo desconhecido: {verbo}")
+    # Tenta publicar na caixa IPC primeiro
+    try:
+        return publicar_pedido(verbo)
+    except (RuntimeError, OSError):
+        pass
+    # Fallback legado: PowerShell via vard-modo.ps1
     alvo = Path(script or SCRIPT)
     if not alvo.exists():
         raise FileNotFoundError(f"vard-modo.ps1 não encontrado em {alvo}")

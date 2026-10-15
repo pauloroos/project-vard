@@ -195,12 +195,18 @@ def mudar_modo(corpo: dict):
     if verbo not in modo.VERBOS:
         raise HTTPException(422, f"modo inválido: {verbo}")
     try:
-        pid = modo.disparar(verbo)
+        resultado = modo.disparar(verbo)
     except FileNotFoundError as exc:
         return _erro(modelos.ErroModelo("modo_script", str(exc)))
     except OSError as exc:
         return _erro(modelos.ErroModelo("modo_falhou", str(exc)))
-    return {"ok": True, "pid": pid}
+    except RuntimeError as exc:
+        # App novo indisponível ou supervisor desabilitado; fallback legado falhou.
+        return _erro(modelos.ErroModelo("modo_indisponivel", str(exc)))
+    # disparar devolve dict {"ok": True, "id": uuid} (caixa IPC) ou int (PID legado).
+    if isinstance(resultado, dict):
+        return resultado
+    return {"ok": True, "pid": resultado}
 
 
 # ----------------------------------------------------------------------------- EVENTOS
