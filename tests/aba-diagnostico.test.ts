@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { AbaDiagnostico, type ResultadoDiagnostico } from "../src/ui/aba-diagnostico";
+import { AbaDiagnostico, type DepsAbaDiagnostico, type ResultadoDiagnostico } from "../src/ui/aba-diagnostico";
 
 // Mock do invoke do Tauri
 vi.mock("@tauri-apps/api/core", () => ({
@@ -11,7 +11,7 @@ const mockInvoke = vi.mocked(invoke);
 
 describe("AbaDiagnostico", () => {
   let raiz: HTMLDivElement;
-  let deps: { copiar: ReturnType<typeof vi.fn> };
+  let deps: DepsAbaDiagnostico;
   let aba: AbaDiagnostico;
 
   const resultadoFake: ResultadoDiagnostico = {
@@ -25,7 +25,7 @@ describe("AbaDiagnostico", () => {
 
   beforeEach(() => {
     raiz = document.createElement("div");
-    deps = { copiar: vi.fn().mockResolvedValue(undefined) };
+    deps = { copiar: vi.fn().mockResolvedValue(undefined) as unknown as (texto: string) => Promise<void> };
     aba = new AbaDiagnostico(raiz, deps);
     mockInvoke.mockReset();
   });
