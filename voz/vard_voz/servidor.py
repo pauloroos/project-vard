@@ -13,9 +13,11 @@ from fastapi.responses import JSONResponse, StreamingResponse
 
 from .motor import VOZ
 from .normalizar import normalizar
+from .transcricao import MotorSTT, LIMITE_BYTES
 
 log = logging.getLogger("vard_voz")
 MAX_CHARS = 400
+LIMITE_UPLOAD_STT = LIMITE_BYTES  # 10 MiB
 
 # Mesma lista da ponte (4700 + webview do HUD em produção / dev).
 ORIGENS_OK = {
@@ -27,7 +29,7 @@ ORIGENS_OK = {
 _NAO_FORNECIDO = object()
 
 
-def criar_app(motor=None, motor_kokoro=_NAO_FORNECIDO, carregar_em_thread: bool = True) -> FastAPI:
+def criar_app(motor=None, motor_kokoro=_NAO_FORNECIDO, stt=None, carregar_em_thread: bool = True) -> FastAPI:
     if motor is None:
         from .motor import Motor
         motor = Motor(os.environ.get("VARD_VOZ_DEVICE", "cuda"))
@@ -38,6 +40,17 @@ def criar_app(motor=None, motor_kokoro=_NAO_FORNECIDO, carregar_em_thread: bool 
         except Exception:
             log.warning("kokoro indisponivel; apenas XTTS ativo")
             motor_kokoro = None
+    if stt is None:
+        # STT é opcional: só instancia se o extra estiver instalado. Sem ele, /transcribe devolve 503.
+        try:
+            stt = MotorSTT(
+                modelo=os.environ.get("VARD_STT_MODEL", "base"),
+                device=os.environ.get("VARD_STT_DEVICE", "cpu"),
+                compute_type=os.environ.get("VARD_STT_COMPUTE", "int8"),
+            )
+        except Exception:
+            log.warning("MotorSTT indisponível; /transcribe retornará 503 até instalação do extra stt")
+            stt = None
 
     @asynccontextmanager
     async def vida(app):
@@ -111,6 +124,33 @@ def criar_app(motor=None, motor_kokoro=_NAO_FORNECIDO, carregar_em_thread: bool 
         if motor_kokoro is not None and motor_kokoro.pronta and motor_kokoro.aquecida:
             return motor_kokoro
         return None
+
+    @app.post("/v1/speech/transcribe")
+    async def transcrever(request: Request):
+        """Transcrição STT própria (compatível com OpenJarvis). Requer extra 'stt' instalado."""
+        if stt is None or not stt.pronta:
+            return JSONResponse({"erro": "stt_indisponivel"}, status_code=503)
+        ct = request.headers.get("content-type", "")
+        if "multipart/form-data" in ct:
+            form = await request.form()
+            arquivo = form.get("file")
+            if arquivo is None or not hasattr(arquivo, "read"):
+                return JSONResponse({"erro": "arquivo_ausente"}, status_code=400)
+            audio = await arquivo.read()
+        else:
+            audio = await request.body()
+        if not audio:
+            return JSONResponse({"erro": "audio_vazio"}, status_code=400)
+        if len(audio) > LIMITE_UPLOAD_STT:
+            return JSONResponse({"erro": "audio_grande_demais"}, status_code=413)
+        try:
+            texto, confianca = await run_in_threadpool(stt.transcrever_bytes, audio)
+        except ValueError as exc:
+            return JSONResponse({"erro": str(exc)}, status_code=400)
+        except RuntimeError as exc:
+            log.warning("transcrever falhou: %s", exc)
+            return JSONResponse({"erro": "stt_falhou"}, status_code=503)
+        return {"text": texto, "confidence": confianca}
 
     @app.post("/falar")
     async def falar(corpo: dict, request: Request, fluxo: int = 0):
