@@ -4,7 +4,7 @@
 //! serviço habilitado. Valida vetor/cwd/prazos seguindo as regras de `externo.rs` da v0.4,
 //! mas sem comando arbitrário de "iniciar instalação" nem script legado.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
@@ -33,6 +33,10 @@ pub struct InstalacaoConfig {
     /// Tamanho do contexto.
     #[serde(default)]
     pub contexto: u32,
+    /// Se true, o app inicia e supervisiona os serviços automaticamente.
+    /// Padrão false para preservar lado a lado com vard-modo.ps1.
+    #[serde(default)]
+    pub supervisor: bool,
     /// Serviços opcionais habilitados e suas configurações.
     #[serde(default)]
     pub servicos: ServicosConfig,
@@ -46,9 +50,35 @@ impl Default for InstalacaoConfig {
             openjarvis_home: String::new(),
             modelo: String::new(),
             contexto: 16000,
+            supervisor: false,
             servicos: ServicosConfig::default(),
         }
     }
+}
+
+/// Resolve a raiz da instalação em tempo de execução.
+/// - Se `VARD_INSTALACAO` estiver definida, usa esse caminho (app instalado).
+/// - Se `VARD_RAIZ_DEV` estiver definida, usa esse caminho (dev).
+/// - Caso contrário, tenta achar o marcador do repo subindo a partir do executável.
+/// - Fallback: diretório corrente.
+pub fn resolver_raiz(recursos: &Path) -> PathBuf {
+    if let Ok(p) = std::env::var("VARD_INSTALACAO") {
+        return PathBuf::from(p);
+    }
+    if let Ok(p) = std::env::var("VARD_RAIZ_DEV") {
+        return PathBuf::from(p);
+    }
+    // Tenta subir a partir do recurso até achar Cargo.toml (marcador do repo)
+    let mut dir = recursos.to_path_buf();
+    for _ in 0..10 {
+        if dir.join("Cargo.toml").exists() && dir.join("src-tauri").exists() {
+            return dir;
+        }
+        if !dir.pop() {
+            break;
+        }
+    }
+    std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))
 }
 
 /// Configuração dos serviços opcionais.
@@ -178,6 +208,8 @@ pub fn descritor_voz(
     let envs = vec![
         ("VARD_VOZ_PORT".into(), porta.to_string()),
         ("VARD_DADOS".into(), dados.to_string_lossy().into_owned()),
+        ("VARD_CONFIG".into(), dados.join("config").to_string_lossy().into_owned()),
+        ("VARD_INSTALACAO".into(), dados.to_string_lossy().into_owned()),
     ];
     Some(DescritorServico {
         id: "voz".into(),
@@ -221,6 +253,8 @@ pub fn descritor_reuniao(
     let envs = vec![
         ("VARD_REUNIAO_PORT".into(), porta.to_string()),
         ("VARD_DADOS".into(), dados.to_string_lossy().into_owned()),
+        ("VARD_CONFIG".into(), dados.join("config").to_string_lossy().into_owned()),
+        ("VARD_INSTALACAO".into(), dados.to_string_lossy().into_owned()),
         ("HF_HUB_OFFLINE".into(), "1".into()),
         ("PYANNOTE_METRICS_ENABLED".into(), "0".into()),
     ];
@@ -233,8 +267,58 @@ pub fn descritor_reuniao(
     })
 }
 
+/// Constrói o descritor de serviço para o OpenJarvis (opcional).
+/// Retorna None se desabilitado ou se o caminho fonte não existe.
+pub fn descritor_openjarvis(
+    config: &InstalacaoConfig,
+    dados: &Path,
+) -> Option<DescritorServico> {
+    if !config.servicos.openjarvis {
+        return None;
+    }
+    let src = Path::new(&config.openjarvis_src);
+    if !src.exists() {
+        return None;
+    }
+    let home = if config.openjarvis_home.is_empty() {
+        dados.join("openjarvis")
+    } else {
+        PathBuf::from(&config.openjarvis_home)
+    };
+    // O entrypoint do OpenJarvis é `jarvis serve --agent orchestrator` dentro do venv/source.
+    let jarvis = if cfg!(windows) {
+        src.join("Scripts").join("jarvis.exe")
+    } else {
+        src.join("bin").join("jarvis")
+    };
+    if !jarvis.exists() {
+        return None;
+    }
+    let args = vec![
+        "serve".into(),
+        "--agent".into(),
+        "orchestrator".into(),
+        "--home".into(),
+        home.to_string_lossy().into_owned(),
+    ];
+    let envs = vec![
+        ("OPENJARVIS_HOME".into(), home.to_string_lossy().into_owned()),
+        ("VARD_DADOS".into(), dados.to_string_lossy().into_owned()),
+        ("VARD_CONFIG".into(), dados.join("config").to_string_lossy().into_owned()),
+        ("VARD_INSTALACAO".into(), dados.to_string_lossy().into_owned()),
+    ];
+    Some(DescritorServico {
+        id: "openjarvis".into(),
+        porta: 0,
+        comando: (jarvis, args),
+        envs,
+        caminho_log: dados.join("logs").join("openjarvis.log"),
+    })
+}
+
 /// Inicia os serviços habilitados na configuração de instalação.
 /// Retorna lista de IDs iniciados e avisos sobre opcionais indisponíveis.
+/// Se `config.supervisor` for false, retorna imediatamente sem iniciar nada.
 pub fn iniciar_servicos(
     config: &InstalacaoConfig,
     recursos: &Path,
@@ -245,7 +329,11 @@ pub fn iniciar_servicos(
     let mut iniciados = Vec::new();
     let mut avisos = Vec::new();
 
-    // Núcleo sempre inicia
+    if !config.supervisor {
+        return (iniciados, avisos);
+    }
+
+    // Núcleo sempre inicia quando supervisor está ligado
     let desc_nucleo = descritor_nucleo(
         cfg!(debug_assertions),
         recursos,
@@ -279,6 +367,18 @@ pub fn iniciar_servicos(
         },
         None if config.servicos.reuniao => {
             avisos.push("reuniao: venv ausente ou desabilitada".into());
+        }
+        _ => {}
+    }
+
+    // OpenJarvis opcional
+    match descritor_openjarvis(config, dados) {
+        Some(desc) => match crate::servicos::iniciar(desc) {
+            Ok(()) => iniciados.push("openjarvis".into()),
+            Err(e) => avisos.push(format!("openjarvis: {e}")),
+        },
+        None if config.servicos.openjarvis => {
+            avisos.push("openjarvis: fonte ou executável ausente".into());
         }
         _ => {}
     }
@@ -471,7 +571,8 @@ mod testes {
 
     #[test]
     fn iniciar_servicos_sem_opcionais_nao_inicia_voz_nem_reuniao() {
-        let c = InstalacaoConfig::default();
+        let mut c = InstalacaoConfig::default();
+        c.supervisor = true;
         let dir = tempfile::tempdir().unwrap();
         let (iniciados, _avisos) = iniciar_servicos(
             &c,
@@ -492,8 +593,27 @@ mod testes {
     }
 
     #[test]
+    fn iniciar_servicos_com_supervisor_desligado_retorna_listas_vazias() {
+        let mut c = InstalacaoConfig::default();
+        c.supervisor = false;
+        c.servicos.voz = true;
+        c.servicos.reuniao = true;
+        let dir = tempfile::tempdir().unwrap();
+        let (iniciados, avisos) = iniciar_servicos(
+            &c,
+            dir.path(),
+            dir.path(),
+            dir.path(),
+            "0.7.0-test",
+        );
+        assert!(iniciados.is_empty(), "nenhum serviço deve iniciar com supervisor desligado");
+        assert!(avisos.is_empty(), "nenhum aviso deve ser gerado com supervisor desligado");
+    }
+
+    #[test]
     fn iniciar_servicos_com_voz_habilitada_mas_venv_ausente_gera_aviso() {
         let mut c = InstalacaoConfig::default();
+        c.supervisor = true;
         c.servicos.voz = true;
         c.raiz_codigo = "/tmp/nao-existe".into();
         let dir = tempfile::tempdir().unwrap();
@@ -508,6 +628,25 @@ mod testes {
             avisos.iter().any(|a| a.contains("voz")),
             "deveria ter aviso sobre voz: {:?}",
             avisos
+        );
+    }
+
+    /// Prova de que o valor de CARGO_MANIFEST_DIR não vazou para o binário de release.
+    /// Em debug, o compilador sempre embeda caminhos nos metadados DWARF/pdb;
+    /// a garantia vale apenas para o artefato final distribuído (release).
+    #[cfg(not(debug_assertions))]
+    #[test]
+    fn binario_release_nao_contem_valor_de_manifest_dir() {
+        let exe = std::env::current_exe().expect("caminho do executável de teste");
+        let bytes = std::fs::read(&exe).expect("leitura do binário");
+        let texto = String::from_utf8_lossy(&bytes);
+        let manifest_dir = env!("CARGO_MANIFEST_DIR");
+        assert!(
+            !texto.contains(manifest_dir),
+            "binário de release contém o valor de CARGO_MANIFEST_DIR ('{}') como string literal — \
+             paths do build host não devem ser embedados no artefato final (exe: {:?})",
+            manifest_dir,
+            exe
         );
     }
 }
