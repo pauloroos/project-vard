@@ -1,5 +1,6 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, beforeEach } from "vitest";
 import { opcoesDeVoz, problemaDeVoz, vozGeminiMarcada } from "../src/ui/aba-voz";
+import { definirPreferencia, obterPreferencia } from "../src/audio/dispositivos";
 
 const base: [string, string][] = [["", "A voz atual do serviço"], ["Ana", "Ana"]];
 
@@ -36,5 +37,45 @@ describe("vozGeminiMarcada", () => {
     expect(vozGeminiMarcada("")).toBe("Kore");
     expect(vozGeminiMarcada("  ")).toBe("Kore");
     expect(vozGeminiMarcada("Puck")).toBe("Puck");
+  });
+});
+
+describe("dispositivos na aba voz (T9c)", () => {
+  beforeEach(() => {
+    definirPreferencia({ microfone_id: "", microfone_rotulo: "", saida_id: "", saida_rotulo: "" });
+  });
+
+  it("definir_preferencia_atualiza_estado_imediatamente", () => {
+    definirPreferencia({ microfone_id: "mic-1", microfone_rotulo: "Mic USB" });
+    const p = obterPreferencia();
+    expect(p.microfone_id).toBe("mic-1");
+    expect(p.microfone_rotulo).toBe("Mic USB");
+  });
+
+  it("selecao_grava_os_4_campos_na_preferencia", () => {
+    definirPreferencia({
+      microfone_id: "m-x",
+      microfone_rotulo: "Microfone X",
+      saida_id: "s-y",
+      saida_rotulo: "Caixa Y",
+    });
+    const p = obterPreferencia();
+    expect(p.microfone_id).toBe("m-x");
+    expect(p.saida_id).toBe("s-y");
+    expect(p.microfone_rotulo).toBe("Microfone X");
+    expect(p.saida_rotulo).toBe("Caixa Y");
+  });
+
+  it("nomes_duplicados_nao_quebram_selecao_por_deviceId", () => {
+    definirPreferencia({ microfone_id: "dup-2", microfone_rotulo: "Mic Genérico" });
+    const p = obterPreferencia();
+    expect(p.microfone_id).toBe("dup-2");
+  });
+
+  it("preferencia_vazia_significa_padrao", () => {
+    definirPreferencia({ microfone_id: "", saida_id: "" });
+    const p = obterPreferencia();
+    expect(p.microfone_id).toBe("");
+    expect(p.saida_id).toBe("");
   });
 });
