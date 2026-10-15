@@ -5748,6 +5748,7 @@ dependencies = [
  "tauri-plugin-single-instance",
  "tempfile",
  "url",
+ "uuid",
  "windows-sys 0.59.0",
  "xcap",
 ]

@@ -1,9 +1,11 @@
-/// Ciclo nativo do Vard 0.7: pasta de dados unificada, fotografia operacional e pedidos atômicos.
+/// Ciclo nativo do Vard 0.7: pasta de dados unificada, fila serial de pedidos e caixa IPC.
 ///
 /// Contrato de pasta de dados (idêntico ao Python nucleo/vard/config.py):
 /// 1. Se `VARD_DADOS` estiver definida, usa esse caminho.
 /// 2. Senão, usa `%LOCALAPPDATA%\rdl-vard`.
 use std::path::PathBuf;
+use std::sync::{Arc, Mutex};
+use serde::{Deserialize, Serialize};
 
 /// Resolve a pasta de dados seguindo o mesmo contrato do Python.
 pub fn pasta_dados() -> PathBuf {
@@ -79,6 +81,22 @@ impl std::str::FromStr for VerboPedido {
             "tentar" => Ok(VerboPedido::Tentar),
             "sair" => Ok(VerboPedido::Sair),
             _ => Err(format!("verbo desconhecido: {}", s)),
+        }
+    }
+}
+
+impl std::fmt::Display for VerboPedido {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            VerboPedido::Iniciar => write!(f, "iniciar"),
+            VerboPedido::Jogo => write!(f, "jogo"),
+            VerboPedido::Voltar => write!(f, "voltar"),
+            VerboPedido::Parar => write!(f, "parar"),
+            VerboPedido::Recarregar => write!(f, "recarregar"),
+            VerboPedido::Sonda => write!(f, "sonda"),
+            VerboPedido::Aba => write!(f, "aba"),
+            VerboPedido::Tentar => write!(f, "tentar"),
+            VerboPedido::Sair => write!(f, "sair"),
         }
     }
 }
@@ -190,6 +208,235 @@ pub fn registrar_sessao(pid: u32, sessao_id: &str) -> Result<(), String> {
     let json = serde_json::to_string_pretty(&doc).map_err(|e| format!("serializar app.json: {}", e))?;
     std::fs::write(&caminho, json.as_bytes()).map_err(|e| format!("escrever app.json: {}", e))?;
     Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Fila serial de pedidos e caixa IPC
+// ---------------------------------------------------------------------------
+
+/// Limite de tamanho para arquivos de pedido na caixa IPC (4 KiB).
+const LIMITE_PEDIDO_BYTES: u64 = 4096;
+
+/// Resultado da admissão de um pedido na fila.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PedidoAceito {
+    pub ok: bool,
+    pub id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub erro: Option<String>,
+}
+
+/// Fotografia do ciclo para o frontend (sem segredos).
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct FotoCiclo {
+    pub modo: String,
+    pub desde: String,
+    pub detalhe: Option<String>,
+    pub servicos_ligados: Vec<String>,
+    pub supervisor_ativo: bool,
+}
+
+/// Estado interno da fila serial.
+struct FilaEstado {
+    /// ID do pedido atualmente em execução (se houver).
+    em_andamento: Option<String>,
+    /// Verbo do pedido em andamento.
+    verbo_em_andamento: Option<VerboPedido>,
+    /// Sessão atual (renovada a cada arranque).
+    sessao_id: String,
+}
+
+lazy_static::lazy_static! {
+    static ref FILA: Arc<Mutex<FilaEstado>> = Arc::new(Mutex::new(FilaEstado {
+        em_andamento: None,
+        verbo_em_andamento: None,
+        sessao_id: String::new(),
+    }));
+}
+
+/// Inicializa a sessão da fila (chamado no setup do app).
+pub fn inicializar_fila(sessao_id: &str) {
+    if let Ok(mut f) = FILA.lock() {
+        f.sessao_id = sessao_id.to_string();
+    }
+}
+
+/// Admite um pedido na fila serial. Retorna imediatamente com o ID aceito.
+/// Repetição do mesmo verbo em andamento devolve o mesmo ID.
+/// Verbo incompatível durante transição retorna ocupado.
+pub fn ciclo_pedir(verbo_str: &str) -> PedidoAceito {
+    use std::str::FromStr;
+    let verbo = match VerboPedido::from_str(verbo_str) {
+        Ok(v) => v,
+        Err(e) => return PedidoAceito { ok: false, id: String::new(), erro: Some(e) },
+    };
+
+    let mut fila = match FILA.lock() {
+        Ok(f) => f,
+        Err(e) => return PedidoAceito { ok: false, id: String::new(), erro: Some(format!("lock: {}", e)) },
+    };
+
+    // Se já há um pedido em andamento com o mesmo verbo, devolve o mesmo ID.
+    if let (Some(id), Some(v)) = (&fila.em_andamento, &fila.verbo_em_andamento) {
+        if *v == verbo {
+            return PedidoAceito { ok: true, id: id.clone(), erro: None };
+        }
+        // Verbo diferente durante transição → ocupado.
+        return PedidoAceito {
+            ok: false,
+            id: String::new(),
+            erro: Some(format!("ocupado: {} em andamento", v)),
+        };
+    }
+
+    // Gera ID único para o novo pedido.
+    let id = uuid::Uuid::new_v4().to_string();
+    fila.em_andamento = Some(id.clone());
+    fila.verbo_em_andamento = Some(verbo.clone());
+
+    // Escreve estado atômico (projeção legada).
+    let modo_projecao = match verbo {
+        VerboPedido::Iniciar => ModoCiclo::Ligando,
+        VerboPedido::Jogo => ModoCiclo::Liberando,
+        VerboPedido::Voltar => ModoCiclo::Voltando,
+        VerboPedido::Parar => ModoCiclo::Liberando,
+        VerboPedido::Sair => ModoCiclo::Saindo,
+        VerboPedido::Recarregar => ModoCiclo::Ligando,
+        VerboPedido::Sonda | VerboPedido::Aba | VerboPedido::Tentar => ModoCiclo::Ligado,
+    };
+    drop(fila);
+    let _ = escrever_estado(&modo_projecao, Some(verbo_str));
+
+    PedidoAceito { ok: true, id, erro: None }
+}
+
+/// Libera o slot da fila quando o pedido termina.
+pub fn liberar_pedido(id: &str) {
+    if let Ok(mut f) = FILA.lock() {
+        if f.em_andamento.as_deref() == Some(id) {
+            f.em_andamento = None;
+            f.verbo_em_andamento = None;
+        }
+    }
+}
+
+/// Retorna a fotografia atual do ciclo para o frontend.
+pub fn ciclo_info(supervisor_ativo: bool) -> FotoCiclo {
+    let estado = ler_estado().unwrap_or_default();
+    let foto = carregar_fotografia().ok().flatten().unwrap_or_default();
+    FotoCiclo {
+        modo: estado.modo,
+        desde: estado.desde,
+        detalhe: estado.detalhe,
+        servicos_ligados: foto.servicos_ligados,
+        supervisor_ativo,
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Comandos Tauri (invoke_handler)
+// ---------------------------------------------------------------------------
+
+#[tauri::command]
+pub fn cmd_ciclo_info() -> FotoCiclo {
+    // Gate supervisor: sempre true no comando direto; o frontend decide quando chamar.
+    ciclo_info(true)
+}
+
+#[tauri::command]
+pub fn cmd_ciclo_pedir(verbo: String) -> PedidoAceito {
+    ciclo_pedir(&verbo)
+}
+
+// ---------------------------------------------------------------------------
+// Caixa IPC: consumo de pedidos via arquivo
+// ---------------------------------------------------------------------------
+
+/// Consome pedidos da caixa IPC (VARD_DADOS/ciclo/pedidos/*.json).
+/// Valida UUID, tamanho, verbo conhecido e sessão atual. Remove após consumo.
+pub fn consumir_pedidos_da_caixa() -> Vec<PedidoAceito> {
+    let dados = pasta_dados();
+    let pedidos_dir = dados.join("ciclo").join("pedidos");
+    if !pedidos_dir.exists() {
+        return Vec::new();
+    }
+
+    let sessao_atual = FILA.lock().ok().map(|f| f.sessao_id.clone()).unwrap_or_default();
+    let mut resultados = Vec::new();
+
+    let entradas = match std::fs::read_dir(&pedidos_dir) {
+        Ok(rd) => rd,
+        Err(_) => return Vec::new(),
+    };
+
+    for entry in entradas.flatten() {
+        let path = entry.path();
+        // Só processa .json
+        if path.extension().and_then(|e| e.to_str()) != Some("json") {
+            continue;
+        }
+        // Não segue links simbólicos para fora da pasta
+        if path.is_symlink() {
+            let _ = std::fs::remove_file(&path);
+            continue;
+        }
+        // Limite de tamanho
+        let meta = match std::fs::metadata(&path) {
+            Ok(m) => m,
+            Err(_) => continue,
+        };
+        if meta.len() > LIMITE_PEDIDO_BYTES {
+            let _ = std::fs::remove_file(&path);
+            continue;
+        }
+        // Lê e parseia
+        let bytes = match std::fs::read(&path) {
+            Ok(b) => b,
+            Err(_) => continue,
+        };
+        let pedido: serde_json::Value = match serde_json::from_slice(&bytes) {
+            Ok(v) => v,
+            Err(_) => {
+                let _ = std::fs::remove_file(&path);
+                continue;
+            }
+        };
+
+        // Valida campos obrigatórios
+        let id = match pedido.get("id").and_then(|v| v.as_str()) {
+            Some(s) => s.to_string(),
+            None => { let _ = std::fs::remove_file(&path); continue; }
+        };
+        let verbo_str = match pedido.get("verbo").and_then(|v| v.as_str()) {
+            Some(s) => s,
+            None => { let _ = std::fs::remove_file(&path); continue; }
+        };
+        let sessao = pedido.get("sessao").and_then(|v| v.as_str()).unwrap_or("");
+
+        // Valida UUID
+        if uuid::Uuid::parse_str(&id).is_err() {
+            let _ = std::fs::remove_file(&path);
+            continue;
+        }
+        // Verbo conhecido
+        use std::str::FromStr;
+        if VerboPedido::from_str(verbo_str).is_err() {
+            let _ = std::fs::remove_file(&path);
+            continue;
+        }
+        // Sessão atual
+        if !sessao_atual.is_empty() && sessao != sessao_atual {
+            let _ = std::fs::remove_file(&path);
+            continue;
+        }
+
+        // Admite na fila
+        let resultado = ciclo_pedir(verbo_str);
+        // Remove o arquivo consumido
+        let _ = std::fs::remove_file(&path);
+        resultados.push(resultado);
+    }
+    resultados
 }
 
 #[cfg(test)]
@@ -318,5 +565,257 @@ mod testes {
         assert_eq!(ModoCiclo::Parado.to_string(), "parado");
         assert_eq!(ModoCiclo::Jogo.to_string(), "jogo");
         assert_eq!(ModoCiclo::Saindo.to_string(), "saindo");
+    }
+
+    // -----------------------------------------------------------------------
+    // Testes T5b: fila serial, caixa IPC, comandos
+    // -----------------------------------------------------------------------
+
+    fn reset_fila_para_teste(sessao_id: &str) {
+        let mut f = match FILA.lock() {
+            Ok(g) => g,
+            Err(poisoned) => {
+                // Recupera de poison anterior (outro teste panicou segurando o lock).
+                let mut g = poisoned.into_inner();
+                g.em_andamento = None;
+                g.verbo_em_andamento = None;
+                g.sessao_id = sessao_id.to_string();
+                return;
+            }
+        };
+        f.em_andamento = None;
+        f.verbo_em_andamento = None;
+        f.sessao_id = sessao_id.to_string();
+    }
+
+    #[test]
+    fn fila_repeticao_devolve_mesmo_id() {
+        let _lock = ENV_LOCK.lock().unwrap();
+        reset_fila_para_teste("sessao-rep");
+        let r1 = ciclo_pedir("iniciar");
+        let r2 = ciclo_pedir("iniciar");
+        assert!(r1.ok);
+        assert!(r2.ok);
+        assert_eq!(r1.id, r2.id);
+        liberar_pedido(&r1.id);
+    }
+
+    #[test]
+    fn fila_ocupado_quando_verbo_diferente_em_andamento() {
+        let _lock = ENV_LOCK.lock().unwrap();
+        reset_fila_para_teste("sessao-ocup");
+        let r1 = ciclo_pedir("iniciar");
+        assert!(r1.ok);
+        let r2 = ciclo_pedir("parar");
+        assert!(!r2.ok);
+        assert!(r2.erro.as_ref().map(|e| e.contains("ocupado")).unwrap_or(false));
+        liberar_pedido(&r1.id);
+    }
+
+    #[test]
+    fn fila_liberar_permite_novo_pedido() {
+        let _lock = ENV_LOCK.lock().unwrap();
+        reset_fila_para_teste("sessao-lib");
+        let r1 = ciclo_pedir("iniciar");
+        assert!(r1.ok);
+        liberar_pedido(&r1.id);
+        let r2 = ciclo_pedir("parar");
+        assert!(r2.ok);
+        liberar_pedido(&r2.id);
+    }
+
+    #[test]
+    fn caixa_ipc_consumo_remove_arquivo() {
+        let _lock = ENV_LOCK.lock().unwrap();
+        let dir = tempfile::tempdir().unwrap();
+        unsafe { std::env::set_var("VARD_DADOS", dir.path()) };
+        reset_fila_para_teste("sessao-ipc");
+
+        let pedidos_dir = dir.path().join("ciclo").join("pedidos");
+        std::fs::create_dir_all(&pedidos_dir).unwrap();
+        let id = uuid::Uuid::new_v4().to_string();
+        let conteudo = serde_json::json!({
+            "id": id,
+            "verbo": "iniciar",
+            "sessao": "sessao-ipc"
+        });
+        let arquivo = pedidos_dir.join(format!("{}.json", id));
+        std::fs::write(&arquivo, conteudo.to_string()).unwrap();
+
+        let resultados = consumir_pedidos_da_caixa();
+        unsafe { std::env::remove_var("VARD_DADOS") };
+
+        assert_eq!(resultados.len(), 1);
+        assert!(resultados[0].ok);
+        assert!(!arquivo.exists());
+        liberar_pedido(&id);
+    }
+
+    #[test]
+    fn caixa_ipc_uuid_invalido_removido() {
+        let _lock = ENV_LOCK.lock().unwrap();
+        let dir = tempfile::tempdir().unwrap();
+        unsafe { std::env::set_var("VARD_DADOS", dir.path()) };
+        reset_fila_para_teste("sessao-uuid");
+
+        let pedidos_dir = dir.path().join("ciclo").join("pedidos");
+        std::fs::create_dir_all(&pedidos_dir).unwrap();
+        let arquivo = pedidos_dir.join("nao-e-uuid.json");
+        std::fs::write(&arquivo, r#"{"id":"nao-e-uuid","verbo":"iniciar","sessao":"sessao-uuid"}"#).unwrap();
+
+        let resultados = consumir_pedidos_da_caixa();
+        unsafe { std::env::remove_var("VARD_DADOS") };
+
+        assert!(resultados.is_empty());
+        assert!(!arquivo.exists());
+    }
+
+    #[test]
+    fn caixa_ipc_maior_que_4k_removido() {
+        let _lock = ENV_LOCK.lock().unwrap();
+        let dir = tempfile::tempdir().unwrap();
+        unsafe { std::env::set_var("VARD_DADOS", dir.path()) };
+        reset_fila_para_teste("sessao-grande");
+
+        let pedidos_dir = dir.path().join("ciclo").join("pedidos");
+        std::fs::create_dir_all(&pedidos_dir).unwrap();
+        let id = uuid::Uuid::new_v4().to_string();
+        let grande = "x".repeat(5000);
+        let conteudo = serde_json::json!({
+            "id": id,
+            "verbo": "iniciar",
+            "sessao": "sessao-grande",
+            "lixo": grande
+        });
+        let arquivo = pedidos_dir.join(format!("{}.json", id));
+        std::fs::write(&arquivo, conteudo.to_string()).unwrap();
+
+        let resultados = consumir_pedidos_da_caixa();
+        unsafe { std::env::remove_var("VARD_DADOS") };
+
+        assert!(resultados.is_empty());
+        assert!(!arquivo.exists());
+    }
+
+    #[test]
+    fn caixa_ipc_sessao_diferente_removido() {
+        let _lock = ENV_LOCK.lock().unwrap();
+        let dir = tempfile::tempdir().unwrap();
+        unsafe { std::env::set_var("VARD_DADOS", dir.path()) };
+        reset_fila_para_teste("sessao-atual");
+
+        let pedidos_dir = dir.path().join("ciclo").join("pedidos");
+        std::fs::create_dir_all(&pedidos_dir).unwrap();
+        let id = uuid::Uuid::new_v4().to_string();
+        let conteudo = serde_json::json!({
+            "id": id,
+            "verbo": "iniciar",
+            "sessao": "sessao-passada"
+        });
+        let arquivo = pedidos_dir.join(format!("{}.json", id));
+        std::fs::write(&arquivo, conteudo.to_string()).unwrap();
+
+        let resultados = consumir_pedidos_da_caixa();
+        unsafe { std::env::remove_var("VARD_DADOS") };
+
+        assert!(resultados.is_empty());
+        assert!(!arquivo.exists());
+    }
+
+    #[test]
+    fn caixa_ipc_verbo_desconhecido_removido() {
+        let _lock = ENV_LOCK.lock().unwrap();
+        let dir = tempfile::tempdir().unwrap();
+        unsafe { std::env::set_var("VARD_DADOS", dir.path()) };
+        reset_fila_para_teste("sessao-verbo");
+
+        let pedidos_dir = dir.path().join("ciclo").join("pedidos");
+        std::fs::create_dir_all(&pedidos_dir).unwrap();
+        let id = uuid::Uuid::new_v4().to_string();
+        let conteudo = serde_json::json!({
+            "id": id,
+            "verbo": "decolar",
+            "sessao": "sessao-verbo"
+        });
+        let arquivo = pedidos_dir.join(format!("{}.json", id));
+        std::fs::write(&arquivo, conteudo.to_string()).unwrap();
+
+        let resultados = consumir_pedidos_da_caixa();
+        unsafe { std::env::remove_var("VARD_DADOS") };
+
+        assert!(resultados.is_empty());
+        assert!(!arquivo.exists());
+    }
+
+    #[test]
+    fn invoke_e_arquivo_simultaneos_um_so_arranque() {
+        let _lock = ENV_LOCK.lock().unwrap();
+        let dir = tempfile::tempdir().unwrap();
+        unsafe { std::env::set_var("VARD_DADOS", dir.path()) };
+        reset_fila_para_teste("sessao-dual");
+
+        // Prepara arquivo IPC
+        let pedidos_dir = dir.path().join("ciclo").join("pedidos");
+        std::fs::create_dir_all(&pedidos_dir).unwrap();
+        let id_arq = uuid::Uuid::new_v4().to_string();
+        let conteudo = serde_json::json!({
+            "id": id_arq,
+            "verbo": "iniciar",
+            "sessao": "sessao-dual"
+        });
+        std::fs::write(pedidos_dir.join(format!("{}.json", id_arq)), conteudo.to_string()).unwrap();
+
+        // Invoke direto primeiro
+        let r_invoke = ciclo_pedir("iniciar");
+        assert!(r_invoke.ok);
+
+        // Consumo da caixa deve retornar ocupado (mesmo verbo já em andamento → dedup devolve mesmo id)
+        let resultados = consumir_pedidos_da_caixa();
+        unsafe { std::env::remove_var("VARD_DADOS") };
+
+        // O arquivo é consumido e a dedup retorna o mesmo id do invoke
+        assert_eq!(resultados.len(), 1);
+        assert!(resultados[0].ok);
+        assert_eq!(resultados[0].id, r_invoke.id);
+        liberar_pedido(&r_invoke.id);
+    }
+
+    #[test]
+    fn estado_json_escrita_atomica_e_projecao_legada() {
+        let _lock = ENV_LOCK.lock().unwrap();
+        let dir = tempfile::tempdir().unwrap();
+        unsafe { std::env::set_var("VARD_DADOS", dir.path()) };
+
+        // Escreve estado com modo que exige projeção legada
+        escrever_estado(&ModoCiclo::Ligando, Some("projecao-teste")).unwrap();
+        // escrever_estado grava em dados/estado.json (raiz de VARD_DADOS), não em ciclo/
+        let caminho = dir.path().join("estado.json");
+        assert!(caminho.exists());
+
+        // Lê e verifica que o modo interno é gravado corretamente
+        let bytes = std::fs::read(&caminho).unwrap();
+        let doc: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(doc["modo"], "ligando");
+
+        // Verifica que não há arquivo temporário residual
+        let tmp = dir.path().join("estado.json.tmp");
+        assert!(!tmp.exists());
+
+        unsafe { std::env::remove_var("VARD_DADOS") };
+    }
+
+    #[test]
+    fn ciclo_info_retorna_foto_com_supervisor() {
+        let _lock = ENV_LOCK.lock().unwrap();
+        let dir = tempfile::tempdir().unwrap();
+        unsafe { std::env::set_var("VARD_DADOS", dir.path()) };
+        reset_fila_para_teste("sessao-info");
+
+        escrever_estado(&ModoCiclo::Ligado, None).unwrap();
+        let foto = ciclo_info(true);
+        unsafe { std::env::remove_var("VARD_DADOS") };
+
+        assert_eq!(foto.modo, "ligado");
+        assert!(foto.supervisor_ativo);
     }
 }
