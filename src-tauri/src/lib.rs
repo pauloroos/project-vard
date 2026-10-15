@@ -383,6 +383,8 @@ pub fn run() {
             comandos::gravar_config,
             comandos::ler_paineis,
             comandos::gravar_paineis,
+            comandos::ler_perfil,
+            comandos::gravar_perfil,
             comandos::definir_sempre_no_topo,
             comandos::definir_click_through,
             comandos::capturar_tela,
