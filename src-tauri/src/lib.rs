@@ -5,6 +5,7 @@ pub mod supervisor;
 pub mod servicos;
 pub mod nucleo;
 pub mod instalacao;
+pub mod ciclo;
 
 use serde_json::Value;
 use tauri::{
@@ -246,8 +247,8 @@ pub fn run() {
             {
                 let recursos = handle.path().resource_dir().unwrap_or_default();
                 let raiz = instalacao::resolver_raiz(&recursos);
-                let dados = handle.path().app_data_dir().unwrap_or_else(|_| raiz.join("dados"));
-                let arquivo = instalacao::arquivo_instalacao(&dados);
+                let dados = ciclo::pasta_dados();
+                let arquivo = instalacao::arquivo_instalacao();
                 let config_instalacao = instalacao::ler_instalacao(&arquivo).unwrap_or_default();
                 let (_iniciados, avisos) = instalacao::iniciar_servicos(
                     &config_instalacao,
