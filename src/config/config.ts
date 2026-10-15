@@ -33,6 +33,14 @@ export interface Config {
   atualizacao_ao_abrir: boolean;
   /** Não ouvir: microfone desligado (o mesmo que o botão Mudo do HUD). */
   nao_ouvir: boolean;
+  /** Dispositivo de entrada selecionado (deviceId); vazio = padrão do sistema. */
+  microfone_id: string;
+  /** Rótulo do microfone selecionado (informativo, para quando o deviceId muda). */
+  microfone_rotulo: string;
+  /** Dispositivo de saída selecionado (deviceId); vazio = padrão do sistema. */
+  saida_id: string;
+  /** Rótulo da saída selecionada (informativo). */
+  saida_rotulo: string;
   /** Não falar: a resposta aparece só em texto, sem síntese nem áudio. */
   nao_falar: boolean;
   /** Fala os avisos que chegam da ponte (tarefa/reunião); nunca com nao_falar ligado. */
@@ -57,6 +65,7 @@ export const CONFIG_PADRAO: Config = {
   voz_provedor: "propria", voz_propria: "", elevenlabs_chave: "", elevenlabs_voz: "", gemini_chave: "", gemini_voz: "Kore",
   atualizacao_ao_abrir: false,
   nao_ouvir: false, nao_falar: false, falar_avisos: false,
+  microfone_id: "", microfone_rotulo: "", saida_id: "", saida_rotulo: "",
 };
 
 /** Mescla o salvo com o padrão descartando o que tem tipo errado (arquivo editado à mão). */
