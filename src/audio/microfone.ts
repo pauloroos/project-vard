@@ -61,10 +61,34 @@ export function abrirMicrofone(): Promise<Microfone> {
   return abrindo;
 }
 
+/** Define o deviceId preferido para a próxima abertura do microfone. "" = padrão do sistema. */
+let microfonePreferidoId = "";
+export function definirMicrofonePreferido(deviceId: string): void {
+  microfonePreferidoId = deviceId;
+}
+
 async function abrirDeVerdade(): Promise<Microfone> {
-  const stream = await navigator.mediaDevices.getUserMedia({
-    audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
-  });
+  const audioConstraints: MediaTrackConstraints = {
+    echoCancellation: true,
+    noiseSuppression: true,
+    autoGainControl: true,
+  };
+  if (microfonePreferidoId) {
+    audioConstraints.deviceId = { exact: microfonePreferidoId };
+  }
+  let stream: MediaStream;
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ audio: audioConstraints });
+  } catch (erro) {
+    // Dispositivo preferido indisponível: volta ao padrão sem apagar a preferência.
+    if (microfonePreferidoId && erro instanceof DOMException && erro.name === "NotFoundError") {
+      console.warn(`Microfone preferido "${microfonePreferidoId}" não encontrado; usando padrão.`);
+      delete audioConstraints.deviceId;
+      stream = await navigator.mediaDevices.getUserMedia({ audio: audioConstraints });
+    } else {
+      throw erro;
+    }
+  }
   const contexto = new AudioContext();
   if (contexto.state === "suspended") await contexto.resume();
   const fonte = contexto.createMediaStreamSource(stream);

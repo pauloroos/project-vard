@@ -1,4 +1,21 @@
 import { pcm16ParaFloat } from "./wav";
+import { obterPreferencia } from "./dispositivos";
+
+/** Aplica setSinkId no AudioContext quando suportado; retorna true se aplicado. */
+export async function aplicarSaidaNoContexto(ctx: AudioContext): Promise<boolean> {
+  const pref = obterPreferencia();
+  if (!pref.saida_id) return false;
+  // AudioContext.setSinkId existe no Chromium 110+; tipagem ainda não está no lib.dom.d.ts padrão.
+  const anyCtx = ctx as AudioContext & { setSinkId?: (id: string) => Promise<void> };
+  if (typeof anyCtx.setSinkId !== "function") return false;
+  try {
+    await anyCtx.setSinkId(pref.saida_id);
+    return true;
+  } catch {
+    console.warn(`Saída preferida "${pref.saida_rotulo || pref.saida_id}" indisponível; usando padrão.`);
+    return false;
+  }
+}
 
 /** Áudio acumulado antes do primeiro trecho de um fluxo começar (evita buracos se o próximo pedaço atrasar). */
 const PRE_BUFFER_S = 0.1;
