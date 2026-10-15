@@ -233,6 +233,59 @@ pub fn descritor_reuniao(
     })
 }
 
+/// Inicia os serviços habilitados na configuração de instalação.
+/// Retorna lista de IDs iniciados e avisos sobre opcionais indisponíveis.
+pub fn iniciar_servicos(
+    config: &InstalacaoConfig,
+    recursos: &Path,
+    repo: &Path,
+    dados: &Path,
+    versao: &str,
+) -> (Vec<String>, Vec<String>) {
+    let mut iniciados = Vec::new();
+    let mut avisos = Vec::new();
+
+    // Núcleo sempre inicia
+    let desc_nucleo = descritor_nucleo(
+        cfg!(debug_assertions),
+        recursos,
+        repo,
+        config,
+        dados,
+        versao,
+    );
+    match crate::servicos::iniciar(desc_nucleo) {
+        Ok(()) => iniciados.push("nucleo".into()),
+        Err(e) => avisos.push(format!("nucleo: {e}")),
+    }
+
+    // Voz opcional
+    match descritor_voz(config, dados) {
+        Some(desc) => match crate::servicos::iniciar(desc) {
+            Ok(()) => iniciados.push("voz".into()),
+            Err(e) => avisos.push(format!("voz: {e}")),
+        },
+        None if config.servicos.voz => {
+            avisos.push("voz: venv ausente ou desabilitada".into());
+        }
+        _ => {}
+    }
+
+    // Reunião opcional
+    match descritor_reuniao(config, dados) {
+        Some(desc) => match crate::servicos::iniciar(desc) {
+            Ok(()) => iniciados.push("reuniao".into()),
+            Err(e) => avisos.push(format!("reuniao: {e}")),
+        },
+        None if config.servicos.reuniao => {
+            avisos.push("reuniao: venv ausente ou desabilitada".into());
+        }
+        _ => {}
+    }
+
+    (iniciados, avisos)
+}
+
 /// Lê e valida `instalacao.json` de um caminho. Arquivo ausente retorna padrão.
 pub fn ler_instalacao(caminho: &Path) -> Result<InstalacaoConfig, String> {
     if !caminho.exists() {
@@ -414,5 +467,47 @@ mod testes {
         assert!(PRAZO_NUCLEO_S > 0);
         assert!(PRAZO_OPENJARVIS_S > 0);
         assert!(PRAZO_OPCIONAIS_S > 0);
+    }
+
+    #[test]
+    fn iniciar_servicos_sem_opcionais_nao_inicia_voz_nem_reuniao() {
+        let c = InstalacaoConfig::default();
+        let dir = tempfile::tempdir().unwrap();
+        let (iniciados, _avisos) = iniciar_servicos(
+            &c,
+            dir.path(),
+            dir.path(),
+            dir.path(),
+            "0.7.0-test",
+        );
+        // Voz e reunião desabilitadas não devem aparecer na lista de iniciados
+        assert!(
+            !iniciados.iter().any(|s| s == "voz"),
+            "voz não deveria iniciar quando desabilitada"
+        );
+        assert!(
+            !iniciados.iter().any(|s| s == "reuniao"),
+            "reuniao não deveria iniciar quando desabilitada"
+        );
+    }
+
+    #[test]
+    fn iniciar_servicos_com_voz_habilitada_mas_venv_ausente_gera_aviso() {
+        let mut c = InstalacaoConfig::default();
+        c.servicos.voz = true;
+        c.raiz_codigo = "/tmp/nao-existe".into();
+        let dir = tempfile::tempdir().unwrap();
+        let (_iniciados, avisos) = iniciar_servicos(
+            &c,
+            dir.path(),
+            dir.path(),
+            dir.path(),
+            "0.7.0-test",
+        );
+        assert!(
+            avisos.iter().any(|a| a.contains("voz")),
+            "deveria ter aviso sobre voz: {:?}",
+            avisos
+        );
     }
 }
