@@ -451,6 +451,7 @@ pub fn definir_invisivel(window: tauri::Window, ligado: bool) -> Result<(), Stri
 }
 
 /// O painel mudou "invisivel": a marca da bandeja acompanha.
+#[cfg(not(test))]
 #[tauri::command]
 pub fn marcar_invisivel_na_bandeja(estado: tauri::State<'_, crate::Bandeja>, ligado: bool) -> Result<(), String> {
     if let Ok(g) = estado.invisivel.lock() {
@@ -491,6 +492,7 @@ fn marcado(item: &Mutex<Option<tauri::menu::CheckMenuItem<tauri::Wry>>>) -> bool
 }
 
 /// Reescreve a dica da bandeja a partir das marcas atuais (no modo invisível ela é o único sinal).
+#[cfg(not(test))]
 pub fn atualizar_dica_bandeja(app: &tauri::AppHandle) {
     let (ouvir, falar, tarefas) = {
         let estado = app.state::<crate::Bandeja>();
@@ -506,6 +508,7 @@ pub fn atualizar_dica_bandeja(app: &tauri::AppHandle) {
 }
 
 /// O widget mudou o número de tarefas em andamento: guarda e a dica da bandeja acompanha.
+#[cfg(not(test))]
 #[tauri::command]
 pub fn definir_tarefas_bandeja(app: tauri::AppHandle, n: u32) -> Result<(), String> {
     if let Ok(mut g) = app.state::<crate::Bandeja>().tarefas.lock() {
@@ -516,6 +519,7 @@ pub fn definir_tarefas_bandeja(app: tauri::AppHandle, n: u32) -> Result<(), Stri
 }
 
 /// O widget mudou "não ouvir"/"não falar": as marcas da bandeja e a dica acompanham.
+#[cfg(not(test))]
 #[tauri::command]
 pub fn sincronizar_bandeja(
     app: tauri::AppHandle,

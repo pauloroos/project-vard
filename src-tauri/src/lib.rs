@@ -1,3 +1,4 @@
+#[cfg(not(test))]
 mod bandeja;
 mod cofre;
 mod comandos;
@@ -10,17 +11,20 @@ pub mod instalacao;
 pub mod ciclo;
 
 use serde_json::Value;
+#[cfg(not(test))]
 use tauri::{
     menu::{CheckMenuItem, Menu, MenuItem},
     tray::TrayIconBuilder,
-    AppHandle, Emitter, Manager,
 };
+use tauri::{AppHandle, Emitter, Manager};
+#[cfg(not(test))]
 use std::sync::Mutex;
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
 
 const JANELA: &str = janelas::HUD;
 
 /// Itens de marca da bandeja, guardados para o painel poder mudar as marcas.
+#[cfg(not(test))]
 pub struct Bandeja {
     pub invisivel: Mutex<Option<CheckMenuItem<tauri::Wry>>>,
     pub nao_ouvir: Mutex<Option<CheckMenuItem<tauri::Wry>>>,
@@ -29,6 +33,7 @@ pub struct Bandeja {
     pub tarefas: Mutex<u32>,
 }
 
+#[cfg(not(test))]
 fn alternar_visibilidade(app: &AppHandle) {
     // Com o modo invisível ligado, o atalho e a bandeja só revelam ou escondem (o widget nunca é escondido de verdade).
     let invisivel = comandos::ler_config_valor(app)
@@ -56,6 +61,7 @@ fn alternar_visibilidade(app: &AppHandle) {
 }
 
 /// Atalho e bandeja: alterna a sala; um problema (monitor sumiu, janela não abriu) vira aviso na linha de estado do widget.
+#[cfg(not(test))]
 fn alternar_sala_e_avisar(app: &AppHandle) {
     let aviso = match janelas::alternar_sala(app) {
         Ok(aviso) => aviso,
@@ -72,11 +78,13 @@ fn acionar(app: &AppHandle, chave: &str, estado: ShortcutState) {
         ("falar", ShortcutState::Released) => { let _ = app.emit_to(JANELA, "ptt-fim", ()); }
         (_, ShortcutState::Released) => {}
         ("parar", _) => { let _ = app.emit_to(JANELA, "parar", ()); }
+        #[cfg(not(test))]
         ("mostrar", _) => alternar_visibilidade(app),
         ("escuta", _) => { let _ = app.emit_to(JANELA, "alternar-escuta", ()); }
         ("naofalar", _) => { let _ = app.emit_to(JANELA, "alternar-fala", ()); }
         ("conversa", _) => { let _ = app.emit_to(JANELA, "alternar-conversa", ()); }
         ("config", _) => janelas::alternar_configuracoes(app),
+        #[cfg(not(test))]
         ("sala", _) => alternar_sala_e_avisar(app),
         _ => {}
     }
@@ -98,6 +106,7 @@ fn registrar_atalhos(app: &AppHandle, config: &Value) {
 
 /// Cria a bandeja nativa. Com supervisor=true, monta menu dinâmico via itens_menu
 /// e despacha ciclo_pedir; com supervisor=false, preserva o menu antigo estático.
+#[cfg(not(test))]
 fn criar_bandeja(app: &AppHandle, no_topo: bool, invisivel_ligado: bool, nao_ouvir_ligado: bool, nao_falar_ligado: bool, supervisor: bool) -> tauri::Result<()> {
     if supervisor {
         return criar_bandeja_supervisor(app, no_topo, invisivel_ligado, nao_ouvir_ligado, nao_falar_ligado);
@@ -186,6 +195,7 @@ fn criar_bandeja(app: &AppHandle, no_topo: bool, invisivel_ligado: bool, nao_ouv
 
 /// Bandeja com supervisor ativo: menu dinâmico reconstruído a cada ciclo-estado,
 /// despacho de ciclo_pedir para verbos do ciclo e abertura de logs/janelas.
+#[cfg(not(test))]
 fn criar_bandeja_supervisor(app: &AppHandle, no_topo: bool, invisivel_ligado: bool, nao_ouvir_ligado: bool, nao_falar_ligado: bool) -> tauri::Result<()> {
     let foto_inicial = ciclo::ciclo_info(true);
     let itens = bandeja::itens_menu(&foto_inicial, nao_ouvir_ligado, nao_falar_ligado, no_topo, invisivel_ligado);
@@ -220,6 +230,7 @@ fn criar_bandeja_supervisor(app: &AppHandle, no_topo: bool, invisivel_ligado: bo
 }
 
 /// Constrói um Menu Tauri a partir dos ItemMenu do bandeja.rs.
+#[cfg(not(test))]
 fn montar_menu_supervisor(app: &AppHandle, itens: &[bandeja::ItemMenu]) -> tauri::Result<Menu<tauri::Wry>> {
     use tauri::menu::IsMenuItem;
     let mut filhos: Vec<Box<dyn IsMenuItem<tauri::Wry>>> = Vec::new();
@@ -242,6 +253,7 @@ fn montar_menu_supervisor(app: &AppHandle, itens: &[bandeja::ItemMenu]) -> tauri
 
 /// Despacha clique do menu supervisor: verbos do ciclo vão para a fila;
 /// janelas/logs são abertos diretamente; em jogo, itens desabilitados não disparam.
+#[cfg(not(test))]
 fn dispatch_menu_supervisor(app: &AppHandle, id: &str) {
     match id {
         // Verbos do ciclo → fila serial
@@ -318,6 +330,7 @@ fn dispatch_menu_supervisor(app: &AppHandle, id: &str) {
 
 /// Reconstrói o menu da bandeja supervisor com base no novo estado do ciclo.
 /// Chamada pelo evento ciclo-estado quando supervisor está ativo.
+#[cfg(not(test))]
 pub fn reconstruir_menu_bandeja(app: &AppHandle, foto: &ciclo::FotoCiclo) {
     use tauri::Manager;
     let Some(icone) = app.tray_by_id("hud") else { return };
@@ -357,6 +370,7 @@ pub fn run() {
                 if let Some(w) = app.get_webview_window(JANELA) {
                     let _ = w.unminimize();
                 }
+                #[cfg(not(test))]
                 alternar_visibilidade(app);
                 return;
             }
@@ -369,12 +383,6 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .manage(comandos::FalhasDeAtalho::default())
-        .manage(Bandeja {
-            invisivel: Mutex::new(None),
-            nao_ouvir: Mutex::new(None),
-            nao_falar: Mutex::new(None),
-            tarefas: Mutex::new(0),
-        })
         .invoke_handler(tauri::generate_handler![
             comandos::ler_config,
             comandos::versao_do_app,
@@ -398,8 +406,11 @@ pub fn run() {
             comandos::alternar_sala,
             comandos::listar_monitores,
             comandos::definir_invisivel,
+            #[cfg(not(test))]
             comandos::marcar_invisivel_na_bandeja,
+            #[cfg(not(test))]
             comandos::sincronizar_bandeja,
+            #[cfg(not(test))]
             comandos::definir_tarefas_bandeja,
             cofre::cofre_existe,
             cofre::cofre_gravar,
@@ -453,7 +464,8 @@ pub fn run() {
                 .get("nao_falar")
                 .and_then(|v| v.as_bool())
                 .unwrap_or(false);
-            let supervisor = config_instalacao.supervisor;
+let supervisor = config_instalacao.supervisor;
+            #[cfg(not(test))]
             criar_bandeja(&handle, no_topo, invisivel, nao_ouvir, nao_falar, supervisor)?;
             registrar_atalhos(&handle, &config);
 
