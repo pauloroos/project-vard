@@ -1376,6 +1376,41 @@ http.server.HTTPServer(('127.0.0.1', {porta}), H).serve_forever()
     }
 
     #[test]
+    fn executar_voltar_preserva_modelo_da_fotografia() {
+        // T7b (3): log do voltar mostra unload -> lista vazia -> load do MESMO modelo/contexto.
+        // Com LM Studio falso (sem ponte), confirmar que a fotografia não é perdida e o modelo
+        // registrado nela permanece como referência após o retorno.
+        let _lock = ENV_LOCK.lock().unwrap();
+        let dir = tempfile::tempdir().unwrap();
+        unsafe { std::env::set_var("VARD_DADOS", dir.path()) };
+
+        reset_fila_para_teste("sessao-voltar-modelo");
+        escrever_estado(&ModoCiclo::Jogo, None).unwrap();
+
+        let foto = FotoOperacional {
+            servicos_ligados: vec!["nucleo".into()],
+            modelo_id: Some("lmstudio-falso-7b".into()),
+            contexto_id: Some("ctx-vard-teste".into()),
+            audio_microfone: None,
+            audio_saida: None,
+            reuniao_ativa: false,
+            reuniao_pasta: None,
+        };
+        salvar_fotografia(&foto).unwrap();
+
+        let id = uuid::Uuid::new_v4().to_string();
+        let modo = executar_verbo(&id, &VerboPedido::Voltar);
+        assert_eq!(modo, ModoCiclo::Ligado);
+
+        // Fotografia continua intacta após o retorno (não foi sobrescrita nem perdida)
+        let pos = carregar_fotografia().unwrap().unwrap();
+        assert_eq!(pos.modelo_id.as_deref(), Some("lmstudio-falso-7b"));
+        assert_eq!(pos.contexto_id.as_deref(), Some("ctx-vard-teste"));
+
+        unsafe { std::env::remove_var("VARD_DADOS") };
+    }
+
+    #[test]
     fn ler_ponte_url_retorna_none_sem_config() {
         let _lock = ENV_LOCK.lock().unwrap();
         let dir = tempfile::tempdir().unwrap();

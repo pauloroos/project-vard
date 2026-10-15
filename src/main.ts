@@ -717,4 +717,32 @@ window.addEventListener("DOMContentLoaded", async () => {
     if (mudou.includes("nao_falar")) await aplicarNaoFalar(cfg.nao_falar, false);
   };
   await listen<unknown>("config-salva", (ev) => { void aplicarConfigSalva(ev.payload); });
+
+  // T7b — Restaurar estado ao voltar do modo jogo: escuta/fala/dispositivos/janelas.
+  await listen<{ modo: string; servicos_ligados?: string[] }>("ciclo-estado", (ev) => {
+    const foto = ev.payload;
+    if (!foto || typeof foto.modo !== "string") return;
+    const eraJogo = emModoJogo;
+    emModoJogo = foto.modo === "jogo";
+    // Ao sair do jogo (transição jogo -> ligado/liberando): restaurar preferências salvas.
+    if (eraJogo && !emModoJogo) {
+      // 1. Dispositivos: aplicar preferência ANTES de reabrir captura.
+      const pref = obterPreferencia();
+      definirMicrofonePreferido(pref.microfone_id);
+      // 2. Escuta/Fala: restaurar exatamente como estavam na config salva.
+      // A config já tem os valores corretos (não foram alterados durante o jogo).
+      if (cfg.nao_ouvir) {
+        hud.setMudo(true);
+        definirMudo(true);
+      } else {
+        hud.setMudo(false);
+        definirMudo(false);
+      }
+      // naoFalar é variável local capturada no closure; aplicarNaoFalar atualiza tudo.
+      void aplicarNaoFalar(cfg.nao_falar, false);
+      // 3. Sincronizar bandeja com os estados restaurados.
+      sincronizarBandeja();
+      console.info("retorno do jogo: escuta/fala/dispositivos restaurados");
+    }
+  });
 });

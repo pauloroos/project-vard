@@ -103,6 +103,27 @@ def iniciar() -> str:
     return FRASE_INICIO
 
 
+def retomar(pasta_anterior: str | None = None) -> str:
+    """T7b — Inicia novo segmento após voltar do modo jogo.
+
+    Se a reunião estava gravando antes do jogo, este chamado cria um NOVO
+    segmento (não reabre o arquivo anterior). O vínculo/intervalo é registrado
+    pelo serviço 4720 no log e no indicador.
+    """
+    try:
+        r = _post("/retomar", {"pasta_anterior": pasta_anterior} if pasta_anterior else None)
+    except Frase as exc:
+        # Serviço pode não suportar /retomar ainda; fallback para /iniciar
+        if "404" in str(exc) or "não respondeu" in str(exc):
+            _post("/iniciar")
+            return f"{FRASE_INICIO} (novo segmento pós-jogo)"
+        raise
+    intervalo = r.get("intervalo_s") if isinstance(r, dict) else None
+    if intervalo is not None:
+        return f"{FRASE_INICIO} Novo segmento iniciado; {int(intervalo)}s sem gravação."
+    return f"{FRASE_INICIO} (novo segmento pós-jogo)"
+
+
 def encerrar() -> str:
     r = _post("/encerrar")
     return f"Reunião encerrada: {_minutos(r.get('duracao_s'))}, {_falas(r.get('falas'))}."
