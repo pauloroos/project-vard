@@ -358,7 +358,7 @@ def validar_evento(ev) -> dict:
 
 
 def formatar_sse(ev: dict) -> str:
-    nome = {"tarefa": "oficina", "reuniao": "reuniao"}.get(ev["tipo"], "preflight")
+    nome = {"tarefa": "oficina", "reuniao": "reuniao", "pedido": "pedido"}.get(ev.get("tipo", ""), "preflight")
     return f"event: {nome}\ndata: {json.dumps(ev, ensure_ascii=False)}\n\n"
 
 
@@ -369,6 +369,19 @@ def publicar_evento(ev: dict) -> int:
         except asyncio.QueueFull:
             pass  # aba lenta perde aviso; não trava a oficina
     return len(ASSINANTES)
+
+
+def publicar_evento_pedido(pedido_id: str, sessao_id: str, seq: int, tipo: str, dados: dict) -> None:
+    """Publica um EventoPedido do cérebro próprio via SSE (tipo 'pedido')."""
+    ev = {
+        "tipo": "pedido",
+        "pedido_id": pedido_id,
+        "sessao_id": sessao_id,
+        "seq": seq,
+        "evento_tipo": tipo,
+        "dados": dados,
+    }
+    publicar_evento(ev)
 
 
 @app.post("/events/publicar")

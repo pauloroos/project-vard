@@ -35,6 +35,36 @@ log = logging.getLogger(__name__)
 
 LIMITE_TURNOS = 8
 
+# Persona montada do perfil: injetada como mensagem de sistema no início do histórico.
+# Atualizada entre turnos sem reiniciar a sessão; mudar perfil.json muda o próximo turno.
+_persona_cache: str | None = None
+_persona_versao: int = 0
+
+
+def _obter_persona() -> str:
+    """Lê a persona montada do perfil com cache simples (invalidado por versão)."""
+    global _persona_cache, _persona_versao
+    try:
+        from vard import perfil, config
+        p = perfil.ler()
+        # Usa nome/usuario da config se disponíveis; fallback vazio
+        cfg_nome = ""
+        cfg_usuario = ""
+        try:
+            cfg = config.ler()
+            cfg_nome = getattr(cfg, "nome", "") or ""
+            cfg_usuario = getattr(cfg, "usuario", "") or ""
+        except Exception:  # noqa: BLE001
+            pass
+        texto = perfil.montar_persona(p, cfg_nome, cfg_usuario)
+        # Invalida cache se o texto mudou
+        if _persona_cache != texto:
+            _persona_cache = texto
+            _persona_versao += 1
+        return texto
+    except Exception:  # noqa: BLE001
+        return ""
+
 
 async def executar_pedido(
     pedido: Pedido,
@@ -49,6 +79,10 @@ async def executar_pedido(
         return
 
     mensagens = list(sessoes.obter_historico(pedido.sessao_id))
+    # Insere persona como mensagem de sistema no início (atualizada entre turnos)
+    persona = _obter_persona()
+    if persona:
+        mensagens.insert(0, {"role": "system", "content": persona})
     mensagens.append({"role": "user", "content": pedido.texto})
 
     seq = info.ultimo_seq
