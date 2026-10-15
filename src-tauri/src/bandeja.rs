@@ -202,6 +202,7 @@ pub fn deve_notificar_erro(anterior: Option<&str>, atual: &FotoCiclo) -> bool {
 /// Chamada pelo ciclo após cada transição de estado quando supervisor está ativo.
 /// O ícone é atualizado via set_tooltip apenas; a cor do ponto será aplicada
 /// quando houver recurso de ícone base carregado (placeholder atual).
+#[cfg(not(test))]
 pub fn atualizar_bandeja_nativa(app: &tauri::AppHandle, foto: &FotoCiclo) {
     use tauri::Manager;
     let Some(icone) = app.tray_by_id("hud") else {

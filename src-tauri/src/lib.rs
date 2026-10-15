@@ -1,4 +1,3 @@
-#[cfg(not(test))]
 mod bandeja;
 mod cofre;
 mod comandos;
