@@ -18,7 +18,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
-from vard import avisos as vavisos, central, config, modelos, modo, oficina, reuniao, segredos, tarefas
+from vard import avisos as vavisos, central, config, modelos, modo, oficina, perfil, reuniao, segredos, tarefas
 from vard.seguro import Frase
 
 # ----------------------------------------------------------------------------- PERSONA
@@ -187,6 +187,12 @@ def status():
         pass
     return {"openjarvis": ok_oj, "lmstudio": ok_lm, "modelo": modelo, "modo": modo.ler_estado()["modo"],
             "modelos_lmstudio": ids, "tarefas_abertas": _tarefas_abertas(), "reuniao": _estado_reuniao()}
+
+
+@app.get("/perfil/persona")
+def persona_montada(nome: str = "", usuario: str = ""):
+    """Persona pronta do perfil.json: prévia da aba do perfil e fonte do laço."""
+    return {"texto": perfil.montar_persona(perfil.ler(), nome, usuario)}
 
 
 @app.post("/modo")

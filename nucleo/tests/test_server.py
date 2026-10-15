@@ -8,7 +8,7 @@ import respx
 from fastapi.testclient import TestClient
 
 import server
-from vard import central, modelos
+from vard import central, modelos, perfil
 
 JPEG_1PX = base64.b64decode(
     "/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAP//////////////////////////////////////////////////////////////////////////////////////wgALCAABAAEBAREA/8QAFBABAAAAAAAAAAAAAAAAAAAAAP/aAAgBAQABPxA="
@@ -523,3 +523,15 @@ def test_tarefas_andamento_so_as_rodando(cliente, tmp_path, monkeypatch):
     assert r["total"] == 2 and {t["n"] for t in r["tarefas"]} == {a.n, c.n}
     t = next(x for x in r["tarefas"] if x["n"] == a.n)
     assert t["quem"] == "Codex" and t["resumo"] == "cria um teste" and t["segundos"] >= 0
+
+def test_perfil_persona_monta_texto(cliente):
+    persona_md = server.config.arquivo_config("persona.md")
+    persona_md.parent.mkdir(parents=True, exist_ok=True)
+    persona_md.write_text("Instrucoes antigas da persona.md.", encoding="utf-8")
+    perfil.gravar(perfil.Perfil(tom="direto e calmo"))
+    r = cliente.get("/perfil/persona", params={"nome": "Aurora", "usuario": "Fulano"})
+    assert r.status_code == 200 and list(r.json()) == ["texto"]
+    texto = r.json()["texto"]
+    assert ("Nome do assistente: Aurora" in texto and "Como chamar a pessoa: Fulano" in texto
+            and "Tom: direto e calmo" in texto and "disparar_tarefa" in texto)
+    assert persona_md.exists()                       # a persona.md antiga continua no lugar
