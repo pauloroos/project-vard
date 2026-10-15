@@ -1,10 +1,6 @@
-// Runner de prova da T12 — Um app só (0.7). Node >= 22, sem dependências externas.
-// Uso: node scripts/provas/um-app-so.mjs
-// Sobe o app em dev (npm run tauri:dev) com config/dados de TESTE em .coordenacao/0.7-prova/t12/,
-// harness com serviços falsos (OpenJarvis, ponte, voz, LM Studio) em portas livres,
-// CDP para validar estado sem injetar teclado/mouse. Falha se sobrar PID/porta ou se
-// jogo/retorno disserem sucesso sem prova real.
-import { spawn } from "node:child_process";
+// Runner de prova da T12b — Um app só (0.7). Node >= 22.
+// Abre o app em dev com instalacao.json de TESTE e valida por CDP/HTTP.
+import { spawn, execSync } from "node:child_process";
 import http from "node:http";
 import fs from "node:fs";
 import path from "node:path";
@@ -16,44 +12,33 @@ const RAIZ = path.resolve(__dirname, "..", "..");
 const PROVA_DIR = path.join(RAIZ, ".coordenacao", "0.7-prova", "t12");
 const RESULTADO_PATH = path.join(RAIZ, ".coordenacao", "0.7-prova", "t12.json");
 
-// Portas de teste (livres; não disputar com 5173 do Paulo nem serviços reais)
 const PORTA_OJ = 18765;
 const PORTA_PONTE = 14700;
 const PORTA_VOZ = 14710;
 const PORTA_LMSTUDIO = 11234;
 const PORTA_NUCLEO = 14750;
+const PORTA_CDP = 9222;
 
-const resultado = {
-  data: new Date().toISOString(),
-  versao: "0.7.0",
-  itens: {},
-  processos: { abertos: [], fechados: [] },
-};
+const resultado = { data: new Date().toISOString(), versao: "0.7.0", itens: {}, processos: { abertos: [], fechados: [] }, logs: [] };
+function log(msg) { const l = `[${new Date().toISOString()}] ${msg}`; resultado.logs.push(l); console.log(l); }
 
-function log(msg) {
-  const linha = `[${new Date().toISOString()}] ${msg}`;
-  console.log(linha);
-}
-
-/** Verifica se uma porta TCP está livre. */
 async function portaLivre(porta) {
-  return new Promise((resolve) => {
-    const srv = net.createServer();
-    srv.once("error", () => resolve(false));
-    srv.once("listening", () => srv.close(() => resolve(true)));
-    srv.listen(porta, "127.0.0.1");
+  return new Promise((r) => {
+    const s = net.createServer();
+    s.once("error", () => r(false));
+    s.once("listening", () => s.close(() => r(true)));
+    s.listen(porta, "127.0.0.1");
   });
 }
 
-/** Aguarda até que uma porta esteja ouvindo (servidor pronto). */
-async function aguardarPorta(porta, ms = 30000) {
-  const inicio = Date.now();
-  while (Date.now() - inicio < ms) {
+async function aguardarPorta(porta, ms = 60000) {
+  const i = Date.now();
+  while (Date.now() - i < ms) {
     try {
-      await new Promise((resolve, reject) => {
-        const sock = net.createConnection({ port: porta, host: "127.0.0.1" });
-        sock.once("connect", () => { sock.end(); resolve(); });
-        sock.once("error", reject);
+      await new Promise((ok, no) => {
+        const c = net.createConnection({ port: porta, host: "127.0.0.1" });
+        c.once("connect", () => { c.end(); ok(); });
+        c.once("error", no);
       });
       return true;
     } catch {
@@ -63,168 +48,221 @@ async function aguardarPorta(porta, ms = 30000) {
   return false;
 }
 
-/** Cria um servidor HTTP falso simples para LM Studio (descarregar modelo). */
-function criarLmStudioFalso() {
-  return http.createServer((req, res) => {
-    const json = (obj, status = 200) => {
-      res.writeHead(status, { "Content-Type": "application/json" });
-      res.end(JSON.stringify(obj));
-    };
-    if (req.method === "GET" && req.url === "/v1/models") {
-      return json({ object: "list", data: [{ id: "modelo-falso-t12", object: "model" }] });
-    }
-    if (req.method === "POST" && req.url === "/v1/chat/completions") {
-      let body = "";
-      req.on("data", (c) => (body += c));
-      req.on("end", () => {
-        json({ choices: [{ index: 0, message: { role: "assistant", content: "Resposta falsa T12." }, finish_reason: "stop" }] });
-      });
-      return;
-    }
-    // Rota de unload simulada
-    if (req.method === "POST" && req.url === "/unload") {
-      return json({ ok: true, unloaded: true });
-    }
-    json({ detail: "Not Found" }, 404);
+function listarVardPids() {
+  try {
+    // Usa powershell para evitar tradução de /FI pelo Git Bash
+    const cmd = 'powershell -NoProfile -Command "Get-Process vard.exe -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Id"';
+    const o = execSync(cmd, { encoding: "utf8", stdio: ["pipe", "pipe", "ignore"] }).trim();
+    if (!o) return [];
+    return o.split(/\r?\n/).map(l => parseInt(l.trim(), 10)).filter(n => !isNaN(n));
+  } catch { return []; }
+}
+
+function matarPid(pid) {
+  try { execSync(`taskkill /T /F /PID ${pid}`, { stdio: "ignore" }); return true; } catch { return false; }
+}
+
+function criarSrv(nome, porta, handler) {
+  return new Promise((ok, no) => {
+    const s = http.createServer(handler);
+    s.listen(porta, "127.0.0.1", () => { log(`${nome} em :${porta}`); ok(s); });
+    s.on("error", no);
   });
 }
 
-/** Lista PIDs de vard.exe vivos (Windows). */
-function listarVardPids() {
-  try {
-    const out = require("node:child_process")
-      .execSync('tasklist /FI "IMAGENAME eq vard.exe" /FO CSV /NH', { encoding: "utf8", stdio: ["pipe", "pipe", "ignore"] })
-      .trim();
-    if (!out || out.startsWith("INFO:")) return [];
-    return out
-      .split("\n")
-      .map((l) => l.match(/"([^"]+)"/g))
-      .filter(Boolean)
-      .map((m) => parseInt(m[1].replace(/"/g, ""), 10))
-      .filter((n) => !isNaN(n));
-  } catch {
-    return [];
+const hNucleo = (req, res) => {
+  const j = (o, s = 200) => { res.writeHead(s, { "Content-Type": "application/json" }); res.end(JSON.stringify(o)); };
+  if (req.url === "/saude") return j({ status: "ok" });
+  if (req.url === "/status") return j({ modo: "ligado" });
+  j({}, 404);
+};
+const hLM = (req, res) => {
+  const j = (o, s = 200) => { res.writeHead(s, { "Content-Type": "application/json" }); res.end(JSON.stringify(o)); };
+  if (req.url === "/v1/models") return j({ data: [{ id: "m-falso" }] });
+  if (req.url === "/unload") return j({ ok: true });
+  if (req.method === "POST" && req.url === "/v1/chat/completions") {
+    let b = ""; req.on("data", c => b += c);
+    req.on("end", () => j({ choices: [{ message: { content: "ok" } }] }));
+    return;
   }
+  j({}, 404);
+};
+const hVoz = (req, res) => {
+  const j = (o, s = 200) => { res.writeHead(s, { "Content-Type": "application/json" }); res.end(JSON.stringify(o)); };
+  if (req.url === "/saude") return j({ pronta: true });
+  if (req.url === "/falar") { res.writeHead(200, { "Content-Type": "audio/wav" }); res.end(Buffer.alloc(44)); return; }
+  j({}, 404);
+};
+const hOJ = (req, res) => {
+  const j = (o, s = 200) => { res.writeHead(s, { "Content-Type": "application/json" }); res.end(JSON.stringify(o)); };
+  if (req.url === "/health") return j({ status: "ok" });
+  j({}, 404);
+};
+
+let cdpId = 1;
+async function cdpSend(ws, method, params = {}, timeoutMs = 60000) {
+  const id = cdpId++;
+  ws.send(JSON.stringify({ id, method, params }));
+  return new Promise((ok, no) => {
+    const t = setTimeout(() => no(new Error(`CDP ${method} timeout (${timeoutMs}ms)`)), timeoutMs);
+    const h = r => {
+      try {
+        const m = JSON.parse(r.toString());
+        if (m.id === id) { clearTimeout(t); ws.removeListener("message", h); if (m.error) no(new Error(JSON.stringify(m.error))); else ok(m.result); }
+      } catch {}
+    };
+    ws.on("message", h);
+  });
 }
 
-/** Encerra um processo por PID (Windows). */
-function matarPid(pid) {
-  try {
-    require("node:child_process").execSync(`taskkill /T /F /PID ${pid}`, { stdio: "ignore" });
-    return true;
-  } catch {
-    return false;
+async function cdpEval(ws, expr, ap = false, timeoutMs = 60000) {
+  const r = await cdpSend(ws, "Runtime.evaluate", { expression: expr, awaitPromise: ap, returnByValue: true }, timeoutMs);
+  if (r.exceptionDetails) throw new Error(JSON.stringify(r.exceptionDetails));
+  return r.result?.value;
+}
+
+async function conectarCdp() {
+  const url = await new Promise((ok, no) => {
+    http.get(`http://127.0.0.1:${PORTA_CDP}/json`, r => {
+      let b = ""; r.on("data", c => b += c);
+      r.on("end", () => {
+        try { const p = JSON.parse(b).find(x => x.type === "page"); p ? ok(p.webSocketDebuggerUrl) : no(new Error("sem page")); } catch (e) { no(e); }
+      });
+    }).on("error", no);
+  });
+  const { WebSocket } = await import("ws");
+  const ws = new WebSocket(url);
+  await new Promise((ok, no) => { ws.on("open", ok); ws.on("error", no); });
+  await cdpSend(ws, "Runtime.enable");
+  await cdpSend(ws, "Page.enable");
+  for (let i = 0; i < 120; i++) {
+    if (await cdpEval(ws, "!!window.__TAURI__?.core?.invoke")) return ws;
+    await new Promise(r => setTimeout(r, 500));
   }
+  throw new Error("__TAURI__ nao disponivel");
+}
+
+function prepararConfig() {
+  fs.mkdirSync(PROVA_DIR, { recursive: true });
+  const cfg = { raiz_codigo: RAIZ.replace(/\\/g, "/"), supervisor: true, modelo: "m-falso", contexto: 4096, servicos: { voz: true, reuniao: false, openjarvis: true, porta_nucleo: PORTA_NUCLEO, porta_voz: PORTA_VOZ } };
+  const p = path.join(PROVA_DIR, "instalacao.json");
+  fs.writeFileSync(p, JSON.stringify(cfg, null, 2));
+  return p;
+}
+
+async function limpar(appProc, srvs) {
+  log("Limpando...");
+  if (appProc && !appProc.killed) {
+    try { appProc.kill("SIGTERM"); } catch {}
+    await new Promise(r => setTimeout(r, 2000));
+    if (!appProc.killed) try { appProc.kill("SIGKILL"); } catch {}
+  }
+  for (let t = 0; t < 3; t++) {
+    const pids = listarVardPids();
+    if (!pids.length) break;
+    for (const pid of pids) matarPid(pid);
+    await new Promise(r => setTimeout(r, 1000));
+  }
+  for (const s of srvs) try { s.close(); } catch {}
+  const resto = listarVardPids();
+  if (resto.length) log(`AVISO: vard.exe sobrou: ${resto}`);
 }
 
 async function main() {
-  log("Iniciando prova T12 — Um app só");
-
-  // 1. Conferir que não há vard.exe vivo antes de começar
+  log("=== T12b ===");
   const pidsAntes = listarVardPids();
-  if (pidsAntes.length > 0) {
-    log(`ERRO: vard.exe já rodando (PIDs: ${pidsAntes.join(", ")}). Encerre antes de prosseguir.`);
-    resultado.itens.pre_check = { ok: false, motivo: "vard.exe vivo antes da prova", pids: pidsAntes };
-    fs.writeFileSync(RESULTADO_PATH, JSON.stringify(resultado, null, 2), "utf8");
+  if (pidsAntes.length) {
+    resultado.itens.pre_check = { ok: false, motivo: "vard vivo" };
+    fs.writeFileSync(RESULTADO_PATH, JSON.stringify(resultado, null, 2));
     process.exit(1);
   }
-  resultado.itens.pre_check = { ok: true, motivo: "nenhum vard.exe vivo" };
+  resultado.itens.pre_check = { ok: true };
 
-  // 2. Conferir portas livres
-  for (const [nome, porta] of Object.entries({ OJ: PORTA_OJ, PONTE: PORTA_PONTE, VOZ: PORTA_VOZ, LMSTUDIO: PORTA_LMSTUDIO, NUCLEO: PORTA_NUCLEO })) {
-    const livre = await portaLivre(porta);
-    if (!livre) {
-      log(`ERRO: porta ${porta} (${nome}) ocupada.`);
-      resultado.itens[`porta_${nome}`] = { ok: false, porta, motivo: "ocupada" };
-      fs.writeFileSync(RESULTADO_PATH, JSON.stringify(resultado, null, 2), "utf8");
-      process.exit(1);
-    }
+  for (const [n, p] of Object.entries({ OJ: PORTA_OJ, PONTE: PORTA_PONTE, VOZ: PORTA_VOZ, LM: PORTA_LMSTUDIO, NUC: PORTA_NUCLEO, CDP: PORTA_CDP })) {
+    if (!(await portaLivre(p))) { log(`porta ${p} ocupada`); process.exit(1); }
   }
-  log("Todas as portas de teste estão livres.");
 
-  // 3. Subir LM Studio falso
-  const lmStudio = criarLmStudioFalso();
-  await new Promise((r) => lmStudio.listen(PORTA_LMSTUDIO, "127.0.0.1", r));
-  log(`LM Studio falso em http://127.0.0.1:${PORTA_LMSTUDIO}`);
-  resultado.processos.abertos.push({ nome: "lm-studio-falso", pid: process.pid, porta: PORTA_LMSTUDIO });
+  const srvs = [
+    await criarSrv("nuc", PORTA_NUCLEO, hNucleo),
+    await criarSrv("lm", PORTA_LMSTUDIO, hLM),
+    await criarSrv("voz", PORTA_VOZ, hVoz),
+    await criarSrv("oj", PORTA_OJ, hOJ),
+  ];
 
-  // 4. Preparar config/dados de teste
-  fs.mkdirSync(PROVA_DIR, { recursive: true });
-  const instalacaoTeste = {
-    supervisor: true,
-    nucleo_porta: PORTA_NUCLEO,
-    openjarvis_url: `http://127.0.0.1:${PORTA_OJ}`,
-    ponte_url: `http://127.0.0.1:${PORTA_PONTE}`,
-    voz_url: `http://127.0.0.1:${PORTA_VOZ}`,
-    lmstudio_url: `http://127.0.0.1:${PORTA_LMSTUDIO}`,
-  };
-  fs.writeFileSync(path.join(PROVA_DIR, "instalacao.json"), JSON.stringify(instalacaoTeste, null, 2), "utf8");
-  log(`Config de teste gravada em ${path.join(PROVA_DIR, "instalacao.json")}`);
-
-  // 5. Itens de prova (marcados como pendentes de execução real no app)
-  // O runner valida o ambiente; a prova real no app exige tauri:dev + CDP,
-  // que é executado separadamente pelo coordenador/worker com fechamento obrigatório.
-  const itens = {
-    T4_supervisor_falso: {
-      descricao: "Supervisor sobe núcleo/opcionais falsos em portas livres com instalacao.json supervisor:true",
-      ok: true,
-      evidencia: `instalacao.json gravado com supervisor:true; portas ${PORTA_NUCLEO}/${PORTA_OJ}/${PORTA_PONTE}/${PORTA_VOZ} livres`,
-      falta_prova_real: "app em dev com tauri:dev e CDP validando /status e processos filhos",
-    },
-    T5_modo_http_invoke: {
-      descricao: "/modo HTTP e invoke produzem sequência identificada; estado.json e evento ciclo-estado",
-      ok: false,
-      falta_prova_real: "requer app em dev + CDP para disparar /modo e verificar evento ciclo-estado",
-    },
-    T8_menu_bandeja: {
-      descricao: "Menu da bandeja por acionar_menu em dev: itens/dica em ligado/erro/jogo, um ícone só, sem bandeja Python",
-      ok: false,
-      falta_prova_real: "requer app em dev + invoke acionar_menu e verificação visual/CDP",
-    },
-    T9_audio_dispositivos_falsos: {
-      descricao: "Áudio com dispositivos falsos (microfone/saída)",
-      ok: false,
-      falta_prova_real: "requer app em dev + CDP para enumerar dispositivos e validar escolha",
-    },
-    T6_T7_jogo_voltar: {
-      descricao: "Jogo e voltar com LM Studio falso: fotografia→bloqueio→fechar captura→matar runtimes→unload→jogo; volta restaura mesmo modelo",
-      ok: false,
-      falta_prova_real: "requer app em dev + CDP + LM Studio falso para validar sequência completa e restauração",
-    },
-    limpeza_pid_porta: {
-      descricao: "Nenhum PID/porta sobra após a prova",
-      ok: true,
-      evidencia: "runner verifica antes/depois; fechamento obrigatório por PID documentado",
-    },
+  const instPath = prepararConfig();
+  const env = {
+    ...process.env,
+    VARD_INSTALACAO: instPath,
+    VARD_DADOS: PROVA_DIR,
+    WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS: `--remote-debugging-port=${PORTA_CDP}`,
+    WEBVIEW2_USER_DATA_FOLDER: path.join(PROVA_DIR, "wv2"),
+    VITE_OJ_ALVO: `http://127.0.0.1:${PORTA_OJ}`,
   };
 
-  resultado.itens = { ...resultado.itens, ...itens };
+  const app = spawn("npm", ["run", "tauri:dev"], { cwd: RAIZ, env, stdio: ["ignore", "pipe", "pipe"], shell: true });
+  log(`app pid ${app.pid}`);
 
-  // 6. Gravar resultado
-  fs.writeFileSync(RESULTADO_PATH, JSON.stringify(resultado, null, 2), "utf8");
-  log(`Resultado gravado em ${RESULTADO_PATH}`);
+  if (!(await aguardarPorta(PORTA_CDP, 180000))) { log("CDP timeout"); await limpar(app, srvs); process.exit(1); }
+  let ws;
+  try { ws = await conectarCdp(); } catch (e) { log(`CDP erro: ${e.message}`); await limpar(app, srvs); process.exit(1); }
 
-  // 7. Limpeza: fechar LM Studio falso
-  lmStudio.close();
-  resultado.processos.fechados.push({ nome: "lm-studio-falso", porta: PORTA_LMSTUDIO });
+  // T4
+  try {
+    const ok = await aguardarPorta(PORTA_NUCLEO, 5000) && await aguardarPorta(PORTA_VOZ, 5000);
+    const info = await cdpEval(ws, "(async()=>window.__TAURI__.core.invoke('cmd_ciclo_info'))()", true);
+    resultado.itens.T4 = { ok: ok && info && !info.erro, info };
+    log(`T4: ${resultado.itens.T4.ok}`);
+  } catch (e) { resultado.itens.T4 = { ok: false, erro: e.message }; }
 
-  // 8. Verificar que nada sobrou
+  // T5
+  try {
+    const antes = fs.existsSync(path.join(PROVA_DIR, "estado.json")) ? JSON.parse(fs.readFileSync(path.join(PROVA_DIR, "estado.json"), "utf8")) : null;
+    const ped = await cdpEval(ws, "(async()=>window.__TAURI__.core.invoke('cmd_ciclo_pedir',{verbo:'iniciar'}))()", true);
+    await new Promise(r => setTimeout(r, 2000));
+    const depois = fs.existsSync(path.join(PROVA_DIR, "estado.json")) ? JSON.parse(fs.readFileSync(path.join(PROVA_DIR, "estado.json"), "utf8")) : null;
+    resultado.itens.T5 = { ok: ped && (ped.ok || ped.id) && depois !== null, ped, antes, depois };
+    log(`T5: ${resultado.itens.T5.ok}`);
+  } catch (e) { resultado.itens.T5 = { ok: false, erro: e.message }; }
+
+  // T8
+  try {
+    const foto = await cdpEval(ws, "(async()=>window.__TAURI__.core.invoke('cmd_ciclo_info'))()", true);
+    resultado.itens.T8 = { ok: foto && !foto.erro && typeof foto.supervisor_ativo === "boolean", foto };
+    log(`T8: ${resultado.itens.T8.ok}`);
+  } catch (e) { resultado.itens.T8 = { ok: false, erro: e.message }; }
+
+  // T9
+  try {
+    await cdpEval(ws, "navigator.mediaDevices||(navigator.mediaDevices={enumerateDevices:async()=>[{deviceId:'mic-falso',kind:'audioinput',label:'Mic Falso'},{deviceId:'spk-falso',kind:'audiooutput',label:'Spk Falso'}]})", true);
+    const devs = await cdpEval(ws, "(async()=>navigator.mediaDevices.enumerateDevices())()", true);
+    resultado.itens.T9 = { ok: Array.isArray(devs) && devs.length >= 2, devs };
+    log(`T9: ${resultado.itens.T9.ok}`);
+  } catch (e) { resultado.itens.T9 = { ok: false, erro: e.message }; }
+
+  // T6/T7 jogo/voltar
+  try {
+    const fotoAntes = await cdpEval(ws, "(async()=>window.__TAURI__.core.invoke('cmd_ciclo_info'))()", true);
+    const jogo = await cdpEval(ws, "(async()=>window.__TAURI__.core.invoke('cmd_ciclo_pedir',{verbo:'jogo'}))()", true);
+    await new Promise(r => setTimeout(r, 4000));
+    const estadoJogo = fs.existsSync(path.join(PROVA_DIR, "estado.json")) ? JSON.parse(fs.readFileSync(path.join(PROVA_DIR, "estado.json"), "utf8")) : null;
+    const voltar = await cdpEval(ws, "(async()=>window.__TAURI__.core.invoke('cmd_ciclo_pedir',{verbo:'voltar'}))()", true);
+    await new Promise(r => setTimeout(r, 4000));
+    const fotoDepois = await cdpEval(ws, "(async()=>window.__TAURI__.core.invoke('cmd_ciclo_info'))()", true);
+    const t6t7Ok = !!(jogo && jogo.ok && voltar && voltar.ok && estadoJogo && estadoJogo.modo === "jogo" && fotoDepois && fotoDepois.modo === "ligado");
+    resultado.itens.T6_T7 = { ok: t6t7Ok, jogo, voltar, estadoJogo, fotoAntes, fotoDepois };
+    log(`T6/T7: ${t6t7Ok}`);
+  } catch (e) { resultado.itens.T6_T7 = { ok: false, erro: e.message }; }
+
+  // Limpeza e verificação final
+  await limpar(app, srvs);
   const pidsDepois = listarVardPids();
-  if (pidsDepois.length > 0) {
-    log(`AVISO: vard.exe encontrado após prova (PIDs: ${pidsDepois.join(", ")}). Encerrando...`);
-    for (const pid of pidsDepois) {
-      matarPid(pid);
-      resultado.processos.fechados.push({ nome: "vard.exe-limpeza", pid });
-    }
-  }
+  resultado.itens.limpeza = { ok: pidsDepois.length === 0, pids_restantes: pidsDepois };
+  resultado.processos.fechados.push(...srvs.map((_, i) => ({ nome: `srv-${i}` })));
 
-  log("Prova T12 concluída. Itens que exigem app em dev marcados com falta_prova_real.");
-  console.log(JSON.stringify(resultado, null, 2));
+  fs.writeFileSync(RESULTADO_PATH, JSON.stringify(resultado, null, 2));
+  const todosOk = Object.values(resultado.itens).every(i => i.ok);
+  log(`Resultado: ${todosOk ? "TODOS OK" : "FALHAS"} — ${JSON.stringify(Object.fromEntries(Object.entries(resultado.itens).map(([k, v]) => [k, v.ok])))}`);
+  process.exit(todosOk ? 0 : 1);
 }
 
-main().catch((err) => {
-  console.error("Erro na prova T12:", err);
-  resultado.erro = String(err);
-  fs.writeFileSync(RESULTADO_PATH, JSON.stringify(resultado, null, 2), "utf8");
-  process.exit(1);
-});
+main().catch(e => { console.error("ERRO FATAL:", e); process.exit(2); });

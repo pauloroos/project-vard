@@ -467,7 +467,15 @@ pub fn run() {
                 .unwrap_or(false);
 let supervisor = config_instalacao.supervisor;
             #[cfg(not(test))]
-            criar_bandeja(&handle, no_topo, invisivel, nao_ouvir, nao_falar, supervisor)?;
+            {
+                app.manage(Bandeja {
+                    invisivel: Mutex::new(None),
+                    nao_ouvir: Mutex::new(None),
+                    nao_falar: Mutex::new(None),
+                    tarefas: Mutex::new(0),
+                });
+                criar_bandeja(&handle, no_topo, invisivel, nao_ouvir, nao_falar, supervisor)?;
+            }
             registrar_atalhos(&handle, &config);
 
             // T8: registra AppHandle para emissão de eventos e inicializa ciclo se supervisor ativo
