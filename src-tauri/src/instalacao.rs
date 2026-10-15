@@ -58,22 +58,16 @@ impl Default for InstalacaoConfig {
 
 /// Resolve o caminho do arquivo `instalacao.json` seguindo o contrato do Python:
 /// 1. Se `VARD_INSTALACAO` estiver definida, é o caminho direto do arquivo.
-/// 2. Senão, se `VARD_DADOS` estiver definida, usa `<VARD_DADOS>/instalacao.json`.
-/// 3. Senão, usa `%LOCALAPPDATA%/rdl-vard/instalacao.json` (app_data_dir padrão).
+/// 2. Senão, usa `<pasta_dados()>/instalacao.json` (VARD_DADOS ou %LOCALAPPDATA%/rdl-vard).
 ///
 /// O arquivo pode não existir; o chamador decide como tratar (default ou erro).
-pub fn arquivo_instalacao(app_data: &Path) -> PathBuf {
+pub fn arquivo_instalacao() -> PathBuf {
     if let Ok(p) = std::env::var("VARD_INSTALACAO") {
         if !p.is_empty() {
             return PathBuf::from(p);
         }
     }
-    if let Ok(d) = std::env::var("VARD_DADOS") {
-        if !d.is_empty() {
-            return PathBuf::from(d).join("instalacao.json");
-        }
-    }
-    app_data.join("instalacao.json")
+    crate::ciclo::pasta_dados().join("instalacao.json")
 }
 
 /// Resolve a raiz do código/repo em tempo de execução (independente de VARD_INSTALACAO).
@@ -657,8 +651,7 @@ mod testes {
         let caminho = dir.path().join("custom").join("instalacao.json");
         unsafe { std::env::set_var("VARD_INSTALACAO", &caminho) };
         unsafe { std::env::remove_var("VARD_DADOS") };
-        let app_data = dir.path().join("appdata");
-        let resultado = super::arquivo_instalacao(&app_data);
+        let resultado = super::arquivo_instalacao();
         unsafe { std::env::remove_var("VARD_INSTALACAO") };
         assert_eq!(resultado, caminho);
     }
@@ -669,8 +662,7 @@ mod testes {
         unsafe { std::env::remove_var("VARD_INSTALACAO") };
         let dados = dir.path().join("meus_dados");
         unsafe { std::env::set_var("VARD_DADOS", &dados) };
-        let app_data = dir.path().join("appdata");
-        let resultado = super::arquivo_instalacao(&app_data);
+        let resultado = super::arquivo_instalacao();
         unsafe { std::env::remove_var("VARD_DADOS") };
         assert_eq!(resultado, dados.join("instalacao.json"));
     }
@@ -680,9 +672,10 @@ mod testes {
         let dir = tempfile::tempdir().unwrap();
         unsafe { std::env::remove_var("VARD_INSTALACAO") };
         unsafe { std::env::remove_var("VARD_DADOS") };
-        let app_data = dir.path().join("localappdata").join("rdl-vard");
-        let resultado = super::arquivo_instalacao(&app_data);
-        assert_eq!(resultado, app_data.join("instalacao.json"));
+        // Sem VARD_DADOS, pasta_dados() usa LOCALAPPDATA/rdl-vard;
+        // o teste valida apenas que arquivo_instalacao() termina com instalacao.json.
+        let resultado = super::arquivo_instalacao();
+        assert!(resultado.ends_with("instalacao.json"), "esperado terminar com instalacao.json: {:?}", resultado);
     }
 
     #[test]
@@ -691,8 +684,7 @@ mod testes {
         unsafe { std::env::set_var("VARD_INSTALACAO", "") };
         let dados = dir.path().join("dados_env");
         unsafe { std::env::set_var("VARD_DADOS", &dados) };
-        let app_data = dir.path().join("appdata");
-        let resultado = super::arquivo_instalacao(&app_data);
+        let resultado = super::arquivo_instalacao();
         unsafe { std::env::remove_var("VARD_INSTALACAO") };
         unsafe { std::env::remove_var("VARD_DADOS") };
         assert_eq!(resultado, dados.join("instalacao.json"));
