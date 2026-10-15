@@ -6,7 +6,6 @@ import logging
 import os
 import socket
 import sys
-from pathlib import Path
 
 import uvicorn
 from fastapi import FastAPI
@@ -32,14 +31,19 @@ def _verificar_porta(host: str, porta: int) -> None:
 
 
 def criar_app() -> FastAPI:
-    """Cria a aplicação FastAPI do núcleo com /saude e preserva rotas da ponte."""
+    """Cria a aplicação FastAPI do núcleo com /saude e preserva rotas da ponte.
+
+    Idempotente: chamar múltiplas vezes não duplica a rota /saude.
+    """
     # Importa a app da ponte (server.py) e adiciona /saude sem quebrar contratos existentes.
     # O import é tardio para que --versao não carregue dependências pesadas.
     from server import app as ponte_app  # type: ignore[import-untyped]
 
-    @ponte_app.get("/saude")
-    def saude():
-        return {"ok": True, "versao": __version__, "pid": os.getpid()}
+    # Evita duplicar /saude se criar_app() for chamada mais de uma vez.
+    if not any(getattr(r, "path", None) == "/saude" for r in ponte_app.routes):
+        @ponte_app.get("/saude")
+        def saude():
+            return {"ok": True, "versao": __version__, "pid": os.getpid()}
 
     return ponte_app
 

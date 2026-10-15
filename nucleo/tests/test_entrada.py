@@ -1,12 +1,16 @@
-"""Testes de entrada do núcleo (T1): __main__, /saude e porta ocupada."""
+"""Testes de entrada do núcleo (T1): __main__, /saude, porta ocupada, wheel e pastas."""
 from __future__ import annotations
 
+import json
 import os
 import socket
 import subprocess
 import sys
+import tempfile
+import time
 from pathlib import Path
 
+import httpx
 import pytest
 
 RAIZ_NUCLEO = Path(__file__).resolve().parents[1]
@@ -40,8 +44,6 @@ def test_servir_com_caminho_com_espacos(monkeypatch, tmp_path: Path):
     monkeypatch.setenv("VARD_CONFIG", str(cfg))
     monkeypatch.setenv("VARD_DADOS", str(dados))
     monkeypatch.setenv("VARD_SEM_VIGIA", "1")
-
-    # Apenas importa o app para confirmar que caminhos com espaço não quebram a criação
     from vard import servidor  # type: ignore
 
     app = servidor.criar_app()
@@ -51,6 +53,7 @@ def test_servir_com_caminho_com_espacos(monkeypatch, tmp_path: Path):
 def _cliente_nucleo():
     """TestClient configurado com headers que passam pelo middleware so_localhost."""
     from fastapi.testclient import TestClient
+
     from vard import servidor
 
     client = TestClient(servidor.criar_app(), base_url="http://127.0.0.1:4700")
@@ -91,3 +94,178 @@ def test_porta_ocupada_sai_com_motivo_identificavel(tmp_path: Path, monkeypatch)
         assert codigo == servidor.SAIDA_PORTA_OCUPADA
     finally:
         sock.close()
+
+
+def test_saude_idempotente_em_multiplas_chamadas_de_criar_app():
+    """criar_app() chamada duas vezes não duplica /saude nem quebra rotas existentes."""
+    from vard import servidor
+
+    app1 = servidor.criar_app()
+    app2 = servidor.criar_app()
+    rotas_saude = [r for r in app2.routes if getattr(r, "path", None) == "/saude"]
+    assert len(rotas_saude) == 1, f"/saude duplicada: {len(rotas_saude)} registros"
+    from fastapi.testclient import TestClient
+
+    client = TestClient(app2, base_url="http://127.0.0.1:4700")
+    resposta = client.get("/saude")
+    assert resposta.status_code == 200
+    assert resposta.json()["ok"] is True
+
+
+def test_pastas_hud_e_nucleo_sao_diferentes(monkeypatch, tmp_path: Path):
+    """Config do HUD (%APPDATA%/io.github.pauloroos.vard) e do núcleo (VARD_CONFIG) são pastas distintas."""
+    hud_dir = tmp_path / "appdata" / "io.github.pauloroos.vard"
+    nucleo_cfg = tmp_path / "localappdata" / "rdl-vard" / "config"
+    hud_dir.mkdir(parents=True)
+    nucleo_cfg.mkdir(parents=True)
+    monkeypatch.setenv("APPDATA", str(tmp_path / "appdata"))
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path / "localappdata"))
+    monkeypatch.delenv("VARD_CONFIG", raising=False)
+    from vard import config
+
+    assert config.pasta_config() != hud_dir
+    assert str(config.pasta_config()).endswith("rdl-vard\\config") or str(config.pasta_config()).endswith(
+        "rdl-vard/config"
+    )
+
+
+def test_wheel_instalado_fora_do_repo(tmp_path: Path):
+    """Wheel inclui server, MCPs, preflight e viewer; funciona fora do checkout com python -I."""
+    import shutil
+    uv_bin = shutil.which("uv")
+    if not uv_bin:
+        pytest.skip("uv não encontrado no PATH")
+    dist_dir = tmp_path / "dist"
+    venv_dir = tmp_path / "venv"
+    build = subprocess.run(
+        [uv_bin, "build", "--project", str(RAIZ_NUCLEO), "--wheel", "--out-dir", str(dist_dir)],
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
+    assert build.returncode == 0, build.stderr
+    wheels = list(dist_dir.glob("*.whl"))
+    assert wheels, "nenhum wheel gerado"
+    wheel_path = wheels[0]
+    venv = subprocess.run(
+        [sys.executable, "-m", "venv", str(venv_dir)],
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
+    assert venv.returncode == 0, venv.stderr
+    pip_exe = str(venv_dir / "Scripts" / "pip.exe" if sys.platform == "win32" else venv_dir / "bin" / "pip")
+    py_exe = str(venv_dir / "Scripts" / "python.exe" if sys.platform == "win32" else venv_dir / "bin" / "python")
+    install = subprocess.run(
+        [pip_exe, "install", str(wheel_path)],
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
+    assert install.returncode == 0, install.stderr
+    # Roda fora do repo com python -I para não importar do checkout
+    fora_repo = tmp_path / "fora"
+    fora_repo.mkdir()
+    versao = subprocess.run(
+        [py_exe, "-I", "-m", "vard", "--versao"],
+        capture_output=True,
+        text=True,
+        cwd=str(fora_repo),
+        timeout=15,
+    )
+    assert versao.returncode == 0, versao.stderr
+    assert versao.stdout.strip()
+    # Importa server e cada MCP
+    imports = [
+        "server",
+        "consulta_mcp",
+        "memoria_mcp",
+        "mesa_mcp",
+        "oficina_mcp",
+        "reuniao_mcp",
+        "preflight",
+    ]
+    for mod in imports:
+        r = subprocess.run(
+            [py_exe, "-I", "-c", f"import vard.{mod}; print(vard.{mod}.__name__)"],
+            capture_output=True,
+            text=True,
+            cwd=str(fora_repo),
+            timeout=15,
+        )
+        assert r.returncode == 0, f"falha ao importar vard.{mod}: {r.stderr}"
+    # Verifica recursos do viewer
+    viewer_check = subprocess.run(
+        [py_exe, "-I", "-c", "from pathlib import Path; import vard; p=Path(vard.__file__).parent/'viewer'/'index.html'; print('OK' if p.exists() else 'MISS')"],
+        capture_output=True,
+        text=True,
+        cwd=str(fora_repo),
+        timeout=15,
+    )
+    assert "OK" in viewer_check.stdout, f"viewer/index.html ausente no wheel: {viewer_check.stdout} {viewer_check.stderr}"
+
+
+def test_prova_http_real_subprocesso(tmp_path: Path):
+    """Sobe o núcleo como processo, consulta /saude e /status por HTTP, registra PID e encerra."""
+    prova_dir = RAIZ_NUCLEO.parent / ".coordenacao" / "0.7-prova"
+    prova_dir.mkdir(parents=True, exist_ok=True)
+    # Encontra porta livre
+    sock = socket.socket()
+    sock.bind(("127.0.0.1", 0))
+    porta = sock.getsockname()[1]
+    sock.close()
+    proc = subprocess.Popen(
+        [sys.executable, "-m", "vard", "servir", "--porta", str(porta), "--host", "127.0.0.1"],
+        cwd=str(RAIZ_NUCLEO),
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    try:
+        # Espera o servidor subir
+        url_saude = f"http://127.0.0.1:{porta}/saude"
+        url_status = f"http://127.0.0.1:{porta}/status"
+        inicio = time.monotonic()
+        resposta_saude = None
+        while time.monotonic() - inicio < 10:
+            try:
+                resposta_saude = httpx.get(url_saude, timeout=1)
+                if resposta_saude.status_code == 200:
+                    break
+            except httpx.HTTPError:
+                time.sleep(0.3)
+        assert resposta_saude is not None and resposta_saude.status_code == 200, "núcleo não subiu em 10s"
+        saude = resposta_saude.json()
+        assert saude["ok"] is True
+        # uvicorn pode fazer fork/spawn: o PID do /saude é do worker, não necessariamente do pai.
+        assert isinstance(saude["pid"], int) and saude["pid"] > 0
+        resposta_status = httpx.get(url_status, timeout=2)
+        assert resposta_status.status_code == 200
+        status_body = resposta_status.json()
+        assert "modo" in status_body
+        # Registra prova
+        prova = {
+            "tarefa": "T1",
+            "pedaco": "prova-http-real",
+            "pid": proc.pid,
+            "porta": porta,
+            "versao": saude["versao"],
+            "status_code_saude": resposta_saude.status_code,
+            "status_code_status": resposta_status.status_code,
+        }
+        (prova_dir / "t1.json").write_text(json.dumps(prova, indent=2, ensure_ascii=False), encoding="utf-8")
+    finally:
+        proc.terminate()
+        try:
+            proc.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            proc.wait(timeout=5)
+    # Confirma que a porta ficou livre
+    time.sleep(0.5)
+    sock2 = socket.socket()
+    try:
+        sock2.bind(("127.0.0.1", porta))
+    except OSError:
+        pytest.fail(f"porta {porta} ainda ocupada após encerramento do processo {proc.pid}")
+    finally:
+        sock2.close()

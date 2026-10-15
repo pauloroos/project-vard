@@ -9,7 +9,9 @@ def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(prog="vard")
     ap.add_argument("--versao", action="store_true", help="mostra a versão e sai")
     sub = ap.add_subparsers(dest="comando")
-    sub.add_parser("servir", help="sobe o núcleo em 127.0.0.1:4700")
+    servir_p = sub.add_parser("servir", help="sobe o núcleo em loopback")
+    servir_p.add_argument("--porta", type=int, default=4700, help="porta TCP (padrão 4700)")
+    servir_p.add_argument("--host", default="127.0.0.1", help="host de bind (padrão 127.0.0.1)")
     args = ap.parse_args(argv)
 
     if args.versao:
@@ -19,7 +21,7 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.comando == "servir":
         from . import servidor
-        return servidor.servir()
+        return servidor.servir(porta=args.porta, host=args.host)
 
     ap.print_usage(sys.stderr)
     return 2
