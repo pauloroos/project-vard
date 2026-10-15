@@ -46,10 +46,16 @@ class _CapturaReal:
     def __init__(self, ao_bloco):
         import pyaudiowpatch
 
-        from .audio import Captura, dispositivos_padrao
+        from .audio import Captura, dispositivos_com_preferencia
+        from .preferencia import ler_preferencia
 
         self.pa = pyaudiowpatch.PyAudio()
-        self.dispositivos = dispositivos_padrao(self.pa)
+        pref = ler_preferencia()
+        self.dispositivos, self._avisos_disp = dispositivos_com_preferencia(
+            self.pa, microfone_nome=pref.microfone_rotulo, saida_nome=pref.saida_rotulo
+        )
+        if self._avisos_disp:
+            log.info("preferencia de dispositivos: %s", self._avisos_disp)
         self._cap = Captura(self.pa, self.dispositivos, ao_bloco)
         self._fechada = False
 

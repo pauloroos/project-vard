@@ -44,22 +44,79 @@ class Dispositivos:
         return {"eu": self.eu_nome, "outros": self.outros_nome}
 
 
-def dispositivos_padrao(pa) -> Dispositivos:
+def _normalizar(nome: str) -> str:
+    """Normaliza FriendlyName para comparação: lowercase, trim, colapsa espaços."""
+    return " ".join(str(nome).lower().split())
+
+
+def _achar_por_nome(pa, kind: str, nome: str):
+    """Busca dispositivo por FriendlyName normalizado; retorna info ou None se ambíguo/ausente."""
+    if not nome:
+        return None
+    alvo = _normalizar(nome)
+    try:
+        n = pa.get_device_count()
+    except Exception:  # noqa: BLE001
+        return None
+    achados = []
+    for i in range(n):
+        try:
+            info = pa.get_device_info_by_index(i)
+        except Exception:  # noqa: BLE001
+            continue
+        if kind == "input" and int(info.get("maxInputChannels", 0)) < 1:
+            continue
+        if kind == "loopback":
+            # loopback é identificado pelo host API WASAPI e maxOutputChannels > 0
+            try:
+                import pyaudiowpatch
+                if int(info.get("hostApi", -1)) != pa.get_host_api_info_by_type(pyaudiowpatch.paWASAPI)["index"]:
+                    continue
+            except (ImportError, OSError, KeyError, ValueError):
+                continue
+        if _normalizar(info.get("name", "")) == alvo:
+            achados.append(info)
+    if len(achados) == 1:
+        return achados[0]
+    return None  # ausente ou ambíguo → caller usa padrão
+
+
+def dispositivos_com_preferencia(pa, microfone_nome: str = "", saida_nome: str = "") -> tuple[Dispositivos, dict]:
+    """Resolve dispositivos pela preferência (FriendlyName); volta ao padrão com aviso se falhar."""
+    avisos: dict[str, str] = {}
     lb = pa.get_default_wasapi_loopback()
     mic = None
-    try:
-        import pyaudiowpatch
-        wasapi = pa.get_host_api_info_by_type(pyaudiowpatch.paWASAPI)
-        mic = pa.get_device_info_by_index(wasapi["defaultInputDevice"])
-    except (ImportError, OSError, KeyError, ValueError):
-        mic = None
+    # Microfone preferido
+    if microfone_nome:
+        mic = _achar_por_nome(pa, "input", microfone_nome)
+        if mic is None:
+            avisos["microfone"] = f'"{microfone_nome}" não encontrado ou ambíguo; usando padrão.'
+    if mic is None:
+        try:
+            import pyaudiowpatch
+            wasapi = pa.get_host_api_info_by_type(pyaudiowpatch.paWASAPI)
+            mic = pa.get_device_info_by_index(wasapi["defaultInputDevice"])
+        except (ImportError, OSError, KeyError, ValueError):
+            mic = None
     if mic is None:
         mic = pa.get_default_input_device_info()
+    # Loopback da saída preferida
+    if saida_nome:
+        lb_pref = _achar_por_nome(pa, "loopback", saida_nome)
+        if lb_pref is not None:
+            lb = lb_pref
+        else:
+            avisos["saida"] = f'"{saida_nome}" não encontrada ou ambígua; usando loopback padrão.'
     return Dispositivos(
         eu_id=int(mic["index"]), eu_nome=str(mic["name"]), outros_id=int(lb["index"]), outros_nome=str(lb["name"]),
         taxa_eu=int(mic["defaultSampleRate"]), taxa_outros=int(lb["defaultSampleRate"]),
         canais_eu=max(1, int(mic["maxInputChannels"])), canais_outros=max(1, int(lb["maxInputChannels"])),
-    )
+    ), avisos
+
+
+def dispositivos_padrao(pa) -> Dispositivos:
+    d, _ = dispositivos_com_preferencia(pa)
+    return d
 
 
 LOTE_BLOCOS = 5      # ~100 ms por trilha antes de reamostrar (o filtro sem estado erra na borda de blocos de 20 ms)
