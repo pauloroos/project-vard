@@ -1,16 +1,16 @@
 """Testes de entrada do núcleo (T1): __main__, /saude, porta ocupada, wheel e pastas."""
 from __future__ import annotations
 
-import json
 import os
+import shutil
 import socket
 import subprocess
 import sys
-import tempfile
 import time
 from pathlib import Path
 
 import httpx
+import psutil
 import pytest
 
 RAIZ_NUCLEO = Path(__file__).resolve().parents[1]
@@ -129,9 +129,53 @@ def test_pastas_hud_e_nucleo_sao_diferentes(monkeypatch, tmp_path: Path):
     )
 
 
+def _encerrar_arvore(proc: subprocess.Popen) -> None:
+    """Encerra o processo e todos os filhos recursivamente via psutil."""
+    try:
+        pai = psutil.Process(proc.pid)
+        filhos = pai.children(recursive=True)
+        for filho in filhos:
+            try:
+                filho.terminate()
+            except psutil.NoSuchProcess:
+                pass
+        for filho in filhos:
+            try:
+                filho.wait(timeout=3)
+            except psutil.TimeoutExpired:
+                try:
+                    filho.kill()
+                except psutil.NoSuchProcess:
+                    pass
+        pai.terminate()
+        try:
+            pai.wait(timeout=3)
+        except psutil.TimeoutExpired:
+            pai.kill()
+            pai.wait(timeout=3)
+    except psutil.NoSuchProcess:
+        pass
+
+
+def _porta_livre(porta: int, timeout: float = 2.0) -> bool:
+    """Verifica se a porta ficou livre após encerramento."""
+    inicio = time.monotonic()
+    while time.monotonic() - inicio < timeout:
+        s = socket.socket()
+        try:
+            s.bind(("127.0.0.1", porta))
+            s.close()
+            return True
+        except OSError:
+            s.close()
+            time.sleep(0.2)
+    return False
+
+
 def test_wheel_instalado_fora_do_repo(tmp_path: Path):
-    """Wheel inclui server, MCPs, preflight e viewer; funciona fora do checkout com python -I."""
-    import shutil
+    """Wheel inclui server, MCPs, preflight e viewer; funciona fora do checkout com python -I.
+    Estendido: sobe o núcleo como processo na venv, consulta /saude e /status por HTTP.
+    """
     uv_bin = shutil.which("uv")
     if not uv_bin:
         pytest.skip("uv não encontrado no PATH")
@@ -203,12 +247,48 @@ def test_wheel_instalado_fora_do_repo(tmp_path: Path):
         timeout=15,
     )
     assert "OK" in viewer_check.stdout, f"viewer/index.html ausente no wheel: {viewer_check.stdout} {viewer_check.stderr}"
+    # Prova HTTP real: sobe o núcleo na venv, consulta /saude e /status
+    sock = socket.socket()
+    sock.bind(("127.0.0.1", 0))
+    porta = sock.getsockname()[1]
+    sock.close()
+    proc = subprocess.Popen(
+        [py_exe, "-I", "-m", "vard", "servir", "--porta", str(porta), "--host", "127.0.0.1"],
+        cwd=str(fora_repo),
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    try:
+        url_saude = f"http://127.0.0.1:{porta}/saude"
+        url_status = f"http://127.0.0.1:{porta}/status"
+        inicio = time.monotonic()
+        resposta_saude = None
+        while time.monotonic() - inicio < 15:
+            try:
+                resposta_saude = httpx.get(url_saude, timeout=1)
+                if resposta_saude.status_code == 200:
+                    break
+            except httpx.HTTPError:
+                time.sleep(0.3)
+        assert resposta_saude is not None and resposta_saude.status_code == 200, "núcleo (wheel) não subiu em 15s"
+        saude = resposta_saude.json()
+        assert saude["ok"] is True
+        assert isinstance(saude["pid"], int) and saude["pid"] > 0
+        resposta_status = httpx.get(url_status, timeout=2)
+        assert resposta_status.status_code == 200
+        status_body = resposta_status.json()
+        assert "modo" in status_body
+    finally:
+        _encerrar_arvore(proc)
+    assert _porta_livre(porta), f"porta {porta} ainda ocupada após encerramento do wheel"
 
 
 def test_prova_http_real_subprocesso(tmp_path: Path):
-    """Sobe o núcleo como processo, consulta /saude e /status por HTTP, registra PID e encerra."""
-    prova_dir = RAIZ_NUCLEO.parent / ".coordenacao" / "0.7-prova"
-    prova_dir.mkdir(parents=True, exist_ok=True)
+    """Sobe o núcleo como processo, consulta /saude e /status por HTTP.
+    Exige que saude.pid seja o proc.pid OU um descendente dele (psutil).
+    Encerra a árvore inteira e confirma porta livre.
+    NÃO escreve em .coordenacao (prova externa faz isso).
+    """
     # Encontra porta livre
     sock = socket.socket()
     sock.bind(("127.0.0.1", 0))
@@ -236,36 +316,23 @@ def test_prova_http_real_subprocesso(tmp_path: Path):
         assert resposta_saude is not None and resposta_saude.status_code == 200, "núcleo não subiu em 10s"
         saude = resposta_saude.json()
         assert saude["ok"] is True
-        # uvicorn pode fazer fork/spawn: o PID do /saude é do worker, não necessariamente do pai.
-        assert isinstance(saude["pid"], int) and saude["pid"] > 0
+        # saude.pid deve ser o proc.pid OU um descendente dele
+        pid_saude = saude["pid"]
+        assert isinstance(pid_saude, int) and pid_saude > 0
+        if pid_saude != proc.pid:
+            try:
+                pai = psutil.Process(proc.pid)
+                descendentes = {c.pid for c in pai.children(recursive=True)}
+                assert pid_saude in descendentes, (
+                    f"saude.pid={pid_saude} não é proc.pid={proc.pid} nem descendente"
+                )
+            except psutil.NoSuchProcess:
+                pytest.fail(f"processo {proc.pid} morreu antes da verificação de descendência")
         resposta_status = httpx.get(url_status, timeout=2)
         assert resposta_status.status_code == 200
         status_body = resposta_status.json()
         assert "modo" in status_body
-        # Registra prova
-        prova = {
-            "tarefa": "T1",
-            "pedaco": "prova-http-real",
-            "pid": proc.pid,
-            "porta": porta,
-            "versao": saude["versao"],
-            "status_code_saude": resposta_saude.status_code,
-            "status_code_status": resposta_status.status_code,
-        }
-        (prova_dir / "t1.json").write_text(json.dumps(prova, indent=2, ensure_ascii=False), encoding="utf-8")
     finally:
-        proc.terminate()
-        try:
-            proc.wait(timeout=5)
-        except subprocess.TimeoutExpired:
-            proc.kill()
-            proc.wait(timeout=5)
+        _encerrar_arvore(proc)
     # Confirma que a porta ficou livre
-    time.sleep(0.5)
-    sock2 = socket.socket()
-    try:
-        sock2.bind(("127.0.0.1", porta))
-    except OSError:
-        pytest.fail(f"porta {porta} ainda ocupada após encerramento do processo {proc.pid}")
-    finally:
-        sock2.close()
+    assert _porta_livre(porta), f"porta {porta} ainda ocupada após encerramento do processo {proc.pid}"
