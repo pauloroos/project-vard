@@ -278,6 +278,14 @@ pub fn abrir_url(url: String) -> Result<(), String> {
     tauri_plugin_opener::open_url(url, None::<&str>).map_err(|e| e.to_string())
 }
 
+/// Abre arquivo de log local no editor padrão do sistema.
+pub fn abrir_log(caminho: &std::path::Path) -> Result<(), String> {
+    if !caminho.exists() {
+        return Err(format!("log nao encontrado: {}", caminho.display()));
+    }
+    tauri_plugin_opener::open_path(caminho, None::<&str>).map_err(|e| e.to_string())
+}
+
 /// Pasta Startup do usuario (separada para ser testavel).
 pub fn atalho_logon_em(appdata: &Path) -> PathBuf {
     appdata
