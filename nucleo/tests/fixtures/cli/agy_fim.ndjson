@@ -1,0 +1,1 @@
+{"event":"result","result":{"conversation_id":"conv-agy-001","status":"SUCCESS","response":"Resposta final.","duration_seconds":2.5,"num_turns":1,"usage":{"input_tokens":100,"output_tokens":5,"thinking_tokens":0,"cache_read_tokens":0,"total_tokens":105}}}

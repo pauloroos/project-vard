@@ -1,0 +1,1 @@
+{"type":"result","stop_reason":null,"session_id":"sess-claude-err","result":"API Error: 401 authentication required","num_turns":0,"is_error":true,"api_error_status":401}

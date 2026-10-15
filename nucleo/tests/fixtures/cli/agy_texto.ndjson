@@ -1,0 +1,3 @@
+{"event":"step_update","step_update":{"conversation_id":"conv-agy-001","step_index":2,"state":"ACTIVE","step_type":"agent_response","text_delta":"Olá, "}}
+{"event":"step_update","step_update":{"conversation_id":"conv-agy-001","step_index":2,"state":"ACTIVE","step_type":"agent_response","text_delta":"como posso ajudar?"}}
+{"event":"step_update","step_update":{"conversation_id":"conv-agy-001","step_index":2,"state":"DONE","step_type":"agent_response","text_delta":"\n","duration_seconds":1.2,"usage":{"input_tokens":100,"output_tokens":5,"thinking_tokens":0,"cache_read_tokens":0,"total_tokens":105}}}
