@@ -4,8 +4,29 @@
 /// 1. Se `VARD_DADOS` estiver definida, usa esse caminho.
 /// 2. Senão, usa `%LOCALAPPDATA%\rdl-vard`.
 use std::path::PathBuf;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, OnceLock};
 use serde::{Deserialize, Serialize};
+use tauri::{AppHandle, Emitter};
+
+/// Handle global do app para emissão de eventos a partir de threads sem acesso direto ao App.
+static APP_HANDLE: OnceLock<AppHandle> = OnceLock::new();
+
+/// Registra o AppHandle global; chamada uma vez no setup do Tauri.
+pub fn registrar_app_handle(handle: AppHandle) {
+    let _ = APP_HANDLE.set(handle);
+}
+
+/// Emite evento `ciclo-estado` com a FotoCiclo atual para frontend e bandeja nativa.
+pub fn emitir_ciclo_estado() {
+    if let Some(handle) = APP_HANDLE.get() {
+        let foto = ciclo_info(supervisor_ativo());
+        let _ = handle.emit("ciclo-estado", &foto);
+        // Atualiza bandeja nativa se supervisor ativo
+        if supervisor_ativo() {
+            crate::bandeja::atualizar_bandeja_nativa(handle, &foto);
+        }
+    }
+}
 
 /// Resolve a pasta de dados seguindo o mesmo contrato do Python.
 pub fn pasta_dados() -> PathBuf {
@@ -370,6 +391,7 @@ pub fn executar_verbo(id: &str, verbo: &VerboPedido) -> ModoCiclo {
         }
     };
     let _ = escrever_estado(&modo_final, None);
+    emitir_ciclo_estado();
     liberar_pedido(id);
     modo_final
 }
