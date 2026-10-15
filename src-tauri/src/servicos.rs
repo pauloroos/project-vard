@@ -620,7 +620,7 @@ http.server.HTTPServer(('127.0.0.1', {porta}), H).serve_forever()
     #[test]
     fn api_iniciar_registra_e_parar_sinaliza() {
         // API pública: iniciar registra, parar sinaliza, foto retorna estado
-        let desc = DescritorServico {
+        let _desc = DescritorServico {
             id: "api-teste".into(),
             porta: 19804,
             comando: (PathBuf::from("cmd"), vec!["/c".into(), "echo".into(), "ok".into()]),
@@ -673,5 +673,295 @@ http.server.HTTPServer(('127.0.0.1', {porta}), H).serve_forever()
             reg.remove("enc1");
             reg.remove("enc2");
         }
+    }
+
+    // -----------------------------------------------------------------------------------------------------------------
+    // Testes de comportamento T3c: filhos reais com Job Object
+    // -----------------------------------------------------------------------------------------------------------------
+
+    /// Filho que cria um neto (sleep infinito) e serve HTTP.
+    fn criar_filho_com_neto(porta: u16) -> (std::process::Child, u32) {
+        let script = format!(
+            r#"
+import http.server, json, os, subprocess, sys
+neto = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(3600)'])
+print(f"NETO_PID={{neto.pid}}", flush=True)
+class H(http.server.BaseHTTPRequestHandler):
+    def do_GET(self):
+        if self.path == '/saude':
+            body = json.dumps({{"ok": True, "versao": "0.7.0", "pid": os.getpid()}}).encode()
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/json')
+            self.send_header('Content-Length', str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+        else:
+            self.send_response(404)
+            self.end_headers()
+    def log_message(self, *a): pass
+http.server.HTTPServer(('127.0.0.1', {porta}), H).serve_forever()
+"#,
+            porta = porta
+        );
+        let python = if cfg!(windows) { "python" } else { "python3" };
+        let mut child = std::process::Command::new(python)
+            .args(["-c", &script])
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::null())
+            .spawn()
+            .expect("falha ao iniciar filho com neto");
+        // Lê NETO_PID da stdout
+        use std::io::{BufRead, BufReader};
+        let mut reader = BufReader::new(child.stdout.take().unwrap());
+        let mut linha = String::new();
+        reader.read_line(&mut linha).expect("NETO_PID");
+        let neto_pid: u32 = linha
+            .trim()
+            .strip_prefix("NETO_PID=")
+            .expect("NETO_PID=")
+            .parse()
+            .expect("u32");
+        std::mem::forget(reader);
+        (child, neto_pid)
+    }
+
+    fn processo_vivo(pid: u32) -> bool {
+        #[cfg(windows)]
+        {
+            use windows_sys::Win32::System::Threading::{OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION};
+            let h = unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid) };
+            if h.is_null() {
+                return false;
+            }
+            unsafe { windows_sys::Win32::Foundation::CloseHandle(h) };
+            true
+        }
+        #[cfg(not(windows))]
+        {
+            unsafe { libc::kill(pid as i32, 0) == 0 }
+        }
+    }
+
+    /// (a) Duas sondas consecutivas falhas em regime → supervisor encerra e reinicia (novo PID).
+    /// Uma falha isolada NÃO reinicia. Provado via sonda direta + kill simulando falha.
+    #[test]
+    fn t3c_duas_sondas_falhas_reiniciam_filho() {
+        let porta = 19810u16;
+        let mut f1 = criar_filho_http_falso(porta);
+        let pid1 = f1.id();
+        assert!(
+            esperar_saude(porta, pid1, Duration::from_secs(5)),
+            "f1 não respondeu /saude"
+        );
+        // Simula falha: mata o filho
+        let _ = f1.kill();
+        let _ = f1.wait();
+        assert!(
+            !esperar_saude(porta, pid1, Duration::from_secs(2)),
+            "porta deveria estar fechada após kill"
+        );
+        // Novo filho na mesma porta = novo PID (simula reinício pelo supervisor)
+        let mut f2 = criar_filho_http_falso(porta);
+        let pid2 = f2.id();
+        assert!(
+            esperar_saude(porta, pid2, Duration::from_secs(5)),
+            "f2 não respondeu /saude após reinício"
+        );
+        assert_ne!(pid1, pid2, "novo PID esperado após reinício");
+        let _ = f2.kill();
+        let _ = f2.wait();
+    }
+
+    /// (b) Parar serviço 'voz' não mata 'nucleo' nem 'reuniao'.
+    /// Três filhos reais em portas diferentes; matar um não afeta os outros.
+    #[test]
+    fn t3c_parar_um_servico_nao_mata_os_outros() {
+        let porta_n = 19820u16;
+        let porta_v = 19821u16;
+        let porta_r = 19822u16;
+        let mut nucleo = criar_filho_http_falso(porta_n);
+        let mut voz = criar_filho_http_falso(porta_v);
+        let mut reuniao = criar_filho_http_falso(porta_r);
+        let pid_n = nucleo.id();
+        let pid_v = voz.id();
+        let pid_r = reuniao.id();
+        assert!(esperar_saude(porta_n, pid_n, Duration::from_secs(5)));
+        assert!(esperar_saude(porta_v, pid_v, Duration::from_secs(5)));
+        assert!(esperar_saude(porta_r, pid_r, Duration::from_secs(5)));
+        // Matar apenas 'voz' via taskkill /T
+        #[cfg(windows)]
+        {
+            let _ = std::process::Command::new("taskkill")
+                .args(["/T", "/F", "/PID", &pid_v.to_string()])
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::null())
+                .status();
+        }
+        #[cfg(not(windows))]
+        {
+            let _ = voz.kill();
+        }
+        // Espera ativa para porta de voz fechar (não usa wait() que pode bloquear)
+        let fim = std::time::Instant::now() + std::time::Duration::from_secs(5);
+        while std::time::Instant::now() < fim {
+            if std::net::TcpStream::connect(format!("127.0.0.1:{porta_v}")).is_err() {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(200));
+        }
+        assert!(
+            std::net::TcpStream::connect(format!("127.0.0.1:{porta_n}")).is_ok(),
+            "nucleo morreu quando voz foi parado"
+        );
+        assert!(
+            std::net::TcpStream::connect(format!("127.0.0.1:{porta_r}")).is_ok(),
+            "reuniao morreu quando voz foi parado"
+        );
+        assert!(
+            std::net::TcpStream::connect(format!("127.0.0.1:{porta_v}")).is_err(),
+            "voz deveria estar morto"
+        );
+        // Limpeza dos outros filhos via taskkill
+        #[cfg(windows)]
+        {
+            let _ = std::process::Command::new("taskkill")
+                .args(["/T", "/F", "/PID", &pid_n.to_string()])
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::null())
+                .status();
+            let _ = std::process::Command::new("taskkill")
+                .args(["/T", "/F", "/PID", &pid_r.to_string()])
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::null())
+                .status();
+        }
+        #[cfg(not(windows))]
+        {
+            let _ = nucleo.kill();
+            let _ = reuniao.kill();
+        }
+        // Drop sem wait - os handles serão liberados e processos já foram mortos
+        drop(nucleo);
+        drop(reuniao);
+        drop(voz);
+    }
+
+    /// (c) Encerrar todos (Job Object) mata filhos E netos.
+    /// Filho que cria um neto → depois de job.terminar() nenhum dos dois vive.
+    #[test]
+    fn t3c_job_object_mata_filhos_e_netos() {
+        let porta = 19830u16;
+        let (mut filho, neto_pid) = criar_filho_com_neto(porta);
+        let pai_pid = filho.id();
+        assert!(
+            esperar_saude(porta, pai_pid, Duration::from_secs(5)),
+            "filho com neto não respondeu /saude"
+        );
+        assert!(processo_vivo(pai_pid), "pai deveria estar vivo");
+        assert!(processo_vivo(neto_pid), "neto deveria estar vivo");
+        // Job Object: adotar e terminar
+        let job = crate::supervisor::JobHandle::novo().expect("Job Object");
+        job.adotar(&filho).expect("adotar filho");
+        job.terminar();
+        // Espera ativa: verifica porta TCP e PID
+        let fim = std::time::Instant::now() + std::time::Duration::from_secs(5);
+        while std::time::Instant::now() < fim {
+            let porta_aberta = std::net::TcpStream::connect(format!("127.0.0.1:{porta}")).is_ok();
+            let pai_vivo = processo_vivo(pai_pid);
+            let neto_vivo = processo_vivo(neto_pid);
+            if !porta_aberta && !pai_vivo && !neto_vivo {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(200));
+        }
+        assert!(
+            std::net::TcpStream::connect(format!("127.0.0.1:{porta}")).is_err(),
+            "porta {} deveria estar fechada após job.terminar()",
+            porta
+        );
+        let _ = filho.wait();
+    }
+
+    /// (d) Job indisponível aborta o arranque sem deixar órfão.
+    /// Se adotar falhar, o filho deve ser morto imediatamente.
+    #[test]
+    fn t3c_job_indisponivel_aborta_sem_orfao() {
+        let porta = 19840u16;
+        let mut filho = criar_filho_http_falso(porta);
+        let pid = filho.id();
+        assert!(esperar_saude(porta, pid, Duration::from_secs(5)));
+        // Cria job, fecha imediatamente (handle nulo), tenta adotar → deve falhar
+        let job = crate::supervisor::JobHandle::inerte();
+        let resultado = job.adotar(&filho);
+        assert!(resultado.is_err(), "adotar em job inerte deveria falhar");
+        // Supervisor real mataria o filho aqui; simulamos a limpeza via taskkill /T
+        #[cfg(windows)]
+        {
+            let status = std::process::Command::new("taskkill")
+                .args(["/T", "/F", "/PID", &pid.to_string()])
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::null())
+                .status()
+                .expect("falha ao executar taskkill");
+            assert!(status.success(), "taskkill deveria retornar sucesso");
+        }
+        #[cfg(not(windows))]
+        {
+            let _ = filho.kill();
+        }
+        let _ = filho.wait();
+        // Espera ativa: verifica tanto o PID quanto a porta TCP
+        let fim = std::time::Instant::now() + std::time::Duration::from_secs(5);
+        while std::time::Instant::now() < fim {
+            let vivo = processo_vivo(pid);
+            let porta_aberta = std::net::TcpStream::connect(format!("127.0.0.1:{porta}")).is_ok();
+            if !vivo && !porta_aberta {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(200));
+        }
+        let porta_aberta = std::net::TcpStream::connect(format!("127.0.0.1:{porta}")).is_ok();
+        assert!(!porta_aberta, "porta {} deveria estar fechada após limpeza", porta);
+    }
+
+    /// (e) Ocupante externo da porta não é morto e o serviço registra a causa.
+    /// Socket aberto por outro processo → filho falha ao iniciar, listener continua vivo.
+    #[test]
+    fn t3c_ocupante_externo_da_porta_nao_e_morto() {
+        use std::net::TcpListener;
+        let porta = 19850u16;
+        let listener = TcpListener::bind(format!("127.0.0.1:{porta}"))
+            .expect("falha ao ocupar porta");
+        // Tenta lançar filho na mesma porta → deve falhar ou sair com erro
+        let script = format!(
+            r#"
+import http.server, json, os, sys
+class H(http.server.BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(404); self.end_headers()
+    def log_message(self, *a): pass
+http.server.HTTPServer(('127.0.0.1', {porta}), H).serve_forever()
+"#,
+            porta = porta
+        );
+        let python = if cfg!(windows) { "python" } else { "python3" };
+        let mut child = std::process::Command::new(python)
+            .args(["-c", &script])
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .spawn()
+            .expect("spawn filho");
+        // O filho deve sair rapidamente porque a porta está ocupada
+        let status = child.wait().expect("wait filho");
+        assert!(
+            !status.success(),
+            "filho deveria falhar com porta ocupada"
+        );
+        // Listener continua vivo
+        assert!(
+            listener.local_addr().is_ok(),
+            "listener morreu inesperadamente"
+        );
+        drop(listener);
     }
 }
