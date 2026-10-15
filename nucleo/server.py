@@ -381,6 +381,40 @@ def reuniao_lista(n: int = 10):
     return _proxy_reuniao("GET", "/lista", {"n": n})
 
 
+@app.get("/reuniao/dispositivos")
+def reuniao_dispositivos():
+    """Lê a preferência de dispositivos salva pela ponte/widget."""
+    try:
+        from vard_reuniao import preferencia as pref_mod
+        p = pref_mod.ler_preferencia()
+        return JSONResponse(p.como_dict())
+    except Exception:  # noqa: BLE001
+        return JSONResponse({"microfone_id": "", "microfone_rotulo": "", "saida_id": "", "saida_rotulo": ""})
+
+
+@app.post("/reuniao/dispositivos")
+async def reuniao_dispositivos_gravar(request: Request):
+    """Grava a preferência de dispositivos atomicamente."""
+    try:
+        corpo = await request.json()
+    except ValueError:
+        return JSONResponse({"erro": "json_invalido"}, status_code=422)
+    if not isinstance(corpo, dict):
+        return JSONResponse({"erro": "corpo_invalido"}, status_code=422)
+    try:
+        from vard_reuniao import preferencia as pref_mod
+        p = pref_mod.PreferenciaDispositivos(
+            microfone_id=str(corpo.get("microfone_id", "")),
+            microfone_rotulo=str(corpo.get("microfone_rotulo", "")),
+            saida_id=str(corpo.get("saida_id", "")),
+            saida_rotulo=str(corpo.get("saida_rotulo", "")),
+        )
+        pref_mod.gravar_preferencia(p)
+        return JSONResponse({"ok": True})
+    except OSError as exc:
+        return JSONResponse({"erro": str(exc)}, status_code=500)
+
+
 @app.post("/reuniao/ata")
 async def reuniao_ata(request: Request):
     try:
