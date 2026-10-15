@@ -24,10 +24,20 @@ ORIGENS_OK = {
 }
 
 
-def criar_app(motor=None, carregar_em_thread: bool = True) -> FastAPI:
+_NAO_FORNECIDO = object()
+
+
+def criar_app(motor=None, motor_kokoro=_NAO_FORNECIDO, carregar_em_thread: bool = True) -> FastAPI:
     if motor is None:
         from .motor import Motor
         motor = Motor(os.environ.get("VARD_VOZ_DEVICE", "cuda"))
+    if motor_kokoro is _NAO_FORNECIDO:
+        try:
+            from .kokoro import MotorKokoro
+            motor_kokoro = MotorKokoro(os.environ.get("VARD_VOZ_DEVICE", "cpu"))
+        except Exception:
+            log.warning("kokoro indisponivel; apenas XTTS ativo")
+            motor_kokoro = None
 
     @asynccontextmanager
     async def vida(app):
@@ -36,7 +46,12 @@ def criar_app(motor=None, carregar_em_thread: bool = True) -> FastAPI:
                 try:
                     motor.carregar()
                 except Exception:
-                    log.exception("falha ao carregar o motor")
+                    log.exception("falha ao carregar o motor XTTS")
+                if motor_kokoro is not None:
+                    try:
+                        motor_kokoro.carregar()
+                    except Exception:
+                        log.exception("falha ao carregar o motor Kokoro")
             threading.Thread(target=_carga, daemon=True, name="carga-motor").start()
         yield
 
@@ -56,13 +71,46 @@ def criar_app(motor=None, carregar_em_thread: bool = True) -> FastAPI:
 
     @app.get("/saude")
     def saude():
-        return {"pronta": bool(motor.pronta), "voz": VOZ, "device": motor.device, "aquecida": bool(motor.aquecida)}
+        kokoro_pronta = motor_kokoro is not None and motor_kokoro.pronta and motor_kokoro.aquecida
+        xtts_pronta = motor.pronta and motor.aquecida
+        pronta = xtts_pronta or kokoro_pronta
+        voz_atual = VOZ if xtts_pronta else (next(iter(VOZES_KOKORO), "") if kokoro_pronta else VOZ)
+        device = motor.device if xtts_pronta else (motor_kokoro.device if kokoro_pronta else motor.device)
+        return {
+            "pronta": pronta,
+            "voz": voz_atual,
+            "device": device,
+            "aquecida": pronta,
+            "kokoro": kokoro_pronta,
+            "xtts": xtts_pronta,
+        }
 
     @app.get("/vozes")
     def vozes():
-        if not motor.pronta:
+        if not motor.pronta and motor_kokoro is None:
             return JSONResponse({"erro": "aquecendo"}, status_code=503)
-        return {"vozes": motor.vozes(), "atual": VOZ}
+        lista = list(motor.vozes()) if motor.pronta else []
+        if motor_kokoro is not None:
+            from .kokoro import VOZES_KOKORO
+            for vid in VOZES_KOKORO:
+                if vid not in lista:
+                    lista.append(vid)
+        atual = VOZ if motor.pronta else (next(iter(VOZES_KOKORO), "") if motor_kokoro is not None else "")
+        return {"vozes": lista, "atual": atual}
+
+    def _motor_para_voz(voz: str | None):
+        """Escolhe o motor adequado para a voz pedida. Kokoro tem prioridade quando a voz é dele."""
+        if voz and motor_kokoro is not None:
+            from .kokoro import VOZES_KOKORO
+            if voz in VOZES_KOKORO:
+                if motor_kokoro.pronta and motor_kokoro.aquecida:
+                    return motor_kokoro
+                return None  # Kokoro pedido mas não pronto → 503
+        if motor.pronta and motor.aquecida:
+            return motor
+        if motor_kokoro is not None and motor_kokoro.pronta and motor_kokoro.aquecida:
+            return motor_kokoro
+        return None
 
     @app.post("/falar")
     async def falar(corpo: dict, request: Request, fluxo: int = 0):
@@ -74,19 +122,20 @@ def criar_app(motor=None, carregar_em_thread: bool = True) -> FastAPI:
         except (TypeError, ValueError):
             return JSONResponse({"erro": "velocidade_invalida"}, status_code=400)
         voz = str(corpo.get("voz", "") or "").strip() or None
-        if not (motor.pronta and motor.aquecida):
+        alvo = _motor_para_voz(voz)
+        if alvo is None:
             return JSONResponse({"erro": "aquecendo"}, status_code=503)
-        if voz is not None and not motor.tem_voz(voz):
+        if voz is not None and not alvo.tem_voz(voz):
             return JSONResponse({"erro": "voz_desconhecida"}, status_code=400)
         texto = normalizar(texto)
-        log.info("falar: %d chars", len(texto))
+        log.info("falar: %d chars motor=%s voz=%s", len(texto), type(alvo).__name__, voz)
         log.debug("falar (normalizado): %s", texto)
         if fluxo or "audio/pcm" in request.headers.get("accept", ""):
             return StreamingResponse(
-                motor.falar_fluxo(texto, vel, voz), media_type="audio/pcm",
+                alvo.falar_fluxo(texto, vel, voz), media_type="audio/pcm",
                 headers={"X-Taxa": "24000", "X-Canais": "1", "X-Formato": "s16le"},
             )
-        wav = await run_in_threadpool(motor.falar, texto, vel, voz)
+        wav = await run_in_threadpool(alvo.falar, texto, vel, voz)
         return Response(wav, media_type="audio/wav")
 
     return app
