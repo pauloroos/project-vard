@@ -1,4 +1,6 @@
 ﻿# Registra (ou remove) o início do Vard no logon (pasta Startup) e os atalhos da área de trabalho.
+# Com supervisor ativo e vard.exe presente, os atalhos apontam direto para o exe (ciclo nativo).
+# Sem supervisor, mantém o comportamento legado (PowerShell + vard-modo.ps1).
 param([switch]$Remover)
 $ErrorActionPreference = "Stop"
 $Repo    = Split-Path (Split-Path $PSScriptRoot -Parent) -Parent   # scripts/windows -> raiz do repositório
@@ -11,13 +13,43 @@ if ($Remover) {
   foreach ($a in $Atalhos.Keys) { Remove-Item $a -Force -ErrorAction SilentlyContinue }
   Write-Host "Início no logon e atalhos removidos."; exit 0
 }
+
+# Detecta modo supervisor: instalacao.json com supervisor:true e vard.exe existente.
+$Dados = if ($env:VARD_DADOS) { $env:VARD_DADOS } else { Join-Path $env:LOCALAPPDATA "rdl-vard" }
+$InstArquivo = Join-Path $Dados "instalacao.json"
+$Supervisor = $false
+$HudExe = $null
+if (Test-Path $InstArquivo) {
+  try {
+    $instCfg = Get-Content $InstArquivo -Raw -Encoding UTF8 | ConvertFrom-Json
+    if ($instCfg.supervisor -eq $true) {
+      $candidato = Join-Path $Repo "src-tauri\target\release\vard.exe"
+      if (-not (Test-Path $candidato)) { $candidato = Join-Path $Repo "vard.exe" }
+      if (Test-Path $candidato) { $Supervisor = $true; $HudExe = $candidato }
+    }
+  } catch { }
+}
+
 $shell = New-Object -ComObject WScript.Shell
 foreach ($a in $Atalhos.Keys) {
   $lnk = $shell.CreateShortcut($a)
-  $lnk.TargetPath = "powershell.exe"
-  $lnk.Arguments = "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$Script`" " + $Atalhos[$a]
-  $lnk.WorkingDirectory = $Repo
-  $lnk.IconLocation = "shell32.dll,137"
+  if ($Supervisor) {
+    # Modo supervisor: atalho aponta direto para vard.exe (single-instance garante unicidade).
+    $lnk.TargetPath = $HudExe
+    $lnk.Arguments = ""
+    $lnk.WorkingDirectory = Split-Path $HudExe -Parent
+    $lnk.IconLocation = "$HudExe,0"
+  } else {
+    # Modo legado: PowerShell + vard-modo.ps1 (comportamento atual preservado).
+    $lnk.TargetPath = "powershell.exe"
+    $lnk.Arguments = "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$Script`" " + $Atalhos[$a]
+    $lnk.WorkingDirectory = $Repo
+    $lnk.IconLocation = "shell32.dll,137"
+  }
   $lnk.Save()
 }
-Write-Host "Vard registrado no logon (pasta Startup) e atalhos criados na área de trabalho."
+if ($Supervisor) {
+  Write-Host "Vard registrado no logon (supervisor: atalhos apontam para vard.exe)."
+} else {
+  Write-Host "Vard registrado no logon (pasta Startup) e atalhos criados na área de trabalho."
+}

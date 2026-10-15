@@ -227,6 +227,30 @@ function JanelaVardAberta() {
   return ($achou.Count -gt 0)
 }
 
+# ---------------------------------------------------------------- adaptador supervisor
+# Com supervisor ativo e app novo vivo, publica o verbo na caixa IPC em vez de executar
+# diretamente. O Rust consome o pedido e executa pelo ciclo nativo. Sem supervisor ou sem
+# app vivo, devolve $false e o script segue o caminho legado (comportamento atual).
+function PublicarNaCaixa($verbo) {
+  if (-not $Inst -or -not $Inst.supervisor) { return $false }
+  $appJson = Join-Path $Pasta "ciclo\app.json"
+  if (-not (Test-Path $appJson)) { return $false }
+  try {
+    $app = Get-Content $appJson -Raw -Encoding UTF8 | ConvertFrom-Json
+  } catch { return $false }
+  if (-not $app.sessao_id) { return $false }
+  $pedidosDir = Join-Path $Pasta "ciclo\pedidos"
+  New-Item -ItemType Directory -Force $pedidosDir | Out-Null
+  $id = [guid]::NewGuid().ToString()
+  $conteudo = @{ id = $id; verbo = $verbo; sessao = $app.sessao_id } | ConvertTo-Json -Compress
+  $tmp = Join-Path $pedidosDir "$id.tmp"
+  $alvo = Join-Path $pedidosDir "$id.json"
+  [IO.File]::WriteAllText($tmp, $conteudo, (New-Object Text.UTF8Encoding $false))
+  Rename-Item -Path $tmp -NewName "$id.json" -Force
+  Log "adaptador: publicado '$verbo' na caixa IPC ($id)"
+  return $true
+}
+
 # ---------------------------------------------------------------- verbos
 function ModoAtual() {
   if (Test-Path $Estado) { try { return (Get-Content $Estado -Raw -Encoding UTF8 | ConvertFrom-Json).modo } catch {} }
@@ -346,6 +370,10 @@ function Sonda() {
   Set-Content -Path (Join-Path $Pasta "sonda.txt") -Value $agora -Encoding ascii
   Log "sonda gravada (voz: $(EstadoVoz))"
 }
+
+# Adaptador: com supervisor ativo e app vivo, publica na caixa IPC e sai.
+# Sem supervisor ou sem app vivo, segue o caminho legado (comportamento atual).
+if (PublicarNaCaixa $Verbo) { exit 0 }
 
 switch ($Verbo) {
   "iniciar"    { Iniciar }

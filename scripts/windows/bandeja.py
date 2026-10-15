@@ -97,8 +97,22 @@ def _registrar(msg: str) -> None:
         pass
 
 
+def _supervisor_ativo() -> bool:
+    """Verifica se o supervisor está habilitado e o app novo está vivo."""
+    try:
+        app = modo._app_vivo()
+        return app is not None
+    except Exception:
+        return False
+
+
 def main() -> None:
     _registrar("início")
+    # Com supervisor ativo, a bandeja nativa do Rust assume; esta bandeja Python não inicia.
+    if _supervisor_ativo():
+        _registrar("não iniciou: supervisor ativo (bandeja nativa assume)")
+        print("bandeja: supervisor ativo — bandeja nativa assume; saindo.", file=sys.stderr)
+        return
     motivo = "saída normal (Sair da bandeja)"
     try:
         estado = modo.ler_estado()
