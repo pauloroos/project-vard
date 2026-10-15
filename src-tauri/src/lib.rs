@@ -245,13 +245,13 @@ pub fn run() {
             // T4: inicia serviços habilitados via instalacao.json
             {
                 let recursos = handle.path().resource_dir().unwrap_or_default();
-                let repo = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).parent().unwrap_or(std::path::Path::new(".")).to_path_buf();
-                let dados = handle.path().app_data_dir().unwrap_or_else(|_| repo.join("dados"));
-                let config_instalacao = instalacao::ler_instalacao(&dados.join("instalacao.json")).unwrap_or_default();
+                let raiz = instalacao::resolver_raiz(&recursos);
+                let dados = handle.path().app_data_dir().unwrap_or_else(|_| raiz.join("dados"));
+                let config_instalacao = instalacao::ler_instalacao(&raiz.join("instalacao.json")).unwrap_or_default();
                 let (_iniciados, avisos) = instalacao::iniciar_servicos(
                     &config_instalacao,
                     &recursos,
-                    &repo,
+                    &raiz,
                     &dados,
                     env!("CARGO_PKG_VERSION"),
                 );
