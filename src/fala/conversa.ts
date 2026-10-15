@@ -4,6 +4,8 @@ import { FALAS, saudacaoPara } from "./falas";
 import { cortarEmFrases } from "./frases";
 import { ehEncerramento } from "./encerramento";
 import { aPartirDoGatilho, classificar, ehConfirmacao, ehInterrupcao, extrairComando } from "./rotas";
+import type { Cerebro } from "../config/cerebro";
+import type { EventoPedidoSSE } from "../conectores/ponte/cliente";
 
 export type Estado = "repouso" | "ouvindo" | "pensando" | "falando" | "jogo" | "erro" | "fora";
 export interface Mensagem { role: "system" | "user" | "assistant"; content: string }
@@ -40,7 +42,17 @@ export interface DepsConversa {
   ponte?: {
     ver(jpegB64: string, pergunta: string): Promise<string>;
     modo(verbo: string): Promise<boolean>;
+    /** Cérebro próprio: admite um pedido e devolve o estado inicial. */
+    pedir?(texto: string, sessaoId: string): Promise<{ pedido_id: string; sessao_id: string; estado: string }>;
+    /** Cancela um pedido do cérebro próprio. */
+    cancelar?(pedidoId: string): Promise<{ estado: string } | null>;
+    /** Consulta o estado de um pedido do cérebro próprio. */
+    consultarPedido?(pedidoId: string): Promise<{ resposta?: string | null; estado: string } | null>;
   };
+  /** Cérebro ativo: 'openjarvis' (padrão) ou 'proprio' (usa rotas /pedidos). */
+  cerebro?: Cerebro;
+  /** ID da sessão de voz atual (usado pelo cérebro próprio para isolar pedidos). */
+  sessaoVoz?: () => string;
   /** A ponte respondeu na última sondagem? Sem isto, a ponte (se existir) conta como no ar. */
   ponteNoAr?: () => boolean;
   /** JPEG em base64 do monitor sob a janela. */
@@ -289,6 +301,58 @@ export class Conversa {
           jpeg = await this.d.capturar();
         } finally { this.d.depoisDaCaptura?.(); }
         resposta = (await this.d.ponte.ver(jpeg, comando)).trim();
+      } else if (this.d.cerebro === "proprio" && this.d.ponte?.pedir && this.d.sessaoVoz) {
+        // Cérebro próprio: admite pedido e espera texto via EventoPedido (SSE).
+        const sessaoId = this.d.sessaoVoz();
+        const estado = await this.d.ponte.pedir(comando, sessaoId);
+        if (ac.signal.aborted || this.emJogo()) return;
+        const pedidoId = estado.pedido_id;
+        let ultimoSeq = -1;
+        let textoAcumulado = "";
+        // Reconciliação inicial: consulta estado atual para pegar texto já produzido antes do SSE.
+        try {
+          const snap = await this.d.ponte.consultarPedido?.(pedidoId);
+          if (snap && typeof snap.resposta === "string") {
+            textoAcumulado = snap.resposta;
+            ultimoSeq = Number((snap as { ultimo_seq?: number }).ultimo_seq ?? 0);
+          }
+        } catch { /* segue com SSE */ }
+        // Escuta eventos SSE da sessão até fim/erro/cancelamento ou abort.
+        const esperarFim = new Promise<string>((resolve, reject) => {
+          const onEvento = (ev: Event) => {
+            if (ac.signal.aborted) return;
+            const msg = (ev as MessageEvent).data;
+            if (typeof msg !== "string") return;
+            let obj: EventoPedidoSSE | null = null;
+            try { obj = JSON.parse(msg) as EventoPedidoSSE; } catch { return; }
+            if (!obj || obj.tipo !== "pedido" || obj.sessao_id !== sessaoId || obj.pedido_id !== pedidoId) return;
+            if (obj.seq <= ultimoSeq) return; // ignora repetido
+            ultimoSeq = obj.seq;
+            if (obj.evento_tipo === "texto" && typeof obj.dados.texto === "string") {
+              textoAcumulado += obj.dados.texto;
+            } else if (obj.evento_tipo === "fim" || obj.evento_tipo === "erro") {
+              cleanup();
+              resolve(textoAcumulado.trim());
+            }
+          };
+          const onError = () => { cleanup(); reject(new Error("sse_erro")); };
+          const cleanup = () => {
+            window.removeEventListener("vard-evento-pedido", onEvento as unknown as EventListener);
+            window.removeEventListener("error", onError);
+          };
+          window.addEventListener("vard-evento-pedido", onEvento as unknown as EventListener);
+          window.addEventListener("error", onError);
+          ac.signal.addEventListener("abort", () => { cleanup(); reject(new Error("abortado")); });
+        });
+        try {
+          resposta = await esperarFim;
+        } catch (erro) {
+          // Cancela pedido se a fala foi cortada (abort) ou houve erro.
+          try { await this.d.ponte.cancelar?.(pedidoId); } catch { /* melhor esforço */ }
+          if (ac.signal.aborted || this.emJogo()) return;
+          throw erro;
+        }
+        if (!resposta) throw new Error("resposta vazia");
       } else {
         resposta = (await this.d.oj.perguntar([
           { role: "system", content: this.d.config.instrucao_formato },

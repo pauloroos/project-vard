@@ -93,6 +93,8 @@ export class Configuracoes {
     this.modelos = new AbaModelos(this.raiz.querySelector<HTMLElement>("#cfg-modelos")!, this.cfg.modelo, {
       criarOj: (modelo) => this.deps.criarOj(this.cfg.openjarvis_url, modelo),
       statusPonte: () => this.deps.statusPonte(this.cfg.ponte_url),
+      cerebroInicial: this.cfg.cerebro,
+      aoMudarCerebro: (cerebro) => { this.cfg.cerebro = cerebro; void salvarConfig(this.cfg); },
     });
     void this.modelos.carregar();
     this.paineisProvedores = new AbaPaineisProvedores(this.raiz.querySelector<HTMLElement>("#cfg-paineis-provedores")!);

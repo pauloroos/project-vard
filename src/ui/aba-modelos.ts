@@ -1,5 +1,6 @@
 import type { OpenJarvis } from "../conectores/openjarvis/cliente";
 import type { StatusPonte } from "../conectores/ponte/cliente";
+import { CEREBROS, ehCerebro, type Cerebro } from "../config/cerebro";
 
 /** "1,8 s". */
 export function formatarSegundos(ms: number): string { return `${(ms / 1000).toFixed(1).replace(".", ",")} s`; }
@@ -23,21 +24,36 @@ export interface DepsAbaModelos {
   /** Cliente no endereço salvo, já com o modelo pedido ("" = automático). */
   criarOj: (modelo: string) => OpenJarvis;
   statusPonte: () => Promise<StatusPonte | null>;
+  /** Cérebro ativo no momento da abertura da aba. */
+  cerebroInicial?: Cerebro;
+  /** Chamado quando o usuário troca o cérebro na aba. */
+  aoMudarCerebro?: (cerebro: Cerebro) => void;
 }
+
+const ROTULOS_CEREBRO: Record<Cerebro, string> = {
+  openjarvis: "OpenJarvis (padrão)",
+  proprio: "Cérebro próprio (experimental)",
+};
 
 /** Aba Modelos: o que o conector expõe, a reserva informada pela ponte e o teste de tempo. A escolha fica em `escolhido`. */
 export class AbaModelos {
   escolhido: string;
+  cerebro: Cerebro;
 
-  constructor(private raiz: HTMLElement, modelo: string, private deps: DepsAbaModelos) { this.escolhido = modelo; }
+  constructor(private raiz: HTMLElement, modelo: string, private deps: DepsAbaModelos) {
+    this.escolhido = modelo;
+    this.cerebro = ehCerebro(deps.cerebroInicial) ? deps.cerebroInicial : "openjarvis";
+  }
 
   async carregar() {
     this.raiz.innerHTML = `
+      <fieldset id="mod-cerebro"><legend>Cérebro</legend></fieldset>
       <p class="nota">O Vard só escolhe entre os modelos que o OpenJarvis expõe. Trocar de provedor (OmniRouter, assinaturas, LM Studio) é configuração do OpenJarvis, não do Vard.</p>
       <p class="nota aviso-gpu">Atenção: escolher um modelo diferente do automático, ou clicar em Testar nele, pode fazer o servidor de LLM (por exemplo o LM Studio) carregar um segundo modelo na GPU e consumir memória.</p>
       <fieldset><legend>Modelo principal</legend><div id="mod-lista">Carregando...</div></fieldset>
       <fieldset><legend>Reserva</legend><div id="mod-reserva">Consultando a ponte...</div></fieldset>
       <button id="mod-testar" type="button">Testar</button> <span id="mod-tempo"></span>`;
+    this.desenharCerebro();
     this.raiz.querySelector("#mod-testar")!.addEventListener("click", () => { void this.testar(); });
     const lista = this.raiz.querySelector<HTMLElement>("#mod-lista")!;
     const [ids, st] = await Promise.all([
@@ -49,6 +65,29 @@ export class AbaModelos {
     this.raiz.querySelector("#mod-reserva")!.textContent = st === null
       ? "Ponte fora ou desligada: sem informação de reserva."
       : st.reserva ? `Se o principal falhar, o OpenJarvis usa ${st.reserva}.` : "A ponte não informa um modelo de reserva.";
+  }
+
+  private desenharCerebro() {
+    const campo = this.raiz.querySelector<HTMLElement>("#mod-cerebro");
+    if (!campo) return;
+    campo.innerHTML = "";
+    for (const valor of CEREBROS) {
+      const l = document.createElement("label");
+      l.className = "marca";
+      const r = document.createElement("input");
+      r.type = "radio";
+      r.name = "cerebro";
+      r.value = valor;
+      r.checked = valor === this.cerebro;
+      r.addEventListener("change", () => {
+        if (r.checked && this.cerebro !== valor) {
+          this.cerebro = valor;
+          this.deps.aoMudarCerebro?.(valor);
+        }
+      });
+      l.append(r, document.createTextNode(` ${ROTULOS_CEREBRO[valor]}`));
+      campo.append(l);
+    }
   }
 
   private desenharLista(lista: HTMLElement, ids: string[], locais: string[] | null) {
