@@ -4,5 +4,6 @@
   "openjarvis_home": "X:/DEV/openjarvis/home",
   "modelo": "modelo-local",
   "contexto": 16000,
+  "supervisor": false,
   "servicos": {}
 }
