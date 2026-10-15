@@ -1,5 +1,6 @@
 mod cofre;
 mod comandos;
+mod diagnostico;
 mod janelas;
 pub mod supervisor;
 pub mod servicos;
@@ -239,7 +240,9 @@ pub fn run() {
             cofre::cofre_apagar,
             cofre::cofre_ler,
             ciclo::cmd_ciclo_info,
-            ciclo::cmd_ciclo_pedir
+            ciclo::cmd_ciclo_pedir,
+            diagnostico::rodar_diagnostico,
+            diagnostico::cancelar_diagnostico
         ])
         .setup(|app| {
             let handle = app.handle().clone();
