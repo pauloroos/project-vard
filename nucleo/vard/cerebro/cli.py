@@ -48,7 +48,11 @@ class Dialeto(Protocol):
 
 @runtime_checkable
 class CanalCli(Protocol):
-    """Canal de uma CLI viva: escrever turno, ler linhas, interromper (T16 fornece o real)."""
+    """Canal de uma CLI viva: escrever turno, ler linhas, interromper (T16 fornece o real).
+
+    linhas() devolve um iterador estável: cada chamada de __anext__ lê a sequência
+    do stream sem perder linhas, mesmo sendo chamadas uma a uma em tarefas soltas.
+    """
 
     async def enviar(self, linha: str) -> None:
         ...
