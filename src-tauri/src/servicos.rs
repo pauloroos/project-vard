@@ -853,6 +853,25 @@ http.server.HTTPServer(('127.0.0.1', {porta}), H).serve_forever()
         let porta = 19830u16;
         let (mut filho, neto_pid) = criar_filho_com_neto(porta);
         let pai_pid = filho.id();
+        // Guard de limpeza: garante que neto morra mesmo se o teste falhar
+        struct LimpaNeto(u32);
+        impl Drop for LimpaNeto {
+            fn drop(&mut self) {
+                #[cfg(windows)]
+                {
+                    let _ = std::process::Command::new("taskkill")
+                        .args(["/T", "/F", "/PID", &self.0.to_string()])
+                        .stdout(std::process::Stdio::null())
+                        .stderr(std::process::Stdio::null())
+                        .status();
+                }
+                #[cfg(not(windows))]
+                {
+                    unsafe { libc::kill(self.0 as i32, libc::SIGKILL); }
+                }
+            }
+        }
+        let _guard_neto = LimpaNeto(neto_pid);
         assert!(
             esperar_saude(porta, pai_pid, Duration::from_secs(5)),
             "filho com neto não respondeu /saude"
