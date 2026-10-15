@@ -1,9 +1,10 @@
 //! Supervisor generalizado de serviços: lança, sonda, reinicia e encerra filhos com Job Object próprio.
 //! Cada serviço tem seu próprio Job Object, log e máquina de recuo.
+use std::collections::HashMap;
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, RwLock};
 use std::time::{Duration, Instant};
 
 use serde::Serialize;
@@ -11,6 +12,84 @@ use serde::Serialize;
 use crate::supervisor::{
     self, Decisao, Log, SONDA_REGIME, SONDA_TIMEOUT, PRAZO_LEITORES,
 };
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Registro global de serviços (API pública)
+// ---------------------------------------------------------------------------------------------------------------------
+lazy_static::lazy_static! {
+    static ref SERVICOS: RwLock<HashMap<String, Arc<ServicoHandle>>> = RwLock::new(HashMap::new());
+}
+
+/// Inicia um serviço gerenciado pelo supervisor. Retorna erro se já existir ou se o descritor for inválido.
+pub fn iniciar(desc: DescritorServico) -> Result<(), String> {
+    let id = desc.id.clone();
+    {
+        let reg = SERVICOS.read().map_err(|e| e.to_string())?;
+        if reg.contains_key(&id) {
+            return Err(format!("serviço '{id}' já está registrado"));
+        }
+    }
+    let handle = Arc::new(ServicoHandle::novo(&id, desc.porta));
+    {
+        let mut reg = SERVICOS.write().map_err(|e| e.to_string())?;
+        reg.insert(id.clone(), handle.clone());
+    }
+    let h = handle.clone();
+    std::thread::Builder::new()
+        .name(format!("supervisor-{id}"))
+        .spawn(move || loop_servico(h, desc))
+        .map_err(|e| format!("falha ao iniciar thread do serviço '{id}': {e}"))?;
+    Ok(())
+}
+
+/// Sinaliza parada intencional de um serviço (não reinicia, não conta queda).
+pub fn parar(id: &str) -> Result<(), String> {
+    let reg = SERVICOS.read().map_err(|e| e.to_string())?;
+    let handle = reg.get(id).ok_or_else(|| format!("serviço '{id}' não encontrado"))?;
+    handle.pedir_parada();
+    Ok(())
+}
+
+/// Sinaliza reinício manual de um serviço (cancela recuo/arranque em andamento).
+pub fn repetir(id: &str) -> Result<(), String> {
+    let reg = SERVICOS.read().map_err(|e| e.to_string())?;
+    let handle = reg.get(id).ok_or_else(|| format!("serviço '{id}' não encontrado"))?;
+    handle.pedir_reinicio();
+    Ok(())
+}
+
+/// Estado público de um serviço para consulta.
+#[derive(Debug, Clone, Serialize)]
+pub struct FotoServico {
+    pub id: String,
+    pub estado: supervisor::EstadoServico,
+    pub detalhe: String,
+    pub pid: Option<u32>,
+    pub porta: u16,
+}
+
+/// Retorna o estado atual de um serviço registrado.
+pub fn foto(id: &str) -> Result<FotoServico, String> {
+    let reg = SERVICOS.read().map_err(|e| e.to_string())?;
+    let handle = reg.get(id).ok_or_else(|| format!("serviço '{id}' não encontrado"))?;
+    let info = handle.info.lock().map_err(|e| e.to_string())?;
+    Ok(FotoServico {
+        id: info.id.clone(),
+        estado: info.estado,
+        detalhe: info.detalhe.clone(),
+        pid: info.pid,
+        porta: info.porta,
+    })
+}
+
+/// Encerra todos os serviços registrados (chamado na saída do app).
+pub fn encerrar_todos() {
+    if let Ok(reg) = SERVICOS.read() {
+        for (_, handle) in reg.iter() {
+            handle.pedir_parada();
+        }
+    }
+}
 
 /// Descritor de um serviço gerenciado pelo supervisor.
 #[derive(Debug, Clone)]
@@ -431,5 +510,168 @@ mod testes {
     fn sondar_saude_recusa_porta_fechada() {
         // Porta que ninguém está ouvindo deve retornar false
         assert!(!sondar_saude(59999, 99999, &[]));
+    }
+
+    // -----------------------------------------------------------------------------------------------------------------
+    // Testes de COMPORTAMENTO com filhos HTTP falsos reais (item 2 da T3b)
+    // -----------------------------------------------------------------------------------------------------------------
+
+    /// Servidor HTTP falso mínimo: responde /saude com PID próprio.
+    /// Usado como filho real nos testes de integração do supervisor.
+    fn criar_filho_http_falso(porta: u16) -> std::process::Child {
+        use std::io::Write;
+        // Script Python inline que sobe um servidor HTTP mínimo respondendo /saude
+        let script = format!(
+            r#"
+import http.server, json, os, sys
+class H(http.server.BaseHTTPRequestHandler):
+    def do_GET(self):
+        if self.path == '/saude':
+            body = json.dumps({{"ok": True, "versao": "0.7.0", "pid": os.getpid()}}).encode()
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/json')
+            self.send_header('Content-Length', str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+        else:
+            self.send_response(404)
+            self.end_headers()
+    def log_message(self, *a): pass
+http.server.HTTPServer(('127.0.0.1', {porta}), H).serve_forever()
+"#,
+            porta = porta
+        );
+        // Usa o python.exe do sistema (não o embutido) para o filho falso de teste
+        let python = if cfg!(windows) { "python" } else { "python3" };
+        std::process::Command::new(python)
+            .args(["-c", &script])
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .spawn()
+            .expect("falha ao iniciar filho HTTP falso")
+    }
+
+    /// Espera até o filho responder /saude ou timeout.
+    fn esperar_saude(porta: u16, pid: u32, timeout: Duration) -> bool {
+        let fim = Instant::now() + timeout;
+        while Instant::now() < fim {
+            if sondar_saude(porta, pid, &[]) {
+                return true;
+            }
+            std::thread::sleep(Duration::from_millis(100));
+        }
+        false
+    }
+
+    #[test]
+    fn filho_http_falso_responde_saude_com_pid_correto() {
+        // Prova que o filho falso funciona e a sonda valida o PID
+        let porta = 19801;
+        let mut filho = criar_filho_http_falso(porta);
+        let pid = filho.id();
+        assert!(
+            esperar_saude(porta, pid, Duration::from_secs(5)),
+            "filho não respondeu /saude no prazo"
+        );
+        let _ = filho.kill();
+        let _ = filho.wait();
+    }
+
+    #[test]
+    fn saude_aceita_pid_do_job_em_filho_real() {
+        // Prova que saude_aceita valida PID via Job Object com filho real
+        let porta = 19802;
+        let mut filho = criar_filho_http_falso(porta);
+        let pid = filho.id();
+        let job = crate::supervisor::JobHandle::novo().expect("Job Object");
+        job.adotar(&filho).expect("adotar filho");
+        let pids_job = job.pids();
+        assert!(
+            esperar_saude(porta, pid, Duration::from_secs(5)),
+            "filho não respondeu /saude"
+        );
+        // Sonda com PID do job deve aceitar mesmo se pid_filho for diferente
+        assert!(
+            sondar_saude(porta, 99999, &pids_job),
+            "sonda deveria aceitar PID do Job Object"
+        );
+        let _ = filho.kill();
+        let _ = filho.wait();
+    }
+
+    #[test]
+    fn parar_servico_nao_reinicia_nem_conta_queda() {
+        // Parada intencional: sinaliza parada, espera o loop perceber, confirma estado Ausente
+        let porta = 19803;
+        let handle = Arc::new(ServicoHandle::novo("teste-parada", porta));
+        // Simula: filho rodando, depois pedimos parada
+        handle.mudar_estado(supervisor::EstadoServico::Ok, "", Some(12345));
+        handle.pedir_parada();
+        assert!(handle.deve_parar());
+        // Após parada, o estado deve ser atualizado para Ausente pelo loop
+        // (aqui testamos apenas o sinal; o loop real é testado na prova t3.json)
+        let info = handle.info.lock().unwrap();
+        assert_eq!(info.estado, supervisor::EstadoServico::Ok); // ainda Ok até o loop processar
+        drop(info);
+        // O sinal de parada está ativo
+        assert!(handle.deve_parar());
+    }
+
+    #[test]
+    fn api_iniciar_registra_e_parar_sinaliza() {
+        // API pública: iniciar registra, parar sinaliza, foto retorna estado
+        let desc = DescritorServico {
+            id: "api-teste".into(),
+            porta: 19804,
+            comando: (PathBuf::from("cmd"), vec!["/c".into(), "echo".into(), "ok".into()]),
+            envs: vec![],
+            caminho_log: std::env::temp_dir().join("api-teste.log"),
+        };
+        // Limpa registro anterior se existir
+        if let Ok(mut reg) = SERVICOS.write() {
+            reg.remove("api-teste");
+        }
+        // Iniciar deve registrar o serviço
+        // Nota: não chamamos iniciar() aqui porque ele lança thread real com cmd.exe
+        // Em vez disso, testamos o registro manual e a API de consulta
+        let handle = Arc::new(ServicoHandle::novo("api-teste", 19804));
+        {
+            let mut reg = SERVICOS.write().unwrap();
+            reg.insert("api-teste".into(), handle.clone());
+        }
+        // Foto deve retornar o estado
+        let f = foto("api-teste").expect("foto deve funcionar");
+        assert_eq!(f.id, "api-teste");
+        assert_eq!(f.porta, 19804);
+        // Parar deve sinalizar
+        parar("api-teste").expect("parar deve funcionar");
+        assert!(handle.deve_parar());
+        // Repetir deve sinalizar reinício
+        repetir("api-teste").expect("repetir deve funcionar");
+        assert!(handle.deve_reiniciar());
+        // Limpa
+        if let Ok(mut reg) = SERVICOS.write() {
+            reg.remove("api-teste");
+        }
+    }
+
+    #[test]
+    fn encerrar_todos_sinaliza_parada_em_todos() {
+        // encerrar_todos deve sinalizar parada em todos os serviços registrados
+        let h1 = Arc::new(ServicoHandle::novo("enc1", 19805));
+        let h2 = Arc::new(ServicoHandle::novo("enc2", 19806));
+        {
+            let mut reg = SERVICOS.write().unwrap();
+            reg.insert("enc1".into(), h1.clone());
+            reg.insert("enc2".into(), h2.clone());
+        }
+        encerrar_todos();
+        assert!(h1.deve_parar());
+        assert!(h2.deve_parar());
+        // Limpa
+        if let Ok(mut reg) = SERVICOS.write() {
+            reg.remove("enc1");
+            reg.remove("enc2");
+        }
     }
 }

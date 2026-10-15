@@ -3,6 +3,7 @@ mod comandos;
 mod janelas;
 pub mod supervisor;
 pub mod servicos;
+pub mod nucleo;
 
 use serde_json::Value;
 use tauri::{
