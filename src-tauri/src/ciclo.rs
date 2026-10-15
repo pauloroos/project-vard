@@ -22,6 +22,7 @@ pub fn emitir_ciclo_estado() {
         let foto = ciclo_info(supervisor_ativo());
         let _ = handle.emit("ciclo-estado", &foto);
         // Atualiza bandeja nativa se supervisor ativo
+        #[cfg(not(test))]
         if supervisor_ativo() {
             crate::bandeja::atualizar_bandeja_nativa(handle, &foto);
         }
