@@ -9,6 +9,7 @@ import base64
 import datetime as dt
 import json
 import logging
+import os
 import re
 from pathlib import Path
 
@@ -42,8 +43,8 @@ estiver pequeno ou ilegível, diga isso em vez de chutar."""
 
 MODELO_LOCAL = "gemma-4-12b-it-qat@q4_k_xl"
 MODELO_NUVEM = "combo/t1-work"
-OPENJARVIS = "http://127.0.0.1:8000"
-LMSTUDIO = "http://127.0.0.1:1234"
+OPENJARVIS = os.environ.get("VARD_OPENJARVIS_URL", "http://127.0.0.1:8000")
+LMSTUDIO = os.environ.get("VARD_LMSTUDIO_URL", "http://127.0.0.1:1234")
 REUNIAO = "http://127.0.0.1:4720"
 HISTORICO_MAX = 10
 HISTORICO: list[dict] = []
@@ -161,32 +162,49 @@ def _reuniao_ativa() -> bool:
         return False
 
 
-def _estado_reuniao() -> str:
+async def _sondar_reuniao() -> str:
+    """Sonda assíncrona ao serviço de reunião com timeout de 2 s."""
     try:
-        return "ativa" if httpx.get(f"{REUNIAO}/status", timeout=2, trust_env=False).json().get("ativa") else "inativa"
+        async with httpx.AsyncClient(timeout=2, trust_env=False) as client:
+            r = await client.get(f"{REUNIAO}/status")
+            return "ativa" if r.json().get("ativa") else "inativa"
     except (httpx.HTTPError, ValueError, AttributeError):
         return "ausente"
 
 
-@app.get("/status")
-def status():
-    ok_oj = ok_lm = False
-    modelo = ""
-    ids: list[str] = []
+async def _sondar_openjarvis() -> bool:
+    """Sonda assíncrona ao OpenJarvis com timeout de 2 s."""
     try:
-        ok_oj = httpx.get(f"{OPENJARVIS}/health", timeout=2, trust_env=False).status_code == 200
+        async with httpx.AsyncClient(timeout=2, trust_env=False) as client:
+            r = await client.get(f"{OPENJARVIS}/health")
+            return r.status_code == 200
     except httpx.HTTPError:
-        pass
+        return False
+
+
+async def _sondar_lmstudio() -> tuple[bool, list[str], str]:
+    """Sonda assíncrona ao LM Studio com timeout de 2 s; devolve (ok, ids, modelo)."""
     try:
         cab = {"Authorization": f"Bearer {CHAVE_LMSTUDIO}"} if CHAVE_LMSTUDIO else {}
-        r = httpx.get(f"{LMSTUDIO}/v1/models", headers=cab, timeout=2, trust_env=False)
-        ok_lm = r.status_code == 200
-        ids = [m["id"] for m in r.json().get("data", [])]
-        modelo = MODELO_LOCAL if MODELO_LOCAL in ids else (ids[0] if ids else "")
+        async with httpx.AsyncClient(timeout=2, trust_env=False) as client:
+            r = await client.get(f"{LMSTUDIO}/v1/models", headers=cab)
+            if r.status_code != 200:
+                return False, [], ""
+            dados = r.json().get("data", [])
+            ids = [m["id"] for m in dados]
+            modelo = MODELO_LOCAL if MODELO_LOCAL in ids else (ids[0] if ids else "")
+            return True, ids, modelo
     except (httpx.HTTPError, ValueError, AttributeError, KeyError, TypeError):
-        pass
+        return False, [], ""
+
+
+@app.get("/status")
+async def status():
+    ok_oj, (ok_lm, ids, modelo), reuniao = await asyncio.gather(
+        _sondar_openjarvis(), _sondar_lmstudio(), _sondar_reuniao()
+    )
     return {"openjarvis": ok_oj, "lmstudio": ok_lm, "modelo": modelo, "modo": modo.ler_estado()["modo"],
-            "modelos_lmstudio": ids, "tarefas_abertas": _tarefas_abertas(), "reuniao": _estado_reuniao()}
+            "modelos_lmstudio": ids, "tarefas_abertas": _tarefas_abertas(), "reuniao": reuniao}
 
 
 @app.get("/perfil/persona")

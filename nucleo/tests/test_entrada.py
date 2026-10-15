@@ -248,15 +248,22 @@ def test_wheel_instalado_fora_do_repo(tmp_path: Path):
     )
     assert "OK" in viewer_check.stdout, f"viewer/index.html ausente no wheel: {viewer_check.stdout} {viewer_check.stderr}"
     # Prova HTTP real: sobe o núcleo na venv, consulta /saude e /status
+    # Usa portas fechadas para OpenJarvis/LM Studio via env, independente dos serviços reais da máquina.
+    sock_oj = socket.socket(); sock_oj.bind(("127.0.0.1", 0)); porta_oj = sock_oj.getsockname()[1]; sock_oj.close()
+    sock_lm = socket.socket(); sock_lm.bind(("127.0.0.1", 0)); porta_lm = sock_lm.getsockname()[1]; sock_lm.close()
     sock = socket.socket()
     sock.bind(("127.0.0.1", 0))
     porta = sock.getsockname()[1]
     sock.close()
+    env_proc = os.environ.copy()
+    env_proc["VARD_OPENJARVIS_URL"] = f"http://127.0.0.1:{porta_oj}"
+    env_proc["VARD_LMSTUDIO_URL"] = f"http://127.0.0.1:{porta_lm}"
     proc = subprocess.Popen(
         [py_exe, "-I", "-m", "vard", "servir", "--porta", str(porta), "--host", "127.0.0.1"],
         cwd=str(fora_repo),
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
+        env=env_proc,
     )
     try:
         url_saude = f"http://127.0.0.1:{porta}/saude"
@@ -274,7 +281,7 @@ def test_wheel_instalado_fora_do_repo(tmp_path: Path):
         saude = resposta_saude.json()
         assert saude["ok"] is True
         assert isinstance(saude["pid"], int) and saude["pid"] > 0
-        resposta_status = httpx.get(url_status, timeout=10)
+        resposta_status = httpx.get(url_status, timeout=3)
         assert resposta_status.status_code == 200
         status_body = resposta_status.json()
         assert "modo" in status_body
@@ -288,17 +295,25 @@ def test_prova_http_real_subprocesso(tmp_path: Path):
     Exige que saude.pid seja o proc.pid OU um descendente dele (psutil).
     Encerra a árvore inteira e confirma porta livre.
     NÃO escreve em .coordenacao (prova externa faz isso).
+    Usa portas fechadas para OpenJarvis/LM Studio via env, independente dos serviços reais.
     """
-    # Encontra porta livre
+    # Portas fechadas para OpenJarvis e LM Studio (reserva e fecha)
+    sock_oj = socket.socket(); sock_oj.bind(("127.0.0.1", 0)); porta_oj = sock_oj.getsockname()[1]; sock_oj.close()
+    sock_lm = socket.socket(); sock_lm.bind(("127.0.0.1", 0)); porta_lm = sock_lm.getsockname()[1]; sock_lm.close()
+    # Encontra porta livre para o núcleo
     sock = socket.socket()
     sock.bind(("127.0.0.1", 0))
     porta = sock.getsockname()[1]
     sock.close()
+    env_proc = os.environ.copy()
+    env_proc["VARD_OPENJARVIS_URL"] = f"http://127.0.0.1:{porta_oj}"
+    env_proc["VARD_LMSTUDIO_URL"] = f"http://127.0.0.1:{porta_lm}"
     proc = subprocess.Popen(
         [sys.executable, "-m", "vard", "servir", "--porta", str(porta), "--host", "127.0.0.1"],
         cwd=str(RAIZ_NUCLEO),
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
+        env=env_proc,
     )
     try:
         # Espera o servidor subir
@@ -328,7 +343,7 @@ def test_prova_http_real_subprocesso(tmp_path: Path):
                 )
             except psutil.NoSuchProcess:
                 pytest.fail(f"processo {proc.pid} morreu antes da verificação de descendência")
-        resposta_status = httpx.get(url_status, timeout=10)
+resposta_status = httpx.get(url_status, timeout=3)
         assert resposta_status.status_code == 200
         status_body = resposta_status.json()
         assert "modo" in status_body
@@ -336,3 +351,81 @@ def test_prova_http_real_subprocesso(tmp_path: Path):
         _encerrar_arvore(proc)
     # Confirma que a porta ficou livre
     assert _porta_livre(porta), f"porta {porta} ainda ocupada após encerramento do processo {proc.pid}"
+
+
+def test_status_responde_rapido_com_urls_lentas(tmp_path: Path):
+    """/status responde em < 3 s mesmo com OpenJarvis e LM Studio lentos/mortos.
+    Sondas em paralelo garantem prazo total ~2 s, não 4 s sequenciais.
+    """
+    import threading
+    from http.server import HTTPServer, BaseHTTPRequestHandler
+
+    class LentoHandler(BaseHTTPRequestHandler):
+        """Servidor falso que demora 1.5 s para responder (simula serviço lento)."""
+        def do_GET(self):
+            time.sleep(1.5)
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            if "/health" in self.path:
+                self.wfile.write(b'{"ok":true}')
+            else:
+                self.wfile.write(b'{"data":[]}')
+        def log_message(self, format, *args):
+            pass  # silencia logs do servidor falso
+
+    # Sobe dois servidores lentos em portas livres
+    srv_oj = HTTPServer(("127.0.0.1", 0), LentoHandler)
+    srv_lm = HTTPServer(("127.0.0.1", 0), LentoHandler)
+    porta_oj = srv_oj.server_address[1]
+    porta_lm = srv_lm.server_address[1]
+    t_oj = threading.Thread(target=srv_oj.serve_forever, daemon=True)
+    t_lm = threading.Thread(target=srv_lm.serve_forever, daemon=True)
+    t_oj.start()
+    t_lm.start()
+
+    # Porta livre para o núcleo
+    sock = socket.socket()
+    sock.bind(("127.0.0.1", 0))
+    porta = sock.getsockname()[1]
+    sock.close()
+
+    env_proc = os.environ.copy()
+    env_proc["VARD_OPENJARVIS_URL"] = f"http://127.0.0.1:{porta_oj}"
+    env_proc["VARD_LMSTUDIO_URL"] = f"http://127.0.0.1:{porta_lm}"
+    proc = subprocess.Popen(
+        [sys.executable, "-m", "vard", "servir", "--porta", str(porta), "--host", "127.0.0.1"],
+        cwd=str(RAIZ_NUCLEO),
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        env=env_proc,
+    )
+    try:
+        url_saude = f"http://127.0.0.1:{porta}/saude"
+        url_status = f"http://127.0.0.1:{porta}/status"
+        inicio = time.monotonic()
+        resposta_saude = None
+        while time.monotonic() - inicio < 10:
+            try:
+                resposta_saude = httpx.get(url_saude, timeout=1)
+                if resposta_saude.status_code == 200:
+                    break
+            except httpx.HTTPError:
+                time.sleep(0.3)
+        assert resposta_saude is not None and resposta_saude.status_code == 200, "núcleo não subiu em 10s"
+
+        # Mede tempo do /status: deve ser < 3 s (paralelo), não ~4 s (sequencial)
+        t0 = time.monotonic()
+        resposta_status = httpx.get(url_status, timeout=5)
+        duracao = time.monotonic() - t0
+        assert resposta_status.status_code == 200
+        assert duracao < 4.0, f"/status demorou {duracao:.2f}s (esperado < 4s com sondas paralelas)"
+        status_body = resposta_status.json()
+        assert "modo" in status_body
+        assert "openjarvis" in status_body
+        assert "lmstudio" in status_body
+    finally:
+        _encerrar_arvore(proc)
+        srv_oj.shutdown()
+        srv_lm.shutdown()
+    assert _porta_livre(porta), f"porta {porta} ainda ocupada após encerramento"
