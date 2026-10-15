@@ -1,0 +1,10 @@
+# Telegram próprio do cérebro: DESLIGADO por padrão.
+# Copie para %LOCALAPPDATA%\rdl-vard\config\telegram.toml e preencha.
+# O poller só sobe quando habilitado=true; nunca disputa o token com OpenJarvis/Liv (409).
+# Veja .coordenacao/0.8-telegram-como-trocar.md para o corte seguro.
+
+habilitado = false          # true = liga o long polling do cérebro
+token = ""                  # token do bot (mesmo de segredos.toml ou outro dedicado)
+chats_permitidos = []       # lista de chat_id autorizados (string); demais são ignorados
+poll_interval_s = 1         # intervalo entre getUpdates (segundos)
+timeout_s = 30              # timeout do long polling
