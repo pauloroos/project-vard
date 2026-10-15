@@ -4,6 +4,7 @@ mod janelas;
 pub mod supervisor;
 pub mod servicos;
 pub mod nucleo;
+pub mod instalacao;
 
 use serde_json::Value;
 use tauri::{
