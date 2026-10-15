@@ -85,15 +85,15 @@ export function criarServidor({ log = () => {}, release = false } = {}) {
     // Quando o harness roda só na porta 8765 (sem PONTE=4700), esta rota age como proxy
     // para manter a API única; o app consome SSE da ponte, não do OpenJarvis falso.
     if (req.method === "POST" && caminho === "/emitir-aviso") {
-      await lerCorpo(req);
-      // Se a ponte falsa estiver rodando, repassa; senão retorna ok com nota.
+      const corpo = await lerCorpo(req);
+      // Se a ponte falsa estiver rodando, repassa o corpo original (preservando estado/id/resumo); senão retorna ok com nota.
       const pontePorta = process.env.PONTE;
       if (pontePorta) {
         try {
           const resp = await fetch(`http://127.0.0.1:${pontePorta}/emitir-aviso`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ resumo: "Aviso de teste CDP", id: Date.now(), estado: "terminou" }),
+            body: corpo,
           });
           const dados = await resp.json().catch(() => ({}));
           return json({ ok: true, via: "ponte", ...dados });

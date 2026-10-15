@@ -618,7 +618,8 @@ window.addEventListener("DOMContentLoaded", async () => {
           const wav = await fixa(acao.texto);
           await boca.tocar(wav);
         } catch { /* sem voz, o aviso já está na tela */ }
-        // Após ler o aviso, transiciona para conversando se estiver em lendo_aviso
+        // Transiciona para conversando após leitura do aviso (mesmo se a fala falhar).
+        // O estado já foi mudado para lendo_aviso por usuarioRespondeu antes de retornar as ações.
         if (fluxoChamada.estado === "lendo_aviso") {
           const acoesLeitura = fluxoChamada.leituraConcluida();
           void executarAcoesChamada(acoesLeitura);
