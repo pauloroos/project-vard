@@ -65,6 +65,26 @@ function paraBlob(b64: string): Blob {
   return new Blob([bytes], { type: "image/jpeg" });
 }
 
+/** Estado de um pedido do cérebro próprio segundo /pedidos/{id}. */
+export interface EstadoPedido {
+  pedido_id: string;
+  sessao_id: string;
+  estado: "na_fila" | "executando" | "concluido" | "falhou" | "cancelado";
+  resposta?: string | null;
+  erro?: string | null;
+  ultimo_seq?: number;
+}
+
+/** Evento SSE do tipo 'pedido' emitido pelo /events. */
+export interface EventoPedidoSSE {
+  tipo: "pedido";
+  pedido_id: string;
+  sessao_id: string;
+  seq: number;
+  evento_tipo: "estado" | "texto" | "ferramenta" | "reserva" | "fim" | "erro";
+  dados: Record<string, unknown>;
+}
+
 export class Ponte {
   private base: string;
   constructor(base: string) { this.base = base.replace(/\/+$/, ""); }
@@ -102,6 +122,52 @@ export class Ponte {
       if (!t) throw new ErroPonte("modelo_vazio");
       return t;
     });
+  }
+
+  /** Admite um pedido no cérebro próprio via POST /pedidos. Devolve o estado inicial. */
+  async pedir(texto: string, sessaoId: string, origem = "painel"): Promise<EstadoPedido> {
+    const pedidoId = crypto.randomUUID();
+    return comTimeout(5000, async (signal) => {
+      let r: Response;
+      try {
+        r = await fetch(`${this.base}/pedidos`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          signal,
+          body: JSON.stringify({ pedido_id: pedidoId, sessao_id: sessaoId, origem, texto }),
+        });
+      } catch { throw new ErroPonte("rede"); }
+      const j = await r.json().catch(() => null);
+      if (!r.ok) throw new ErroPonte(String(j?.erro ?? "pedido_http"));
+      return j as EstadoPedido;
+    });
+  }
+
+  /** Cancela um pedido existente via POST /pedidos/{id}/cancelar. */
+  async cancelar(pedidoId: string): Promise<EstadoPedido> {
+    return comTimeout(5000, async (signal) => {
+      let r: Response;
+      try {
+        r = await fetch(`${this.base}/pedidos/${encodeURIComponent(pedidoId)}/cancelar`, {
+          method: "POST",
+          signal,
+        });
+      } catch { throw new ErroPonte("rede"); }
+      const j = await r.json().catch(() => null);
+      if (!r.ok) throw new ErroPonte(String(j?.erro ?? "cancelar_http"));
+      return j as EstadoPedido;
+    });
+  }
+
+  /** Consulta o estado de um pedido via GET /pedidos/{id}. */
+  async consultarPedido(pedidoId: string): Promise<EstadoPedido | null> {
+    try {
+      return await comTimeout(3000, async (signal) => {
+        const r = await fetch(`${this.base}/pedidos/${encodeURIComponent(pedidoId)}`, { signal });
+        if (!r.ok) return null;
+        return (await r.json()) as EstadoPedido;
+      });
+    } catch { return null; }
   }
 
   /** Dispara um verbo do ciclo (`jogo`, `voltar`...). true = a ponte aceitou. */
