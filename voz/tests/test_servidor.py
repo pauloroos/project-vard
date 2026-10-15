@@ -35,8 +35,23 @@ class MotorFalso:
         yield b"\x02\x00" * 5
 
 
-def cliente(motor, motor_kokoro=None):
-    return TestClient(criar_app(motor, motor_kokoro=motor_kokoro, carregar_em_thread=False), base_url="http://127.0.0.1:4710")
+class STTFalso:
+    """MotorSTT falso para testes da rota /transcribe sem dependência de faster-whisper."""
+    def __init__(self, pronta=True, texto="texto transcrito", confianca=0.95):
+        self.pronta = pronta
+        self._texto = texto
+        self._confianca = confianca
+        self.chamadas: list[bytes] = []
+
+    def transcrever_bytes(self, audio: bytes, idioma: str | None = None) -> tuple[str, float]:
+        self.chamadas.append(audio)
+        if not self.pronta:
+            raise RuntimeError("STT não carregado")
+        return self._texto, self._confianca
+
+
+def cliente(motor, motor_kokoro=None, stt=None):
+    return TestClient(criar_app(motor, motor_kokoro=motor_kokoro, stt=stt, carregar_em_thread=False), base_url="http://127.0.0.1:4710")
 
 
 def test_saude_antes_do_aquecimento():
@@ -141,3 +156,59 @@ def test_falar_sem_voz_usa_a_padrao():
     m = MotorFalso()
     cliente(m).post("/falar", json={"texto": "Oi.", "voz": ""})
     assert m.chamadas[0][2] is None
+
+
+# ----------------------------------------------------------------------------- STT
+def test_transcribe_stt_indisponivel_503():
+    """Sem MotorSTT (extra não instalado), /transcribe devolve 503."""
+    r = cliente(MotorFalso(), stt=None).post("/v1/speech/transcribe", content=b"\x00" * 10)
+    assert r.status_code == 503 and r.json()["erro"] == "stt_indisponivel"
+
+
+def test_transcribe_stt_nao_carregado_503():
+    """MotorSTT existe mas não está pronto → 503."""
+    stt = STTFalso(pronta=False)
+    r = cliente(MotorFalso(), stt=stt).post("/v1/speech/transcribe", content=b"\x00" * 10)
+    assert r.status_code == 503 and r.json()["erro"] == "stt_indisponivel"
+
+
+def test_transcribe_audio_vazio_400():
+    stt = STTFalso()
+    r = cliente(MotorFalso(), stt=stt).post("/v1/speech/transcribe", content=b"")
+    assert r.status_code == 400 and r.json()["erro"] == "audio_vazio"
+
+
+def test_transcribe_audio_grande_demais_413():
+    stt = STTFalso()
+    grande = b"\x00" * (10 * 1024 * 1024 + 1)
+    r = cliente(MotorFalso(), stt=stt).post("/v1/speech/transcribe", content=grande)
+    assert r.status_code == 413 and r.json()["erro"] == "audio_grande_demais"
+
+
+def test_transcribe_devolve_texto_e_confianca():
+    stt = STTFalso(texto="Olá mundo.", confianca=0.92)
+    r = cliente(MotorFalso(), stt=stt).post("/v1/speech/transcribe", content=b"\x00" * 100)
+    assert r.status_code == 200
+    j = r.json()
+    assert j["text"] == "Olá mundo." and j["confidence"] == 0.92
+    assert len(stt.chamadas) == 1 and stt.chamadas[0] == b"\x00" * 100
+
+
+def test_transcribe_falha_do_motor_503():
+    """RuntimeError no motor → 503 stt_falhou, não exceção vazada."""
+    class STTQueFalha:
+        pronta = True
+        def transcrever_bytes(self, audio, idioma=None):
+            raise RuntimeError("GPU OOM")
+    r = cliente(MotorFalso(), stt=STTQueFalha()).post("/v1/speech/transcribe", content=b"\x00" * 10)
+    assert r.status_code == 503 and r.json()["erro"] == "stt_falhou"
+
+
+def test_transcribe_valor_invalido_400():
+    """ValueError (ex: áudio longo demais) → 400 com mensagem."""
+    class STTValorInvalido:
+        pronta = True
+        def transcrever_bytes(self, audio, idioma=None):
+            raise ValueError("áudio excede 120s")
+    r = cliente(MotorFalso(), stt=STTValorInvalido()).post("/v1/speech/transcribe", content=b"\x00" * 10)
+    assert r.status_code == 400 and "excede" in r.json()["erro"]

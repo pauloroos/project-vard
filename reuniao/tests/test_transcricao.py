@@ -98,3 +98,79 @@ def test_fila_e_de_uso_unico_depois_de_parar():
     f.parar()
     with pytest.raises(RuntimeError):
         f.iniciar()
+
+
+# ----------------------------------------------------------------------------- STT PRÓPRIO / FALLBACK
+def test_transcritor_proprio_usa_voz_quando_disponivel():
+    """Com proprio=True, tenta primeiro o vard-voz (4710)."""
+    chamadas = []
+
+    def post(url, **kw):
+        chamadas.append(url)
+        if "4710" in url:
+            return httpx.Response(200, json={"text": "pela voz", "confidence": 0.9})
+        raise AssertionError("não deveria chamar OpenJarvis")
+
+    t = tr.Transcritor(post=post, proprio=True)
+    assert t.transcrever(np.zeros(1600, dtype=np.int16)) == ("pela voz", 0.9)
+    assert len(chamadas) == 1 and "4710" in chamadas[0]
+
+
+def test_transcritor_proprio_fallback_para_openjarvis_em_503():
+    """STT próprio 503 → cai no OpenJarvis silenciosamente."""
+    chamadas = []
+
+    def post(url, **kw):
+        chamadas.append(url)
+        if "4710" in url:
+            return httpx.Response(503, json={"erro": "stt_indisponivel"})
+        return httpx.Response(200, json={"text": "pelo OJ", "confidence": 0.8})
+
+    t = tr.Transcritor(post=post, proprio=True)
+    assert t.transcrever(np.zeros(1600, dtype=np.int16)) == ("pelo OJ", 0.8)
+    assert len(chamadas) == 2 and "4710" in chamadas[0] and "8000" in chamadas[1]
+
+
+def test_transcritor_proprio_fallback_para_openjarvis_em_connect_error():
+    """vard-voz fora do ar → cai no OpenJarvis."""
+    chamadas = []
+
+    def post(url, **kw):
+        chamadas.append(url)
+        if "4710" in url:
+            raise httpx.ConnectError("fora")
+        return httpx.Response(200, json={"text": "fallback OJ", "confidence": 0.7})
+
+    t = tr.Transcritor(post=post, proprio=True)
+    assert t.transcrever(np.zeros(1600, dtype=np.int16)) == ("fallback OJ", 0.7)
+    assert len(chamadas) == 2
+
+
+def test_transcritor_sem_proprio_usa_so_openjarvis():
+    """Com proprio=False, usa só o OpenJarvis (comportamento legado)."""
+    chamadas = []
+
+    def post(url, **kw):
+        chamadas.append(url)
+        return httpx.Response(200, json={"text": "OJ direto", "confidence": 0.85})
+
+    t = tr.Transcritor(post=post, proprio=False)
+    assert t.transcrever(np.zeros(1600, dtype=np.int16)) == ("OJ direto", 0.85)
+    assert len(chamadas) == 1 and "8000" in chamadas[0]
+
+
+def test_transcritor_proprio_via_env_var(monkeypatch):
+    """VARD_STT_PROPRIO=1 ativa o modo próprio mesmo sem parâmetro."""
+    monkeypatch.setenv("VARD_STT_PROPRIO", "1")
+    chamadas = []
+
+    def post(url, **kw):
+        chamadas.append(url)
+        if "4710" in url:
+            return httpx.Response(200, json={"text": "via env", "confidence": 0.9})
+        raise AssertionError("não deveria chamar OpenJarvis")
+
+    t = tr.Transcritor(post=post)
+    assert t.proprio is True
+    assert t.transcrever(np.zeros(1600, dtype=np.int16)) == ("via env", 0.9)
+    assert len(chamadas) == 1 and "4710" in chamadas[0]

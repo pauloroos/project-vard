@@ -34,14 +34,64 @@ def wav_bytes(pcm16: np.ndarray) -> bytes:
 
 
 class Transcritor:
-    def __init__(self, base: str = "http://127.0.0.1:8000", post=httpx.post, timeout: float = 60):
+    """Transcritor que usa o endpoint próprio do vard-voz (4710) ou OpenJarvis (8000).
+
+    Quando `proprio` é True, tenta primeiro o vard-voz; se falhar com 503 (stt_indisponivel)
+    ou erro de conexão, cai no OpenJarvis. Quando `proprio` é False, usa só o OpenJarvis.
+    A variável de ambiente VARD_STT_PROPRIO=1 força o modo próprio mesmo sem parâmetro.
+    """
+    def __init__(
+        self,
+        base: str = "http://127.0.0.1:8000",
+        post=httpx.post,
+        timeout: float = 60,
+        proprio: bool | None = None,
+        voz_base: str = "http://127.0.0.1:4710",
+    ):
         self.base, self.post, self.timeout = base.rstrip("/"), post, timeout
+        self.voz_base = voz_base.rstrip("/")
+        import os as _os
+        if proprio is None:
+            proprio = _os.environ.get("VARD_STT_PROPRIO", "").strip() == "1"
+        self.proprio = proprio
 
     def transcrever(self, pcm16: np.ndarray) -> tuple[str, float]:
+        wav = wav_bytes(pcm16)
+        if self.proprio:
+            resultado = self._transcrever_voz(wav)
+            if resultado is not None:
+                return resultado
+            # Fallback silencioso para OpenJarvis quando STT próprio indisponível
+            log.info("STT próprio indisponível; usando OpenJarvis como fallback")
+        return self._transcrever_openjarvis(wav)
+
+    def _transcrever_voz(self, wav: bytes) -> tuple[str, float] | None:
+        """Tenta transcrever via vard-voz. Devolve None se indisponível (503/conexão)."""
+        try:
+            r = self.post(
+                f"{self.voz_base}/v1/speech/transcribe",
+                files={"file": ("segmento.wav", wav, "audio/wav")},
+                data={"language": "pt"}, timeout=self.timeout, trust_env=False,
+            )
+            if r.status_code == 503:
+                return None  # STT não instalado ou não carregado
+            if r.status_code != 200:
+                log.warning("transcrever_voz: HTTP %s %s", r.status_code, r.text[:80])
+                return None
+            d = r.json()
+            return str(d.get("text", "")).strip(), float(d.get("confidence") or 0.0)
+        except (httpx.ConnectError, httpx.TimeoutException):
+            return None  # vard-voz fora do ar → fallback
+        except (httpx.HTTPError, ValueError, TypeError, AttributeError) as e:
+            log.warning("transcrever_voz: %s", str(e)[:80])
+            return None
+
+    def _transcrever_openjarvis(self, wav: bytes) -> tuple[str, float]:
+        """Transcrição via OpenJarvis (endpoint original)."""
         try:
             r = self.post(
                 f"{self.base}/v1/speech/transcribe",
-                files={"file": ("segmento.wav", wav_bytes(pcm16), "audio/wav")},
+                files={"file": ("segmento.wav", wav, "audio/wav")},
                 data={"language": "pt"}, timeout=self.timeout, trust_env=False,
             )
             if r.status_code != 200:
