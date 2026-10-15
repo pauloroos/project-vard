@@ -4,6 +4,7 @@ mod janelas;
 pub mod supervisor;
 pub mod servicos;
 pub mod nucleo;
+pub mod instalacao;
 
 use serde_json::Value;
 use tauri::{
@@ -240,6 +241,25 @@ pub fn run() {
         .setup(|app| {
             let handle = app.handle().clone();
             cofre::migrar_no_arranque(&handle);
+
+            // T4: inicia serviços habilitados via instalacao.json
+            {
+                let recursos = handle.path().resource_dir().unwrap_or_default();
+                let repo = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).parent().unwrap_or(std::path::Path::new(".")).to_path_buf();
+                let dados = handle.path().app_data_dir().unwrap_or_else(|_| repo.join("dados"));
+                let config_instalacao = instalacao::ler_instalacao(&dados.join("instalacao.json")).unwrap_or_default();
+                let (_iniciados, avisos) = instalacao::iniciar_servicos(
+                    &config_instalacao,
+                    &recursos,
+                    &repo,
+                    &dados,
+                    env!("CARGO_PKG_VERSION"),
+                );
+                for aviso in &avisos {
+                    eprintln!("instalacao: {aviso}");
+                }
+            }
+
             let config = comandos::ler_config_valor(&handle).unwrap_or(Value::Null);
             let no_topo = config
                 .get("sempre_no_topo")
