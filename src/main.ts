@@ -21,6 +21,7 @@ import { EstadoReuniao } from "./reuniao/estado";
 import { criarFonteDeVoz } from "./conectores/voz/escolher";
 import type { FonteDeVoz } from "./conectores/voz/fonte";
 import { Conversa, type Estado } from "./fala/conversa";
+import { processarTextoOuvido } from "./fala/textoOuvido";
 import { criarMaquinaConversaAberta } from "./conversa/aberta";
 import { FALAS, saudacaoPara } from "./fala/falas";
 import { Adiador } from "./ui/dock";
@@ -284,9 +285,12 @@ window.addEventListener("DOMContentLoaded", async () => {
     aoCanal: (aberto) => {
       invisibilidade.definirCanal(aberto);
       console.info("modo conversa:", aberto ? "aberto" : "fechado");
-      // T13: frase de voz "fica me ouvindo" liga/desliga a conversa aberta contínua
-      if (aberto && conversaAberta.estado === "desligado") alternarConversaAberta();
-      if (!aberto && conversaAberta.estado !== "desligado") alternarConversaAberta();
+    },
+    aoDesligarConversaAberta: () => {
+      if (conversaAberta.estado !== "desligado") alternarConversaAberta();
+    },
+    aoLigarConversaAberta: () => {
+      if (conversaAberta.estado === "desligado") alternarConversaAberta();
     },
   });
   olharTela = () => { void conversa.aoTextoTranscrito("olha a tela", true); };
@@ -433,15 +437,17 @@ window.addEventListener("DOMContentLoaded", async () => {
       }
       console.log("ouvi:", texto);
       if (texto) mostrarOuvido(texto);
-      // T14: se o fluxo de chamada está aguardando resposta ou conversando, roteia para ele antes da conversa normal
-      if (fluxoChamada.estado === "aguardando_resposta" || fluxoChamada.estado === "conversando") {
-        const acoes = fluxoChamada.usuarioRespondeu(texto);
-        if (acoes.length) {
-          void executarAcoesChamada(acoes);
-          return; // não envia para a conversa normal
-        }
-      }
-      await conversa.aoTextoTranscrito(texto, pushToTalk);
+      // Roteamento único (T14 + T13): fluxo de chamada tem prioridade; nome dispensado quando pushToTalk OU conversa aberta ligada.
+      await processarTextoOuvido(
+        {
+          fluxoChamada,
+          conversa,
+          executarAcoesChamada,
+          conversaAbertaEstado: () => conversaAberta.estado,
+        },
+        texto,
+        pushToTalk,
+      );
     } catch (erro) {
       console.error("ciclo de fala falhou", erro);
     } finally {
@@ -519,17 +525,6 @@ window.addEventListener("DOMContentLoaded", async () => {
     // Só em desenvolvimento: injeta uma pergunta como se tivesse vindo do microfone (mede a latência sem voz humana).
     // Com o microfone fechado, a boca ganha um AudioContext próprio (sem pedir permissão de microfone).
     const injetar = async (texto: string, pushToTalk: boolean) => {
-      // T14: se o fluxo de chamada está aguardando resposta ou conversando, roteia para ele
-      if (fluxoChamada.estado === "aguardando_resposta" || fluxoChamada.estado === "conversando") {
-        const acoes = fluxoChamada.usuarioRespondeu(texto);
-        if (acoes.length) {
-          void executarAcoesChamada(acoes);
-          // Após usuarioRespondeu com presença, o fluxo vai para lendo_aviso;
-          // o timer de conversa é armado no listener de aviso quando leituraConcluida for chamada.
-          return; // não envia para a conversa normal
-        }
-        // Se não foi resposta de presença, cai na conversa normal
-      }
       if (!bocaReal) {
         bocaReal = new Boca(new AudioContext());
         nucleo.setAnalisadores(null, bocaReal.analisador);
@@ -538,7 +533,17 @@ window.addEventListener("DOMContentLoaded", async () => {
       try {
         console.log("ouvi:", texto);
         mostrarOuvido(texto);
-        await conversa.aoTextoTranscrito(texto, pushToTalk);
+        // Roteamento único (T14 + T13): igual ao caminho real do VAD.
+        await processarTextoOuvido(
+          {
+            fluxoChamada,
+            conversa,
+            executarAcoesChamada,
+            conversaAbertaEstado: () => conversaAberta.estado,
+          },
+          texto,
+          pushToTalk,
+        );
       } finally {
         ocupado = false;
         detector.reset();
@@ -546,8 +551,9 @@ window.addEventListener("DOMContentLoaded", async () => {
       }
     };
     (window as unknown as { __vardPergunta?: (t: string) => Promise<void> }).__vardPergunta = (texto: string) => injetar(texto, true);
-    // Pelo caminho do VAD (sem push-to-talk): exige o nome, a menos que o modo conversa aberta esteja ligado.
-    (window as unknown as { __vardOuvido?: (t: string) => Promise<void> }).__vardOuvido = (texto: string) => injetar(texto, conversaAberta.estado !== "desligado");
+    // Gancho de dev sem push-to-talk: passa pushToTalk=false e depende da regra unificada
+    // (nome dispensado quando conversa aberta ligada), igual ao caminho real do VAD.
+    (window as unknown as { __vardOuvido?: (t: string) => Promise<void> }).__vardOuvido = (texto: string) => injetar(texto, false);
     // Prova do dock: move a janela para uma posição física.
     (window as unknown as { __vardMover?: (x: number, y: number) => Promise<void> }).__vardMover = (x: number, y: number) => getCurrentWindow().setPosition(new PhysicalPosition(x, y));
   }

@@ -58,6 +58,10 @@ export interface DepsConversa {
   mutar?: () => void;
   /** O modo conversa abriu (true) ou fechou (false): o nome está dispensado enquanto aberto. */
   aoCanal?: (aberto: boolean) => void;
+  /** Desliga a máquina ConversaAberta e o HUD: chamado por frase de encerramento para cobrir ligações via atalho/voz. */
+  aoDesligarConversaAberta?: () => void;
+  /** Liga a máquina ConversaAberta sem duplicar: chamado por "fica me ouvindo". */
+  aoLigarConversaAberta?: () => void;
   /** Reunião em andamento (a ponte avisa): o widget não fala nada enquanto durar. */
   reuniaoAtiva?: () => boolean;
 }
@@ -230,15 +234,17 @@ export class Conversa {
     // T13: frase de ativação da conversa aberta ("fica me ouvindo" e variantes).
     const comandoBruto = extrairComando(bruto, v) ?? bruto;
     if (/fica\s+me\s+ouvindo|continua\s+me\s+ouvindo|pode\s+ficar\s+ouvindo/.test(comandoBruto.toLowerCase())) {
-      // O main escuta este evento para ligar a máquina ConversaAberta.
-      this.d.aoCanal?.(true);
+      // Liga a máquina ConversaAberta sem duplicar (atalho/voz já podem ter ligado).
+      this.d.aoLigarConversaAberta?.();
       await this.falarFixa(saudacaoPara(this.d.config.usuario));
       return;
     }
 
     // Frase de encerramento: com ou sem o nome na frente. Fala "Parei de ouvir." e muta até alguém reativar.
+    // Desliga a ConversaAberta independente de como foi ligada (atalho, voz, aoCanal).
     if (ehEncerramento(comandoBruto)) {
       this.fecharCanal();
+      this.d.aoDesligarConversaAberta?.();
       await this.falarFixa(FALAS.pareiDeOuvir);
       this.d.mutar?.();
       return;
