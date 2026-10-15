@@ -183,8 +183,8 @@ pub fn gravar_config(app: tauri::AppHandle, config: Value) -> Result<(), String>
     fs::rename(&tmp, &p).map_err(|e| e.to_string())
 }
 
-/// Resolve caminho de painéis a partir de variável de ambiente; usada em produção e testes.
-fn caminho_paineis_por_env(var_name: &str, nome_arquivo: &str) -> Option<PathBuf> {
+/// Resolve caminho de um arquivo de config pela variável de ambiente; usada em produção e testes.
+fn caminho_por_env(var_name: &str, nome_arquivo: &str) -> Option<PathBuf> {
     std::env::var(var_name)
         .ok()
         .filter(|v| !v.trim().is_empty())
@@ -193,7 +193,7 @@ fn caminho_paineis_por_env(var_name: &str, nome_arquivo: &str) -> Option<PathBuf
 
 /// Resolve caminho de painéis respeitando VARD_CONFIG/VARD_DADOS; fallback para app_config_dir/app_data_dir.
 fn caminho_paineis_config(app: &tauri::AppHandle) -> PathBuf {
-    if let Some(p) = caminho_paineis_por_env("VARD_CONFIG", "paineis.json") {
+    if let Some(p) = caminho_por_env("VARD_CONFIG", "paineis.json") {
         return p;
     }
     let dir = tauri::Manager::path(app)
@@ -204,7 +204,7 @@ fn caminho_paineis_config(app: &tauri::AppHandle) -> PathBuf {
 }
 
 fn caminho_paineis_estado(app: &tauri::AppHandle) -> PathBuf {
-    if let Some(p) = caminho_paineis_por_env("VARD_DADOS", "paineis-estado.json") {
+    if let Some(p) = caminho_por_env("VARD_DADOS", "paineis-estado.json") {
         return p;
     }
     let dir = tauri::Manager::path(app)
@@ -256,6 +256,57 @@ pub fn gravar_paineis(app: tauri::AppHandle, arquivo: String, valor: Value) -> R
     )
     .map_err(|e| e.to_string())?;
     fs::rename(&tmp, &p).map_err(|e| e.to_string())
+}
+
+/// Caminho do perfil do agente: `VARD_CONFIG/perfil.json` (mesmo contrato do Python); sem a
+/// variável, a pasta de configuração do app.
+fn caminho_perfil(app: &tauri::AppHandle) -> PathBuf {
+    if let Some(p) = caminho_por_env("VARD_CONFIG", "perfil.json") {
+        return p;
+    }
+    let dir = tauri::Manager::path(app)
+        .app_config_dir()
+        .expect("app_config_dir");
+    fs::create_dir_all(&dir).ok();
+    dir.join("perfil.json")
+}
+
+/// Lê o perfil de um caminho (testável sem `AppHandle`); sem arquivo devolve `Value::Null`.
+pub fn ler_perfil_em(p: &Path) -> Result<Value, String> {
+    if !p.exists() {
+        return Ok(Value::Null);
+    }
+    let txt = fs::read_to_string(p).map_err(|e| e.to_string())?;
+    match serde_json::from_str(&txt) {
+        Ok(v) => Ok(v),
+        Err(e) => {
+            // Guarda o arquivo ilegível para o usuário e volta com o padrão.
+            let guardado = p.with_extension("json.invalido");
+            let _ = fs::rename(p, &guardado);
+            Err(format!("perfil.json inválido ({e}); guardado como perfil.json.invalido"))
+        }
+    }
+}
+
+/// Grava o perfil de forma atômica (tmp + troca) em um caminho (testável sem `AppHandle`).
+pub fn gravar_perfil_em(p: &Path, valor: &Value) -> Result<(), String> {
+    if let Some(parent) = p.parent() {
+        fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    }
+    let tmp = p.with_extension("json.tmp");
+    fs::write(&tmp, serde_json::to_string_pretty(valor).map_err(|e| e.to_string())?)
+        .map_err(|e| e.to_string())?;
+    fs::rename(&tmp, p).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn ler_perfil(app: tauri::AppHandle) -> Result<Value, String> {
+    ler_perfil_em(&caminho_perfil(&app))
+}
+
+#[tauri::command]
+pub fn gravar_perfil(app: tauri::AppHandle, valor: Value) -> Result<(), String> {
+    gravar_perfil_em(&caminho_perfil(&app), &valor)
 }
 
 #[tauri::command]
@@ -795,25 +846,25 @@ mod testes {
     }
 
     #[test]
-    fn caminho_paineis_por_env_retorna_caminho_correto() {
+    fn caminho_por_env_retorna_caminho_correto() {
         let dir = tempfile::tempdir().unwrap();
         unsafe { std::env::set_var("VARD_CONFIG_TESTE", dir.path()) };
-        let p = super::caminho_paineis_por_env("VARD_CONFIG_TESTE", "paineis.json");
+        let p = super::caminho_por_env("VARD_CONFIG_TESTE", "paineis.json");
         assert_eq!(p, Some(dir.path().join("paineis.json")));
         unsafe { std::env::remove_var("VARD_CONFIG_TESTE") };
     }
 
     #[test]
-    fn caminho_paineis_por_env_retorna_none_sem_var() {
+    fn caminho_por_env_retorna_none_sem_var() {
         unsafe { std::env::remove_var("VARD_CONFIG_INEXISTENTE_XYZ") };
-        let p = super::caminho_paineis_por_env("VARD_CONFIG_INEXISTENTE_XYZ", "paineis.json");
+        let p = super::caminho_por_env("VARD_CONFIG_INEXISTENTE_XYZ", "paineis.json");
         assert!(p.is_none());
     }
 
     #[test]
-    fn caminho_paineis_por_env_ignora_var_vazia() {
+    fn caminho_por_env_ignora_var_vazia() {
         unsafe { std::env::set_var("VARD_CONFIG_VAZIA_TESTE", "") };
-        let p = super::caminho_paineis_por_env("VARD_CONFIG_VAZIA_TESTE", "paineis.json");
+        let p = super::caminho_por_env("VARD_CONFIG_VAZIA_TESTE", "paineis.json");
         assert!(p.is_none());
         unsafe { std::env::remove_var("VARD_CONFIG_VAZIA_TESTE") };
     }
@@ -845,6 +896,35 @@ mod testes {
             panic!("arquivo não deveria existir")
         };
         assert!(resultado.is_null());
+    }
+
+    #[test]
+    fn ler_perfil_em_devolve_null_sem_arquivo() {
+        let dir = tempfile::tempdir().unwrap();
+        let r = super::ler_perfil_em(&dir.path().join("perfil.json")).unwrap();
+        assert!(r.is_null());
+    }
+
+    #[test]
+    fn gravar_e_ler_perfil_dao_ida_e_volta_sem_deixar_tmp() {
+        let dir = tempfile::tempdir().unwrap();
+        let p = dir.path().join("perfil.json");
+        let valor = serde_json::json!({"versao": 1, "tom": "direto e calmo", "instrucoes": "frases curtas"});
+        super::gravar_perfil_em(&p, &valor).unwrap();
+        assert_eq!(super::ler_perfil_em(&p).unwrap(), valor);
+        assert!(!p.with_extension("json.tmp").exists(), "a gravação é atômica");
+        assert_eq!(p.file_name().unwrap(), "perfil.json");
+    }
+
+    #[test]
+    fn perfil_ilegivel_e_guardado_como_invalido() {
+        let dir = tempfile::tempdir().unwrap();
+        let p = dir.path().join("perfil.json");
+        std::fs::write(&p, "{isso nao e json").unwrap();
+        let erro = super::ler_perfil_em(&p).unwrap_err();
+        assert!(erro.contains("perfil.json inválido"), "{erro}");
+        assert!(!p.exists());
+        assert!(dir.path().join("perfil.json.invalido").exists());
     }
 
     #[test]

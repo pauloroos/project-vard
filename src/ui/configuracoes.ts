@@ -3,6 +3,7 @@ import type { Config } from "../config/config";
 import { avisosDeUrl, limitarLado, mudancasQueExigemReinicio, salvarConfig, urlLocal } from "../config/config";
 import { ACOES_ATALHO, ROTULOS_ATALHO, avisoAltGr, validarAtalhos, type AcaoAtalho, type FalhaAtalho } from "../config/atalhos";
 import { campoIdioma } from "../config/idiomas";
+import { gravarPerfil, lerPerfil, previaPersona } from "../config/perfil";
 import { campoAtalho } from "./campo-atalho";
 import type { OpenJarvis } from "../conectores/openjarvis/cliente";
 import type { StatusPonte } from "../conectores/ponte/cliente";
@@ -11,6 +12,7 @@ import { AbaAtualizacao } from "./aba-atualizacao";
 import { AbaAvisos } from "./aba-avisos";
 import { AbaDiagnostico } from "./aba-diagnostico";
 import { AbaModelos } from "./aba-modelos";
+import { AbaPerfil } from "./aba-perfil";
 import { AbaPaineisAgentes } from "./paineis-agentes";
 import { AbaPaineisMcps } from "./paineis-mcps";
 import { AbaPaineisProvedores } from "./paineis-provedores";
@@ -40,9 +42,9 @@ export interface DepsConfiguracoes {
 /** Monitor como o comando listar_monitores devolve (pixels físicos). */
 export interface MonitorInfo { nome: string; x: number; y: number; largura: number; altura: number; escala: number; principal: boolean }
 
-export type Aba = "geral" | "voz" | "atalhos" | "saber" | "modelos" | "paineis-provedores" | "paineis-vozes" | "paineis-mcps" | "paineis-agentes" | "sistema" | "reuniao" | "avisos" | "atualizacao" | "diagnostico";
+export type Aba = "geral" | "perfil" | "voz" | "atalhos" | "saber" | "modelos" | "paineis-provedores" | "paineis-vozes" | "paineis-mcps" | "paineis-agentes" | "sistema" | "reuniao" | "avisos" | "atualizacao" | "diagnostico";
 const ABAS: [Aba, string][] = [
-  ["geral", "Geral"], ["voz", "Voz"], ["atalhos", "Atalhos"], ["saber", "O que eu sei fazer"], ["modelos", "Modelos"],
+  ["geral", "Geral"], ["perfil", "Perfil"], ["voz", "Voz"], ["atalhos", "Atalhos"], ["saber", "O que eu sei fazer"], ["modelos", "Modelos"],
   ["paineis-provedores", "Painéis: Provedores"], ["paineis-vozes", "Painéis: Vozes"], ["paineis-mcps", "Painéis: MCPs"], ["paineis-agentes", "Painéis: Agentes"],
   ["sistema", "Sistema"], ["reuniao", "Reunião"], ["avisos", "Avisos"], ["atualizacao", "Atualização"], ["diagnostico", "Diagnóstico"],
 ];
@@ -67,6 +69,7 @@ export class Configuracoes {
   private atualizacao: AbaAtualizacao | null = null;
   private diagnostico: AbaDiagnostico | null = null;
   private abaVoz!: AbaVoz;
+  private abaPerfil!: AbaPerfil;
   private paineisProvedores!: AbaPaineisProvedores;
   private paineisVozes!: AbaPaineisVozes;
   private paineisMcps!: AbaPaineisMcps;
@@ -96,6 +99,19 @@ export class Configuracoes {
     this.paineisVozes = new AbaPaineisVozes(this.raiz.querySelector<HTMLElement>("#cfg-paineis-vozes")!);
     this.paineisMcps = new AbaPaineisMcps(this.raiz.querySelector<HTMLElement>("#cfg-paineis-mcps")!);
     this.paineisAgentes = new AbaPaineisAgentes(this.raiz.querySelector<HTMLElement>("#cfg-paineis-agentes")!);
+    this.abaPerfil = new AbaPerfil(this.raiz.querySelector<HTMLElement>("#cfg-perfil")!, {
+      nome: () => this.el("nome").value,
+      usuario: () => this.el("usuario").value,
+      ler: () => lerPerfil(),
+      gravar: (p) => gravarPerfil(p),
+      previa: () => previaPersona(this.el("ponte_url").value, this.el("nome").value.trim(), this.el("usuario").value.trim()),
+      aoMudar: (campo, valor) => { const alvo = this.el(campo); if (alvo.value !== valor) alvo.value = valor; },
+    });
+    await this.abaPerfil.montar();
+    // Nome/usuário são os mesmos campos da aba Geral: os dois lados acompanham um ao outro.
+    for (const campo of ["nome", "usuario"] as const) {
+      this.el(campo).addEventListener("input", () => this.abaPerfil.definir(campo, this.el(campo).value));
+    }
     const urlPonte = () => this.el("ponte_url").value.trim(); // vazio = sem ponte (desliga), não "usar a salva"
     this.sistema = new AbaSistema(this.raiz.querySelector<HTMLElement>("#cfg-sistema")!, {
       statusPonte: () => this.deps.statusPonte(urlPonte()),
@@ -142,6 +158,10 @@ export class Configuracoes {
     if (aba === "paineis-vozes") void this.paineisVozes?.montar();
     if (aba === "paineis-mcps") void this.paineisMcps?.montar();
     if (aba === "paineis-agentes") void this.paineisAgentes?.montar();
+    if (aba === "perfil") {
+      this.abaPerfil.definir("nome", this.el("nome").value);
+      this.abaPerfil.definir("usuario", this.el("usuario").value);
+    }
     if (aba === "sistema") this.sistema?.ativar(); else this.sistema?.desativar();
     if (aba === "reuniao") this.reuniao?.ativar(); else this.reuniao?.desativar();
     if (aba === "avisos") this.avisos?.ativar(); else this.avisos?.desativar();
@@ -217,6 +237,7 @@ export class Configuracoes {
           ${this.marca("falar_avisos", "Falar os avisos de tarefas (desligado por padrão)", c.falar_avisos)}
         </fieldset>
       </section>
+      <section data-aba="perfil"><div id="cfg-perfil"></div></section>
       <section data-aba="paineis-provedores"><div id="cfg-paineis-provedores"></div></section>
       <section data-aba="paineis-vozes"><div id="cfg-paineis-vozes"></div></section>
       <section data-aba="paineis-mcps"><div id="cfg-paineis-mcps"></div></section>
@@ -365,6 +386,10 @@ export class Configuracoes {
     try { await salvarConfig(novo); }
     catch (erro) { this.dizer(`Não consegui salvar: ${String(erro)}`, true); return; }
     Object.assign(this.cfg, novo);
+    // O perfil do agente é outro arquivo: falha aqui não desfaz o config.json salvo.
+    let erroPerfil = "";
+    try { await this.abaPerfil.gravar(); }
+    catch (erro) { erroPerfil = erro instanceof Error ? erro.message : String(erro); }
     // O atalho de início só é mexido quando a caixa mudou (evita regravar o .lnk a cada Salvar).
     let falhouLogon = false;
     if (this.logon.checked !== this.logonGuardado) {
@@ -374,9 +399,10 @@ export class Configuracoes {
     this.deps.aoSalvar?.(this.cfg);
     const avisos = avisosDeUrl(novo);
     const partes = [falhouLogon ? "Configuração salva, mas não consegui criar o atalho de início." : "Salvo; tamanho, janela e usuário já valem no widget."];
+    if (erroPerfil) partes.push(`O perfil do agente não foi gravado: ${erroPerfil}.`);
     if (reiniciar.length) partes.push(`Reinicie o Vard para aplicar: ${reiniciar.join(", ")}.`);
     if (avisos.length) partes.push(`Atenção: ${avisos.join("; ")}.`);
-    this.dizer(partes.join(" "), avisos.length > 0 || falhouLogon);
+    this.dizer(partes.join(" "), avisos.length > 0 || falhouLogon || erroPerfil !== "");
   }
 
   private async testar() {
