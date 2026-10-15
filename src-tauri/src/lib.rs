@@ -237,7 +237,9 @@ pub fn run() {
             cofre::cofre_existe,
             cofre::cofre_gravar,
             cofre::cofre_apagar,
-            cofre::cofre_ler
+            cofre::cofre_ler,
+            ciclo::cmd_ciclo_info,
+            ciclo::cmd_ciclo_pedir
         ])
         .setup(|app| {
             let handle = app.handle().clone();
