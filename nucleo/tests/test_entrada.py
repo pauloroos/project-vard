@@ -343,7 +343,7 @@ def test_prova_http_real_subprocesso(tmp_path: Path):
                 )
             except psutil.NoSuchProcess:
                 pytest.fail(f"processo {proc.pid} morreu antes da verificação de descendência")
-resposta_status = httpx.get(url_status, timeout=3)
+        resposta_status = httpx.get(url_status, timeout=3)
         assert resposta_status.status_code == 200
         status_body = resposta_status.json()
         assert "modo" in status_body
