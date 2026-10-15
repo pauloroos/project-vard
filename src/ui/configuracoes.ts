@@ -9,6 +9,7 @@ import type { StatusPonte } from "../conectores/ponte/cliente";
 import type { PonteAvisos } from "../avisos/central";
 import { AbaAtualizacao } from "./aba-atualizacao";
 import { AbaAvisos } from "./aba-avisos";
+import { AbaDiagnostico } from "./aba-diagnostico";
 import { AbaModelos } from "./aba-modelos";
 import { AbaPaineisAgentes } from "./paineis-agentes";
 import { AbaPaineisMcps } from "./paineis-mcps";
@@ -39,11 +40,11 @@ export interface DepsConfiguracoes {
 /** Monitor como o comando listar_monitores devolve (pixels físicos). */
 export interface MonitorInfo { nome: string; x: number; y: number; largura: number; altura: number; escala: number; principal: boolean }
 
-export type Aba = "geral" | "voz" | "atalhos" | "saber" | "modelos" | "paineis-provedores" | "paineis-vozes" | "paineis-mcps" | "paineis-agentes" | "sistema" | "reuniao" | "avisos" | "atualizacao";
+export type Aba = "geral" | "voz" | "atalhos" | "saber" | "modelos" | "paineis-provedores" | "paineis-vozes" | "paineis-mcps" | "paineis-agentes" | "sistema" | "reuniao" | "avisos" | "atualizacao" | "diagnostico";
 const ABAS: [Aba, string][] = [
   ["geral", "Geral"], ["voz", "Voz"], ["atalhos", "Atalhos"], ["saber", "O que eu sei fazer"], ["modelos", "Modelos"],
   ["paineis-provedores", "Painéis: Provedores"], ["paineis-vozes", "Painéis: Vozes"], ["paineis-mcps", "Painéis: MCPs"], ["paineis-agentes", "Painéis: Agentes"],
-  ["sistema", "Sistema"], ["reuniao", "Reunião"], ["avisos", "Avisos"], ["atualizacao", "Atualização"],
+  ["sistema", "Sistema"], ["reuniao", "Reunião"], ["avisos", "Avisos"], ["atualizacao", "Atualização"], ["diagnostico", "Diagnóstico"],
 ];
 const OPCOES_TAMANHO: [Config["tamanho"], string][] = [
   ["pequeno", "Pequeno (240 px)"], ["medio", "Médio (320 px)"], ["grande", "Grande (480 px)"], ["personalizado", "Personalizado"],
@@ -64,6 +65,7 @@ export class Configuracoes {
   private avisos: AbaAvisos | null = null;
   private saber: AbaSaber | null = null;
   private atualizacao: AbaAtualizacao | null = null;
+  private diagnostico: AbaDiagnostico | null = null;
   private abaVoz!: AbaVoz;
   private paineisProvedores!: AbaPaineisProvedores;
   private paineisVozes!: AbaPaineisVozes;
@@ -122,6 +124,8 @@ export class Configuracoes {
     this.saber.montar();
     this.atualizacao = new AbaAtualizacao(this.raiz.querySelector<HTMLElement>("#cfg-atualizacao")!, this.deps.atualizacao);
     this.atualizacao.montar();
+    this.diagnostico = new AbaDiagnostico(this.raiz.querySelector<HTMLElement>("#cfg-diagnostico")!);
+    this.diagnostico.montar();
     this.abrirAba("geral");
     try { this.logonGuardado = await invoke<boolean>("inicio_no_logon_ativo"); } catch { this.logonGuardado = false; }
     this.logon.checked = this.logonGuardado;
@@ -246,6 +250,7 @@ export class Configuracoes {
         <p class="nota">A consulta vai ao GitHub (api.github.com) só quando você clica em Verificar ou marca esta caixa.</p>
       </section>
       <section data-aba="modelos" id="cfg-modelos"></section>
+      <section data-aba="diagnostico"><div id="cfg-diagnostico"></div></section>
       <footer>
         <div id="cfg-msg" role="status"></div>
         <div class="acoes"><button id="cfg-salvar" type="button">Salvar</button><button id="cfg-fechar" type="button">Fechar</button></div>
