@@ -21,6 +21,7 @@ from fastapi.staticfiles import StaticFiles
 
 from vard import avisos as vavisos, central, config, modelos, modo, oficina, perfil, reuniao, segredos, tarefas
 from vard.cerebro import contratos as cerebro_contratos, pedidos as cerebro_pedidos
+from vard.primeiro_uso import estado as primeiro_uso_estado
 from vard.seguro import Frase
 
 # ----------------------------------------------------------------------------- PERSONA
@@ -553,6 +554,38 @@ async def reuniao_ata(request: Request):
     except Frase as exc:
         return JSONResponse({"ok": False, "frase": str(exc)}, status_code=404 if str(exc) == reuniao.NAO_ACHEI else 409)
     return {"ok": True, "n": n, "frase": frase}
+
+
+# --------------------------------------------------------------------------- PRIMEIRO USO (T2)
+@app.get("/primeiro-uso")
+def primeiro_uso_ler():
+    """Estado atual do assistente; instalação preexistente devolve concluido=True."""
+    return JSONResponse(primeiro_uso_estado.ler())
+
+
+@app.put("/primeiro-uso")
+async def primeiro_uso_atualizar(request: Request):
+    """Aplica patch de campos conhecidos ao estado do assistente."""
+    try:
+        corpo = await request.json()
+    except ValueError:
+        return JSONResponse({"erro": "json_invalido"}, status_code=422)
+    if not isinstance(corpo, dict):
+        return JSONResponse({"erro": "corpo_invalido"}, status_code=422)
+    nome = corpo.get("nome_chamada")
+    if isinstance(nome, str):
+        try:
+            primeiro_uso_estado.validar_nome(nome)
+        except ValueError:
+            return JSONResponse({"erro": "nome_vazio"}, status_code=422)
+    estado = primeiro_uso_estado.atualizar(corpo)
+    return JSONResponse(estado)
+
+
+@app.post("/primeiro-uso/reabrir")
+def primeiro_uso_reabrir():
+    """Reabre o assistente sem apagar escolhas salvas."""
+    return JSONResponse(primeiro_uso_estado.reabrir())
 
 
 app.mount("/viewer", StaticFiles(directory=VIEWER), name="viewer")
