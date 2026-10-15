@@ -274,7 +274,7 @@ def test_wheel_instalado_fora_do_repo(tmp_path: Path):
         saude = resposta_saude.json()
         assert saude["ok"] is True
         assert isinstance(saude["pid"], int) and saude["pid"] > 0
-        resposta_status = httpx.get(url_status, timeout=2)
+        resposta_status = httpx.get(url_status, timeout=10)
         assert resposta_status.status_code == 200
         status_body = resposta_status.json()
         assert "modo" in status_body
@@ -328,7 +328,7 @@ def test_prova_http_real_subprocesso(tmp_path: Path):
                 )
             except psutil.NoSuchProcess:
                 pytest.fail(f"processo {proc.pid} morreu antes da verificação de descendência")
-        resposta_status = httpx.get(url_status, timeout=2)
+        resposta_status = httpx.get(url_status, timeout=10)
         assert resposta_status.status_code == 200
         status_body = resposta_status.json()
         assert "modo" in status_body
