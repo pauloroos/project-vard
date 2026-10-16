@@ -53,3 +53,10 @@ describe("config voz_motor padrao", () => {
     expect(CONFIG_PADRAO.voz_motor ?? "").toBe("");
   });
 });
+describe("VOZES_POR_MOTOR usa as listas do conector", () => {
+  it("cada_motor_mostra_as_vozes_do_seu_backend", () => {
+    expect(VOZES_POR_MOTOR.kokoro).toBe(VOZES_KOKORO);
+    expect(VOZES_POR_MOTOR.edge).toBe(VOZES_EDGE_PT_BR);
+    expect(VOZES_POR_MOTOR.piper).toBe(VOZES_PIPER_PT_BR);
+  });
+});

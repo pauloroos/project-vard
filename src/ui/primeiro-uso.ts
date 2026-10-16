@@ -18,13 +18,7 @@ const TITULOS_ETAPA: Record<Etapa, string> = {
   resumo: "Resumo",
 };
 
-/** Dependências da etapa de áudio (T4): contrato estável para ligação por rebase. */
-export interface DepsEtapaAudio {
-  config: unknown;
-  transcrever: (wav: ArrayBuffer, sinal?: AbortSignal) => Promise<string>;
-  suspenderEscuta: () => Promise<() => void>;
-  salvar: (dados: { microfone_id?: string; saida_id?: string; voz_id?: string; microfone_testado?: boolean; voz_ouvida?: boolean }) => Promise<void>;
-}
+export type { DepsEtapaAudio };
 
 export interface DepsPrimeiroUso {
   ponteUrl: string;
