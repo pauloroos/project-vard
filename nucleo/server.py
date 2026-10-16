@@ -651,4 +651,75 @@ async def primeiro_uso_cerebro_testar(request: Request):
     return JSONResponse(resultado)
 
 
+# --------------------------------------------------------------------------- PACOTES OPCIONAIS (T5)
+from vard.pacotes import carregar_manifesto, InstaladorPacotes
+
+_instalador_pacotes = InstaladorPacotes()
+
+
+@app.get("/pacotes")
+def pacotes_listar():
+    """Lista pacotes opcionais disponíveis no manifesto + estado de instalação."""
+    try:
+        manifesto = carregar_manifesto()
+    except (FileNotFoundError, ValueError) as exc:
+        return JSONResponse({"erro": str(exc)}, status_code=500)
+    estado = _instalador_pacotes.ler_estado()
+    lista = []
+    for pid, pkg in manifesto.items():
+        info = {
+            "id": pkg.id,
+            "nome": pkg.nome,
+            "versao": pkg.versao,
+            "tipo": pkg.tipo,
+            "descricao": pkg.descricao,
+            "bytes_download": pkg.bytes_download,
+            "bytes_instalado": pkg.bytes_instalado,
+            "licenca_url": pkg.licenca_url,
+            "licenca_nome": pkg.licenca_nome,
+            "indisponivel": pkg.indisponivel,
+            "motivo_indisponivel": pkg.motivo_indisponivel,
+            "instalado": pid in estado,
+            "instalavel": pkg.instalavel(),
+        }
+        if pkg.voz_id:
+            info["voz_id"] = pkg.voz_id
+        lista.append(info)
+    return {"pacotes": lista}
+
+
+@app.post("/pacotes/{pacote_id}/instalar")
+async def pacote_instalar(pacote_id: str):
+    """Inicia instalação de um pacote opcional. Devolve 404 se não existir no manifesto."""
+    try:
+        manifesto = carregar_manifesto()
+    except (FileNotFoundError, ValueError) as exc:
+        return JSONResponse({"erro": str(exc)}, status_code=500)
+    pkg = manifesto.get(pacote_id)
+    if pkg is None:
+        return JSONResponse({"erro": "pacote_nao_encontrado"}, status_code=404)
+    if not pkg.instalavel():
+        return JSONResponse(
+            {"erro": "pacote_nao_instalavel", "motivo": pkg.motivo_indisponivel or "hash/url ausente"},
+            status_code=409,
+        )
+    # Instalação síncrona para simplificar a primeira versão; SSE pode ser adicionado depois.
+    resultado = await _instalador_pacotes.instalar(pkg)
+    if resultado.estado == "concluido":
+        return {"estado": "concluido", "pacote_id": pacote_id}
+    return JSONResponse(
+        {"estado": resultado.estado, "erro": resultado.erro},
+        status_code=500 if resultado.estado == "falhou" else 202,
+    )
+
+
+@app.post("/pacotes/{pacote_id}/remover")
+async def pacote_remover(pacote_id: str):
+    """Remove um pacote instalado."""
+    ok, erro = await _instalador_pacotes.remover(pacote_id)
+    if ok:
+        return {"estado": "removido", "pacote_id": pacote_id}
+    return JSONResponse({"erro": erro}, status_code=500)
+
+
 app.mount("/viewer", StaticFiles(directory=VIEWER), name="viewer")

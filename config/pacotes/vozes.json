@@ -1,0 +1,43 @@
+{
+  "schema": 1,
+  "pacotes": [
+    {
+      "id": "xtts-v2",
+      "nome": "XTTS-v2 (motor de voz própria)",
+      "versao": "2.0.3",
+      "tipo": "motor",
+      "descricao": "Motor de síntese de voz multilíngue Coqui XTTS-v2. Requer ~2 GB de espaço e Python 3.12.",
+      "url": "https://huggingface.co/coqui/XTTS-v2/resolve/main/model.pth",
+      "sha256": "c7ea20001c6a0a841c77e252d8409f6a74fb423e79b3206a0771ba5989776187",
+      "bytes_download": 1867929118,
+      "bytes_instalado": 2100000000,
+      "python": ">=3.12,<3.13",
+      "backend": "cuda|cpu",
+      "licenca_url": "https://coqui.ai/cpml",
+      "licenca_nome": "Coqui Public Model License (CPML)",
+      "dependencias": ["coqui-tts>=0.27.5", "torch>=2.11"],
+      "voz_id": null,
+      "indisponivel": false,
+      "motivo_indisponivel": null
+    },
+    {
+      "id": "voz-pt-br-ana",
+      "nome": "Ana (pt-BR, feminina)",
+      "versao": "1.0.0",
+      "tipo": "voz",
+      "descricao": "Voz feminina em português do Brasil para XTTS-v2.",
+      "url": "",
+      "sha256": "",
+      "bytes_download": 0,
+      "bytes_instalado": 0,
+      "python": ">=3.12,<3.13",
+      "backend": "cuda|cpu",
+      "licenca_url": "",
+      "licenca_nome": "",
+      "dependencias": ["xtts-v2"],
+      "voz_id": "ana",
+      "indisponivel": true,
+      "motivo_indisponivel": "hash/tamanho nao conferidos na origem; pacote marcado indisponivel ate prova real"
+    }
+  ]
+}
