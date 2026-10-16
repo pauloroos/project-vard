@@ -4,7 +4,7 @@ import { ElevenLabs } from "../conectores/nuvem/elevenlabs";
 import { VOZES_GEMINI } from "../conectores/nuvem/gemini";
 import { Voz } from "../conectores/voz/cliente";
 import { FRASE_AMOSTRA, PROVEDORES_VOZ, criarFonteDeVoz, type ProvedorVoz } from "../conectores/voz/escolher";
-import { VOZES_KOKORO } from "../conectores/voz/kokoro";
+import { VOZES_KOKORO, VOZES_EDGE_PT_BR, VOZES_PIPER_PT_BR } from "../conectores/voz/kokoro";
 import { listarDispositivos, definirPreferencia, obterPreferencia } from "../audio/dispositivos";
 
 export interface DepsAbaVoz {
@@ -15,7 +15,21 @@ export interface DepsAbaVoz {
   dizer: (texto: string, ruim?: boolean) => void;
 }
 
-export type CamposVoz = Pick<Config, "vad" | "interromper_ao_falar" | "voz_provedor" | "voz_propria" | "voz" | "elevenlabs_chave" | "elevenlabs_voz" | "gemini_chave" | "gemini_voz">;
+export type CamposVoz = Pick<Config, "vad" | "interromper_ao_falar" | "voz_provedor" | "voz_motor" | "voz_propria" | "voz" | "elevenlabs_chave" | "elevenlabs_voz" | "gemini_chave" | "gemini_voz">;
+
+export const MOTORES_PROPRIA = [
+  { id: "", rotulo: "Automático (o serviço escolhe)" },
+  { id: "kokoro", rotulo: "Kokoro (local, sem rede)" },
+  { id: "edge", rotulo: "Edge TTS (Microsoft, usa internet)" },
+  { id: "piper", rotulo: "Piper (local, CPU)" },
+  { id: "xtts", rotulo: "XTTS (local, GPU)" },
+] as const;
+
+export const VOZES_POR_MOTOR: Record<string, readonly { id: string; rotulo: string }[]> = {
+  kokoro: VOZES_KOKORO,
+  edge: VOZES_EDGE_PT_BR,
+  piper: VOZES_PIPER_PT_BR,
+};
 
 const ROTULO_PROVEDOR: Record<ProvedorVoz, string> = {
   propria: "Voz própria (XTTS, no seu computador)",
@@ -77,6 +91,8 @@ export class AbaVoz {
       </fieldset>
       <div data-prov="propria">
         <label>Endereço do serviço de voz (vazio desliga)<input id="cfg-voz_url" type="text" value="${esc(c.voz_url)}"></label>
+        <label>Motor<select id="cfg-voz_motor">${MOTORES_PROPRIA.map((m) => `<option value="${m.id}" ${(c.voz_motor ?? "") === m.id ? "selected" : ""}>${m.rotulo}</option>`).join("")}</select></label>
+        <p class="nota" id="cfg-voz_motor_nota"></p>
         <label>Voz<select id="cfg-voz_propria"></select></label>
         <p class="nota" id="cfg-voz_propria_nota"></p>
       </div>
@@ -108,6 +124,7 @@ export class AbaVoz {
     this.preencher(this.sel("gemini_voz"), opcoesDeVoz(VOZES_GEMINI.map((v): [string, string] => [v, v]), vozGeminiMarcada(c.gemini_voz), (v) => `${v} (fora da lista)`), vozGeminiMarcada(c.gemini_voz));
     for (const r of this.raiz.querySelectorAll<HTMLInputElement>('input[name="voz_provedor"]')) r.addEventListener("change", () => this.mostrar());
     this.sel("voz_kokoro").addEventListener("change", () => this.mostrar());
+    this.sel("voz_motor").addEventListener("change", () => this.atualizarVozesPorMotor());
     this.sel("elevenlabs_voz").addEventListener("change", () => { const v = this.sel("elevenlabs_voz").value; if (v) this.el("elevenlabs_voz_id").value = v; });
     this.el("voz_url").addEventListener("change", () => { void this.carregarPropria(); });
     this.raiz.querySelector("#cfg-elevenlabs_carregar")!.addEventListener("click", () => { void this.carregarElevenLabs(); });
@@ -115,6 +132,7 @@ export class AbaVoz {
     this.raiz.querySelector("#cfg-ouvir")!.addEventListener("click", () => { void this.ouvir(); });
     this.mostrar();
     void this.carregarPropria();
+    this.atualizarVozesPorMotor();
     void this.carregarDispositivos();
   }
 
@@ -167,6 +185,25 @@ export class AbaVoz {
     }
   }
 
+  /** Atualiza a lista de vozes e o aviso conforme o motor escolhido; Edge mostra aviso de rede. */
+  private atualizarVozesPorMotor() {
+    const motor = this.sel("voz_motor").value;
+    const selVoz = this.sel("voz_propria");
+    const notaMotor = this.raiz.querySelector<HTMLElement>("#cfg-voz_motor_nota")!;
+    const notaVoz = this.raiz.querySelector<HTMLElement>("#cfg-voz_propria_nota")!;
+    const vozesMotor = VOZES_POR_MOTOR[motor];
+    if (vozesMotor) {
+      const atual = selVoz.value || this.cfg.voz_propria;
+      this.preencher(selVoz, opcoesDeVoz(vozesMotor.map((v) => [v.id, v.rotulo]), atual), atual);
+      notaVoz.textContent = "";
+      notaMotor.textContent = motor === "edge" ? "Edge TTS usa a internet (serviço da Microsoft); sem conexão, a fala falha." : "";
+    } else {
+      // Motor automático ou XTTS: carrega vozes do serviço via /vozes
+      void this.carregarPropria();
+      notaMotor.textContent = motor === "xtts" ? "XTTS exige GPU e modelo carregado no serviço." : "";
+    }
+  }
+
   /** Preenche a lista de vozes do serviço próprio; fora do ar, deixa uma nota. */
   private async carregarPropria() {
     const sel = this.sel("voz_propria");
@@ -204,7 +241,7 @@ export class AbaVoz {
     definirPreferencia({ microfone_id: micId, microfone_rotulo: micRot, saida_id: saiId, saida_rotulo: saiRot });
     return {
       vad: this.sel("vad").value === "silero" ? "silero" : "energia", interromper_ao_falar: this.el("interromper_ao_falar").checked,
-      voz_provedor: this.provedor(), voz_propria: this.sel("voz_propria").value, voz,
+      voz_provedor: this.provedor(), voz_motor: this.sel("voz_motor")?.value ?? "", voz_propria: this.sel("voz_propria").value, voz,
       elevenlabs_chave: this.el("elevenlabs_chave").value.trim(), elevenlabs_voz: this.el("elevenlabs_voz_id").value.trim(),
       gemini_chave: this.el("gemini_chave").value.trim(), gemini_voz: this.sel("gemini_voz").value,
       microfone_id: micId, microfone_rotulo: micRot, saida_id: saiId, saida_rotulo: saiRot,
