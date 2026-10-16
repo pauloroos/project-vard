@@ -33,8 +33,7 @@ import { restaurarPreferencia, onDeviceChange, obterPreferencia } from "./audio/
 import { ladoDoTamanho, ladoMudou, medidasDoWidget } from "./ui/tamanho";
 import { ESPELHO_INICIAL, reduzir, salaExiste, type Espelho, type EventoEspelho } from "./sala/espelho";
 import { lerNiveis } from "./sala/espectro";
-import { montarAssistentePrimeiroUso, reabrirAssistentePrimeiroUso } from "./ui/primeiro-uso";
-import { deveMostrarAssistente } from "./config/primeiro-uso";
+import { abrirAssistenteSeNecessario, reabrirAssistente, type DepsHospedeiro } from "./ui/primeiro-uso-hospedeiro";
 
 const PRE_ROLL_MS = 300;
 /** Prazo da voz própria numa fala fixa que não está no cache (o aquecimento usa o prazo normal). */
@@ -137,9 +136,9 @@ window.addEventListener("DOMContentLoaded", async () => {
     (await import("./prova")).ativarProva(String(import.meta.env.VITE_PROVA), nucleo, hud);
   }
 
-  // Assistente de primeiro uso: abre sozinho só em instalação nova; botão nas Configurações reabre.
+  // Assistente de primeiro uso: lógica extraída para src/ui/primeiro-uso-hospedeiro.ts (testável).
   let limparAssistente: (() => void) | null = null;
-  const depsPrimeiroUso = {
+  const depsHospedeiro: DepsHospedeiro = {
     ponteUrl: cfg.ponte_url,
     salvarNome: async (nome: string, variantes: string[]) => {
       await atualizarConfig({ nome, variantes });
@@ -147,12 +146,10 @@ window.addEventListener("DOMContentLoaded", async () => {
     audio: {
       config: cfg,
       transcrever: async (wav: ArrayBuffer, sinal: AbortSignal) => {
-        // Usa o conector já configurado no widget; sem disparar por nome de chamada.
         const texto = await oj.transcrever(wav, cfg.idioma, sinal);
         return texto;
       },
       suspenderEscuta: async () => {
-        // Suspende a escuta por chamada durante o teste; devolve restauração.
         const estavaMudo = estaMudo();
         if (!estavaMudo) definirMudo(true);
         return async () => {
@@ -164,20 +161,13 @@ window.addEventListener("DOMContentLoaded", async () => {
           microfone_id: resultado.microfone_id,
           saida_id: resultado.saida_id,
         });
-        // voz_id é salvo no estado do primeiro uso; a config ativa usa o campo do provedor.
-        // O assistente já persiste voz_id via atualizarEstadoPrimeiroUso em primeiro-uso.ts.
       },
     },
     cerebro: {}, // T3c injeta o resto quando estiver pronta
   };
-  try {
-    if (await deveMostrarAssistente(cfg.ponte_url)) {
-      limparAssistente = await montarAssistentePrimeiroUso(app, depsPrimeiroUso);
-    }
-  } catch { /* ponte ausente não bloqueia o app */ }
+  limparAssistente = await abrirAssistenteSeNecessario(depsHospedeiro, { raiz: app });
   listen("reabrir-primeiro-uso", async () => {
-    limparAssistente?.();
-    limparAssistente = await reabrirAssistentePrimeiroUso(app, depsPrimeiroUso);
+    limparAssistente = await reabrirAssistente(depsHospedeiro, limparAssistente, { raiz: app });
   }).catch(() => {});
 
   // No `tauri dev` a origem do webview (localhost:1420) é recusada pelo CORS do OpenJarvis; o Vite faz a ponte em /oj.
