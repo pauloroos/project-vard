@@ -56,6 +56,19 @@ class TestOpenAICompat:
         assert any(e.tipo == "fim" for e in eventos)
 
     @respx.mock
+    @pytest.mark.parametrize("base", ["http://lm.local/v1", "http://lm.local/v1/", "http://lm.local"])
+    async def test_url_base_com_ou_sem_v1(self, base):
+        """D9: quem cadastra a URL no padrão OpenAI/LM Studio (".../v1") não pode cair em /v1/v1."""
+        body = _sse_linhas({"choices": [{"delta": {"content": "ok"}}]})
+        rota = respx.post("http://lm.local/v1/chat/completions").mock(
+            return_value=Response(200, text=body, headers={"content-type": "text/event-stream"})
+        )
+        adp = AdaptadorOpenAICompat(base, "qwen2")
+        eventos = await _coletar(adp.inferir([{"role": "user", "content": "oi"}]))
+        assert rota.called
+        assert any(e.tipo == "fim" for e in eventos)
+
+    @respx.mock
     async def test_mesmo_modelo_endpoints_distintos(self):
         """Mesmo nome de modelo em dois endpoints diferentes funciona."""
         for base in ("http://lm1.local", "http://lm2.local"):
