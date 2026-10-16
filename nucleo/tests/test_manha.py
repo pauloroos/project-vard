@@ -189,3 +189,22 @@ def test_manha_sem_consulta_mantem_o_caminho_legado(loja):
     t = tarefas.nova("manha", "", "x")
     u = manha.executar(t.n, conf={**CONF, "perguntar_remoto": False}, gerar=lambda: "Bom dia legado.")
     assert u.estado == "terminou" and "Bom dia legado." in open(u.resultado, encoding="utf-8").read()
+
+
+def test_manha_delegada_com_agente_desconhecido_declara_a_ausencia(loja, config_usuario):
+    t = tarefas.nova("manha", "", "x")
+    u = manha.executar(t.n, conf={**DELEGADA, "agente": "copilot"})
+    texto = open(u.resultado, encoding="utf-8").read()
+    assert u.estado == "terminou" and manha.SEM_CONSULTA in texto
+
+
+def test_manha_delegada_separa_conteudo_recebido_de_indisponivel(loja, config_usuario):
+    from vard import delegada
+
+    def consultar(agente, pergunta, conf_d):
+        return delegada.Saida("terminou", texto="Agenda: duas reuniões. Notícias: fonte indisponível hoje.")
+
+    t = tarefas.nova("manha", "", "x")
+    u = manha.executar(t.n, conf=DELEGADA, consultar=consultar)
+    texto = open(u.resultado, encoding="utf-8").read()
+    assert u.estado == "terminou" and "indisponível" in texto and manha.SEM_CONSULTA not in texto

@@ -216,9 +216,17 @@ def test_openclaw_normaliza_saida_json_e_usa_a_sessao_da_tarefa(remoto_config):
 
     pedido = "e o card 42?"
     assert remoto.perguntar(pedido, executar=executar, sessao="tarefa-9") == "card 42 em revisão"
+    assert len(chamadas) == 1
     args, kw = chamadas[-1]
     assert args[-1] == "openclaw agent --session-key tarefa-9 --json"
     assert kw["input"] == pedido
+
+
+def test_sessao_vard_preserva_o_perfil_antigo(loja, remoto_config):
+    _remoto_openclaw(remoto_config, extra='sessao = "vard"\n')
+    assert remoto.chave_sessao(7) == "vard"
+    _remoto_openclaw(remoto_config)
+    assert remoto.chave_sessao(7) == "tarefa-7"
 
 
 def test_executar_remoto_usa_sessao_por_tarefa_por_padrao(loja, remoto_config, monkeypatch):

@@ -119,3 +119,9 @@ def test_pesquisa_delegada_sem_config_declara_a_falha(loja):
     t = tarefas.nova("pesquisa", "", "dólar?")
     u = pesquisa.executar(t.n, conf={"consulta": "delegada"})
     assert u.estado == "falhou" and "delegada" in u.resumo
+
+
+def test_pesquisa_delegada_com_agente_desconhecido_fala(loja, config_usuario):
+    t = tarefas.nova("pesquisa", "", "dólar?")
+    u = pesquisa.executar(t.n, conf={"consulta": "delegada", "agente": "copilot"})
+    assert u.estado == "falhou" and "copilot" in (u.resumo + u.erro)

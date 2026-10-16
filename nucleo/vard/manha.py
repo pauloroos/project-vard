@@ -121,11 +121,11 @@ def consulta_delegada(conf: dict, *, consultar=None, conf_delegada=None) -> str:
     from vard import delegada
     try:
         conf_d = conf_delegada if conf_delegada is not None else delegada.carregar()
-    except Exception as exc:  # noqa: BLE001 — sem delegada.toml, a manhã sai declarando a ausência
+        agente = delegada.normalizar_agente(str(conf.get("agente") or conf_d.padrao)) or conf_d.padrao
+        s = (consultar or delegada.consultar)(agente, montar_consulta(conf), conf_d)
+    except Exception as exc:  # noqa: BLE001 — agente desconhecido ou consulta indisponível: a manhã declara a ausência
         log.warning("manhã sem consulta delegada: %s", type(exc).__name__)
         return ""
-    agente = str(conf.get("agente") or conf_d.padrao)
-    s = (consultar or delegada.consultar)(agente, montar_consulta(conf), conf_d)
     if s.estado != "terminou" or not s.texto.strip():
         log.warning("manhã: a consulta delegada não terminou (%s)", s.estado)
         return ""

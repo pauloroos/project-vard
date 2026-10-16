@@ -68,11 +68,12 @@ def consulta_delegada(n: int, arq: Path | None, t: tarefas.Tarefa, conf: dict, *
     from vard import delegada
     try:
         conf_d = delegada.carregar()
-    except Exception as exc:  # noqa: BLE001 — sem delegada.toml, a pesquisa falha declarando o motivo
+        agente = delegada.normalizar_agente(str(conf.get("agente") or conf_d.padrao)) or conf_d.padrao
+        s = (consultar or delegada.consultar)(agente, t.pedido, conf_d)
+    except Exception as exc:  # noqa: BLE001 — agente desconhecido ou consulta indisponível: falha declarada
+        frase = str(exc).strip() or type(exc).__name__
         return tarefas.atualizar(n, arq, se_estado="rodando", estado="falhou",
-                                 resumo="a pesquisa delegada não está configurada", erro=str(exc)[:200])
-    agente = str(conf.get("agente") or conf_d.padrao)
-    s = (consultar or delegada.consultar)(agente, t.pedido, conf_d)
+                                 resumo=frase[:200], erro=f"{type(exc).__name__}: {exc}"[:300])
     if s.estado != "terminou" or not s.texto.strip():
         return tarefas.atualizar(n, arq, se_estado="rodando", estado="falhou",
                                  resumo=(s.resumo or s.motivo or "a consulta delegada não respondeu")[:200],

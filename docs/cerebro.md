@@ -38,10 +38,12 @@ O caminho novo é explícito e convive com o legado: nada muda por padrão até 
 - `nucleo/vard/manha.py` — com `consulta = "delegada"` no `manha.toml`, o resumo do dia vem de uma
   consulta delegada (`delegada.consultar`) ao agente/conectores do `delegada.toml`; o pedido
   (`manha.montar_consulta`) pede agenda, tarefas e notícias e nunca pede correio. Sem agente nem
-  conector configurado, o resumo declara a ausência (`manha.SEM_CONSULTA`); o caminho novo não chama
+  conector configurado, ou com agente desconhecido na chave `agente`, o resumo declara a ausência
+  (`manha.SEM_CONSULTA`); o caminho novo não chama
   `/api/digest/generate`. Sem a chave, segue o `gerar_digest` legado do OpenJarvis.
 - `nucleo/vard/pesquisa.py` — com `consulta = "delegada"` no `pesquisa.toml`, a pesquisa roda pelo
-  agente do `delegada.toml` em vez de `/v1/managed-agents`. Sem a chave, segue o caminho legado.
+  agente do `delegada.toml` em vez de `/v1/managed-agents`; agente desconhecido ou consulta que não
+  termina vira falha declarada na tarefa. Sem a chave, segue o caminho legado.
 - `nucleo/vard/remoto.py` — `envelope = "openclaw"` normaliza o envelope JSON do CLI do OpenClaw
   (`final`, ou os `payloads`); `{sessao}` vira sessão por tarefa (`sessao = "tarefa"`, padrão) ou o
   perfil antigo (`sessao = "vard"`). O comando não pode usar `--deliver` nem `/hooks/agent`. Timeout
