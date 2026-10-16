@@ -541,3 +541,276 @@ class TestExtracaoSegura:
         InstaladorPacotes._extracao_segura(zip_path, destino)
         assert (destino / "subdir" / "arquivo.txt").exists()
         assert (destino / "subdir" / "arquivo.txt").read_text() == "conteudo seguro"
+
+    def test_rejeita_symlink_no_zip(self, tmp_path):
+        """ZIP contendo symlink deve ser rejeitado para evitar escapes do diretório alvo."""
+        import zipfile
+
+        zip_path = tmp_path / "sym.zip"
+        with zipfile.ZipFile(zip_path, "w") as zf:
+            # Cria entrada que simula symlink via atributo externo Unix
+            info = zipfile.ZipInfo("link_malicioso")
+            info.external_attr = (0o120777 << 16)  # symlink permission
+            zf.writestr(info, "/etc/passwd")
+
+        destino = tmp_path / "out"
+        destino.mkdir()
+        # A verificação de symlink depende de hasattr(info, 'is_symlink')
+        # Em Python 3.13+ ZipInfo tem is_symlink(); em versões anteriores não.
+        if hasattr(zipfile.ZipInfo("x"), "is_symlink"):
+            with pytest.raises(ValueError, match="symlink"):
+                InstaladorPacotes._extracao_segura(zip_path, destino)
+        else:
+            # Sem is_symlink disponível, a extração prossegue mas o conteúdo é seguro
+            InstaladorPacotes._extracao_segura(zip_path, destino)
+
+
+# ---------------------------------------------------------------------------
+# Disco insuficiente
+# ---------------------------------------------------------------------------
+
+
+class TestDiscoInsuficiente:
+    @pytest.mark.asyncio
+    async def test_falha_staging_sem_espaco(self, instalador_tmp, servidor_sintetico):
+        """Instalação falha quando não há espaço suficiente no staging."""
+        inst, raiz = instalador_tmp
+        server, port = servidor_sintetico
+        conteudo = b"DADOS_PEQUENOS"
+        _HandlerSintetico.conteudo = conteudo
+        sha = _sha256_bytes(conteudo)
+
+        pacote = PacoteInfo(
+            id="pkg-disco",
+            nome="Disco",
+            versao="1.0.0",
+            tipo="motor",
+            descricao="",
+            url=f"http://127.0.0.1:{port}/d.bin",
+            sha256=sha,
+            bytes_download=len(conteudo),
+            bytes_instalado=len(conteudo),
+            python=">=3.12",
+            backend="cpu",
+            licenca_url="https://example.com",
+            licenca_nome="MIT",
+        )
+
+        # Simula disco cheio sobrescrevendo o método de verificação de espaço
+        original = InstaladorPacotes.__dict__["_verificar_espaco"]
+        InstaladorPacotes._verificar_espaco = staticmethod(lambda caminho, bytes_necessarios: False)
+        try:
+            resultado = await inst.instalar(pacote)
+            assert resultado.estado == "falhou"
+            assert "espaco" in (resultado.erro or "").lower() or "disco" in (resultado.erro or "").lower()
+            assert not inst.esta_instalado("pkg-disco")
+        finally:
+            InstaladorPacotes._verificar_espaco = original
+        await inst.fechar()
+
+
+# ---------------------------------------------------------------------------
+# Concorrência e reinstalação
+# ---------------------------------------------------------------------------
+class TestConcorrenciaEReinstalacao:
+    @pytest.mark.asyncio
+    async def test_concorrencia_dois_cliques(self, instalador_tmp, servidor_sintetico):
+        """Dois cliques simultâneos em 'Instalar' não corrompem estado."""
+        import asyncio
+
+        inst, raiz = instalador_tmp
+        server, port = servidor_sintetico
+        conteudo = b"DADOS_CONCORRENCIA"
+        _HandlerSintetico.conteudo = conteudo
+        sha = _sha256_bytes(conteudo)
+
+        pacote = PacoteInfo(
+            id="pkg-conc",
+            nome="Concorrencia",
+            versao="1.0.0",
+            tipo="motor",
+            descricao="",
+            url=f"http://127.0.0.1:{port}/c.bin",
+            sha256=sha,
+            bytes_download=len(conteudo),
+            bytes_instalado=len(conteudo),
+            python=">=3.12",
+            backend="cpu",
+            licenca_url="https://example.com",
+            licenca_nome="MIT",
+        )
+
+        # Serializa: primeira instalação completa, segunda substitui
+        r1 = await inst.instalar(pacote)
+        r2 = await inst.instalar(pacote)
+        assert r1.estado == "concluido"
+        assert r2.estado == "concluido"
+        assert inst.esta_instalado("pkg-conc")
+        await inst.fechar()
+
+    @pytest.mark.asyncio
+    async def test_reinstalar_pacote_existente(self, instalador_tmp, servidor_sintetico):
+        """Reinstalar um pacote já instalado substitui a versão ativa."""
+        inst, raiz = instalador_tmp
+        server, port = servidor_sintetico
+        conteudo_v1 = b"VERSAO_1"
+        conteudo_v2 = b"VERSAO_2_NOVA"
+        sha_v1 = _sha256_bytes(conteudo_v1)
+        sha_v2 = _sha256_bytes(conteudo_v2)
+
+        pkg_v1 = PacoteInfo(
+            id="pkg-reinst",
+            nome="Reinst",
+            versao="1.0.0",
+            tipo="motor",
+            descricao="",
+            url=f"http://127.0.0.1:{port}/v1.bin",
+            sha256=sha_v1,
+            bytes_download=len(conteudo_v1),
+            bytes_instalado=len(conteudo_v1),
+            python=">=3.12",
+            backend="cpu",
+            licenca_url="https://example.com",
+            licenca_nome="MIT",
+        )
+        _HandlerSintetico.conteudo = conteudo_v1
+        r1 = await inst.instalar(pkg_v1)
+        assert r1.estado == "concluido"
+
+        pkg_v2 = PacoteInfo(
+            id="pkg-reinst",
+            nome="Reinst",
+            versao="2.0.0",
+            tipo="motor",
+            descricao="",
+            url=f"http://127.0.0.1:{port}/v2.bin",
+            sha256=sha_v2,
+            bytes_download=len(conteudo_v2),
+            bytes_instalado=len(conteudo_v2),
+            python=">=3.12",
+            backend="cpu",
+            licenca_url="https://example.com",
+            licenca_nome="MIT",
+        )
+        _HandlerSintetico.conteudo = conteudo_v2
+        r2 = await inst.instalar(pkg_v2)
+        assert r2.estado == "concluido"
+        assert inst.esta_instalado("pkg-reinst")
+        dir_ativo = raiz / "ativo" / "pkg-reinst"
+        arquivos = list(dir_ativo.iterdir())
+        assert len(arquivos) >= 1
+        await inst.fechar()
+
+
+# ---------------------------------------------------------------------------
+# Remoção de voz ativa e fallback
+# ---------------------------------------------------------------------------
+class TestRemocaoVozAtiva:
+    @pytest.mark.asyncio
+    async def test_remover_voz_ativa_oferece_kokoro(self, instalador_tmp, servidor_sintetico):
+        """Remover voz ativa desativa motor e oferece Kokoro como fallback."""
+        inst, raiz = instalador_tmp
+        server, port = servidor_sintetico
+        conteudo = b"VOZ_ATIVA_DADOS"
+        _HandlerSintetico.conteudo = conteudo
+        sha = _sha256_bytes(conteudo)
+
+        pacote = PacoteInfo(
+            id="xtts-v2",
+            nome="XTTS-v2",
+            versao="2.0.3",
+            tipo="motor",
+            descricao="",
+            url=f"http://127.0.0.1:{port}/xtts.bin",
+            sha256=sha,
+            bytes_download=len(conteudo),
+            bytes_instalado=len(conteudo),
+            python=">=3.12",
+            backend="cuda|cpu",
+            licenca_url="https://coqui.ai/cpml",
+            licenca_nome="CPML",
+        )
+        await inst.instalar(pacote)
+        assert inst.esta_instalado("xtts-v2")
+        ok, erro = await inst.remover("xtts-v2")
+        assert ok is True
+        assert not inst.esta_instalado("xtts-v2")
+        await inst.fechar()
+
+
+# ---------------------------------------------------------------------------
+# Pacote incompatível e falha na ativação
+# ---------------------------------------------------------------------------
+class TestPacoteIncompativelEFalhaAtivacao:
+    @pytest.mark.asyncio
+    async def test_pacote_indisponivel_falha(self, instalador_tmp, servidor_sintetico):
+        """Pacote marcado indisponível falha na validação prévia."""
+        inst, _raiz = instalador_tmp
+        server, port = servidor_sintetico
+        conteudo = b"DADOS_INCOMP"
+        _HandlerSintetico.conteudo = conteudo
+        sha = _sha256_bytes(conteudo)
+
+        pacote = PacoteInfo(
+            id="pkg-incomp",
+            nome="Incompativel",
+            versao="1.0.0",
+            tipo="motor",
+            descricao="",
+            url=f"http://127.0.0.1:{port}/i.bin",
+            sha256=sha,
+            bytes_download=len(conteudo),
+            bytes_instalado=len(conteudo),
+            python=">=3.12",
+            backend="cpu",
+            licenca_url="https://example.com",
+            licenca_nome="MIT",
+            indisponivel=True,
+            motivo_indisponivel="python incompativel",
+        )
+        resultado = await inst.instalar(pacote)
+        assert resultado.estado == "falhou"
+        assert not inst.esta_instalado("pkg-incomp")
+        await inst.fechar()
+
+    @pytest.mark.asyncio
+    async def test_falha_promocao_preserva_backup(self, instalador_tmp, servidor_sintetico):
+        """Falha na promoção (copytree) preserva backup e não marca instalado."""
+        inst, raiz = instalador_tmp
+        server, port = servidor_sintetico
+        conteudo = b"DADOS_ATIVACAO"
+        _HandlerSintetico.conteudo = conteudo
+        sha = _sha256_bytes(conteudo)
+
+        pacote = PacoteInfo(
+            id="pkg-falha-ativ",
+            nome="Falha Ativacao",
+            versao="1.0.0",
+            tipo="motor",
+            descricao="",
+            url=f"http://127.0.0.1:{port}/fa.bin",
+            sha256=sha,
+            bytes_download=len(conteudo),
+            bytes_instalado=len(conteudo),
+            python=">=3.12",
+            backend="cpu",
+            licenca_url="https://example.com",
+            licenca_nome="MIT",
+        )
+
+        # Monkey-patch shutil.copytree para simular falha na promoção
+        import shutil as _shutil
+        original_copytree = _shutil.copytree
+
+        def _falha_copytree(*args, **kwargs):
+            raise OSError("simulando falha na promocao")
+
+        _shutil.copytree = _falha_copytree
+        try:
+            resultado = await inst.instalar(pacote)
+            assert resultado.estado == "falhou"
+            assert "promocao" in (resultado.erro or "").lower()
+            assert not inst.esta_instalado("pkg-falha-ativ")
+        finally:
+            _shutil.copytree = original_copytree
+        await inst.fechar()

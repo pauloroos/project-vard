@@ -767,8 +767,8 @@ def pacotes_listar():
 
 
 @app.post("/pacotes/{pacote_id}/instalar")
-async def pacote_instalar(pacote_id: str):
-    """Inicia instalação de um pacote opcional. Devolve 404 se não existir no manifesto."""
+async def pacote_instalar_sse(pacote_id: str, request: Request):
+    """Inicia instalação de um pacote opcional com progresso via SSE."""
     try:
         manifesto = carregar_todos_manifestos()
     except (FileNotFoundError, ValueError) as exc:
@@ -781,14 +781,55 @@ async def pacote_instalar(pacote_id: str):
             {"erro": "pacote_nao_instalavel", "motivo": pkg.motivo_indisponivel or "hash/url ausente"},
             status_code=409,
         )
-    # Instalação síncrona para simplificar a primeira versão; SSE pode ser adicionado depois.
-    resultado = await _instalador_pacotes.instalar(pkg)
-    if resultado.estado == "concluido":
-        return {"estado": "concluido", "pacote_id": pacote_id}
-    return JSONResponse(
-        {"estado": resultado.estado, "erro": resultado.erro},
-        status_code=500 if resultado.estado == "falhou" else 202,
-    )
+
+    import asyncio
+    import json as _json
+
+    fila: asyncio.Queue[dict | None] = asyncio.Queue()
+
+    def _on_progress(p):
+        try:
+            fila.put_nowait({
+                "estado": p.estado,
+                "bytes_baixados": p.bytes_baixados,
+                "bytes_total": p.bytes_total,
+                "erro": p.erro,
+            })
+        except asyncio.QueueFull:
+            pass
+
+    async def _gerar_eventos():
+        tarefa = asyncio.create_task(_instalador_pacotes.instalar(pkg, on_progress=_on_progress))
+        while True:
+            if await request.is_disconnected():
+                _instalador_pacotes.cancelar(pacote_id)
+                tarefa.cancel()
+                break
+            try:
+                evento = await asyncio.wait_for(fila.get(), timeout=1.0)
+            except asyncio.TimeoutError:
+                yield f"data: {_json.dumps({'estado': 'aguardando'})}\n\n"
+                continue
+            if evento is None:
+                break
+            yield f"data: {_json.dumps(evento)}\n\n"
+            if evento["estado"] in ("concluido", "falhou", "cancelado"):
+                break
+        if not tarefa.done():
+            try:
+                await tarefa
+            except Exception:
+                pass
+
+    from starlette.responses import StreamingResponse as _StreamingSSE
+    return _StreamingSSE(_gerar_eventos(), media_type="text/event-stream")
+
+
+@app.post("/pacotes/{pacote_id}/cancelar")
+async def pacote_cancelar(pacote_id: str):
+    """Cancela uma instalação em andamento."""
+    _instalador_pacotes.cancelar(pacote_id)
+    return {"estado": "cancelado", "pacote_id": pacote_id}
 
 
 @app.post("/pacotes/{pacote_id}/remover")

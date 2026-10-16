@@ -353,17 +353,18 @@ class InstaladorPacotes:
             shutil.rmtree(dir_staging, ignore_errors=True)
             return progresso
 
-        # Extração segura (se for ZIP) ou cópia direta
+        # Instalação do arquivo principal + extras
         progresso.estado = "instalando"
         notificar()
 
+        conteudo = dir_staging / "conteudo"
+        conteudo.mkdir(parents=True, exist_ok=True)
+
+        # Move arquivo principal para conteudo/
         try:
             if str(arquivo_destino).endswith(".zip"):
-                self._extracao_segura(arquivo_destino, dir_staging / "conteudo")
+                self._extracao_segura(arquivo_destino, conteudo)
             else:
-                # Arquivo único (ex: model.pth) → move para conteudo/
-                conteudo = dir_staging / "conteudo"
-                conteudo.mkdir(parents=True, exist_ok=True)
                 arquivo_destino.rename(conteudo / arquivo_destino.name)
         except (ValueError, zipfile.BadZipFile) as exc:
             progresso.estado = "falhou"
@@ -371,6 +372,47 @@ class InstaladorPacotes:
             notificar()
             shutil.rmtree(dir_staging, ignore_errors=True)
             return progresso
+
+        # Baixa e verifica cada arquivo extra
+        for extra in pacote.arquivos_extras:
+            if self._foi_cancelado(pacote.id):
+                progresso.estado = "cancelado"
+                notificar()
+                shutil.rmtree(dir_staging, ignore_errors=True)
+                self._limpar_cancelamento(pacote.id)
+                return progresso
+
+            arquivo_extra = conteudo / extra.nome
+            try:
+                async with cliente.stream("GET", extra.url) as resp_extra:
+                    if resp_extra.status_code != 200:
+                        progresso.estado = "falhou"
+                        progresso.erro = f"download extra {extra.nome} HTTP {resp_extra.status_code}"
+                        notificar()
+                        shutil.rmtree(dir_staging, ignore_errors=True)
+                        return progresso
+                    with open(arquivo_extra, "wb") as f_extra:
+                        async for chunk in resp_extra.aiter_bytes(chunk_size=CHUNK_SIZE):
+                            if self._foi_cancelado(pacote.id):
+                                progresso.estado = "cancelado"
+                                notificar()
+                                shutil.rmtree(dir_staging, ignore_errors=True)
+                                self._limpar_cancelamento(pacote.id)
+                                return progresso
+                            f_extra.write(chunk)
+            except httpx.HTTPError as exc:
+                progresso.estado = "falhou"
+                progresso.erro = f"erro conexao extra {extra.nome}: {type(exc).__name__}"
+                notificar()
+                shutil.rmtree(dir_staging, ignore_errors=True)
+                return progresso
+
+            if not self._verificar_hash(arquivo_extra, extra.sha256):
+                progresso.estado = "falhou"
+                progresso.erro = f"hash SHA-256 nao confere para {extra.nome}"
+                notificar()
+                shutil.rmtree(dir_staging, ignore_errors=True)
+                return progresso
 
         # Promoção atômica: staging → ativo
         try:
