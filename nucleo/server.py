@@ -625,4 +625,30 @@ def primeiro_uso_reabrir():
     return JSONResponse(primeiro_uso_estado.reabrir())
 
 
+@app.post("/primeiro-uso/cerebro/testar")
+async def primeiro_uso_cerebro_testar(request: Request):
+    """Testa conexão com o provedor escolhido na etapa 'cerebro' do assistente.
+    Corpo: {"tipo": str, "base_url": str, "modelo": str, "chave"?: str}.
+    Devolve {"ok": bool, "detalhe": str, "primeiro_token_ms": int|null}.
+    Nunca altera configuração ativa nem troca modelo; teste isolado.
+    """
+    try:
+        corpo = await request.json()
+    except ValueError:
+        return JSONResponse({"erro": "json_invalido"}, status_code=422)
+    if not isinstance(corpo, dict):
+        return JSONResponse({"erro": "corpo_invalido"}, status_code=422)
+    tipo = str(corpo.get("tipo", "")).strip()
+    base_url = str(corpo.get("base_url", "")).strip()
+    modelo = str(corpo.get("modelo", "")).strip()
+    chave = str(corpo.get("chave", "")).strip()
+    if not tipo or not base_url or not modelo:
+        return JSONResponse({"erro": "campos_obrigatorios"}, status_code=422)
+    from vard.primeiro_uso import cerebro as primeiro_uso_cerebro
+    resultado = await primeiro_uso_cerebro.testar_cerebro(
+        tipo=tipo, base_url=base_url, modelo=modelo, chave=chave
+    )
+    return JSONResponse(resultado)
+
+
 app.mount("/viewer", StaticFiles(directory=VIEWER), name="viewer")
