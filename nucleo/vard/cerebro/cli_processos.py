@@ -273,6 +273,8 @@ class SupervisorCli:
         # lista, chamada síncrona ou assíncrona; None = nenhuma registrada.
         self._fonte_ferramentas_locais = ferramentas_locais
         self._processos: Dict[str, asyncio.subprocess.Process] = {}
+        # Um canal (e um leitor do stdout) por processo: dois leitores no mesmo stdout derrubam o turno (D7).
+        self._canais: Dict[str, "_CanalProcesso"] = {}
         self._ultimo_uso: Dict[str, float] = {}
         self._enxuto: Dict[str, bool] = {}
         self._trava = asyncio.Lock()
@@ -285,7 +287,7 @@ class SupervisorCli:
             proc = self._processos.get(chave)
             if proc is not None and proc.returncode is None:
                 self._ultimo_uso[chave] = time.monotonic()
-                return _CanalProcesso(proc)
+                return self._canal_do_processo(chave, proc)
             if provedor.enxuto:
                 return await self._abrir_enxuto(provedor, sessao_id, chave)
             self._enxuto[chave] = False
@@ -315,7 +317,15 @@ class SupervisorCli:
         self._processos[chave] = proc
         self._ultimo_uso[chave] = time.monotonic()
         self._garantir_limpeza()
-        return _CanalProcesso(proc)
+        return self._canal_do_processo(chave, proc)
+
+    def _canal_do_processo(self, chave: str, proc: asyncio.subprocess.Process) -> "_CanalProcesso":
+        """Devolve o canal já ligado a este processo, ou cria um se o processo é novo."""
+        canal = self._canais.get(chave)
+        if canal is None or canal._proc is not proc:
+            canal = _CanalProcesso(proc)
+            self._canais[chave] = canal
+        return canal
 
     async def _abrir_enxuto(self, provedor: ProvedorCli, sessao_id: str, chave: str) -> CanalCli:
         """T17b/C5: confere as ferramentas iniciais; se faltar, reabre sem enxuto e avisa."""
