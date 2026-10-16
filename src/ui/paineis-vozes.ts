@@ -1,22 +1,163 @@
 /**
- * Aba de cadastro manual de provedores de voz (0.6 Painéis).
+ * Vozes cadastradas (0.6 Painéis → 0.9.3 Voz).
  *
- * Renderiza lista + formulário de adicionar/editar; persiste via paineis.json.
- * Credencial por referência ao cofre; botão "Testar" verifica existência sem expor valor.
+ * O conteúdo do antigo "Painéis: Vozes" agora mora na seção Voz: este arquivo virou
+ * o módulo das vozes cadastradas — tipos, validação, persistência em paineis.json e
+ * o modal de adicionar/editar usado pela aba-voz. Credencial por referência ao cofre
+ * (tipo:id); "Testar credencial" verifica existência sem expor valor.
  * Tipos válidos: suad, kokoro, elevenlabs, gemini, fish.
  */
 import { cofreExiste } from "../config/segredos";
 import type { PaineisConfig, Provedor } from "../config/paineis";
 import { lerPaineis, gravarPaineis } from "../config/paineis";
+import { abrirModal, campoModal, type AcaoModal, type ModalAberto } from "./componentes";
 
 const TIPOS_VOZ = ["suad", "kokoro", "elevenlabs", "gemini", "fish"] as const;
 export type TipoVoz = (typeof TIPOS_VOZ)[number];
+
+/** Grupo (motor) da lista da aba Voz onde cada tipo cadastrado aparece. */
+export const MOTOR_DO_TIPO: Record<TipoVoz, string> = {
+  suad: "XTTS",
+  kokoro: "Kokoro",
+  elevenlabs: "ElevenLabs",
+  gemini: "Gemini",
+  fish: "Fish",
+};
+
+export function motorDoTipo(tipo: string): string {
+  return MOTOR_DO_TIPO[tipo as TipoVoz] ?? "Cadastradas";
+}
 
 const esc = (t: string) => t.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
 
 export interface DepsVozes {
   /** Notifica quando a config mudou para que o painel possa reagir. */
   aoMudar?: () => void;
+}
+
+export type VozCadastrada = Provedor & { tipo: TipoVoz };
+
+export interface CamposVozCadastrada {
+  id: string;
+  nome: string;
+  tipo: TipoVoz;
+  url_base: string;
+  modelo: string;
+  credencial_ref: string;
+}
+
+/** Só as vozes (tipos de voz) dentro de paineis.json; provedores de cérebro ficam de fora. */
+export function vozesCadastradas(cfg: PaineisConfig): VozCadastrada[] {
+  return cfg.provedores.filter((p): p is VozCadastrada => TIPOS_VOZ.includes(p.tipo as TipoVoz));
+}
+
+/** Motivo para não salvar; null quando está tudo certo. Mesmos textos do formulário de 0.6. */
+export function validarCamposVoz(c: CamposVozCadastrada, cfg: PaineisConfig, idOriginal: string | null): string | null {
+  if (!c.id || !c.nome || !c.tipo) return "Preencha todos os campos obrigatórios (ID, Nome, Tipo).";
+  if (!TIPOS_VOZ.includes(c.tipo)) return `Tipo de voz desconhecido: ${c.tipo}. Use um dos: ${TIPOS_VOZ.join(", ")}.`;
+  if (idOriginal === null && cfg.provedores.some((p) => p.id === c.id)) return `Já existe uma voz com ID "${c.id}".`;
+  if (c.credencial_ref && !/^[\w.-]+:[\w.-]+$/.test(c.credencial_ref)) return "Referência de credencial deve estar no formato tipo:id.";
+  return null;
+}
+
+export interface OpcoesModalVoz {
+  /** paineis.json como está agora (validação de id duplicado). */
+  cfg: PaineisConfig;
+  /** Informado = editar; omitido = adicionar. */
+  atual?: VozCadastrada;
+  aoSalvar: (campos: CamposVozCadastrada, idOriginal: string | null) => void | Promise<void>;
+  aoRemover?: (id: string) => void | Promise<void>;
+  testarCredencial?: (ref: string) => Promise<boolean>;
+  raiz?: HTMLElement;
+}
+
+/** Modal de adicionar/editar voz cadastrada (cadastro sempre em modal; nada de formulário jogado para baixo). */
+export function abrirModalVoz(op: OpcoesModalVoz): ModalAberto {
+  const atual = op.atual;
+  const corpo = document.createElement("div");
+  corpo.className = "modal-voz";
+  const id = document.createElement("input");
+  id.type = "text";
+  id.value = atual?.id ?? "";
+  id.readOnly = Boolean(atual);
+  const nome = document.createElement("input");
+  nome.type = "text";
+  nome.value = atual?.nome ?? "";
+  const tipo = document.createElement("select");
+  for (const t of TIPOS_VOZ) tipo.append(new Option(t, t, false, t === (atual?.tipo ?? TIPOS_VOZ[0])));
+  const url = document.createElement("input");
+  url.type = "text";
+  url.value = atual?.url_base ?? "";
+  const modelo = document.createElement("input");
+  modelo.type = "text";
+  modelo.value = atual?.modelo ?? "";
+  const cred = document.createElement("input");
+  cred.type = "text";
+  cred.value = atual?.credencial_ref ?? "";
+  corpo.append(
+    campoModal("ID", id, "Como a voz é identificada; não muda depois de salva."),
+    campoModal("Nome", nome),
+    campoModal("Tipo", tipo),
+    campoModal("URL base (opcional)", url, "Endereço do serviço que fala esta voz."),
+    campoModal("Modelo (opcional)", modelo),
+    campoModal("Referência da credencial (opcional)", cred, "Formato tipo:id, apontando para o cofre."),
+  );
+  const ler = (): CamposVozCadastrada => ({
+    id: id.value.trim(),
+    nome: nome.value.trim(),
+    tipo: tipo.value as TipoVoz,
+    url_base: url.value.trim(),
+    modelo: modelo.value.trim(),
+    credencial_ref: cred.value.trim(),
+  });
+
+  let modal!: ModalAberto;
+  const avisar = (texto: string, ruim = false) => modal.avisar(texto, ruim);
+  const acoes: AcaoModal[] = [
+    {
+      rotulo: "Salvar",
+      primaria: true,
+      aoClicar: async () => {
+        const campos = ler();
+        const erro = validarCamposVoz(campos, op.cfg, atual?.id ?? null);
+        if (erro) {
+          avisar(erro, true);
+          return false;
+        }
+        await op.aoSalvar(campos, atual?.id ?? null);
+      },
+    },
+    {
+      rotulo: "Testar credencial",
+      aoClicar: async () => {
+        const ref = cred.value.trim();
+        if (!ref) {
+          avisar("Informe a referência da credencial (tipo:id).", true);
+          return false;
+        }
+        const ok = await (op.testarCredencial ?? cofreExisteRef)(ref);
+        avisar(ok ? "Credencial encontrada no cofre." : "Credencial NÃO encontrada no cofre.", !ok);
+        return false;
+      },
+    },
+  ];
+  if (atual && op.aoRemover) {
+    acoes.push({
+      rotulo: "Remover",
+      aoClicar: async () => {
+        await op.aoRemover!(atual.id);
+      },
+    });
+  }
+  acoes.push({ rotulo: "Cancelar" });
+  modal = abrirModal({ titulo: atual ? "Editar voz" : "Adicionar voz", corpo, acoes }, op.raiz);
+  return modal;
+}
+
+/** Credencial padrão do modal: pergunta ao cofre pela referência tipo:id, sem expor o valor. */
+async function cofreExisteRef(ref: string): Promise<boolean> {
+  const [tipo, id] = ref.split(":");
+  return cofreExiste(tipo, id);
 }
 
 export class AbaPaineisVozes {
@@ -35,7 +176,7 @@ export class AbaPaineisVozes {
 
   private desenhar() {
     // Filtra apenas provedores que são de voz (tipo em TIPOS_VOZ)
-    const vozes = this.cfg.provedores.filter((p): p is Provedor & { tipo: TipoVoz } =>
+    const vozes = this.cfg.provedores.filter((p): p is VozCadastrada =>
       TIPOS_VOZ.includes(p.tipo as TipoVoz),
     );
 
@@ -154,29 +295,15 @@ export class AbaPaineisVozes {
     const tipo = (this.raiz.querySelector("#voz-tipo") as HTMLSelectElement).value as TipoVoz;
     const url = (this.raiz.querySelector("#voz-url") as HTMLInputElement).value.trim() || "";
     const modelo = (this.raiz.querySelector("#voz-modelo") as HTMLInputElement).value.trim() || "";
-    const cred = (this.raiz.querySelector("#voz-cred") as HTMLInputElement).value.trim() || undefined;
+    const cred = (this.raiz.querySelector("#voz-cred") as HTMLInputElement).value.trim() || "";
 
-    if (!id || !nome || !tipo) {
-      this.msg("Preencha todos os campos obrigatórios (ID, Nome, Tipo).", true);
+    const erro = validarCamposVoz({ id, nome, tipo, url_base: url, modelo, credencial_ref: cred }, this.cfg, this.editando === -1 ? null : id);
+    if (erro) {
+      this.msg(erro, true);
       return;
     }
 
-    if (!TIPOS_VOZ.includes(tipo)) {
-      this.msg(`Tipo de voz desconhecido: ${tipo}. Use um dos: ${TIPOS_VOZ.join(", ")}.`, true);
-      return;
-    }
-
-    if (this.editando === -1 && this.cfg.provedores.some((p) => p.id === id)) {
-      this.msg(`Já existe uma voz com ID "${id}".`, true);
-      return;
-    }
-
-    if (cred && !/^[\w.-]+:[\w.-]+$/.test(cred)) {
-      this.msg("Referência de credencial deve estar no formato tipo:id.", true);
-      return;
-    }
-
-    const novo: Provedor = { id, nome, tipo, url_base: url, modelo, credencial_ref: cred };
+    const novo: Provedor = { id, nome, tipo, url_base: url, modelo, credencial_ref: cred || undefined };
 
     if (this.editando === -1) {
       this.cfg.provedores.push(novo);
