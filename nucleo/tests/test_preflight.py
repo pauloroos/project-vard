@@ -551,7 +551,25 @@ def test_agente_remoto_com_config_usa_o_remoto(monkeypatch, tmp_path):
 
 # === T10c: testes do modo --json ===
 
-def test_rodar_como_json_tem_todas_as_checagens_do_texto():
+
+@pytest.fixture
+def checagens_duble(monkeypatch):
+    """As checagens reais falam com LM Studio, ponte, CLIs, SSH e scripts do PC de quem roda a suíte.
+    Os testes do modo --json só precisam dos nomes: cada checagem vira um dublê que não chama nada."""
+    reais = preflight.checagens()
+    chamadas = []
+
+    def _duble(nome):
+        def _fn():
+            chamadas.append(nome)
+            return (False, "dublê: sem chamada real")
+        return _fn
+
+    monkeypatch.setattr(preflight, "checagens", lambda: [(n, _duble(n)) for n, _fn in reais])
+    return chamadas
+
+
+def test_rodar_como_json_tem_todas_as_checagens_do_texto(checagens_duble):
     """O JSON deve ter exatamente as mesmas checagens (por nome) que o modo texto."""
     resultado = preflight.rodar_como_json()
     nomes_json = {c["nome"] for c in resultado["checagens"]}
@@ -559,7 +577,7 @@ def test_rodar_como_json_tem_todas_as_checagens_do_texto():
     assert nomes_json == nomes_texto, f"Diferença: {nomes_texto - nomes_json} | {nomes_json - nomes_texto}"
 
 
-def test_rodar_como_json_estrutura_correta():
+def test_rodar_como_json_estrutura_correta(checagens_duble):
     """Cada checagem JSON tem grupo, nome, estado válido e frase não vazia."""
     resultado = preflight.rodar_como_json()
     estados_validos = {"ok", "aviso", "falha"}
@@ -572,12 +590,14 @@ def test_rodar_como_json_estrutura_correta():
     assert "duracao_ms" in resultado and isinstance(resultado["duracao_ms"], int)
 
 
-def test_rodar_como_json_integracao_desligada_vira_aviso_ou_falha():
+def test_rodar_como_json_integracao_desligada_vira_aviso_ou_falha(checagens_duble):
     """Integração desligada (ex: OpenJarvis fora) vira aviso ou falha, nunca ok falso."""
     resultado = preflight.rodar_como_json()
     # Pelo menos uma checagem de integração deve existir
     integracoes = [c for c in resultado["checagens"] if c["grupo"] == "Integração"]
     assert len(integracoes) > 0, "Deve haver checagens de Integração"
+    assert all(c["estado"] != "ok" for c in integracoes)
+    assert checagens_duble, "o dublê deve ter sido usado no lugar das checagens reais"
 
 
 def test_sanitizar_remove_segredo_sintetico():
@@ -597,7 +617,7 @@ def test_sanitizar_remove_caminho_pessoal():
     assert usuario not in limpo.lower() or "***USER***" in limpo
 
 
-def test_main_json_flag_produz_json_valido(capsys, monkeypatch):
+def test_main_json_flag_produz_json_valido(capsys, monkeypatch, checagens_duble):
     """main() com --json produz JSON válido no stdout."""
     import sys
     monkeypatch.setattr(sys, "argv", ["preflight.py", "--json"])
