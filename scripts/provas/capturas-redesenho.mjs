@@ -455,7 +455,7 @@ async function main() {
               { id: "openai1", nome: "OpenAI API Produção", tipo: "openai_nativo", url_base: "https://api.openai.com/v1", modelo: "gpt-4o-mini" },
               { id: "anthropic1", nome: "Anthropic Claude", tipo: "anthropic", url_base: "https://api.anthropic.com", modelo: "claude-sonnet-5-5" },
               { id: "google1", nome: "Google Gemini", tipo: "google", url_base: "https://generativelanguage.googleapis.com", modelo: "gemini-2.5-flash" },
-              { id: "compat1", nome: "Servidor OpenAI Compatível Interno com Nome Longo", tipo: "openai_compat", url_base: "http://192.168.1.100:8080/v1", modelo: "modelo-interno-v2" },
+              { id: "compat1", nome: "Servidor OpenAI Compatível Interno com Nome Longo", tipo: "openai_compat", url_base: "http://127.0.0.1:8080/v1", modelo: "modelo-interno-v2" },
             ],
             ativo: "lm1",
             reserva: "ollama1",
