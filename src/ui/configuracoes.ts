@@ -170,6 +170,12 @@ export class Configuracoes {
   abrirAba(aba: Aba) {
     for (const s of this.raiz.querySelectorAll<HTMLElement>("section[data-aba]")) s.hidden = s.dataset.aba !== aba;
     for (const b of this.raiz.querySelectorAll<HTMLButtonElement>("nav button")) b.classList.toggle("ativa", b.dataset.aba === aba);
+    // Atualiza título da seção ativa no topo da área de conteúdo
+    const tituloEl = this.raiz.querySelector<HTMLElement>("#cfg-titulo-secao");
+    if (tituloEl) {
+      const mapaRotulo = new Map(ABAS);
+      tituloEl.textContent = mapaRotulo.get(aba) ?? aba;
+    }
     if (aba === "paineis-provedores") void this.paineisProvedores?.montar();
     if (aba === "paineis-vozes") void this.paineisVozes?.montar();
     if (aba === "paineis-mcps") void this.paineisMcps?.montar();
@@ -223,76 +229,92 @@ export class Configuracoes {
 
   private desenhar() {
     const c = this.cfg;
+    // Grupos do menu lateral (ordem visual)
+    const GRUPOS: [string, Aba[]][] = [
+      ["Conversa", ["geral", "perfil"]],
+      ["Voz e áudio", ["voz", "atalhos"]],
+      ["Cérebro e agentes", ["saber", "modelos", "paineis-provedores", "paineis-vozes", "paineis-mcps", "paineis-agentes"]],
+      ["Sistema", ["sistema", "reuniao", "avisos", "atualizacao", "diagnostico"]],
+    ];
+    const mapaRotulo = new Map(ABAS);
+    const navHtml = GRUPOS.map(([titulo, ids]) =>
+      `<div class="grupo-titulo">${titulo}</div>` +
+      ids.map((id) => `<button type="button" data-aba="${id}">${mapaRotulo.get(id) ?? id}</button>`).join("")
+    ).join("");
+
     this.raiz.innerHTML = `
-      <nav>${ABAS.map(([id, nome]) => `<button type="button" data-aba="${id}">${nome}</button>`).join("")}</nav>
-      <section data-aba="geral">
-        <fieldset><legend>Endereços</legend>
-          ${this.campo("openjarvis_url", "OpenJarvis", c.openjarvis_url)}
-          ${this.campo("gui_url", "Interface de texto", c.gui_url)}
-          <button id="cfg-testar" type="button">Testar OpenJarvis</button>
-        </fieldset>
-        <fieldset><legend>Chamada</legend>
-          ${this.campo("nome", "Nome para chamar", c.nome)}
-          ${this.campo("variantes", "Variantes (separadas por vírgula)", c.variantes.join(", "))}
-          ${this.campo("usuario", "Como te chamar (opcional)", c.usuario)}
-          ${campoIdioma(c.idioma)}
-        </fieldset>
-        <fieldset id="cfg-janela"><legend>Janela</legend>
-          <label>Tamanho do widget<select id="cfg-tamanho">${OPCOES_TAMANHO.map(([v, r]) => `<option value="${v}" ${v === c.tamanho ? "selected" : ""}>${r}</option>`).join("")}</select></label>
-          ${this.campo("tamanho_px", "Lado em px (personalizado, 160 a 800)", c.tamanho_px, "number", 'step="10" min="160" max="800"')}
-          ${this.marca("compacto", "Compacto (só o holograma)", c.compacto)}
-          ${this.marca("sempre_no_topo", "Sempre no topo", c.sempre_no_topo)}
-          ${this.marca("click_through", "Clique atravessa a janela", c.click_through)}
-          ${this.marca("invisivel", "Modo invisível (aparece só durante a conversa)", c.invisivel)}
-          ${this.marca("logon", "Iniciar com o Windows", false)}
-          <label>Monitor da tela cheia<select id="cfg-sala_monitor"></select></label>
-        </fieldset>
-        <fieldset><legend>Ouvir e falar</legend>
-          ${this.marca("nao_ouvir", "Não ouvir (microfone desligado)", c.nao_ouvir)}
-          ${this.marca("nao_falar", "Não falar (resposta só em texto)", c.nao_falar)}
-          ${this.marca("falar_avisos", "Falar os avisos de tarefas (desligado por padrão)", c.falar_avisos)}
-        </fieldset>
-        <fieldset><legend>Assistente</legend>
-          <button id="cfg-primeiro-uso" type="button">Configurar primeiro uso</button>
-        </fieldset>
-      </section>
-      <section data-aba="perfil"><div id="cfg-perfil"></div></section>
-      <section data-aba="paineis-provedores"><div id="cfg-paineis-provedores"></div></section>
-      <section data-aba="paineis-vozes"><div id="cfg-paineis-vozes"></div></section>
-      <section data-aba="paineis-mcps"><div id="cfg-paineis-mcps"></div></section>
-      <section data-aba="paineis-agentes"><div id="cfg-paineis-agentes"></div></section>
-      <section data-aba="voz">
-        <fieldset><legend>Fala</legend>
-          ${this.campo("velocidade", "Velocidade da fala", c.velocidade, "number", 'step="0.05" min="0.5" max="2"')}
-          ${this.campo("instrucao_formato", "Instrução de formato", c.instrucao_formato)}
-        </fieldset>
-        <div id="cfg-voz"></div>
-        <div id="cfg-instalador-vozes"></div>
-        <fieldset><legend>Ouvido</legend>
-          ${this.campo("finish_ms", "Silêncio para encerrar a fala (ms)", c.finish_ms, "number", 'step="50" min="200" max="3000"')}
-          ${this.campo("limiar_vad", "Limiar do microfone", c.limiar_vad, "number", 'step="0.005" min="0.001" max="0.5"')}
-          ${this.campo("conversa_s", "Modo conversa: segundos ouvindo sem o nome depois de uma resposta (0 desliga)", c.conversa_ms / 1000, "number", 'step="1" min="0" max="300"')}
-        </fieldset>
-      </section>
-      <section data-aba="atalhos">
-        <p class="nota">Clique num atalho e pressione a nova combinação (Ctrl, Alt ou Win mais uma tecla). Esc cancela. Valem depois de reiniciar o Vard.</p>
-        <div id="cfg-atalhos"></div>
-      </section>
-      <section data-aba="sistema">
-        ${this.campo("ponte_url", "Ponte do Vard (opcional; vazio desliga)", c.ponte_url)}
-        <div id="cfg-sistema"></div>
-        <div id="cfg-importacao"></div>
-      </section>
-      <section data-aba="reuniao"><div id="cfg-reuniao"></div></section>
-      <section data-aba="saber"><div id="cfg-saber"></div></section>
-      <section data-aba="avisos"><div id="cfg-avisos"></div></section>
-      <section data-aba="atualizacao">
-        <div id="cfg-atualizacao"></div>
-        ${this.marca("atualizacao_ao_abrir", "Verificar ao abrir a aba Atualização", c.atualizacao_ao_abrir)}
-        <p class="nota">A consulta vai ao GitHub (api.github.com) só quando você clica em Verificar ou marca esta caixa.</p>
-      </section>
-      <section data-aba="modelos" id="cfg-modelos"></section>
-      <section data-aba="diagnostico"><div id="cfg-diagnostico"></div></section>
+      <nav>${navHtml}</nav>
+      <div class="conteudo">
+        <div id="cfg-titulo-secao" class="conteudo-titulo"></div>
+        <section data-aba="geral">
+          <fieldset><legend>Endereços</legend>
+            ${this.campo("openjarvis_url", "OpenJarvis", c.openjarvis_url)}
+            ${this.campo("gui_url", "Interface de texto", c.gui_url)}
+            <button id="cfg-testar" type="button">Testar OpenJarvis</button>
+          </fieldset>
+          <fieldset><legend>Chamada</legend>
+            ${this.campo("nome", "Nome para chamar", c.nome)}
+            ${this.campo("variantes", "Variantes (separadas por vírgula)", c.variantes.join(", "))}
+            ${this.campo("usuario", "Como te chamar (opcional)", c.usuario)}
+            ${campoIdioma(c.idioma)}
+          </fieldset>
+          <fieldset id="cfg-janela"><legend>Janela</legend>
+            <label>Tamanho do widget<select id="cfg-tamanho">${OPCOES_TAMANHO.map(([v, r]) => `<option value="${v}" ${v === c.tamanho ? "selected" : ""}>${r}</option>`).join("")}</select></label>
+            ${this.campo("tamanho_px", "Lado em px (personalizado, 160 a 800)", c.tamanho_px, "number", 'step="10" min="160" max="800"')}
+            ${this.marca("compacto", "Compacto (só o holograma)", c.compacto)}
+            ${this.marca("sempre_no_topo", "Sempre no topo", c.sempre_no_topo)}
+            ${this.marca("click_through", "Clique atravessa a janela", c.click_through)}
+            ${this.marca("invisivel", "Modo invisível (aparece só durante a conversa)", c.invisivel)}
+            ${this.marca("logon", "Iniciar com o Windows", false)}
+            <label>Monitor da tela cheia<select id="cfg-sala_monitor"></select></label>
+          </fieldset>
+          <fieldset><legend>Ouvir e falar</legend>
+            ${this.marca("nao_ouvir", "Não ouvir (microfone desligado)", c.nao_ouvir)}
+            ${this.marca("nao_falar", "Não falar (resposta só em texto)", c.nao_falar)}
+            ${this.marca("falar_avisos", "Falar os avisos de tarefas (desligado por padrão)", c.falar_avisos)}
+          </fieldset>
+          <fieldset><legend>Assistente</legend>
+            <button id="cfg-primeiro-uso" type="button">Configurar primeiro uso</button>
+          </fieldset>
+        </section>
+        <section data-aba="perfil"><div id="cfg-perfil"></div></section>
+        <section data-aba="paineis-provedores"><div id="cfg-paineis-provedores"></div></section>
+        <section data-aba="paineis-vozes"><div id="cfg-paineis-vozes"></div></section>
+        <section data-aba="paineis-mcps"><div id="cfg-paineis-mcps"></div></section>
+        <section data-aba="paineis-agentes"><div id="cfg-paineis-agentes"></div></section>
+        <section data-aba="voz">
+          <fieldset><legend>Fala</legend>
+            ${this.campo("velocidade", "Velocidade da fala", c.velocidade, "number", 'step="0.05" min="0.5" max="2"')}
+            ${this.campo("instrucao_formato", "Instrução de formato", c.instrucao_formato)}
+          </fieldset>
+          <div id="cfg-voz"></div>
+          <div id="cfg-instalador-vozes"></div>
+          <fieldset><legend>Ouvido</legend>
+            ${this.campo("finish_ms", "Silêncio para encerrar a fala (ms)", c.finish_ms, "number", 'step="50" min="200" max="3000"')}
+            ${this.campo("limiar_vad", "Limiar do microfone", c.limiar_vad, "number", 'step="0.005" min="0.001" max="0.5"')}
+            ${this.campo("conversa_s", "Modo conversa: segundos ouvindo sem o nome depois de uma resposta (0 desliga)", c.conversa_ms / 1000, "number", 'step="1" min="0" max="300"')}
+          </fieldset>
+        </section>
+        <section data-aba="atalhos">
+          <p class="nota">Clique num atalho e pressione a nova combinação (Ctrl, Alt ou Win mais uma tecla). Esc cancela. Valem depois de reiniciar o Vard.</p>
+          <div id="cfg-atalhos"></div>
+        </section>
+        <section data-aba="sistema">
+          ${this.campo("ponte_url", "Ponte do Vard (opcional; vazio desliga)", c.ponte_url)}
+          <div id="cfg-sistema"></div>
+          <div id="cfg-importacao"></div>
+        </section>
+        <section data-aba="reuniao"><div id="cfg-reuniao"></div></section>
+        <section data-aba="saber"><div id="cfg-saber"></div></section>
+        <section data-aba="avisos"><div id="cfg-avisos"></div></section>
+        <section data-aba="atualizacao">
+          <div id="cfg-atualizacao"></div>
+          ${this.marca("atualizacao_ao_abrir", "Verificar ao abrir a aba Atualização", c.atualizacao_ao_abrir)}
+          <p class="nota">A consulta vai ao GitHub (api.github.com) só quando você clica em Verificar ou marca esta caixa.</p>
+        </section>
+        <section data-aba="modelos" id="cfg-modelos"></section>
+        <section data-aba="diagnostico"><div id="cfg-diagnostico"></div></section>
+      </div>
       <footer>
         <div id="cfg-msg" role="status"></div>
         <div class="acoes"><button id="cfg-salvar" type="button">Salvar</button><button id="cfg-fechar" type="button">Fechar</button></div>

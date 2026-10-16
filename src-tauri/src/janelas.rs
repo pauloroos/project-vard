@@ -66,10 +66,12 @@ pub fn abrir_configuracoes(app: &AppHandle) -> tauri::Result<()> {
     }
     WebviewWindowBuilder::new(app, CONFIG, WebviewUrl::App("configuracoes.html".into()))
         .title("Configurações - Vard")
-        .inner_size(640.0, 720.0)
-        .min_inner_size(520.0, 480.0)
+        .inner_size(960.0, 640.0)
+        .min_inner_size(960.0, 640.0)
+        .max_inner_size(960.0, 640.0)
         .decorations(true)
-        .resizable(true)
+        .resizable(false)
+        .maximizable(false)
         .always_on_top(false)
         .center()
         .build()?;

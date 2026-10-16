@@ -214,7 +214,7 @@ describe("ligação da etapa no assistente", () => {
     await vi.advanceTimersByTimeAsync(1);
     raiz.querySelector<HTMLButtonElement>('#primeiro-uso-proximo')!.click(); await vi.advanceTimersByTimeAsync(1);
     expect(parar).toHaveBeenCalledOnce(); expect(fechar).toHaveBeenCalledOnce(); expect(restaurar).toHaveBeenCalledOnce();
-    expect(raiz.querySelector('#primeiro-uso-resumo')!.textContent).toContain("microfone_nao_testado");
+    expect(raiz.querySelector('#primeiro-uso-resumo')!.textContent).toContain("microfone não testado");
     expect(buscar.mock.calls.some((c) => String(c[1]?.body).includes("voz_nao_testada"))).toBe(true);
     limpar?.();
   });

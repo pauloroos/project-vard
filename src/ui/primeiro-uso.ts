@@ -10,6 +10,14 @@ import { montarEtapaCerebro, type DepsEtapaCerebro } from "./primeiro-uso-cerebr
 const ETAPAS = ["importar", "detectar", "nome", "cerebro", "voz", "audio", "resumo"] as const;
 type Etapa = (typeof ETAPAS)[number];
 
+/** Texto legível de cada pendência (o código continua sendo o que vai para a ponte). */
+const ROTULOS_PENDENCIA: Record<string, string> = {
+  cerebro_nao_testado: "cérebro não testado",
+  microfone_nao_testado: "microfone não testado",
+  voz_nao_testada: "voz não testada",
+};
+const rotularPendencias = (lista: readonly string[]) => lista.map((p) => ROTULOS_PENDENCIA[p] ?? p.replace(/_/g, " ")).join(", ");
+
 const TITULOS_ETAPA: Record<Etapa, string> = {
   importar: "Importar ou começar",
   detectar: "Detectar PC",
@@ -49,6 +57,10 @@ function renderizarEtapa(
   let pararTeste = () => {};
   let salvarAudio: (() => Promise<void>) | undefined;
   container.innerHTML = "";
+  const passo = document.createElement("p");
+  passo.className = "primeiro-uso-passo";
+  passo.textContent = `Etapa ${ETAPAS.indexOf(etapa) + 1} de ${ETAPAS.length}`;
+  container.appendChild(passo);
   const titulo = document.createElement("h2");
   titulo.textContent = TITULOS_ETAPA[etapa];
   container.appendChild(titulo);
@@ -73,8 +85,8 @@ function renderizarEtapa(
     const resumoDiv = document.createElement("div");
     resumoDiv.id = "primeiro-uso-resumo";
     resumoDiv.textContent = estado.concluido
-      ? estado.pendencias.length ? `Configuração concluída com pendências: ${estado.pendencias.join(", ")}` : "Tudo pronto para conversar."
-      : estado.pendencias.length ? `Revise suas escolhas. Pendências: ${estado.pendencias.join(", ")}` : "Revise suas escolhas e conclua.";
+      ? estado.pendencias.length ? `Configuração concluída com pendências: ${rotularPendencias(estado.pendencias)}` : "Tudo pronto para conversar."
+      : estado.pendencias.length ? `Revise suas escolhas. Pendências: ${rotularPendencias(estado.pendencias)}` : "Revise suas escolhas e conclua.";
     corpo.appendChild(resumoDiv);
   } else if ((etapa === "audio" || etapa === "voz") && deps.audio) {
     const containerAudio = document.createElement("div");
