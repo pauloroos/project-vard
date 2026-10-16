@@ -97,7 +97,8 @@ def test_status_reporta_servicos(cliente, monkeypatch, tmp_path):
     esperado = {"openjarvis": True, "lmstudio": True, "modelo": "gemma-4-12b-it-qat@q4_k_xl", "modo": "desconhecido",
                 "modelos_lmstudio": ["gemma-4-12b-it-qat@q4_k_xl"],
                 "tarefas_abertas": 0, "reuniao": "ausente",
-                "cerebro": {"ativo": False, "provedor": "", "sessoes": 0}}
+                "cerebro": {"ativo": False, "provedor": "", "sessoes": 0},
+                "cli_enxuto": {"avisos": []}}
     assert corpo == esperado
 
 
