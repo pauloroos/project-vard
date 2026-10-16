@@ -16,8 +16,9 @@
       "licenca_url": "https://github.com/project-vard/vard-reuniao/blob/main/LICENSE",
       "licenca_nome": "MIT",
       "dependencias": [],
-      "indisponivel": true,
-      "motivo_indisponivel": "instalacao via venv local; download direto nao suportado nesta versao"
+      "indisponivel": false,
+      "motivo_indisponivel": null,
+      "instalacao_local": true
     }
   ]
 }

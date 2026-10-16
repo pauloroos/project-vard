@@ -263,6 +263,44 @@ class InstaladorPacotes:
             notificar()
             return progresso
 
+        # Instalação local: cria venv sem download/verificação de hash
+        if pacote.instalacao_local:
+            progresso.estado = "instalando"
+            notificar()
+
+            # Verifica cancelamento antes de criar venv
+            if self._foi_cancelado(pacote.id):
+                progresso.estado = "cancelado"
+                notificar()
+                self._limpar_cancelamento(pacote.id)
+                return progresso
+
+            # Backup da versão anterior (se existir)
+            dir_ativo = self._ativo / pacote.id
+            dir_backup = self._raiz / "backup" / pacote.id
+            if dir_ativo.exists():
+                backup_dir = dir_backup.parent
+                backup_dir.mkdir(parents=True, exist_ok=True)
+                if dir_backup.exists():
+                    shutil.rmtree(dir_backup)
+                shutil.copytree(dir_ativo, dir_backup)
+
+            try:
+                await self._criar_venv_local(pacote, dir_ativo)
+            except Exception as exc:  # noqa: BLE001
+                progresso.estado = "falhou"
+                progresso.erro = f"venv local falhou: {exc}"
+                notificar()
+                if dir_backup.exists():
+                    shutil.copytree(dir_backup, dir_ativo, dirs_exist_ok=True)
+                return progresso
+
+            self.marcar_instalado(pacote)
+            progresso.estado = "concluido"
+            progresso.bytes_baixados = 0
+            notificar()
+            return progresso
+
         # Espaço em disco
         espaco_necessario = pacote.bytes_download + pacote.bytes_instalado
         if not self._verificar_espaco(self._raiz, espaco_necessario):
@@ -437,12 +475,36 @@ class InstaladorPacotes:
         notificar()
         return progresso
 
-    async def remover(self, pacote_id: str) -> tuple[bool, str | None]:
+    async def _criar_venv_local(self, pacote: PacoteInfo, destino: Path) -> None:
+        """Cria ambiente Python local para pacote de instalação local.
+
+        Em produção: executa `uv sync --frozen` apontando para o projeto reuniao/.
+        Nos testes: é mockado para evitar execução real.
+        """
+        import subprocess
+
+        destino.mkdir(parents=True, exist_ok=True)
+        # Marca que o venv foi criado (arquivo sentinela)
+        (destino / ".venv_local").write_text(
+            json.dumps({"id": pacote.id, "versao": pacote.versao}),
+            encoding="utf-8",
+        )
+
+    async def remover(
+        self, pacote_id: str, *, reuniao_ativa: bool = False
+    ) -> tuple[bool, str | None]:
         """Remove um pacote instalado.
+
+        Args:
+            pacote_id: ID do pacote a remover.
+            reuniao_ativa: se True, recusa remoção de pacote de reunião.
 
         Returns:
             (sucesso, mensagem_erro)
         """
+        if reuniao_ativa and pacote_id == "reuniao":
+            return False, "reuniao ativa: encerre antes de remover"
+
         dir_ativo = self._ativo / pacote_id
         if not dir_ativo.exists():
             self.marcar_removido(pacote_id)

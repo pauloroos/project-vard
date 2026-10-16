@@ -36,15 +36,14 @@ class TestManifestoReuniao:
         assert pkg.tipo == "reuniao"
         assert pkg.nome == "Reunião (transcrição e diarização)"
 
-    def test_pacote_reuniao_indisponivel(self):
-        """Pacote de reunião atual é marcado indisponível (venv local)."""
+    def test_pacote_reuniao_instalacao_local(self):
+        """Pacote de reunião atual usa instalação local (venv, sem download)."""
         caminho = RAIZ_CONFIG / "reuniao.json"
         pkgs = carregar_manifesto(caminho)
         pkg = pkgs["reuniao"]
-        assert pkg.indisponivel is True
-        assert not pkg.instalavel()
-        assert pkg.motivo_indisponivel is not None
-        assert len(pkg.motivo_indisponivel) > 0
+        assert pkg.instalacao_local is True
+        assert pkg.indisponivel is False
+        assert pkg.instalavel() is True
 
     def test_validar_pacote_reuniao_ok(self):
         caminho = RAIZ_CONFIG / "reuniao.json"

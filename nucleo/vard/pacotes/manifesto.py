@@ -54,11 +54,14 @@ class PacoteInfo:
     indisponivel: bool = False
     motivo_indisponivel: str | None = None
     arquivos_extras: list[ArquivoExtra] = field(default_factory=list)
+    instalacao_local: bool = False
 
     def instalavel(self) -> bool:
-        """True se o pacote pode ser instalado (hash presente e não indisponível)."""
+        """True se o pacote pode ser instalado (hash presente ou instalacao_local)."""
         if self.indisponivel:
             return False
+        if self.instalacao_local:
+            return True
         if not self.sha256 or not self.url:
             return False
         if self.bytes_download <= 0:
@@ -84,12 +87,14 @@ def _validar_pacote_raw(dados: dict[str, Any], origem: str) -> PacoteInfo:
     sha = str(dados.get("sha256", "")).strip()
     url = str(dados.get("url", "")).strip()
     indisponivel = bool(dados.get("indisponivel", False))
+    instalacao_local = bool(dados.get("instalacao_local", False))
     motivo = dados.get("motivo_indisponivel")
 
-    # Hash obrigatório para pacotes instaláveis; indisponíveis podem ter hash vazio
-    if not indisponivel and not sha:
+    # Hash/url obrigatórios apenas para pacotes com download remoto;
+    # instalação local e indisponíveis podem ter esses campos vazios.
+    if not indisponivel and not instalacao_local and not sha:
         raise ValueError(f"{origem} ({pid}): sha256 obrigatório para pacote instalável")
-    if not indisponivel and not url:
+    if not indisponivel and not instalacao_local and not url:
         raise ValueError(f"{origem} ({pid}): url obrigatória para pacote instalável")
 
     try:
@@ -98,7 +103,7 @@ def _validar_pacote_raw(dados: dict[str, Any], origem: str) -> PacoteInfo:
     except (TypeError, ValueError) as exc:
         raise ValueError(f"{origem} ({pid}): bytes inválidos") from exc
 
-    if not indisponivel and bd <= 0:
+    if not indisponivel and not instalacao_local and bd <= 0:
         raise ValueError(f"{origem} ({pid}): bytes_download deve ser > 0")
 
     deps = dados.get("dependencias", [])
@@ -145,6 +150,7 @@ def _validar_pacote_raw(dados: dict[str, Any], origem: str) -> PacoteInfo:
         indisponivel=indisponivel,
         motivo_indisponivel=motivo,
         arquivos_extras=extras,
+        instalacao_local=instalacao_local,
     )
 
 
@@ -226,7 +232,7 @@ def validar_pacote(pacote: PacoteInfo) -> list[str]:
         problemas.append("nome vazio")
     if pacote.tipo not in ("motor", "voz", "reuniao"):
         problemas.append(f"tipo desconhecido: {pacote.tipo}")
-    if not pacote.indisponivel:
+    if not pacote.indisponivel and not pacote.instalacao_local:
         if not pacote.sha256:
             problemas.append("sha256 ausente em pacote instalável")
         if not pacote.url:

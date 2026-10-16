@@ -19,6 +19,23 @@ function porId(no: No, id: string): No | null {
   return null;
 }
 
+/** Encontra todos os nós com uma classe específica (busca recursiva). */
+function porClasse(no: No, cls: string): No[] {
+  const achados: No[] = [];
+  if (no.className.split(/\s+/).includes(cls)) achados.push(no);
+  for (const f of no.filhos) if (f instanceof No) achados.push(...porClasse(f, cls));
+  return achados;
+}
+
+/** Encontra o container de botões da ponte (div.acoes dentro da raiz, não dentro do pacote). */
+function caixaDeBotoes(raiz: No): No {
+  // A caixa de botões da ponte é a div.acoes que NÃO está dentro de #reu-pacote
+  for (const f of raiz.filhos) {
+    if (f instanceof No && f.className === "acoes") return f;
+  }
+  throw new Error("caixa de botões não encontrada");
+}
+
 function montar(st: StatusReuniao | null, lista: ReuniaoDaLista[] | null = null, r: ResultadoReuniao | null = { ok: true, frase: "ok" }) {
   const raiz = new No();
   const deps = {
@@ -84,7 +101,7 @@ describe("AbaReuniao", () => {
     await t.aba.montar();
     await t.aba.carregar();
     expect((porId(t.raiz, "reu-estado") as No).textContent).toBe("Reunião em andamento (2026-10-13_1500).");
-    const botoes = (t.raiz.filhos[2] as No).filhos as No[];
+    const botoes = caixaDeBotoes(t.raiz).filhos as No[];
     expect(botoes.map((b) => [b.textContent, b.disabled])).toEqual([
       ["Iniciar", true], ["Encerrar", false], ["Gerar ata", false], ["Gerar relatório", false],
     ]);
@@ -96,7 +113,7 @@ describe("AbaReuniao", () => {
     await t.aba.montar();
     await t.aba.carregar();
     expect((porId(t.raiz, "reu-estado") as No).textContent).toBe("Ponte fora do ar ou desligada.");
-    const botoes = (t.raiz.filhos[2] as No).filhos as No[];
+    const botoes = caixaDeBotoes(t.raiz).filhos as No[];
     expect(botoes.every((b) => b.disabled)).toBe(true);
   });
 
@@ -104,7 +121,8 @@ describe("AbaReuniao", () => {
     const t = montar({ ativa: false });
     await t.aba.montar();
     await t.aba.carregar();
-    ((t.raiz.filhos[2] as No).filhos[0] as No).ouvintes.click[0]();
+    const botoes = caixaDeBotoes(t.raiz).filhos as No[];
+    botoes[0].ouvintes.click[0]();
     await new Promise((r) => setTimeout(r, 0));
     expect(t.deps.iniciarReuniao).toHaveBeenCalled();
     expect((porId(t.raiz, "reu-msg") as No).textContent).toBe("ok");
@@ -115,7 +133,7 @@ describe("AbaReuniao", () => {
     const t = montar({ ativa: false });
     await t.aba.montar();
     await t.aba.carregar();
-    const botoes = (t.raiz.filhos[2] as No).filhos as No[];
+    const botoes = caixaDeBotoes(t.raiz).filhos as No[];
     botoes[2].ouvintes.click[0]();
     botoes[3].ouvintes.click[0]();
     await new Promise((r) => setTimeout(r, 0));
@@ -126,7 +144,8 @@ describe("AbaReuniao", () => {
     const t = montar({ ativa: false }, null, null);
     await t.aba.montar();
     await t.aba.carregar();
-    ((t.raiz.filhos[2] as No).filhos[0] as No).ouvintes.click[0]();
+    const botoes = caixaDeBotoes(t.raiz).filhos as No[];
+    botoes[0].ouvintes.click[0]();
     await new Promise((r) => setTimeout(r, 0));
     expect((porId(t.raiz, "reu-msg") as No).textContent).toBe("A ponte não respondeu.");
   });
