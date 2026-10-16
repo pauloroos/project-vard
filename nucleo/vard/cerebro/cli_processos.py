@@ -111,6 +111,11 @@ class _CanalProcesso(CanalCli):
         pid = self._proc.pid
         if pid and self._proc.returncode is None:
             await asyncio.get_running_loop().run_in_executor(None, _encerrar_arvore, pid)
+            # Espera a saída para o supervisor ver returncode e abrir processo novo na próxima pergunta.
+            try:
+                await asyncio.wait_for(self._proc.wait(), timeout=5)
+            except asyncio.TimeoutError:
+                log.warning("CLI pid=%s não saiu 5 s depois do encerramento", pid)
 
 
 def _dialeto_do_tipo(tipo: str) -> str:
@@ -251,6 +256,7 @@ def _encerrar_arvore(pid: int) -> None:
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
                 check=False,
+                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),  # sem piscar console no PC
             )
         else:
             try:
