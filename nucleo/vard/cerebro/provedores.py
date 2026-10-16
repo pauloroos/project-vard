@@ -163,6 +163,7 @@ class AdaptadorOpenAICompat(AdaptadorProvedor):
 
         chamadas_parciais: Dict[int, Dict[str, Any]] = {}
         chamadas_emitidas: set[int] = set()
+        concluido = False
 
         async for linha in _stream_http(
             "POST", url,
@@ -173,6 +174,7 @@ class AdaptadorOpenAICompat(AdaptadorProvedor):
                 continue
             payload = linha[5:].strip()
             if payload == "[DONE]":
+                concluido = True
                 break
             try:
                 chunk = json.loads(payload)
@@ -225,6 +227,9 @@ class AdaptadorOpenAICompat(AdaptadorProvedor):
                     "nome": parcial["nome"],
                     "argumentos": args,
                 })
+
+        if not concluido:
+            raise ErroProvedor("sse_interrompido", True, "fluxo sem marcador final")
 
         # Emite chamadas pendentes que so fecharam apos o fim do stream
         for idx in sorted(chamadas_parciais.keys()):
@@ -692,3 +697,67 @@ class AdaptadorFalso(AdaptadorProvedor):
             raise ErroProvedor("conexao", True, "erro de teste simulado")
         yield EventoInferencia("texto", {"conteudo": self._resposta})
         yield EventoInferencia("fim", {})
+
+class ClienteLMStudio:
+    """Ger?ncia expl?cita da API v1; nenhuma carga por descoberta ou infer?ncia.
+
+    GET /api/v1/models inclui modelos baixados e inst?ncias com contexto.
+    N?o devolve corpo de erro, cabe?alhos, URL ou segredo ao chamador.
+    """
+
+    def __init__(self, base_url: str, chave: str = ""):
+        self.base = base_url.rstrip("/")
+        self.chave = chave
+
+    async def requisitar(self, metodo: str, caminho: str, corpo=None):
+        headers = {"Authorization": f"Bearer {self.chave}"} if self.chave else {}
+        try:
+            async with httpx.AsyncClient(timeout=10, trust_env=False) as cliente:
+                resposta = await cliente.request(metodo, f"{self.base}/api/v1/models{caminho}",
+                                                json=corpo, headers=headers)
+                if resposta.is_error:
+                    raise ErroProvedor("http_erro", False, f"HTTP {resposta.status_code}")
+                return resposta.json()
+        except httpx.TimeoutException:
+            raise ErroProvedor("timeout", True, "prazo esgotado") from None
+        except httpx.HTTPError:
+            raise ErroProvedor("conexao", True, "provedor indispon?vel") from None
+
+    async def listar(self) -> list[dict[str, Any]]:
+        dados = await self.requisitar("GET", "")
+        if not isinstance(dados, dict) or not isinstance(dados.get("models"), list):
+            raise ErroProvedor("listagem_invalida", False, "n?o foi poss?vel confirmar inst?ncias")
+        modelos = []
+        for m in dados["models"]:
+            if not isinstance(m, dict) or m.get("type") != "llm":
+                continue
+            if not isinstance(m.get("key"), str) or not isinstance(m.get("loaded_instances"), list):
+                raise ErroProvedor("listagem_invalida", False, "inst?ncias n?o confirmadas")
+            instancias = []
+            for i in m["loaded_instances"]:
+                if not isinstance(i, dict) or not isinstance(i.get("id"), str) or not i["id"]:
+                    raise ErroProvedor("listagem_invalida", False, "inst?ncia inv?lida")
+                cfg = i.get("config") or {}
+                instancias.append({"id": i["id"], "contexto": cfg.get("context_length")})
+            modelos.append({"id": m["key"], "instancias": instancias})
+        return modelos
+
+    async def trocar(self, modelo: str) -> str:
+        modelos = await self.listar()
+        if not any(m["id"] == modelo for m in modelos):
+            raise ErroProvedor("modelo_inexistente", False, "modelo n?o baixado")
+        instancias = [i for m in modelos for i in m["instancias"]]
+        alvo = next(m for m in modelos if m["id"] == modelo)
+        if len(instancias) == 1 and alvo["instancias"]:
+            return alvo["instancias"][0]["id"]
+        for instancia in instancias:
+            await self.requisitar("POST", "/unload", {"instance_id": instancia["id"]})
+        # N?o basta HTTP 200 na descarga. Qualquer inst?ncia restante impede carga.
+        if any(m["instancias"] for m in await self.listar()):
+            raise ErroProvedor("descarga_nao_confirmada", False, "carga interrompida")
+        await self.requisitar("POST", "/load", {"model": modelo})
+        modelos = await self.listar()
+        alvo = next((m for m in modelos if m["id"] == modelo), None)
+        if not alvo or len(alvo["instancias"]) != 1 or sum(len(m["instancias"]) for m in modelos) != 1:
+            raise ErroProvedor("carga_nao_confirmada", False, "prontid?o n?o confirmada")
+        return alvo["instancias"][0]["id"]

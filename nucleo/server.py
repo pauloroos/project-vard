@@ -625,30 +625,52 @@ def primeiro_uso_reabrir():
     return JSONResponse(primeiro_uso_estado.reabrir())
 
 
-@app.post("/primeiro-uso/cerebro/testar")
-async def primeiro_uso_cerebro_testar(request: Request):
-    """Testa conexão com o provedor escolhido na etapa 'cerebro' do assistente.
-    Corpo: {"tipo": str, "base_url": str, "modelo": str, "chave"?: str}.
-    Devolve {"ok": bool, "detalhe": str, "primeiro_token_ms": int|null}.
-    Nunca altera configuração ativa nem troca modelo; teste isolado.
-    """
+async def _corpo_cerebro(request: Request, campos: tuple[str, ...]):
     try:
         corpo = await request.json()
     except ValueError:
-        return JSONResponse({"erro": "json_invalido"}, status_code=422)
+        raise HTTPException(422, "json_invalido") from None
     if not isinstance(corpo, dict):
-        return JSONResponse({"erro": "corpo_invalido"}, status_code=422)
-    tipo = str(corpo.get("tipo", "")).strip()
-    base_url = str(corpo.get("base_url", "")).strip()
-    modelo = str(corpo.get("modelo", "")).strip()
-    chave = str(corpo.get("chave", "")).strip()
-    if not tipo or not base_url or not modelo:
-        return JSONResponse({"erro": "campos_obrigatorios"}, status_code=422)
-    from vard.primeiro_uso import cerebro as primeiro_uso_cerebro
-    resultado = await primeiro_uso_cerebro.testar_cerebro(
-        tipo=tipo, base_url=base_url, modelo=modelo, chave=chave
-    )
-    return JSONResponse(resultado)
+        raise HTTPException(422, "corpo_invalido")
+    if any(not isinstance(corpo.get(c), str) or not corpo[c].strip() for c in campos):
+        raise HTTPException(422, "campos_obrigatorios")
+    if not isinstance(corpo.get("chave", ""), str):
+        raise HTTPException(422, "credencial_invalida")
+    return corpo
+
+
+@app.post("/primeiro-uso/cerebro/testar")
+async def primeiro_uso_cerebro_testar(request: Request):
+    """Teste isolado da escolha expl?cita; n?o troca modelo nem persiste segredo."""
+    from vard.primeiro_uso import cerebro
+    corpo = await _corpo_cerebro(request, ("tipo", "base_url", "modelo"))
+    return JSONResponse(await cerebro.testar_cerebro(
+        tipo=corpo["tipo"].strip(), base_url=corpo["base_url"].strip(),
+        modelo=corpo["modelo"].strip(), chave=corpo.get("chave", "")))
+
+
+@app.post("/primeiro-uso/cerebro/modelos")
+async def primeiro_uso_cerebro_modelos(request: Request):
+    from vard.primeiro_uso import cerebro
+    from vard.cerebro.provedores import ErroProvedor
+    corpo = await _corpo_cerebro(request, ("tipo", "base_url"))
+    try:
+        async with asyncio.timeout(30):
+            modelos = await cerebro.listar_modelos(corpo["tipo"], corpo["base_url"], corpo.get("chave", ""))
+        return {"ok": True, "modelos": modelos}
+    except ErroProvedor as exc:
+        return {"ok": False, "detalhe": exc.codigo}
+    except (ValueError, TimeoutError):
+        return {"ok": False, "detalhe": "listagem_indisponivel"}
+
+
+@app.post("/primeiro-uso/cerebro/trocar")
+async def primeiro_uso_cerebro_trocar(request: Request):
+    from vard.primeiro_uso import cerebro
+    corpo = await _corpo_cerebro(request, ("tipo", "base_url", "modelo"))
+    if corpo["tipo"] != "lmstudio":
+        return JSONResponse({"erro": "controle_requer_lmstudio"}, status_code=422)
+    return await cerebro.trocar_modelo(corpo["base_url"], corpo["modelo"], corpo.get("chave", ""))
 
 
 # --------------------------------------------------------------------------- PACOTES OPCIONAIS (T5)
