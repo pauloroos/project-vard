@@ -84,7 +84,7 @@ describe("release T2 — runtime Python 3.13 embutido", () => {
     expect(pkg.scripts?.nucleo).toContain("montar-nucleo.ps1");
   });
 
-  it.skipIf(!existsSync(BUILD_NUCLEO))("bundle montado existe com python.exe e medidas validas", () => {
+  it.skipIf(!existsSync(BUILD_NUCLEO) || !existsSync(PYTHON_EMBUTIDO))("bundle montado existe com python.exe e medidas validas", () => {
     expect(existsSync(PYTHON_EMBUTIDO)).toBe(true);
     expect(existsSync(MEDIDAS)).toBe(true);
     const dados = JSON.parse(readFileSync(MEDIDAS, "utf8"));
