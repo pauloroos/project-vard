@@ -300,10 +300,44 @@ export class AbaModelos {
     const buscaWrap = document.createElement("div");
     buscaWrap.className = "qr-modal-busca";
     buscaWrap.append(buscaBtn, statusEl);
-    // Sugestão de CLI detectada
-    const cliSugestao = document.createElement("div");
-    cliSugestao.className = "qr-cli-sugestao";
-    cliSugestao.hidden = true;
+    // Containers de campos que aparecem/desaparecem conforme o tipo
+    const campoEndpoint = campoModal("Endpoint", urlInp, "Vazio para CLIs. Aceita com ou sem /v1.");
+    const campoChave = campoModal("Chave de API", chaveInp, "Salva no cofre; nunca exibida.");
+    const campoBusca = buscaWrap;
+
+    // Linha de detecção CLI
+    const cliDetectadoEl = document.createElement("div");
+    cliDetectadoEl.className = "qr-cli-detectado";
+    cliDetectadoEl.hidden = true;
+
+    // Aviso CLI não encontrada
+    const cliNaoEncontradoEl = document.createElement("div");
+    cliNaoEncontradoEl.className = "qr-cli-nao-encontrado qr-modal-status ruim";
+    cliNaoEncontradoEl.hidden = true;
+    cliNaoEncontradoEl.textContent = "Não encontrado neste PC — instale e faça login nele antes.";
+
+    // Aviso C11 (sempre visível quando é CLI)
+    const avisoC11El = document.createElement("div");
+    avisoC11El.className = "qr-aviso-c11 qr-modal-status";
+    avisoC11El.hidden = true;
+    avisoC11El.textContent = "Atenção: a CLI roda com poder completo no seu PC; com yolo, sem pedir permissão.";
+
+    // Yolo / Enxuto checkboxes
+    const yoloLabel = document.createElement("label");
+    yoloLabel.className = "marca";
+    yoloLabel.hidden = true;
+    const yoloChk = document.createElement("input");
+    yoloChk.type = "checkbox";
+    yoloChk.checked = true; // padrão do 0.8
+    yoloLabel.append(yoloChk, document.createTextNode(" Rodar sem pedir permissão (yolo)"));
+
+    const enxutoLabel = document.createElement("label");
+    enxutoLabel.className = "marca";
+    enxutoLabel.hidden = true;
+    const enxutoChk = document.createElement("input");
+    enxutoChk.type = "checkbox";
+    enxutoLabel.append(enxutoChk, document.createTextNode(" Modo enxuto"));
+
     // Checkbox delegada (agentes)
     const delegadaLabel = document.createElement("label");
     delegadaLabel.className = "marca";
@@ -317,39 +351,57 @@ export class AbaModelos {
 
     const atualizarVisibilidade = () => {
       const ehCli = EH_CLI.has(tipoSel.value);
-      urlInp.disabled = ehCli;
-      chaveInp.disabled = ehCli;
-      buscaBtn.disabled = ehCli;
+      const soDelegada = SO_DELEGADA.has(tipoSel.value);
+
+      // Esconde/mostra campos conforme tipo
+      campoEndpoint.hidden = ehCli;
+      campoChave.hidden = ehCli;
+      campoBusca.hidden = ehCli;
+      cliDetectadoEl.hidden = !ehCli;
+      cliNaoEncontradoEl.hidden = !ehCli;
+      avisoC11El.hidden = !ehCli;
+      yoloLabel.hidden = !ehCli;
+      enxutoLabel.hidden = !ehCli;
       delegadaLabel.hidden = !ehCli;
       delegadaAviso.hidden = !ehCli;
+
       if (ehCli) {
         urlInp.value = "";
         chaveInp.value = "";
+
+        // Detecção da CLI
         const cli = this.clis.find((c) => c.tipo === tipoSel.value);
-        if (cli) {
-          cliSugestao.hidden = false;
-          cliSugestao.innerHTML = "";
+        if (cli && cli.instalada) {
+          cliDetectadoEl.hidden = false;
+          cliDetectadoEl.innerHTML = "";
           const txt = document.createElement("span");
-          txt.textContent = `Encontrado no PC: ${cli.tipo} ${cli.versao}`;
+          txt.textContent = `Encontrado no PC: ${cli.tipo.replace("cli-", "")} ${cli.versao}`;
           const btnUsar = document.createElement("button");
           btnUsar.type = "button";
-          btnUsar.textContent = "Usar este";
+          btnUsar.textContent = "Usar modelos detectados";
           btnUsar.addEventListener("click", () => {
-            nomeInp.value = nomeInp.value || cli.tipo;
+            nomeInp.value = nomeInp.value || cli.tipo.replace("cli-", "");
             modeloPadraoInput.value = modeloPadraoInput.value || cli.modelos[0] || "";
             preencherModelosSelect(cli.modelos);
           });
-          cliSugestao.append(txt, btnUsar);
+          cliDetectadoEl.append(txt, btnUsar);
+          cliNaoEncontradoEl.hidden = true;
         } else {
-          cliSugestao.hidden = true;
+          cliDetectadoEl.hidden = true;
+          cliNaoEncontradoEl.hidden = false;
         }
-        if (SO_DELEGADA.has(tipoSel.value)) {
-          delegadaAviso.textContent = "Este provedor só funciona em tarefas delegadas; não pode ser o cérebro principal.";
+
+        // Tarefas longas: Codex/OpenCode sempre marcado e travado
+        if (soDelegada) {
+          delegadaChk.checked = true;
+          delegadaChk.disabled = true;
+          delegadaAviso.textContent = "Este provedor serve só para tarefas longas (delegadas); não pode ser o cérebro principal.";
           delegadaAviso.hidden = false;
+        } else {
+          delegadaChk.disabled = false;
+          delegadaAviso.hidden = true;
         }
       } else {
-        cliSugestao.hidden = true;
-        delegadaAviso.hidden = true;
         // Ajuda contextual para LM Studio
         if (tipoSel.value === "lmstudio") {
           chaveInp.placeholder = chaveExistente
@@ -407,11 +459,15 @@ export class AbaModelos {
     corpo.append(
       campoModal("Tipo", tipoSel),
       campoModal("Nome", nomeInp),
-      campoModal("Endpoint", urlInp, "Vazio para CLIs. Aceita com ou sem /v1."),
-      campoModal("Chave de API", chaveInp, "Salva no cofre; nunca exibida."),
-      buscaWrap,
-      campoModal("Modelo padrão", modeloContainer),
-      cliSugestao,
+      campoEndpoint,
+      campoChave,
+      campoBusca,
+      cliDetectadoEl,
+      cliNaoEncontradoEl,
+      campoModal("Modelo", modeloContainer, "Opcional para CLIs; select após buscar ou detectar."),
+      yoloLabel,
+      enxutoLabel,
+      avisoC11El,
       delegadaLabel,
       delegadaAviso,
     );
@@ -420,9 +476,17 @@ export class AbaModelos {
 
     const testarNoModal = async () => {
       const tipo = tipoSel.value;
+      const ehCli = EH_CLI.has(tipo);
       const url = normalizarEndpoint(urlInp.value);
       const modelo = (modeloContainer.querySelector("select") as HTMLSelectElement)?.value || modeloPadraoInput.value.trim();
-      if (!EH_CLI.has(tipo) && !url) {
+      if (ehCli) {
+        // CLI: verifica se está instalada antes de testar
+        const cli = this.clis.find((c) => c.tipo === tipo);
+        if (!cli || !cli.instalada) {
+          modalRef?.avisar("CLI não encontrada neste PC. Instale e faça login antes de testar.", true);
+          return;
+        }
+      } else if (!url) {
         modalRef?.avisar("Preencha o endpoint para testar.", true);
         return;
       }
@@ -435,7 +499,7 @@ export class AbaModelos {
         const r = await fetch(`${this.deps.ponteUrl}/primeiro-uso/cerebro/testar`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ tipo, base_url: url, modelo, chave: chaveInp.value.trim() }),
+          body: JSON.stringify({ tipo, base_url: ehCli ? "" : url, modelo, chave: ehCli ? "" : chaveInp.value.trim() }),
           signal: AbortSignal.timeout(15000),
         });
         const j = await r.json().catch(() => ({ ok: false, detalhe: "sem resposta" }));
@@ -475,7 +539,9 @@ export class AbaModelos {
         tipo,
         url_base: EH_CLI.has(tipo) ? "" : url,
         modelo,
-        ...(EH_CLI.has(tipo) ? {} : { credencial_ref: credRef }),
+        ...(EH_CLI.has(tipo)
+          ? { yolo: yoloChk.checked, enxuto: enxutoChk.checked }
+          : { credencial_ref: credRef }),
       };
       const idx = this.cfg.provedores.findIndex((p) => p.id === id);
       if (editando && idx >= 0) {

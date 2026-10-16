@@ -31,3 +31,29 @@
   font-size: 12px;
   opacity: 0.8;
 }
+.qr-cli-detectado {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid rgba(80, 220, 140, 0.4);
+  border-radius: 6px;
+  background: rgba(80, 220, 140, 0.08);
+  color: #9ff0c4;
+  font-size: 12px;
+}
+.qr-cli-detectado button { margin: 0; }
+.qr-cli-nao-encontrado {
+  padding: 8px 10px;
+  border: 1px dashed rgba(255, 176, 32, 0.55);
+  border-radius: 6px;
+  background: rgba(255, 176, 32, 0.06);
+}
+.qr-aviso-c11 {
+  padding: 6px 10px;
+  border-left: 3px solid #ffb020;
+  background: rgba(255, 176, 32, 0.06);
+  font-size: 11px;
+  line-height: 1.4;
+  color: #ffd070;
+}

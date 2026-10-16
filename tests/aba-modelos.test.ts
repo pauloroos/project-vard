@@ -276,7 +276,7 @@ describe("AbaModelos (Quem responde 0.9.3)", () => {
     await new Promise((r) => setTimeout(r, 50));
 
     expect(raiz.textContent).toContain("Encontrado no PC");
-    expect(raiz.textContent).toContain("cli-claude");
+    expect(raiz.textContent).toContain("claude 2.1.301");
   });
 
   it("Agentes gravados pelo card da CLI com checkbox delegada", async () => {
@@ -319,5 +319,96 @@ describe("AbaModelos (Quem responde 0.9.3)", () => {
     expect(cfgEmMemoria!.provedores).toHaveLength(1);
     expect(cfgEmMemoria!.provedores[0].tipo).toBe("cli-claude");
     expect(cfgEmMemoria!.agentes.claude.padrao).toBe("claude-sonnet-5-5");
+  });
+
+  it("Modal adapta campos para CLI: esconde endpoint/chave/buscar, mostra yolo/enxuto/C11 e detecção", async () => {
+    mockDetectarClis.mockResolvedValue([
+      { tipo: "cli-claude", instalada: true, versao: "2.1.301", modelos: ["claude-sonnet-5-5"] },
+    ]);
+    const raiz = criarRaiz();
+    const aba = new AbaModelos(raiz, criarDeps());
+    await aba.carregar();
+
+    const btnAdd = Array.from(raiz.querySelectorAll<HTMLButtonElement>("button")).find((b) => b.textContent === "Adicionar provedor");
+    btnAdd!.click();
+    await new Promise((r) => setTimeout(r, 50));
+
+    // Selecionar tipo CLI
+    const selects = Array.from(raiz.querySelectorAll<HTMLSelectElement>("select"));
+    const tipoSel = selects.find((s) => Array.from(s.options).some((o) => o.value === "cli-claude"));
+    tipoSel!.value = "cli-claude";
+    tipoSel!.dispatchEvent(new Event("change"));
+    await new Promise((r) => setTimeout(r, 50));
+
+    // Endpoint, chave e buscar devem estar escondidos
+    const modal = raiz.querySelector(".modal")!;
+    const labels = Array.from(modal.querySelectorAll<HTMLElement>(".campo-modal"));
+    const endpointLabel = labels.find((l) => l.textContent?.includes("Endpoint"));
+    const chaveLabel = labels.find((l) => l.textContent?.includes("Chave de API"));
+    expect(endpointLabel?.hidden).toBe(true);
+    expect(chaveLabel?.hidden).toBe(true);
+    expect(modal.querySelector(".qr-modal-busca")?.closest("[hidden]")).toBeTruthy();
+
+    // Yolo, enxuto, C11 e detecção visíveis
+    expect(modal.textContent).toContain("Rodar sem pedir permissão (yolo)");
+    expect(modal.textContent).toContain("Modo enxuto");
+    expect(modal.textContent).toContain("poder completo");
+    expect(modal.textContent).toContain("Encontrado no PC: claude 2.1.301");
+  });
+
+  it("Codex/OpenCode: tarefas longas travada e marcada, aviso visível", async () => {
+    const raiz = criarRaiz();
+    const aba = new AbaModelos(raiz, criarDeps());
+    await aba.carregar();
+
+    const btnAdd = Array.from(raiz.querySelectorAll<HTMLButtonElement>("button")).find((b) => b.textContent === "Adicionar provedor");
+    btnAdd!.click();
+    await new Promise((r) => setTimeout(r, 50));
+
+    const selects = Array.from(raiz.querySelectorAll<HTMLSelectElement>("select"));
+    const tipoSel = selects.find((s) => Array.from(s.options).some((o) => o.value === "cli-codex"));
+    tipoSel!.value = "cli-codex";
+    tipoSel!.dispatchEvent(new Event("change"));
+    await new Promise((r) => setTimeout(r, 50));
+
+    const modal = raiz.querySelector(".modal")!;
+    const checkboxes = Array.from(modal.querySelectorAll<HTMLInputElement>("input[type='checkbox']"));
+    const delegadaChk = checkboxes.find((c) => c.parentElement?.textContent?.includes("delegadas"));
+    expect(delegadaChk).toBeTruthy();
+    expect(delegadaChk!.checked).toBe(true);
+    expect(delegadaChk!.disabled).toBe(true);
+    expect(modal.textContent).toContain("serve só para tarefas longas");
+  });
+
+  it("CLI não encontrada: mostra aviso e Testar recusa", async () => {
+    mockDetectarClis.mockResolvedValue([]);
+    const raiz = criarRaiz();
+    const aba = new AbaModelos(raiz, criarDeps());
+    await aba.carregar();
+
+    const btnAdd = Array.from(raiz.querySelectorAll<HTMLButtonElement>("button")).find((b) => b.textContent === "Adicionar provedor");
+    btnAdd!.click();
+    await new Promise((r) => setTimeout(r, 50));
+
+    const selects = Array.from(raiz.querySelectorAll<HTMLSelectElement>("select"));
+    const tipoSel = selects.find((s) => Array.from(s.options).some((o) => o.value === "cli-claude"));
+    tipoSel!.value = "cli-claude";
+    tipoSel!.dispatchEvent(new Event("change"));
+    await new Promise((r) => setTimeout(r, 50));
+
+    const modal = raiz.querySelector(".modal")!;
+    expect(modal.textContent).toContain("Não encontrado neste PC");
+
+    // Preencher nome e modelo para poder clicar Testar
+    const inputs = Array.from(modal.querySelectorAll<HTMLInputElement>("input"));
+    const nomeInput = inputs.find((i) => i.placeholder?.includes("Nome"));
+    if (nomeInput) nomeInput.value = "Claude CLI";
+
+    const btnTestar = Array.from(modal.querySelectorAll<HTMLButtonElement>("button")).find((b) => b.textContent === "Testar");
+    expect(btnTestar).toBeTruthy();
+    btnTestar!.click();
+    await new Promise((r) => setTimeout(r, 50));
+
+    expect(modal.textContent).toContain("não encontrada neste PC");
   });
 });

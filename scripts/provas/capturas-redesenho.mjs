@@ -333,6 +333,60 @@ async function main() {
       }
       await page.unroute("**/cli/detectar");
 
+      // 4b. Modal de CLI Codex (tarefas longas travadas)
+      await page.route("**/cli/detectar", (route) => {
+        route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify([{ tipo: "cli-codex", instalada: true, versao: "0.1.2504", modelos: ["o3-mini", "o4-mini"] }]) });
+      });
+      await prepararEstadoExtras(() => {
+        window.__TAURI_INTERNALS__.invoke = async (cmd) => {
+          if (cmd === "ler_paineis") return { versao: 1, provedores: [], ativo: null, reserva: null, agentes: { claude: { padrao: "", modelos: [] }, codex: { padrao: "", modelos: [] }, opencode: { padrao: "", modelos: [] }, agy: { padrao: "", modelos: [] } }, mcps: [] };
+          if (cmd === "ler_config") return { schema: 3, ponte_url: "http://127.0.0.1:8765", nome: "Aurora", variantes: ["Auri"], idioma: "pt", openjarvis_url: "http://localhost:8765", gui_url: "", usuario: "Ana", tamanho: "medio", tamanho_px: 320, compacto: false, sempre_no_topo: false, click_through: false, invisivel: false, logon: false, sala_monitor: "", nao_ouvir: false, nao_falar: false, falar_avisos: true, velocidade: 1.1, instrucao_formato: "", finish_ms: 600, limiar_vad: 0.03, conversa_ms: 5000, atualizacao_ao_abrir: true, modelo: "", microfone_id: "", saida_id: "", caminho_instalacao: "" };
+          return null;
+        };
+      });
+      const btnAddCodex = await page.$('button.cards-adicionar');
+      if (btnAddCodex) {
+        await btnAddCodex.click();
+        await page.waitForTimeout(400);
+        const tipoSelCodex = await page.$('.modal select');
+        if (tipoSelCodex) {
+          await tipoSelCodex.selectOption("cli-codex");
+          await page.waitForTimeout(500);
+        }
+        await page.screenshot({ path: path.join(CAPTURAS_DIR, `quem-responde-modal-codex-escala${scale}.png`), fullPage: false });
+        resultados.push(await medirPagina(page, `quem-responde-modal-codex@${scale}x`));
+        await page.keyboard.press("Escape");
+        await page.waitForTimeout(200);
+      }
+      await page.unroute("**/cli/detectar");
+
+      // 4c. Modal de CLI não encontrada
+      await page.route("**/cli/detectar", (route) => {
+        route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify([]) });
+      });
+      await prepararEstadoExtras(() => {
+        window.__TAURI_INTERNALS__.invoke = async (cmd) => {
+          if (cmd === "ler_paineis") return { versao: 1, provedores: [], ativo: null, reserva: null, agentes: { claude: { padrao: "", modelos: [] }, codex: { padrao: "", modelos: [] }, opencode: { padrao: "", modelos: [] }, agy: { padrao: "", modelos: [] } }, mcps: [] };
+          if (cmd === "ler_config") return { schema: 3, ponte_url: "http://127.0.0.1:8765", nome: "Aurora", variantes: ["Auri"], idioma: "pt", openjarvis_url: "http://localhost:8765", gui_url: "", usuario: "Ana", tamanho: "medio", tamanho_px: 320, compacto: false, sempre_no_topo: false, click_through: false, invisivel: false, logon: false, sala_monitor: "", nao_ouvir: false, nao_falar: false, falar_avisos: true, velocidade: 1.1, instrucao_formato: "", finish_ms: 600, limiar_vad: 0.03, conversa_ms: 5000, atualizacao_ao_abrir: true, modelo: "", microfone_id: "", saida_id: "", caminho_instalacao: "" };
+          return null;
+        };
+      });
+      const btnAddNaoEncontrado = await page.$('button.cards-adicionar');
+      if (btnAddNaoEncontrado) {
+        await btnAddNaoEncontrado.click();
+        await page.waitForTimeout(400);
+        const tipoSelNao = await page.$('.modal select');
+        if (tipoSelNao) {
+          await tipoSelNao.selectOption("cli-claude");
+          await page.waitForTimeout(500);
+        }
+        await page.screenshot({ path: path.join(CAPTURAS_DIR, `quem-responde-modal-cli-nao-encontrado-escala${scale}.png`), fullPage: false });
+        resultados.push(await medirPagina(page, `quem-responde-modal-cli-nao-encontrado@${scale}x`));
+        await page.keyboard.press("Escape");
+        await page.waitForTimeout(200);
+      }
+      await page.unroute("**/cli/detectar");
+
       // 5. Modal de LM Studio após Buscar modelos
       await page.route("**/primeiro-uso/cerebro/modelos", (route) => {
         route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ ok: true, modelos: [{ id: "llama-3.2-3b-instruct" }, { id: "qwen2.5-7b-instruct" }, { id: "mistral-7b-v0.3" }, { id: "gemma-3-4b-it" }] }) });
