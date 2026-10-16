@@ -1,287 +1,206 @@
-/** Etapa 'cerebro' do assistente de primeiro uso (T3).
- *  Permite escolher entre OpenJarvis (padrão) ou cérebro próprio, testar a
- *  conexão com o provedor escolhido e salvar a escolha no estado do assistente.
- *  Arquivo separado para evitar conflitos com a T2b; expõe montarEtapaCerebro()
- *  que será ligada ao fluxo principal quando a T2b mesclar. */
-
-import type { EstadoPrimeiroUso } from "../config/primeiro-uso";
-import { atualizarEstadoPrimeiroUso } from "../config/primeiro-uso";
+/** Etapa de cérebro: seleção manual pelos Painéis, testes sem histórico e pular retomável. */
+import { atualizarEstadoPrimeiroUso, type EstadoPrimeiroUso } from "../config/primeiro-uso";
+import { lerPaineis, gravarPaineis, type PaineisConfig, type Provedor } from "../config/paineis";
+import { atualizarConfig } from "../config/config";
+import { cofreLer } from "../config/segredos";
 
 export interface DepsEtapaCerebro {
-  /** URL base da ponte/núcleo (ex: http://127.0.0.1:8765). */
   ponteUrl: string;
-  /** Estado atual do assistente; usado para pré-preencher escolhas. */
   estadoInicial: EstadoPrimeiroUso;
-  /** Chamado quando o usuário salva uma escolha válida. */
   aoSalvar?: (estado: EstadoPrimeiroUso) => void;
+  lerProvedores?: () => Promise<PaineisConfig>;
+  gravarProvedores?: (config: PaineisConfig) => Promise<void>;
+  salvarCerebro?: (cerebro: "openjarvis" | "proprio") => Promise<void>;
+  lerCredencial?: (tipo: string, id: string) => Promise<string | null>;
 }
 
-interface ResultadoTeste {
-  ok: boolean;
-  detalhe: string;
-  primeiro_token_ms: number | null;
-}
+interface ResultadoTeste { ok: boolean; detalhe: string; primeiro_token_ms?: number | null }
 
-const CEREBROS = [
-  { valor: "openjarvis", rotulo: "OpenJarvis (padrão)" },
-  { valor: "proprio", rotulo: "Cérebro próprio (experimental)" },
-] as const;
+export function montarEtapaCerebro(container: HTMLElement, deps: DepsEtapaCerebro): () => void {
+  const ac = new AbortController();
+  const signal = ac.signal;
+  let geracao = 0;
+  let operacao = 0;
+  let ocupado = false;
+  let validado = "";
+  let editado = false;
+  let cfg: PaineisConfig | undefined;
+  let escolhido = deps.estadoInicial.cerebro_id === "proprio" ? "proprio" : "openjarvis";
+  let provedorId = "";
+  let tipo = "lmstudio", url = "", modelo = "", ref = "";
+  let status: HTMLElement;
+  let salvar: HTMLButtonElement;
+  let testar: HTMLButtonElement | undefined;
+  const assinatura = () => JSON.stringify([escolhido, provedorId, tipo, url, modelo, ref]);
+  const pendencias = (pendente: boolean) => [...deps.estadoInicial.pendencias.filter(p => p !== "cerebro_nao_testado"),
+    ...(pendente ? ["cerebro_nao_testado"] : [])];
 
-type ValorCerebro = (typeof CEREBROS)[number]["valor"];
-
-function ehValorCerebro(v: unknown): v is ValorCerebro {
-  return typeof v === "string" && CEREBROS.some((c) => c.valor === v);
-}
-
-/** Cria a UI da etapa 'cerebro' dentro do container informado.
- *  Retorna função de limpeza que remove listeners e elementos. */
-export function montarEtapaCerebro(
-  container: HTMLElement,
-  deps: DepsEtapaCerebro,
-): () => void {
-  const abortController = new AbortController();
-  const signal = abortController.signal;
-
-  let cerebroEscolhido: ValorCerebro = ehValorCerebro(deps.estadoInicial.cerebro_id)
-    ? deps.estadoInicial.cerebro_id
-    : "openjarvis";
-
-  // Campos do formulário (só aparecem quando cerebroEscolhido === 'proprio')
-  let tipoInput: HTMLSelectElement | null = null;
-  let urlInput: HTMLInputElement | null = null;
-  let modeloInput: HTMLInputElement | null = null;
-  let chaveInput: HTMLInputElement | null = null;
-  let btnTestar: HTMLButtonElement | null = null;
-  let btnSalvar: HTMLButtonElement | null = null;
-  let statusEl: HTMLElement | null = null;
-  let detalhesEl: HTMLElement | null = null;
-
+  function botao(texto: string, acao: () => void) {
+    const b = document.createElement("button"); b.type = "button"; b.textContent = texto;
+    b.addEventListener("click", acao, { signal }); return b;
+  }
+  function invalidar() {
+    editado = true; validado = ""; operacao++; ocupado = false;
+    salvar.disabled = escolhido === "proprio";
+    if (testar) testar.disabled = false;
+  }
+  function campo(rotulo: string, elemento: HTMLElement, pai: HTMLElement) {
+    const l = document.createElement("label"); l.append(rotulo, elemento); pai.append(l);
+  }
+  function texto(rotulo: string, valor: string, mudar: (v: string) => void, pai: HTMLElement, tipoCampo = "text") {
+    const input = document.createElement("input"); input.type = tipoCampo; input.value = valor;
+    input.addEventListener("input", () => { mudar(input.value.trim()); invalidar(); }, { signal });
+    campo(rotulo, input, pai); return input;
+  }
   function desenhar() {
-    container.innerHTML = "";
-
-    const fieldset = document.createElement("fieldset");
-    fieldset.innerHTML = "<legend>Cérebro</legend>";
-
-    const descricao = document.createElement("p");
-    descricao.className = "nota";
-    descricao.textContent =
-      "O cérebro é quem responde às suas perguntas. OpenJarvis usa um serviço externo; cérebro próprio conversa diretamente com um modelo local (LM Studio, llama-server, etc.).";
-    fieldset.appendChild(descricao);
-
-    // Radio buttons para escolha do cérebro
-    for (const opcao of CEREBROS) {
-      const label = document.createElement("label");
-      label.className = "marca";
-      const radio = document.createElement("input");
-      radio.type = "radio";
-      radio.name = "cerebro-escolha";
-      radio.value = opcao.valor;
-      radio.checked = cerebroEscolhido === opcao.valor;
-      radio.addEventListener(
-        "change",
-        () => {
-          if (radio.checked) {
-            cerebroEscolhido = opcao.valor;
-            desenhar();
-          }
-        },
-        { signal },
-      );
-      label.appendChild(radio);
-      label.appendChild(document.createTextNode(opcao.rotulo));
-      fieldset.appendChild(label);
+    geracao++; container.innerHTML = ""; testar = undefined;
+    const f = document.createElement("fieldset"); f.innerHTML = "<legend>Cérebro</legend>";
+    for (const [valor, rotulo] of [["openjarvis", "OpenJarvis"], ["proprio", "Cérebro próprio"]]) {
+      const radio = document.createElement("input"); radio.type = "radio"; radio.name = "cerebro-escolha";
+      radio.value = valor; radio.checked = escolhido === valor;
+      radio.addEventListener("change", () => { if (radio.checked) { escolhido = valor; invalidar(); desenhar(); } }, { signal });
+      campo(rotulo, radio, f);
     }
-
-    // Formulário do cérebro próprio (só quando escolhido)
-    if (cerebroEscolhido === "proprio") {
-      const formProprio = document.createElement("div");
-      formProprio.id = "cerebro-proprio-form";
-
-      // Tipo de provedor
-      const lblTipo = document.createElement("label");
-      lblTipo.textContent = "Tipo de provedor:";
-      tipoInput = document.createElement("select");
-      for (const opt of [
-        { v: "openai_compat", t: "OpenAI Compatível (LM Studio, llama-server)" },
-        { v: "anthropic", t: "Anthropic (Claude)" },
-        { v: "google", t: "Google (Gemini)" },
-        { v: "openai_nativo", t: "OpenAI Nativo" },
-      ]) {
-        const option = document.createElement("option");
-        option.value = opt.v;
-        option.textContent = opt.t;
-        tipoInput.appendChild(option);
+    if (escolhido === "proprio") {
+      const form = document.createElement("div"); form.id = "cerebro-proprio-form";
+      const tipos = document.createElement("select"); tipos.id = "cerebro-tipo";
+      for (const [v, t] of [["openai_compat", "OpenAI compatível"], ["lmstudio", "LM Studio (modelos baixados)"],
+        ["anthropic", "Anthropic"], ["google", "Google"], ["openai_nativo", "OpenAI"]]) {
+        const o = document.createElement("option"); o.value = v; o.textContent = t; tipos.append(o);
       }
-      lblTipo.appendChild(tipoInput);
-      formProprio.appendChild(lblTipo);
-
-      // URL base
-      const lblUrl = document.createElement("label");
-      lblUrl.textContent = "URL base:";
-      urlInput = document.createElement("input");
-      urlInput.type = "url";
-      urlInput.placeholder = "http://localhost:1234";
-      urlInput.required = true;
-      lblUrl.appendChild(urlInput);
-      formProprio.appendChild(lblUrl);
-
-      // Modelo
-      const lblModelo = document.createElement("label");
-      lblModelo.textContent = "Modelo:";
-      modeloInput = document.createElement("input");
-      modeloInput.type = "text";
-      modeloInput.placeholder = "nome-do-modelo";
-      modeloInput.required = true;
-      lblModelo.appendChild(modeloInput);
-      formProprio.appendChild(lblModelo);
-
-      // Chave (opcional)
-      const lblChave = document.createElement("label");
-      lblChave.textContent = "Chave API (opcional):";
-      chaveInput = document.createElement("input");
-      chaveInput.type = "password";
-      chaveInput.autocomplete = "off";
-      lblChave.appendChild(chaveInput);
-      formProprio.appendChild(lblChave);
-
-      // Botões
-      const botoes = document.createElement("div");
-      botoes.className = "botoes";
-
-      btnTestar = document.createElement("button");
-      btnTestar.type = "button";
-      btnTestar.textContent = "Testar conexão";
-      btnTestar.addEventListener("click", () => void executarTeste(), { signal });
-      botoes.appendChild(btnTestar);
-
-      btnSalvar = document.createElement("button");
-      btnSalvar.type = "button";
-      btnSalvar.textContent = "Salvar";
-      btnSalvar.disabled = true; // Só habilita após teste bem-sucedido
-      btnSalvar.addEventListener("click", () => void salvarEscolha(), { signal });
-      botoes.appendChild(btnSalvar);
-
-      formProprio.appendChild(botoes);
-
-      // Status e detalhes do teste
-      statusEl = document.createElement("p");
-      statusEl.className = "status-teste";
-      formProprio.appendChild(statusEl);
-
-      detalhesEl = document.createElement("pre");
-      detalhesEl.className = "detalhes-teste";
-      formProprio.appendChild(detalhesEl);
-
-      fieldset.appendChild(formProprio);
-    } else {
-      // OpenJarvis: sem configuração extra, salvar direto
-      const info = document.createElement("p");
-      info.className = "nota";
-      info.textContent =
-        "OpenJarvis já está configurado. Clique em Salvar para continuar.";
-      fieldset.appendChild(info);
-
-      btnSalvar = document.createElement("button");
-      btnSalvar.type = "button";
-      btnSalvar.textContent = "Salvar";
-      btnSalvar.addEventListener("click", () => void salvarEscolha(), { signal });
-      fieldset.appendChild(btnSalvar);
-
-      statusEl = document.createElement("p");
-      statusEl.className = "status-teste";
-      fieldset.appendChild(statusEl);
-    }
-
-    container.appendChild(fieldset);
-  }
-
-  async function executarTeste(): Promise<void> {
-    if (!btnTestar || !statusEl || !detalhesEl) return;
-    if (cerebroEscolhido !== "proprio") return;
-
-    const tipo = tipoInput?.value?.trim() || "";
-    const baseUrl = urlInput?.value?.trim() || "";
-    const modelo = modeloInput?.value?.trim() || "";
-    const chave = chaveInput?.value?.trim() || "";
-
-    if (!tipo || !baseUrl || !modelo) {
-      statusEl.textContent = "Preencha tipo, URL e modelo antes de testar.";
-      statusEl.className = "status-teste erro";
-      detalhesEl.textContent = "";
-      return;
-    }
-
-    btnTestar.disabled = true;
-    statusEl.textContent = "Testando...";
-    statusEl.className = "status-teste";
-    detalhesEl.textContent = "";
-
-    try {
-      const resposta = await fetch(`${deps.ponteUrl}/primeiro-uso/cerebro/testar`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ tipo, base_url: baseUrl, modelo, chave }),
-        signal,
+      tipos.value = tipo;
+      tipos.addEventListener("change", () => { tipo = tipos.value; invalidar(); }, { signal });
+      campo("Tipo de provedor", tipos, form);
+      const urlInput = texto("URL base", url, v => { url = v; }, form, "url");
+      const modeloInput = texto("Modelo", modelo, v => { modelo = v; }, form);
+      texto("Referência da credencial (tipo:id, nos Painéis)", ref, v => { ref = v; }, form);
+      // Também lê value no clique para chamadas DOM de harness sem eventos de entrada.
+      testar = botao("Testar conexão", () => { url = urlInput.value.trim(); modelo = modeloInput.value.trim(); void testarConexao(); });
+      form.append(testar);
+      salvar = botao("Salvar", () => { void salvarEscolha(false); }); salvar.disabled = validado !== assinatura(); form.append(salvar);
+      const listar = botao("Listar modelos baixados", () => { url = urlInput.value.trim(); void listarModelos(); });
+      listar.id = "cerebro-listar"; form.append(listar);
+      const modelos = document.createElement("select"); modelos.id = "cerebro-modelos";
+      modelos.addEventListener("change", () => { modelo = modelos.value; modeloInput.value = modelo; invalidar(); }, { signal });
+      form.append(modelos);
+      const trocar = botao("Descarregar anterior e carregar escolhido", () => {
+        url = urlInput.value.trim(); modelo = modeloInput.value.trim(); void trocarModelo();
       });
-
-      if (!resposta.ok) {
-        const texto = await resposta.text().catch(() => "");
-        throw new Error(`HTTP ${resposta.status}: ${texto.slice(0, 200)}`);
-      }
-
-      const resultado = (await resposta.json()) as ResultadoTeste;
-
-      if (resultado.ok) {
-        statusEl.textContent = `Conexão OK (${resultado.primeiro_token_ms ?? "?"} ms até primeiro token)`;
-        statusEl.className = "status-teste sucesso";
-        detalhesEl.textContent = resultado.detalhe;
-        if (btnSalvar) btnSalvar.disabled = false;
-      } else {
-        statusEl.textContent = `Falha: ${resultado.detalhe}`;
-        statusEl.className = "status-teste erro";
-        detalhesEl.textContent = "";
-        if (btnSalvar) btnSalvar.disabled = true;
-      }
-    } catch (erro) {
-      statusEl.textContent = `Erro ao testar: ${erro instanceof Error ? erro.message : String(erro)}`;
-      statusEl.className = "status-teste erro";
-      detalhesEl.textContent = "";
-      if (btnSalvar) btnSalvar.disabled = true;
-    } finally {
-      btnTestar.disabled = false;
-    }
-  }
-
-  async function salvarEscolha(): Promise<void> {
-    if (!btnSalvar || !statusEl) return;
-
-    btnSalvar.disabled = true;
-    statusEl.textContent = "Salvando...";
-    statusEl.className = "status-teste";
-
-    const patch: Partial<EstadoPrimeiroUso> = {
-      cerebro_id: cerebroEscolhido,
-      etapa: "voz", // Avança para próxima etapa
-    };
-
-    const novoEstado = await atualizarEstadoPrimeiroUso(deps.ponteUrl, patch);
-
-    if (novoEstado) {
-      statusEl.textContent = "Escolha salva.";
-      statusEl.className = "status-teste sucesso";
-      deps.aoSalvar?.(novoEstado);
+      trocar.id = "cerebro-trocar"; form.append(trocar);
+      const nota = document.createElement("p");
+      nota.textContent = "Sem GPU, configure CPU no provedor local. A troca exige confirmar a descarga; listar e testar não carregam modelos no LM Studio. Configure agentes pela caixa de ferramentas dos Painéis, sem teste de login.";
+      form.append(nota);
+      const link = document.createElement("a"); link.href = "https://lmstudio.ai/docs/developer/core/server";
+      link.textContent = "Como iniciar o servidor do LM Studio"; link.target = "_blank"; link.rel = "noreferrer"; form.append(link);
+      f.append(form);
     } else {
-      statusEl.textContent = "Erro ao salvar. Tente novamente.";
-      statusEl.className = "status-teste erro";
-      btnSalvar.disabled = false;
+      const nota = document.createElement("p"); nota.textContent = "OpenJarvis conserva a configuração atual. A conversa permanece pendente até ser testada."; f.append(nota);
+      salvar = botao("Salvar", () => { void salvarEscolha(true); }); f.append(salvar);
     }
+    const cadastrados = document.createElement("select"); cadastrados.id = "cerebro-provedor";
+    const manual = document.createElement("option"); manual.value = ""; manual.textContent = "Configuração manual"; cadastrados.append(manual);
+    for (const p of cfg?.provedores ?? []) {
+      const opt = document.createElement("option"); opt.value = p.id; opt.textContent = p.nome; cadastrados.append(opt);
+    }
+    cadastrados.value = provedorId;
+    cadastrados.addEventListener("change", () => {
+      const p = cfg?.provedores.find(p => p.id === cadastrados.value);
+      provedorId = cadastrados.value;
+      if (p) { escolhido = "proprio"; tipo = p.tipo; url = p.url_base; modelo = p.modelo; ref = p.credencial_ref ?? ""; }
+      invalidar(); desenhar();
+    }, { signal });
+    campo("Provedor cadastrado nos Painéis", cadastrados, f);
+    status = document.createElement("p"); status.role = "status"; status.className = "status-teste"; f.append(status);
+    const pular = botao("Pular e deixar pendente", () => { void salvarEscolha(true, true); }); pular.id = "cerebro-pular"; f.append(pular);
+    container.append(f);
   }
 
+  async function chave() {
+    if (!ref) return "";
+    const partes = ref.split(":");
+    if (partes.length !== 2) throw new Error("credencial_ausente");
+    return (await (deps.lerCredencial ?? cofreLer)(partes[0], partes[1])) ?? "";
+  }
+  async function requisitar(acao: string, corpo: object) {
+    const resposta = await fetch(`${deps.ponteUrl}/primeiro-uso/cerebro/${acao}`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(corpo), signal: AbortSignal.any([signal, AbortSignal.timeout(32000)]),
+    });
+    if (!resposta.ok) throw new Error("provedor_indisponivel");
+    return resposta.json();
+  }
+  async function executar(acao: () => Promise<void>) {
+    if (ocupado) return;
+    ocupado = true; const id = ++operacao;
+    status.textContent = "Aguarde…";
+    try { await acao(); }
+    catch { if (!signal.aborted && id === operacao) status.textContent = "Não consegui concluir. Confira provedor e credencial nos Painéis ou deixe pendente."; }
+    finally { if (id === operacao) { ocupado = false; if (testar) testar.disabled = false; } }
+  }
+  async function testarConexao() {
+    validado = ""; salvar.disabled = true;
+    if (!tipo || !url || !modelo) { status.textContent = "Preencha tipo, URL e modelo antes de testar."; return; }
+    await executar(async () => {
+      const s = assinatura(), g = geracao, id = operacao;
+      if (testar) testar.disabled = true;
+      const resultado = await requisitar("testar", { tipo, base_url: url, modelo, chave: await chave() }) as ResultadoTeste;
+      if (signal.aborted || g !== geracao || s !== assinatura() || id !== operacao) return;
+      status.textContent = resultado.ok ? `Conexão OK (${resultado.primeiro_token_ms ?? "?"} ms até primeiro token)` : `Falha: ${resultado.detalhe}. Tente novamente ou deixe pendente.`;
+      if (resultado.ok) { validado = s; salvar.disabled = false; }
+    });
+  }
+  async function listarModelos() {
+    await executar(async () => {
+      const g = geracao, s = assinatura(), id = operacao;
+      const resultado = await requisitar("modelos", { tipo, base_url: url, chave: await chave() });
+      if (signal.aborted || g !== geracao || s !== assinatura() || id !== operacao) return;
+      if (!resultado.ok) { status.textContent = `Falha: ${resultado.detalhe}`; return; }
+      const select = container.querySelector<HTMLSelectElement>("#cerebro-modelos")!; select.innerHTML = "";
+      for (const m of resultado.modelos as { id: string; instancias: unknown[] }[]) {
+        const o = document.createElement("option"); o.value = m.id; o.textContent = `${m.id}${m.instancias.length ? " (carregado)" : " (baixado)"}`; select.append(o);
+      }
+      select.value = modelo;
+      status.textContent = "Modelos já baixados. Escolha manualmente; nenhuma carga foi feita.";
+    });
+  }
+  async function trocarModelo() {
+    validado = ""; salvar.disabled = true;
+    if (tipo !== "lmstudio") { status.textContent = "Controle de carga disponível apenas para LM Studio. Use o painel do seu provedor."; return; }
+    await executar(async () => {
+      const s = assinatura(), g = geracao, id = operacao;
+      const r = await requisitar("trocar", { tipo, base_url: url, modelo, chave: await chave() }) as ResultadoTeste;
+      if (signal.aborted || g !== geracao || s !== assinatura() || id !== operacao) return;
+      status.textContent = r.ok ? "Carga confirmada. Teste a conexão antes de salvar." : `Troca interrompida: ${r.detalhe}`;
+    });
+  }
+  async function salvarEscolha(pendente: boolean, pular = false) {
+    if (ocupado || signal.aborted) return;
+    if (!pendente && validado !== assinatura()) return;
+    await executar(async () => {
+      if (!pular) {
+        if (escolhido === "proprio") {
+          if (!cfg) throw new Error("cadastro_indisponivel");
+          const p: Provedor = { id: provedorId || "primeiro-uso", nome: provedorId || "Primeiro uso", tipo, url_base: url, modelo,
+            ...(ref ? { credencial_ref: ref } : {}) };
+          const novo = { ...cfg, ativo: p.id, provedores: [...cfg.provedores.filter(x => x.id !== p.id), p] };
+          await (deps.gravarProvedores ?? gravarPaineis)(novo); cfg = novo;
+        }
+        await (deps.salvarCerebro ?? (c => atualizarConfig({ cerebro: c as "openjarvis" | "proprio" })))(escolhido as "openjarvis" | "proprio");
+      }
+      const novo = await atualizarEstadoPrimeiroUso(deps.ponteUrl, { etapa: "voz", pendencias: pendencias(pendente),
+        ...(!pular ? { cerebro_id: escolhido } : {}) });
+      if (signal.aborted) return;
+      if (!novo) throw new Error("persistencia_falhou");
+      deps.aoSalvar?.(novo);
+    });
+  }
   desenhar();
-
-  // Função de limpeza
-  return () => {
-    abortController.abort();
-    container.innerHTML = "";
-  };
+  void (deps.lerProvedores ?? lerPaineis)().then(p => {
+    cfg = p;
+    if (signal.aborted || editado) return;
+    const ativo = p.provedores.find(x => x.id === p.ativo);
+    if (ativo) { provedorId = ativo.id; tipo = ativo.tipo; url = ativo.url_base; modelo = ativo.modelo; ref = ativo.credencial_ref ?? ""; }
+    desenhar();
+  }).catch(() => { /* Painéis indisponíveis: pular permanece disponível. */ });
+  return () => { ac.abort(); container.innerHTML = ""; };
 }

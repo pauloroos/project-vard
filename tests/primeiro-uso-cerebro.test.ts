@@ -2,6 +2,12 @@
  * Cobre: montagem da UI, escolha entre OpenJarvis/próprio, teste de conexão
  * com dublê HTTP, salvamento da escolha e limpeza de recursos.
  * Nenhum teste real contra LM Studio ou API externa. */
+vi.mock("../src/config/paineis", async (original) => {
+  const mod = await original<typeof import("../src/config/paineis")>();
+  return { ...mod, lerPaineis: vi.fn().mockResolvedValue(mod.PAINEIS_PADRAO), gravarPaineis: vi.fn().mockResolvedValue(undefined) };
+});
+vi.mock("../src/config/config", () => ({ atualizarConfig: vi.fn().mockResolvedValue(undefined) }));
+
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { montarEtapaCerebro, type DepsEtapaCerebro } from "../src/ui/primeiro-uso-cerebro";
 import type { EstadoPrimeiroUso } from "../src/config/primeiro-uso";
@@ -91,9 +97,10 @@ describe("montarEtapaCerebro", () => {
     montarEtapaCerebro(container, deps);
 
     // Preenche campos obrigatórios
+    await new Promise(r => setTimeout(r, 0));
     const urlInput = container.querySelector('input[type="url"]') as HTMLInputElement;
     const modeloInput = container.querySelector('input[type="text"]') as HTMLInputElement;
-    urlInput.value = "http://localhost:1234";
+    urlInput.value = "http://provedor.invalid";
     modeloInput.value = "llama-3";
 
     // Clica em Testar
@@ -120,9 +127,10 @@ describe("montarEtapaCerebro", () => {
     });
     montarEtapaCerebro(container, deps);
 
+    await new Promise(r => setTimeout(r, 0));
     const urlInput = container.querySelector('input[type="url"]') as HTMLInputElement;
     const modeloInput = container.querySelector('input[type="text"]') as HTMLInputElement;
-    urlInput.value = "http://localhost:1234";
+    urlInput.value = "http://provedor.invalid";
     modeloInput.value = "llama-3";
 
     const botoes = container.querySelectorAll("button");
@@ -155,9 +163,10 @@ describe("montarEtapaCerebro", () => {
     });
     montarEtapaCerebro(container, deps);
 
+    await new Promise(r => setTimeout(r, 0));
     const urlInput = container.querySelector('input[type="url"]') as HTMLInputElement;
     const modeloInput = container.querySelector('input[type="text"]') as HTMLInputElement;
-    urlInput.value = "http://localhost:1234";
+    urlInput.value = "http://provedor.invalid";
     modeloInput.value = "llama-3";
 
     const botoes = container.querySelectorAll("button");
@@ -193,5 +202,112 @@ describe("montarEtapaCerebro", () => {
     // Botão Salvar deve estar presente mesmo sem formulário
     const btnSalvar = container.querySelector("button");
     expect(btnSalvar).not.toBeNull();
+  });
+});
+import { montarAssistentePrimeiroUso } from "../src/ui/primeiro-uso";
+
+describe("integração da etapa cérebro", () => {
+  afterEach(() => { vi.unstubAllGlobals(); document.body.innerHTML = ""; });
+  it("monta pelo deps.cerebro e pular persiste pendência", async () => {
+    const inicial = estadoInicial();
+    const fetch = vi.fn().mockImplementation(async (_url, opcoes) => ({ ok: true,
+      json: async () => opcoes?.method === "PUT" ? { ...inicial, ...JSON.parse(opcoes.body) } : inicial }));
+    vi.stubGlobal("fetch", fetch);
+    const limpar = await montarAssistentePrimeiroUso(document.body, { ponteUrl: "http://nucleo.invalid", cerebro: {} });
+    expect(document.querySelector('[name="cerebro-escolha"]')).not.toBeNull();
+    document.querySelector<HTMLButtonElement>("#cerebro-pular")!.click();
+    await vi.waitFor(() => expect(fetch).toHaveBeenCalledWith("http://nucleo.invalid/primeiro-uso",
+      expect.objectContaining({ body: expect.stringContaining("cerebro_nao_testado") })));
+    limpar?.();
+    expect(document.querySelector("#primeiro-uso-etapa")).toBeNull();
+  });
+
+  it("próximo sem teste preserva a pendência crítica", async () => {
+    const inicial = estadoInicial();
+    const fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => inicial });
+    vi.stubGlobal("fetch", fetch);
+    const limpar = await montarAssistentePrimeiroUso(document.body, { ponteUrl: "http://nucleo.invalid", cerebro: {} });
+    document.querySelector<HTMLButtonElement>("#primeiro-uso-proximo")!.click();
+    await vi.waitFor(() => expect(fetch).toHaveBeenCalledWith("http://nucleo.invalid/primeiro-uso",
+      expect.objectContaining({ body: expect.stringContaining("cerebro_nao_testado") })));
+    limpar?.();
+  });
+});
+
+import { PAINEIS_PADRAO, gravarPaineis } from "../src/config/paineis";
+import { atualizarConfig } from "../src/config/config";
+
+describe("escolha manual e falhas", () => {
+  let container: HTMLDivElement;
+  let limpar: (() => void) | undefined;
+  beforeEach(() => { container = document.createElement("div"); document.body.append(container); vi.clearAllMocks(); });
+  afterEach(() => { limpar?.(); container.remove(); vi.unstubAllGlobals(); });
+  async function montar() {
+    limpar = montarEtapaCerebro(container, depsPadrao({ estadoInicial: estadoInicial({ cerebro_id: "proprio" }) }));
+    await new Promise(r => setTimeout(r, 0));
+    container.querySelector<HTMLInputElement>('input[type="url"]')!.value = "http://provedor.invalid";
+    container.querySelector<HTMLInputElement>('input[type="text"]')!.value = "novo";
+  }
+  it("lista baixados apenas ao pedir e preserva seleção", async () => {
+    const fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ ok: true, modelos: [
+      { id: "antigo", instancias: [{ id: "residente" }] }, { id: "novo", instancias: [] }] }) });
+    vi.stubGlobal("fetch", fetch); await montar();
+    expect(fetch).not.toHaveBeenCalled();
+    container.querySelector<HTMLButtonElement>("#cerebro-listar")!.click();
+    await vi.waitFor(() => expect(container.querySelector("#cerebro-modelos")!.textContent).toContain("novo (baixado)"));
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(fetch.mock.calls[0][0]).toContain("/modelos");
+  });
+  it("mudança de endpoint invalida teste e resposta antiga não libera salvar", async () => {
+    let resolver!: (v: unknown) => void;
+    vi.stubGlobal("fetch", vi.fn().mockReturnValue(new Promise(r => { resolver = r; })));
+    await montar();
+    container.querySelector<HTMLButtonElement>("button")!.click();
+    await new Promise(r => setTimeout(r, 0));
+    const input = container.querySelector<HTMLInputElement>('input[type="url"]')!;
+    input.value = "http://outro.invalid"; input.dispatchEvent(new Event("input"));
+    resolver({ ok: true, json: async () => ({ ok: true, primeiro_token_ms: 1 }) });
+    await new Promise(r => setTimeout(r, 0));
+    expect(container.querySelectorAll<HTMLButtonElement>("button")[1].disabled).toBe(true);
+  });
+  it("falha permite tentar novamente e pular sem alterar provedor ativo", async () => {
+    const fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ ok: false, detalhe: "conexao" }) });
+    vi.stubGlobal("fetch", fetch); await montar();
+    const b = container.querySelector<HTMLButtonElement>("button")!; b.click();
+    await vi.waitFor(() => expect(container.textContent).toContain("Falha: conexao"));
+    expect(b.disabled).toBe(false);
+    expect(container.querySelectorAll<HTMLButtonElement>("button")[1].disabled).toBe(true);
+    container.querySelector<HTMLButtonElement>("#cerebro-pular")!.click();
+    await vi.waitFor(() => expect(fetch).toHaveBeenCalledTimes(2));
+    expect(gravarPaineis).not.toHaveBeenCalled(); expect(atualizarConfig).not.toHaveBeenCalled();
+  });
+  it("retoma provedor escolhido e salva modelo sem substituir reserva nem agentes", async () => {
+    const cfg = structuredClone(PAINEIS_PADRAO);
+    cfg.provedores = [{ id: "cpu", nome: "Local CPU", tipo: "lmstudio", url_base: "http://cpu.invalid", modelo: "antigo" },
+      { id: "externo", nome: "Direto", tipo: "anthropic", url_base: "https://externo.invalid", modelo: "remoto" }];
+    cfg.ativo = "cpu"; cfg.reserva = "externo";
+    const gravar = vi.fn().mockResolvedValue(undefined);
+    const fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ ok: true, primeiro_token_ms: 2 }) });
+    vi.stubGlobal("fetch", fetch);
+    limpar = montarEtapaCerebro(container, depsPadrao({ estadoInicial: estadoInicial({ cerebro_id: "proprio" }),
+      lerProvedores: async () => cfg, gravarProvedores: gravar }));
+    await new Promise(r => setTimeout(r, 0));
+    expect(container.querySelector<HTMLInputElement>('input[type="url"]')!.value).toBe("http://cpu.invalid");
+    const modelo = container.querySelector<HTMLInputElement>('input[type="text"]')!;
+    modelo.value = "novo"; modelo.dispatchEvent(new Event("input"));
+    container.querySelector<HTMLButtonElement>("button")!.click();
+    await vi.waitFor(() => expect(container.querySelectorAll<HTMLButtonElement>("button")[1].disabled).toBe(false));
+    container.querySelectorAll<HTMLButtonElement>("button")[1].click();
+    await vi.waitFor(() => expect(gravar).toHaveBeenCalled());
+    expect(gravar.mock.calls[0][0]).toMatchObject({ ativo: "cpu", reserva: "externo", agentes: cfg.agentes });
+    expect(gravar.mock.calls[0][0].provedores.find((p: { id: string }) => p.id === "externo")).toEqual(cfg.provedores[1]);
+  });
+  it("troca recusada não valida conexão", async () => {
+    const fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ ok: false, detalhe: "descarga_nao_confirmada" }) });
+    vi.stubGlobal("fetch", fetch); await montar();
+    container.querySelector<HTMLButtonElement>("#cerebro-trocar")!.click();
+    await vi.waitFor(() => expect(container.textContent).toContain("descarga_nao_confirmada"));
+    expect(fetch.mock.calls[0][0]).toContain("/trocar");
+    expect(container.querySelectorAll<HTMLButtonElement>("button")[1].disabled).toBe(true);
   });
 });

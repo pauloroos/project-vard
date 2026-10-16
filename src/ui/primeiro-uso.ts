@@ -5,6 +5,8 @@ import type { EstadoPrimeiroUso } from "../config/primeiro-uso";
 import { atualizarEstadoPrimeiroUso, lerEstadoPrimeiroUso, reabrirPrimeiroUso } from "../config/primeiro-uso";
 import { montarEtapaAudio, type DepsEtapaAudio, type ResultadoEtapaAudio } from "./primeiro-uso-audio";
 
+import { montarEtapaCerebro, type DepsEtapaCerebro } from "./primeiro-uso-cerebro";
+
 const ETAPAS = ["importar", "detectar", "nome", "cerebro", "voz", "audio", "resumo"] as const;
 type Etapa = (typeof ETAPAS)[number];
 
@@ -26,6 +28,7 @@ export interface DepsPrimeiroUso {
   salvarNome?: (nome: string, variantes: string[]) => Promise<void>;
   /** Recursos da janela hospedeira; a restauração da escuta permanece com o widget. */
   audio?: DepsEtapaAudio;
+  cerebro?: Omit<DepsEtapaCerebro, "ponteUrl" | "estadoInicial" | "aoSalvar">;
 }
 
 function criarContainer(): HTMLDivElement {
@@ -61,6 +64,11 @@ function renderizarEtapa(
     input.placeholder = "Ex.: Aurora";
     input.value = estado.nome_chamada || "";
     corpo.appendChild(input);
+  } else if (etapa === "cerebro" && deps.cerebro) {
+    const alvo = document.createElement("div"); alvo.id = "primeiro-uso-container-cerebro";
+    corpo.appendChild(alvo);
+    limparConteudo = montarEtapaCerebro(alvo, { ...deps.cerebro, ponteUrl: deps.ponteUrl,
+      estadoInicial: estado, aoSalvar: onAtualizado });
   } else if (etapa === "resumo") {
     const resumoDiv = document.createElement("div");
     resumoDiv.id = "primeiro-uso-resumo";
@@ -161,6 +169,7 @@ function renderizarEtapa(
     }
     const novo = await atualizarEstadoPrimeiroUso(deps.ponteUrl, {
       etapa: ETAPAS[idxAtual + 1],
+      ...(etapa === "cerebro" ? { pendencias: [...new Set([...estado.pendencias, "cerebro_nao_testado"])] } : {}),
     });
     if (novo) onAtualizado(novo);
   };
