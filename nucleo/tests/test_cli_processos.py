@@ -398,3 +398,33 @@ async def test_linha_maior_que_64kb_nao_derruba_o_canal(base_dados: Path) -> Non
     finally:
         mod.argv_cli = original_argv  # type: ignore[assignment]
         await sup.encerrar_tudo()
+
+
+@pytest.mark.asyncio
+async def test_dois_turnos_na_mesma_sessao_leem_do_mesmo_canal(base_dados: Path) -> None:
+    """D7: o 2º turno da mesma sessão reaproveita o processo E o leitor do stdout.
+    Antes, cada canal() criava um leitor novo no mesmo stdout e o 2º turno virava cli_caiu
+    ("readuntil() called while another coroutine is already waiting")."""
+    import vard.cerebro.cli_processos as mod
+    from vard.cerebro.cli import AdaptadorCli
+
+    sup = SupervisorCli(base_dados=base_dados, ocioso_segundos=60.0)
+    original_argv = mod.argv_cli
+    mod.argv_cli = lambda p, pasta: [sys.executable, CLI_VIVA, "--dialeto", "claude"]  # type: ignore[assignment]
+    try:
+        prov = ProvedorCli(id="falso_claude", tipo="cli-claude", modelo="teste", yolo=False)
+        respostas = []
+        pids = []
+        for texto in ("um", "dois", "tres"):
+            canal = await sup.canal(prov, "sess-turnos")
+            pids.append(sup._processos["falso_claude:sess-turnos"].pid)
+            partes = []
+            async for ev in AdaptadorCli(canal, "claude").inferir([{"role": "user", "content": texto}]):
+                if ev.tipo == "texto":
+                    partes.append(ev.dados.get("conteudo", ""))
+            respostas.append("".join(partes))
+        assert respostas == ["eco: um", "eco: dois", "eco: tres"]
+        assert len(set(pids)) == 1, "a sessão continua no mesmo processo"
+    finally:
+        mod.argv_cli = original_argv  # type: ignore[assignment]
+        await sup.encerrar_tudo()
