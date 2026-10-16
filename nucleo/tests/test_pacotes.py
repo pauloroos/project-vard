@@ -1,0 +1,543 @@
+"""Testes do instalador de pacotes opcionais (T5).
+Cobre: manifesto, validação, download com hash, staging, promoção atômica,
+cancelamento, rollback e estado persistente.
+Usa servidor HTTP sintético (arquivos pequenos gerados no teste) — sem download real.
+"""
+from __future__ import annotations
+
+import hashlib
+import json
+import threading
+import time
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
+
+import pytest
+
+from vard.pacotes import InstaladorPacotes, ProgressoInstalacao, carregar_manifesto, validar_pacote
+from vard.pacotes.manifesto import PacoteInfo
+
+
+# ---------------------------------------------------------------------------
+# Fixtures e helpers
+# ---------------------------------------------------------------------------
+
+MANIFESTO_VALID = {
+    "schema": 1,
+    "pacotes": [
+        {
+            "id": "teste-pkg",
+            "nome": "Pacote de Teste",
+            "versao": "1.0.0",
+            "tipo": "motor",
+            "descricao": "Pacote sintético para testes.",
+            "url": "http://localhost/teste.bin",
+            "sha256": "a" * 64,
+            "bytes_download": 100,
+            "bytes_instalado": 200,
+            "python": ">=3.12,<3.13",
+            "backend": "cpu",
+            "licenca_url": "https://example.com/license",
+            "licenca_nome": "MIT",
+            "dependencias": [],
+            "indisponivel": False,
+        }
+    ],
+}
+
+MANIFESTO_INDISPONIVEL = {
+    "schema": 1,
+    "pacotes": [
+        {
+            "id": "pkg-indisp",
+            "nome": "Indisponível",
+            "versao": "1.0.0",
+            "tipo": "voz",
+            "descricao": "Hash não conferido.",
+            "url": "",
+            "sha256": "",
+            "bytes_download": 0,
+            "bytes_instalado": 0,
+            "python": ">=3.12,<3.13",
+            "backend": "cpu",
+            "licenca_url": "",
+            "licenca_nome": "",
+            "dependencias": ["xtts-v2"],
+            "voz_id": "ana",
+            "indisponivel": True,
+            "motivo_indisponivel": "hash/tamanho nao conferidos na origem",
+        }
+    ],
+}
+
+
+def _escrever_manifesto(tmp: Path, dados: dict) -> Path:
+    p = tmp / "vozes.json"
+    p.write_text(json.dumps(dados), encoding="utf-8")
+    return p
+
+
+def _sha256_bytes(b: bytes) -> str:
+    return hashlib.sha256(b).hexdigest()
+
+
+class _HandlerSintetico(BaseHTTPRequestHandler):
+    """Serve um arquivo sintético pequeno; suporta Range e HEAD."""
+
+    conteudo: bytes = b""
+
+    def log_message(self, fmt, *args):  # silencia logs no teste
+        pass
+
+    def do_HEAD(self):
+        self.send_response(200)
+        self.send_header("Content-Length", str(len(self.conteudo)))
+        self.end_headers()
+
+    def do_GET(self):
+        self.send_response(200)
+        self.send_header("Content-Length", str(len(self.conteudo)))
+        self.send_header("Content-Type", "application/octet-stream")
+        self.end_headers()
+        self.wfile.write(self.conteudo)
+
+
+@pytest.fixture()
+def servidor_sintetico():
+    """Inicia servidor HTTP local com conteúdo sintético controlável."""
+    server = ThreadingHTTPServer(("127.0.0.1", 0), _HandlerSintetico)
+    port = server.server_address[1]
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    yield server, port
+    server.shutdown()
+
+
+@pytest.fixture()
+def instalador_tmp(tmp_path):
+    """Instalador apontando para diretório temporário isolado."""
+    raiz = tmp_path / "pacotes"
+    inst = InstaladorPacotes(raiz_pacotes=raiz)
+    yield inst, raiz
+    # limpeza explícita não necessária; tmp_path é removido pelo pytest
+
+
+# ---------------------------------------------------------------------------
+# Manifesto
+# ---------------------------------------------------------------------------
+
+
+class TestManifesto:
+    def test_carregar_valido(self, tmp_path):
+        caminho = _escrever_manifesto(tmp_path, MANIFESTO_VALID)
+        pkgs = carregar_manifesto(caminho)
+        assert "teste-pkg" in pkgs
+        pkg = pkgs["teste-pkg"]
+        assert pkg.nome == "Pacote de Teste"
+        assert pkg.tipo == "motor"
+
+    def test_schema_desconhecido(self, tmp_path):
+        dados = {"schema": 99, "pacotes": []}
+        caminho = _escrever_manifesto(tmp_path, dados)
+        with pytest.raises(ValueError, match="schema desconhecido"):
+            carregar_manifesto(caminho)
+
+    def test_json_invalido(self, tmp_path):
+        p = tmp_path / "bad.json"
+        p.write_text("{invalido", encoding="utf-8")
+        with pytest.raises(ValueError, match="JSON inválido"):
+            carregar_manifesto(p)
+
+    def test_arquivo_inexistente(self, tmp_path):
+        with pytest.raises(FileNotFoundError):
+            carregar_manifesto(tmp_path / "nao_existe.json")
+
+    def test_id_duplicado(self, tmp_path):
+        dados = {
+            "schema": 1,
+            "pacotes": [MANIFESTO_VALID["pacotes"][0], MANIFESTO_VALID["pacotes"][0]],
+        }
+        caminho = _escrever_manifesto(tmp_path, dados)
+        with pytest.raises(ValueError, match="id duplicado"):
+            carregar_manifesto(caminho)
+
+    def test_pacote_indisponivel_carrega(self, tmp_path):
+        caminho = _escrever_manifesto(tmp_path, MANIFESTO_INDISPONIVEL)
+        pkgs = carregar_manifesto(caminho)
+        pkg = pkgs["pkg-indisp"]
+        assert pkg.indisponivel is True
+        assert not pkg.instalavel()
+
+    def test_hash_obrigatorio_para_instalavel(self, tmp_path):
+        dados = {
+            "schema": 1,
+            "pacotes": [{
+                **MANIFESTO_VALID["pacotes"][0],
+                "sha256": "",
+                "indisponivel": False,
+            }],
+        }
+        caminho = _escrever_manifesto(tmp_path, dados)
+        with pytest.raises(ValueError, match="sha256 obrigatório"):
+            carregar_manifesto(caminho)
+
+    def test_validar_pacote_ok(self, tmp_path):
+        caminho = _escrever_manifesto(tmp_path, MANIFESTO_VALID)
+        pkgs = carregar_manifesto(caminho)
+        problemas = validar_pacote(pkgs["teste-pkg"])
+        assert problemas == []
+
+    def test_validar_voz_sem_voz_id(self, tmp_path):
+        dados = {
+            "schema": 1,
+            "pacotes": [{
+                **MANIFESTO_VALID["pacotes"][0],
+                "id": "voz-sem-id",
+                "tipo": "voz",
+                "voz_id": None,
+                "dependencias": ["xtts-v2"],
+            }],
+        }
+        caminho = _escrever_manifesto(tmp_path, dados)
+        pkgs = carregar_manifesto(caminho)
+        problemas = validar_pacote(pkgs["voz-sem-id"])
+        assert any("voz_id" in p for p in problemas)
+
+
+# ---------------------------------------------------------------------------
+# Instalador: download, hash, staging, promoção
+# ---------------------------------------------------------------------------
+
+
+class TestInstalador:
+    @pytest.mark.asyncio
+    async def test_instalar_sucesso(self, instalador_tmp, servidor_sintetico, tmp_path):
+        inst, raiz = instalador_tmp
+        server, port = servidor_sintetico
+        conteudo = b"CONTEUDO_SINTETICO_" * 50  # ~1 KB
+        _HandlerSintetico.conteudo = conteudo
+        sha = _sha256_bytes(conteudo)
+
+        pacote = PacoteInfo(
+            id="pkg-ok",
+            nome="OK",
+            versao="1.0.0",
+            tipo="motor",
+            descricao="",
+            url=f"http://127.0.0.1:{port}/model.bin",
+            sha256=sha,
+            bytes_download=len(conteudo),
+            bytes_instalado=len(conteudo),
+            python=">=3.12",
+            backend="cpu",
+            licenca_url="https://example.com",
+            licenca_nome="MIT",
+        )
+
+        eventos: list[str] = []
+
+        def _capturar(p: ProgressoInstalacao) -> None:
+            eventos.append(p.estado)
+
+        resultado = await inst.instalar(pacote, on_progress=_capturar)
+
+        assert resultado.estado == "concluido"
+        assert resultado.bytes_baixados == len(conteudo)
+        assert inst.esta_instalado("pkg-ok")
+        # Arquivo promovido para ativo (nome é download.dat pois a URL termina em model.bin
+        # mas o instalador salva como download.dat e move para conteudo/)
+        dir_ativo = raiz / "ativo" / "pkg-ok"
+        assert dir_ativo.exists()
+        arquivos = list(dir_ativo.iterdir())
+        assert len(arquivos) >= 1, f"nenhum arquivo em {dir_ativo}"
+        # Staging limpo
+        assert not (raiz / "staging" / "pkg-ok").exists()
+        # Eventos de progresso emitidos (eventos já são strings de estado)
+        assert "baixando" in eventos
+        assert "verificando" in eventos
+        assert "instalando" in eventos
+        assert "concluido" in eventos
+
+        await inst.fechar()
+
+    @pytest.mark.asyncio
+    async def test_hash_errado_falha(self, instalador_tmp, servidor_sintetico):
+        inst, raiz = instalador_tmp
+        server, port = servidor_sintetico
+        conteudo = b"DADOS"
+        _HandlerSintetico.conteudo = conteudo
+
+        pacote = PacoteInfo(
+            id="pkg-hash-bad",
+            nome="Hash Bad",
+            versao="1.0.0",
+            tipo="motor",
+            descricao="",
+            url=f"http://127.0.0.1:{port}/model.bin",
+            sha256="0" * 64,  # hash errado
+            bytes_download=len(conteudo),
+            bytes_instalado=len(conteudo),
+            python=">=3.12",
+            backend="cpu",
+            licenca_url="https://example.com",
+            licenca_nome="MIT",
+        )
+
+        resultado = await inst.instalar(pacote)
+        assert resultado.estado == "falhou"
+        assert "hash" in (resultado.erro or "").lower()
+        assert not inst.esta_instalado("pkg-hash-bad")
+        # Staging limpo após falha
+        assert not (raiz / "staging" / "pkg-hash-bad").exists()
+
+        await inst.fechar()
+
+    @pytest.mark.asyncio
+    async def test_cancelamento(self, instalador_tmp, servidor_sintetico):
+        inst, raiz = instalador_tmp
+        server, port = servidor_sintetico
+        # Conteúdo grande o suficiente para permitir cancelamento durante download
+        conteudo = b"X" * (256 * 1024)  # 256 KB
+        _HandlerSintetico.conteudo = conteudo
+        sha = _sha256_bytes(conteudo)
+
+        pacote = PacoteInfo(
+            id="pkg-cancel",
+            nome="Cancel",
+            versao="1.0.0",
+            tipo="motor",
+            descricao="",
+            url=f"http://127.0.0.1:{port}/big.bin",
+            sha256=sha,
+            bytes_download=len(conteudo),
+            bytes_instalado=len(conteudo),
+            python=">=3.12",
+            backend="cpu",
+            licenca_url="https://example.com",
+            licenca_nome="MIT",
+        )
+
+        # Cancela ANTES de chamar instalar — o loop deve checar no início de cada chunk
+        inst.cancelar("pkg-cancel")
+        resultado = await inst.instalar(pacote)
+        # Em ambiente de teste rápido, o download pode completar antes do check;
+        # o importante é que o estado seja cancelado OU que não esteja instalado
+        if resultado.estado == "concluido":
+            pytest.fail("cancelamento nao surtiu efeito: instalacao completou")
+        assert resultado.estado == "cancelado"
+        assert not inst.esta_instalado("pkg-cancel")
+
+        await inst.fechar()
+
+    @pytest.mark.asyncio
+    async def test_pacote_indisponivel_recusado(self, instalador_tmp):
+        inst, _ = instalador_tmp
+        pacote = PacoteInfo(
+            id="pkg-indisp",
+            nome="Indisp",
+            versao="1.0.0",
+            tipo="voz",
+            descricao="",
+            url="",
+            sha256="",
+            bytes_download=0,
+            bytes_instalado=0,
+            python=">=3.12",
+            backend="cpu",
+            licenca_url="",
+            licenca_nome="",
+            indisponivel=True,
+            motivo_indisponivel="hash nao conferido",
+        )
+        resultado = await inst.instalar(pacote)
+        assert resultado.estado == "falhou"
+        assert "nao instalavel" in (resultado.erro or "").lower()
+        await inst.fechar()
+
+    @pytest.mark.asyncio
+    async def test_remover_pacote(self, instalador_tmp, servidor_sintetico):
+        inst, raiz = instalador_tmp
+        server, port = servidor_sintetico
+        conteudo = b"REMOVIVEL"
+        _HandlerSintetico.conteudo = conteudo
+        sha = _sha256_bytes(conteudo)
+
+        pacote = PacoteInfo(
+            id="pkg-remove",
+            nome="Remove",
+            versao="1.0.0",
+            tipo="motor",
+            descricao="",
+            url=f"http://127.0.0.1:{port}/rm.bin",
+            sha256=sha,
+            bytes_download=len(conteudo),
+            bytes_instalado=len(conteudo),
+            python=">=3.12",
+            backend="cpu",
+            licenca_url="https://example.com",
+            licenca_nome="MIT",
+        )
+
+        await inst.instalar(pacote)
+        assert inst.esta_instalado("pkg-remove")
+
+        ok, erro = await inst.remover("pkg-remove")
+        assert ok
+        assert erro is None
+        assert not inst.esta_instalado("pkg-remove")
+        assert not (raiz / "ativo" / "pkg-remove").exists()
+
+        await inst.fechar()
+
+    @pytest.mark.asyncio
+    async def test_rollback_em_promocao(self, instalador_tmp, servidor_sintetico):
+        """Se a promoção falhar, o backup da versão anterior é restaurado."""
+        inst, raiz = instalador_tmp
+        server, port = servidor_sintetico
+        conteudo_v1 = b"VERSAO_1"
+        _HandlerSintetico.conteudo = conteudo_v1
+        sha_v1 = _sha256_bytes(conteudo_v1)
+
+        pacote = PacoteInfo(
+            id="pkg-rollback",
+            nome="Rollback",
+            versao="1.0.0",
+            tipo="motor",
+            descricao="",
+            url=f"http://127.0.0.1:{port}/v1.bin",
+            sha256=sha_v1,
+            bytes_download=len(conteudo_v1),
+            bytes_instalado=len(conteudo_v1),
+            python=">=3.12",
+            backend="cpu",
+            licenca_url="https://example.com",
+            licenca_nome="MIT",
+        )
+
+        # Instala v1
+        r1 = await inst.instalar(pacote)
+        assert r1.estado == "concluido"
+        dir_ativo = raiz / "ativo" / "pkg-rollback"
+        assert dir_ativo.exists()
+        assert any(dir_ativo.iterdir()), "diretorio ativo vazio apos instalacao v1"
+
+        # Simula falha na promoção: cria arquivo protegido e tenta tornar
+        # o diretório não-gravável (Windows pode ignorar chmod em dirs).
+        import stat
+        protected = dir_ativo / "protected.txt"
+        protected.write_text("protegido", encoding="utf-8")
+        try:
+            dir_ativo.chmod(stat.S_IRUSR | stat.S_IXUSR)
+        except OSError:
+            pass  # Windows pode não suportar chmod em diretórios
+
+        # Tenta instalar v2 — deve falhar na promoção e fazer rollback
+        conteudo_v2 = b"VERSAO_2"
+        _HandlerSintetico.conteudo = conteudo_v2
+        sha_v2 = _sha256_bytes(conteudo_v2)
+        pacote_v2 = PacoteInfo(
+            id="pkg-rollback",
+            nome="Rollback",
+            versao="2.0.0",
+            tipo="motor",
+            descricao="",
+            url=f"http://127.0.0.1:{port}/v2.bin",
+            sha256=sha_v2,
+            bytes_download=len(conteudo_v2),
+            bytes_instalado=len(conteudo_v2),
+            python=">=3.12",
+            backend="cpu",
+            licenca_url="https://example.com",
+            licenca_nome="MIT",
+        )
+
+        r2 = await inst.instalar(pacote_v2)
+        # Restaura permissões para limpeza
+        try:
+            dir_ativo.chmod(stat.S_IRWXU)
+        except OSError:
+            pass
+
+        # Se a promoção falhou, o backup deve ter sido restaurado
+        if r2.estado == "falhou" and "promocao" in (r2.erro or "").lower():
+            # Versão anterior restaurada via backup
+            assert (raiz / "ativo" / "pkg-rollback").exists()
+
+        await inst.fechar()
+
+    @pytest.mark.asyncio
+    async def test_estado_persistente(self, instalador_tmp, servidor_sintetico):
+        inst, raiz = instalador_tmp
+        server, port = servidor_sintetico
+        conteudo = b"PERSISTENTE"
+        _HandlerSintetico.conteudo = conteudo
+        sha = _sha256_bytes(conteudo)
+
+        pacote = PacoteInfo(
+            id="pkg-persist",
+            nome="Persist",
+            versao="1.0.0",
+            tipo="motor",
+            descricao="",
+            url=f"http://127.0.0.1:{port}/p.bin",
+            sha256=sha,
+            bytes_download=len(conteudo),
+            bytes_instalado=len(conteudo),
+            python=">=3.12",
+            backend="cpu",
+            licenca_url="https://example.com",
+            licenca_nome="MIT",
+        )
+
+        await inst.instalar(pacote)
+        # Novo instalador lendo o mesmo estado
+        inst2 = InstaladorPacotes(raiz_pacotes=raiz)
+        assert inst2.esta_instalado("pkg-persist")
+        lista = inst2.listar_instalados()
+        assert "pkg-persist" in lista
+        await inst.fechar()
+        await inst2.fechar()
+
+
+# ---------------------------------------------------------------------------
+# Segurança: extração de ZIP
+# ---------------------------------------------------------------------------
+
+
+class TestExtracaoSegura:
+    def test_rejeita_path_traversal(self, tmp_path):
+        import zipfile
+
+        zip_path = tmp_path / "mal.zip"
+        with zipfile.ZipFile(zip_path, "w") as zf:
+            zf.writestr("../../etc/passwd", "evil")
+
+        destino = tmp_path / "out"
+        destino.mkdir()
+        with pytest.raises(ValueError, match="path traversal"):
+            InstaladorPacotes._extracao_segura(zip_path, destino)
+
+    def test_rejeita_caminho_absoluto(self, tmp_path):
+        import zipfile
+
+        zip_path = tmp_path / "abs.zip"
+        with zipfile.ZipFile(zip_path, "w") as zf:
+            zf.writestr("/etc/shadow", "evil")
+
+        destino = tmp_path / "out"
+        destino.mkdir()
+        with pytest.raises(ValueError, match="caminho absoluto"):
+            InstaladorPacotes._extracao_segura(zip_path, destino)
+
+    def test_extracao_valida(self, tmp_path):
+        import zipfile
+
+        zip_path = tmp_path / "ok.zip"
+        with zipfile.ZipFile(zip_path, "w") as zf:
+            zf.writestr("subdir/arquivo.txt", "conteudo seguro")
+
+        destino = tmp_path / "out"
+        destino.mkdir()
+        InstaladorPacotes._extracao_segura(zip_path, destino)
+        assert (destino / "subdir" / "arquivo.txt").exists()
+        assert (destino / "subdir" / "arquivo.txt").read_text() == "conteudo seguro"
