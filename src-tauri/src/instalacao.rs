@@ -647,6 +647,7 @@ mod testes {
 
     #[test]
     fn arquivo_instalacao_usa_vard_instalacao_quando_definido() {
+        let _ambiente = crate::ciclo::testes::ambiente_isolado();
         let dir = tempfile::tempdir().unwrap();
         let caminho = dir.path().join("custom").join("instalacao.json");
         unsafe { std::env::set_var("VARD_INSTALACAO", &caminho) };
@@ -658,9 +659,7 @@ mod testes {
 
     #[test]
     fn arquivo_instalacao_usa_vard_dados_quando_instalacao_ausente() {
-        // Usa ENV_LOCK compartilhado com ciclo::testes para evitar corrida em VARD_DADOS.
-        static ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
-        let _lock = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _ambiente = crate::ciclo::testes::ambiente_isolado();
         let dir = tempfile::tempdir().unwrap();
         unsafe { std::env::remove_var("VARD_INSTALACAO") };
         let dados = dir.path().join("meus_dados");
@@ -672,6 +671,7 @@ mod testes {
 
     #[test]
     fn arquivo_instalacao_fallback_para_app_data() {
+        let _ambiente = crate::ciclo::testes::ambiente_isolado();
         let dir = tempfile::tempdir().unwrap();
         unsafe { std::env::remove_var("VARD_INSTALACAO") };
         unsafe { std::env::remove_var("VARD_DADOS") };
@@ -683,6 +683,7 @@ mod testes {
 
     #[test]
     fn arquivo_instalacao_ignora_vard_instalacao_vazia() {
+        let _ambiente = crate::ciclo::testes::ambiente_isolado();
         let dir = tempfile::tempdir().unwrap();
         unsafe { std::env::set_var("VARD_INSTALACAO", "") };
         let dados = dir.path().join("dados_env");

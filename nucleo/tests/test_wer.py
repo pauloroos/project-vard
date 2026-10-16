@@ -14,14 +14,12 @@ def _openjarvis_no_ar() -> bool:
         return False
 
 
-pytestmark = [
-    pytest.mark.skipif(not _openjarvis_no_ar(), reason="OpenJarvis fora do ar"),
-    pytest.mark.skipif(not preflight.WAV_REUNIAO.exists(),
-                       reason="sem o áudio real da reunião em <pasta_dados>/preflight/preflight-reuniao.wav"),
-]
+pytestmark = pytest.mark.pc_real
 
 
 def test_wer_do_wav_da_reuniao_abaixo_de_15_por_cento():
+    if not preflight.WAV_REUNIAO.exists() or not _openjarvis_no_ar():
+        pytest.skip("prova real exige WAV controlado e OpenJarvis")
     texto, _ = preflight.transcrever_wav_reuniao()
     ref = preflight.normalizar_para_wer(preflight.TXT_REUNIAO.read_text(encoding="utf-8"))
     hip = preflight.normalizar_para_wer(texto)

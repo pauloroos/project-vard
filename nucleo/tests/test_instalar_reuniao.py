@@ -33,9 +33,9 @@ $saida | ConvertTo-Json -Depth 4 -Compress
 """
 
 
-@pytest.fixture(scope="module")
-def ast(tmp_path_factory):
-    arq = tmp_path_factory.mktemp("h") / "harness.ps1"
+@pytest.fixture
+def ast(tmp_path, powershell_isolado):
+    arq = tmp_path / "harness.ps1"
     arq.write_text(HARNESS, encoding="utf-8")
     r = subprocess.run(["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", str(arq), str(INSTALADOR)],
                        capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=60)
@@ -100,3 +100,8 @@ def test_desliga_a_telemetria_do_pyannote_no_download_e_na_prova():
     assert t.count(var) == 2
     assert t.index(var) < t.index("snapshot_download") or t.index(var) < t.index("Baixando os modelos")
     assert t.rindex(var) > t.index("Prova offline")
+
+
+@pytest.fixture(autouse=True)
+def _harness_powershell(powershell_isolado):
+    pass

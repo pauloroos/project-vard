@@ -790,7 +790,7 @@ pub fn consumir_pedidos_da_caixa() -> Vec<PedidoAceito> {
 }
 
 #[cfg(test)]
-mod testes {
+pub(crate) mod testes {
     use super::*;
     use std::sync::Mutex;
 
@@ -798,9 +798,43 @@ mod testes {
     // evitando condições de corrida entre testes paralelos.
     static ENV_LOCK: Mutex<()> = Mutex::new(());
 
+    /// Serializa e restaura o ambiente do processo; nenhum fallback l? dados do usu?rio.
+    pub(crate) struct AmbienteTeste {
+        anteriores: Vec<(&'static str, Option<std::ffi::OsString>)>,
+        _pasta: tempfile::TempDir,
+        _lock: std::sync::MutexGuard<'static, ()>,
+    }
+
+    impl Drop for AmbienteTeste {
+        fn drop(&mut self) {
+            for (nome, valor) in &self.anteriores {
+                unsafe {
+                    match valor {
+                        Some(v) => std::env::set_var(nome, v),
+                        None => std::env::remove_var(nome),
+                    }
+                }
+            }
+        }
+    }
+
+    pub(crate) fn ambiente_isolado() -> AmbienteTeste {
+        let lock = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let pasta = tempfile::tempdir().unwrap();
+        let nomes = ["LOCALAPPDATA", "APPDATA", "HOME", "VARD_DADOS", "VARD_INSTALACAO", "VARD_RAIZ_DEV"];
+        let anteriores = nomes.iter().map(|&n| (n, std::env::var_os(n))).collect();
+        for nome in nomes {
+            unsafe { std::env::set_var(nome, pasta.path().join(nome)) };
+        }
+        // Testes que criam instalacao.json exercitam o fallback em VARD_DADOS.
+        unsafe { std::env::remove_var("VARD_INSTALACAO") };
+        AmbienteTeste { anteriores, _pasta: pasta, _lock: lock }
+    }
+
+
     #[test]
     fn pasta_dados_usa_vard_dados_quando_definido() {
-        let _lock = ENV_LOCK.lock().unwrap();
+        let _ambiente = ambiente_isolado();
         let dir = tempfile::tempdir().unwrap();
         unsafe { std::env::set_var("VARD_DADOS", dir.path()) };
         let resultado = pasta_dados();
@@ -810,7 +844,7 @@ mod testes {
 
     #[test]
     fn pasta_dados_fallback_para_localappdata() {
-        let _lock = ENV_LOCK.lock().unwrap();
+        let _ambiente = ambiente_isolado();
         unsafe { std::env::remove_var("VARD_DADOS") };
         let localappdata = std::env::var("LOCALAPPDATA").unwrap_or_else(|_| {
             std::env::var("HOME").unwrap_or_default()
@@ -822,7 +856,7 @@ mod testes {
 
     #[test]
     fn pasta_dados_ignora_vard_dados_vazio() {
-        let _lock = ENV_LOCK.lock().unwrap();
+        let _ambiente = ambiente_isolado();
         let _dir = tempfile::tempdir().unwrap();
         unsafe { std::env::set_var("VARD_DADOS", "") };
         let localappdata = std::env::var("LOCALAPPDATA").unwrap_or_else(|_| {
@@ -836,7 +870,7 @@ mod testes {
 
     #[test]
     fn escrever_e_ler_estado_roundtrip() {
-        let _lock = ENV_LOCK.lock().unwrap();
+        let _ambiente = ambiente_isolado();
         let dir = tempfile::tempdir().unwrap();
         unsafe { std::env::set_var("VARD_DADOS", dir.path()) };
         let modo = ModoCiclo::Ligado;
@@ -850,7 +884,7 @@ mod testes {
 
     #[test]
     fn salvar_e_carregar_fotografia_roundtrip() {
-        let _lock = ENV_LOCK.lock().unwrap();
+        let _ambiente = ambiente_isolado();
         let dir = tempfile::tempdir().unwrap();
         unsafe { std::env::set_var("VARD_DADOS", dir.path()) };
         let foto = FotoOperacional {
@@ -872,7 +906,7 @@ mod testes {
 
     #[test]
     fn carregar_fotografia_retorna_none_se_ausente() {
-        let _lock = ENV_LOCK.lock().unwrap();
+        let _ambiente = ambiente_isolado();
         let dir = tempfile::tempdir().unwrap();
         unsafe { std::env::set_var("VARD_DADOS", dir.path()) };
         let resultado = carregar_fotografia().unwrap();
@@ -882,7 +916,7 @@ mod testes {
 
     #[test]
     fn registrar_sessao_cria_app_json() {
-        let _lock = ENV_LOCK.lock().unwrap();
+        let _ambiente = ambiente_isolado();
         let dir = tempfile::tempdir().unwrap();
         unsafe { std::env::set_var("VARD_DADOS", dir.path()) };
         registrar_sessao(12345, "sessao-teste").unwrap();
@@ -941,7 +975,7 @@ mod testes {
 
     #[test]
     fn fila_repeticao_devolve_mesmo_id() {
-        let _lock = ENV_LOCK.lock().unwrap();
+        let _ambiente = ambiente_isolado();
         let dir = tempfile::tempdir().unwrap();
         unsafe { std::env::set_var("VARD_DADOS", dir.path()) };
         reset_fila_para_teste("sessao-rep");
@@ -956,7 +990,7 @@ mod testes {
 
     #[test]
     fn fila_ocupado_quando_verbo_diferente_em_andamento() {
-        let _lock = ENV_LOCK.lock().unwrap();
+        let _ambiente = ambiente_isolado();
         let dir = tempfile::tempdir().unwrap();
         unsafe { std::env::set_var("VARD_DADOS", dir.path()) };
         reset_fila_para_teste("sessao-ocup");
@@ -971,7 +1005,7 @@ mod testes {
 
     #[test]
     fn fila_liberar_permite_novo_pedido() {
-        let _lock = ENV_LOCK.lock().unwrap();
+        let _ambiente = ambiente_isolado();
         let dir = tempfile::tempdir().unwrap();
         unsafe { std::env::set_var("VARD_DADOS", dir.path()) };
         reset_fila_para_teste("sessao-lib");
@@ -986,7 +1020,7 @@ mod testes {
 
     #[test]
     fn caixa_ipc_consumo_remove_arquivo() {
-        let _lock = ENV_LOCK.lock().unwrap();
+        let _ambiente = ambiente_isolado();
         let dir = tempfile::tempdir().unwrap();
         unsafe { std::env::set_var("VARD_DADOS", dir.path()) };
         reset_fila_para_teste("sessao-ipc");
@@ -1013,7 +1047,7 @@ mod testes {
 
     #[test]
     fn caixa_ipc_uuid_invalido_removido() {
-        let _lock = ENV_LOCK.lock().unwrap();
+        let _ambiente = ambiente_isolado();
         let dir = tempfile::tempdir().unwrap();
         unsafe { std::env::set_var("VARD_DADOS", dir.path()) };
         reset_fila_para_teste("sessao-uuid");
@@ -1032,7 +1066,7 @@ mod testes {
 
     #[test]
     fn caixa_ipc_maior_que_4k_removido() {
-        let _lock = ENV_LOCK.lock().unwrap();
+        let _ambiente = ambiente_isolado();
         let dir = tempfile::tempdir().unwrap();
         unsafe { std::env::set_var("VARD_DADOS", dir.path()) };
         reset_fila_para_teste("sessao-grande");
@@ -1059,7 +1093,7 @@ mod testes {
 
     #[test]
     fn caixa_ipc_sessao_diferente_removido() {
-        let _lock = ENV_LOCK.lock().unwrap();
+        let _ambiente = ambiente_isolado();
         let dir = tempfile::tempdir().unwrap();
         unsafe { std::env::set_var("VARD_DADOS", dir.path()) };
         reset_fila_para_teste("sessao-atual");
@@ -1084,7 +1118,7 @@ mod testes {
 
     #[test]
     fn caixa_ipc_verbo_desconhecido_removido() {
-        let _lock = ENV_LOCK.lock().unwrap();
+        let _ambiente = ambiente_isolado();
         let dir = tempfile::tempdir().unwrap();
         unsafe { std::env::set_var("VARD_DADOS", dir.path()) };
         reset_fila_para_teste("sessao-verbo");
@@ -1109,7 +1143,7 @@ mod testes {
 
     #[test]
     fn invoke_e_arquivo_simultaneos_um_so_arranque() {
-        let _lock = ENV_LOCK.lock().unwrap();
+        let _ambiente = ambiente_isolado();
         let dir = tempfile::tempdir().unwrap();
         unsafe { std::env::set_var("VARD_DADOS", dir.path()) };
         reset_fila_para_teste("sessao-dual");
@@ -1142,7 +1176,7 @@ mod testes {
 
     #[test]
     fn estado_json_escrita_atomica_e_projecao_legada() {
-        let _lock = ENV_LOCK.lock().unwrap();
+        let _ambiente = ambiente_isolado();
         let dir = tempfile::tempdir().unwrap();
         unsafe { std::env::set_var("VARD_DADOS", dir.path()) };
 
@@ -1166,7 +1200,7 @@ mod testes {
 
     #[test]
     fn ciclo_info_retorna_foto_com_supervisor() {
-        let _lock = ENV_LOCK.lock().unwrap();
+        let _ambiente = ambiente_isolado();
         let dir = tempfile::tempdir().unwrap();
         unsafe { std::env::set_var("VARD_DADOS", dir.path()) };
         reset_fila_para_teste("sessao-info");
@@ -1241,7 +1275,7 @@ http.server.HTTPServer(('127.0.0.1', {porta}), H).serve_forever()
 
     #[test]
     fn executar_iniciar_sobe_servicos_e_grava_estado_ligado() {
-        let _lock = ENV_LOCK.lock().unwrap();
+        let _ambiente = ambiente_isolado();
         let dir = tempfile::tempdir().unwrap();
         unsafe { std::env::set_var("VARD_DADOS", dir.path()) };
 
@@ -1268,7 +1302,7 @@ http.server.HTTPServer(('127.0.0.1', {porta}), H).serve_forever()
 
     #[test]
     fn executar_parar_desliga_servicos_e_grava_estado_parado() {
-        let _lock = ENV_LOCK.lock().unwrap();
+        let _ambiente = ambiente_isolado();
         let dir = tempfile::tempdir().unwrap();
         unsafe { std::env::set_var("VARD_DADOS", dir.path()) };
 
@@ -1287,7 +1321,7 @@ http.server.HTTPServer(('127.0.0.1', {porta}), H).serve_forever()
 
     #[test]
     fn executar_recarregar_reinicia_nucleo_e_conserva_outros() {
-        let _lock = ENV_LOCK.lock().unwrap();
+        let _ambiente = ambiente_isolado();
         let dir = tempfile::tempdir().unwrap();
         unsafe { std::env::set_var("VARD_DADOS", dir.path()) };
 
@@ -1306,7 +1340,7 @@ http.server.HTTPServer(('127.0.0.1', {porta}), H).serve_forever()
 
     #[test]
     fn executar_tentar_repete_desistidos_e_retorna_ligado() {
-        let _lock = ENV_LOCK.lock().unwrap();
+        let _ambiente = ambiente_isolado();
         let dir = tempfile::tempdir().unwrap();
         unsafe { std::env::set_var("VARD_DADOS", dir.path()) };
 
@@ -1322,7 +1356,7 @@ http.server.HTTPServer(('127.0.0.1', {porta}), H).serve_forever()
 
     #[test]
     fn executar_sonda_confirma_registro_sem_mudar_estado() {
-        let _lock = ENV_LOCK.lock().unwrap();
+        let _ambiente = ambiente_isolado();
         let dir = tempfile::tempdir().unwrap();
         unsafe { std::env::set_var("VARD_DADOS", dir.path()) };
 
@@ -1340,7 +1374,7 @@ http.server.HTTPServer(('127.0.0.1', {porta}), H).serve_forever()
 
     #[test]
     fn executar_jogo_sem_ponte_retorna_modo_jogo() {
-        let _lock = ENV_LOCK.lock().unwrap();
+        let _ambiente = ambiente_isolado();
         let dir = tempfile::tempdir().unwrap();
         unsafe { std::env::set_var("VARD_DADOS", dir.path()) };
 
@@ -1359,7 +1393,7 @@ http.server.HTTPServer(('127.0.0.1', {porta}), H).serve_forever()
 
     #[test]
     fn executar_voltar_sem_ponte_retorna_ligado() {
-        let _lock = ENV_LOCK.lock().unwrap();
+        let _ambiente = ambiente_isolado();
         let dir = tempfile::tempdir().unwrap();
         unsafe { std::env::set_var("VARD_DADOS", dir.path()) };
 
@@ -1378,7 +1412,7 @@ http.server.HTTPServer(('127.0.0.1', {porta}), H).serve_forever()
 
     #[test]
     fn executar_voltar_restaura_fotografia_com_opcionais() {
-        let _lock = ENV_LOCK.lock().unwrap();
+        let _ambiente = ambiente_isolado();
         let dir = tempfile::tempdir().unwrap();
         unsafe { std::env::set_var("VARD_DADOS", dir.path()) };
 
@@ -1408,7 +1442,7 @@ http.server.HTTPServer(('127.0.0.1', {porta}), H).serve_forever()
 
     #[test]
     fn executar_voltar_restaura_reuniao_ativa() {
-        let _lock = ENV_LOCK.lock().unwrap();
+        let _ambiente = ambiente_isolado();
         let dir = tempfile::tempdir().unwrap();
         unsafe { std::env::set_var("VARD_DADOS", dir.path()) };
 
@@ -1437,7 +1471,7 @@ http.server.HTTPServer(('127.0.0.1', {porta}), H).serve_forever()
 
     #[test]
     fn executar_voltar_sem_fotografia_usa_padrao() {
-        let _lock = ENV_LOCK.lock().unwrap();
+        let _ambiente = ambiente_isolado();
         let dir = tempfile::tempdir().unwrap();
         unsafe { std::env::set_var("VARD_DADOS", dir.path()) };
 
@@ -1457,7 +1491,7 @@ http.server.HTTPServer(('127.0.0.1', {porta}), H).serve_forever()
         // T7b (3): log do voltar mostra unload -> lista vazia -> load do MESMO modelo/contexto.
         // Com LM Studio falso (sem ponte), confirmar que a fotografia não é perdida e o modelo
         // registrado nela permanece como referência após o retorno.
-        let _lock = ENV_LOCK.lock().unwrap();
+        let _ambiente = ambiente_isolado();
         let dir = tempfile::tempdir().unwrap();
         unsafe { std::env::set_var("VARD_DADOS", dir.path()) };
 
@@ -1489,7 +1523,7 @@ http.server.HTTPServer(('127.0.0.1', {porta}), H).serve_forever()
 
     #[test]
     fn ler_ponte_url_retorna_none_sem_config() {
-        let _lock = ENV_LOCK.lock().unwrap();
+        let _ambiente = ambiente_isolado();
         let dir = tempfile::tempdir().unwrap();
         unsafe { std::env::set_var("VARD_DADOS", dir.path()) };
 
@@ -1499,7 +1533,7 @@ http.server.HTTPServer(('127.0.0.1', {porta}), H).serve_forever()
 
     #[test]
     fn ler_ponte_url_retorna_url_do_config() {
-        let _lock = ENV_LOCK.lock().unwrap();
+        let _ambiente = ambiente_isolado();
         let dir = tempfile::tempdir().unwrap();
         unsafe { std::env::set_var("VARD_DADOS", dir.path()) };
 
@@ -1515,7 +1549,7 @@ http.server.HTTPServer(('127.0.0.1', {porta}), H).serve_forever()
 
     #[test]
     fn gate_supervisor_falso_comandos_devolvem_indisponivel() {
-        let _lock = ENV_LOCK.lock().unwrap();
+        let _ambiente = ambiente_isolado();
         let dir = tempfile::tempdir().unwrap();
         unsafe { std::env::set_var("VARD_DADOS", dir.path()) };
 
@@ -1538,7 +1572,7 @@ http.server.HTTPServer(('127.0.0.1', {porta}), H).serve_forever()
 
     #[test]
     fn caixa_ipc_so_consome_com_supervisor_ativo() {
-        let _lock = ENV_LOCK.lock().unwrap();
+        let _ambiente = ambiente_isolado();
         let dir = tempfile::tempdir().unwrap();
         unsafe { std::env::set_var("VARD_DADOS", dir.path()) };
 

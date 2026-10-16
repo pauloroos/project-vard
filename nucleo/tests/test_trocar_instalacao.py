@@ -19,9 +19,11 @@ def _texto() -> str:
     return bruto.decode("utf-8-sig")
 
 
-def test_sintaxe_valida():
+def test_sintaxe_valida(tmp_path):
     cmd = ("$e=$null; [void][System.Management.Automation.Language.Parser]::ParseFile($env:SCRIPT_ALVO,[ref]$null,[ref]$e); $e.Count")
-    r = subprocess.run(["powershell", "-NoProfile", "-Command", cmd], capture_output=True, text=True, env={**os.environ, "SCRIPT_ALVO": str(SCRIPT)})
+    harness = tmp_path / "sintaxe.ps1"
+    harness.write_text(cmd, encoding="utf-8-sig")
+    r = subprocess.run(["powershell", "-NoProfile", "-File", str(harness)], capture_output=True, text=True, env={**os.environ, "SCRIPT_ALVO": str(SCRIPT)})
     assert r.stdout.strip() == "0", r.stdout + r.stderr
 
 
@@ -61,3 +63,19 @@ def test_reverter_sem_promocao_recusa(tmp_path: Path):
     r = subprocess.run(["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", str(SCRIPT), "-Reverter"],
                        env=env, capture_output=True, text=True, encoding="utf-8", errors="replace")
     assert r.returncode != 0
+
+
+@pytest.fixture(autouse=True)
+def _harness_powershell(powershell_isolado):
+    pass
+
+
+@pytest.fixture(autouse=True)
+def _troca_temporaria(tmp_path, monkeypatch):
+    import sys
+    texto = SCRIPT.read_text(encoding="utf-8-sig")
+    texto = texto.replace('[Environment]::GetFolderPath("Startup")', '(Join-Path $env:LOCALAPPDATA "Startup")')
+    texto = texto.replace('[Environment]::GetFolderPath("Desktop")', '(Join-Path $env:LOCALAPPDATA "Desktop")')
+    copia = tmp_path / "trocar-instalacao.ps1"
+    copia.write_text(texto, encoding="utf-8-sig")
+    monkeypatch.setattr(sys.modules[__name__], "SCRIPT", copia)

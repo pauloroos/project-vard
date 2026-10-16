@@ -77,3 +77,8 @@ def test_instalar_openjarvis_le_o_instalacao_json(tmp_path: Path):
     assert rodar(VARD_DADOS=str(dados)) == "X:/outro/src|"
 
     assert rodar(VARD_INSTALACAO=str(tmp_path / "nao-existe.json")) == "VAZIO"
+
+
+@pytest.fixture(autouse=True)
+def _harness_powershell(powershell_isolado):
+    pass

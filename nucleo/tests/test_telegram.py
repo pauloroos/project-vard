@@ -12,6 +12,7 @@ import asyncio
 import json
 import logging
 import os
+import socket
 import tempfile
 from pathlib import Path
 from typing import Any
@@ -140,7 +141,7 @@ class BotAPIFalsa:
 
 
 @pytest.fixture()
-async def bot_falso():
+async def bot_falso(telegram_config):
     """Sobe um servidor Bot API falso e devolve a instância controlável."""
     api = BotAPIFalsa()
 
@@ -174,13 +175,21 @@ async def bot_falso():
         })
 
     import uvicorn
-    config = uvicorn.Config(app, host="127.0.0.1", port=19876, log_level="error")
+    sock = socket.socket()
+    sock.bind(("127.0.0.1", 0))
+    telegram_config["base_url"] = f"http://127.0.0.1:{sock.getsockname()[1]}"
+    config = uvicorn.Config(app, host="127.0.0.1", port=0, log_level="error")
     server = uvicorn.Server(config)
-    task = asyncio.create_task(server.serve())
-    await asyncio.sleep(0.3)  # aguarda servidor subir
-    yield api
-    server.should_exit = True
-    await asyncio.wait_for(task, timeout=5)
+    task = asyncio.create_task(server.serve(sockets=[sock]))
+    try:
+        await asyncio.sleep(0.3)  # aguarda servidor subir
+        yield api
+    finally:
+        server.should_exit = True
+        try:
+            await asyncio.wait_for(task, timeout=5)
+        finally:
+            sock.close()
 
 
 # ---------------------------------------------------------------------------

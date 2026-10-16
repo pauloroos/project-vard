@@ -6,6 +6,7 @@ import os
 import re
 import shutil
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -38,6 +39,7 @@ def python_embutido() -> Path:
     return PYTHON_EMBUTIDO
 
 
+@pytest.mark.pc_real
 def test_versao_do_runtime_corresponde_ao_toml(python_embutido: Path):
     """python.exe -I -m vard --versao bate com pyproject.toml."""
     versao_esperada = None
@@ -58,6 +60,7 @@ def test_versao_do_runtime_corresponde_ao_toml(python_embutido: Path):
     assert versao_esperada in resultado.stdout.strip()
 
 
+@pytest.mark.pc_real
 def test_imports_do_nucleo_com_python_isolado(python_embutido: Path):
     """Todos os módulos do núcleo importam sob -I fora do repo."""
     modulos = [
@@ -83,6 +86,7 @@ def test_imports_do_nucleo_com_python_isolado(python_embutido: Path):
         assert r.returncode == 0, f"falha importando {mod}: {r.stderr}"
 
 
+@pytest.mark.pc_real
 def test_viewer_e_preflight_encontrados_no_pacote(python_embutido: Path):
     """viewer/index.html e recursos do preflight existem dentro do pacote instalado."""
     check = """
@@ -164,6 +168,7 @@ def test_destino_fora_do_build_e_recusado(tmp_path: Path):
             "-Toml", str(toml_original),
             "-Cache", str(cache_dir),
             "-Destino", str(destino_proibido),
+            "-SoVerificar",
         )
         assert r.returncode != 0, \
             f"script deveria recusar destino fora de build/nucleo. stdout={r.stdout}"
@@ -206,6 +211,7 @@ def test_segredo_no_destino_falha(tmp_path: Path):
         shutil.rmtree(cache_dir, ignore_errors=True)
 
 
+@pytest.mark.pc_real
 def test_caminho_com_espacos_e_somente_leitura_funciona(python_embutido: Path, tmp_path: Path):
     """Bundle copiado para pasta com espacos e somente leitura funciona sem __pycache__."""
     destino_espacos = tmp_path / "pasta com espacos" / "nucleo"
@@ -252,6 +258,7 @@ def test_caminho_com_espacos_e_somente_leitura_funciona(python_embutido: Path, t
     assert not pycaches, f"__pycache__ nao deve ser criado em pasta so-leitura: {pycaches}"
 
 
+@pytest.mark.pc_real
 def test_medidas_do_bundle_existem():
     """build/nucleo-medidas.json existe após montagem com campos obrigatórios."""
     medidas = BUILD_NUCLEO.parent / "nucleo-medidas.json"
@@ -265,6 +272,7 @@ def test_medidas_do_bundle_existem():
     assert dados["python"].startswith("3.13")
 
 
+@pytest.mark.pc_real
 def test_bundle_nao_contem_segredos_ou_perfil(python_embutido: Path):
     """Presença acidental de segredos/perfil/config no bundle interrompe a montagem."""
     base = python_embutido.parent / "Lib" / "site-packages" / "vard"
@@ -276,3 +284,17 @@ def test_bundle_nao_contem_segredos_ou_perfil(python_embutido: Path):
     assert not encontrados, f"arquivos proibidos encontrados no bundle: {encontrados}"
     assert not personas, f"arquivos persona*.md encontrados no bundle: {personas}"
     assert not envs, f"arquivos .env encontrados no bundle: {envs}"
+
+@pytest.fixture(autouse=True)
+def montagem_temporaria(tmp_path, monkeypatch, powershell_isolado, request):
+    """Mantém o contrato build/ do script, inteiramente dentro de tmp."""
+    if request.node.get_closest_marker("pc_real"):
+        return
+    raiz = tmp_path / "repo"
+    scripts = raiz / "scripts" / "windows"
+    scripts.mkdir(parents=True)
+    copia = scripts / SCRIPT_MONTAR.name
+    shutil.copyfile(SCRIPT_MONTAR, copia)
+    monkeypatch.setattr(sys.modules[__name__], "SCRIPT_MONTAR", copia)
+    monkeypatch.setattr(sys.modules[__name__], "BUILD_NUCLEO", raiz / "build" / "nucleo")
+    monkeypatch.setattr(sys.modules[__name__], "BUILD_CACHE", raiz / "build" / "cache")

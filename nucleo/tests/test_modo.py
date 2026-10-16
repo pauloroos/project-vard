@@ -104,12 +104,14 @@ def _esperar_arquivo(arq: Path, segundos: float = 10) -> str | None:
 
 
 @pytest.mark.skipif(sys.platform != "win32", reason="só Windows")
+@pytest.mark.pc_real
 def test_disparar_roda_o_script(tmp_path: Path):
     modo.disparar("jogo", script=_stub(tmp_path))
     assert _esperar_arquivo(tmp_path / "marcador.txt") == "jogo"
 
 
 @pytest.mark.skipif(sys.platform != "win32", reason="só Windows")
+@pytest.mark.pc_real
 def test_disparar_sobrevive_ao_taskkill_do_pai(tmp_path: Path):
     # Simula a ponte/bandeja: um python que dispara e depois leva taskkill /T /F na árvore
     # (é o que o vard-modo.ps1 faz com a ponte no jogo e com a bandeja no parar).

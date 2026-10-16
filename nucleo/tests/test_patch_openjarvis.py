@@ -13,18 +13,19 @@ from types import SimpleNamespace
 
 import pytest
 
-ARQ = Path("X:/Programas DEV/OpenJarvis/src/src/openjarvis/system/_channel_kwargs.py")
+RAIZ_OJ = Path(os.environ.get("VARD_TESTE_OPENJARVIS_SRC", "checkout-ficticio"))
+ARQ = RAIZ_OJ / "src/openjarvis/system/_channel_kwargs.py"
 
 
-@pytest.mark.skipif(not ARQ.exists(), reason="OpenJarvis nao instalado")
+@pytest.mark.pc_real
 def test_telegram_repassa_allowed_chat_ids():
     assert 'kw["allowed_chat_ids"]' in ARQ.read_text(encoding="utf-8")
 
 
-ARQ_EXTRA = Path("X:/Programas DEV/OpenJarvis/src/src/openjarvis/engine/_openai_compat.py")
+ARQ_EXTRA = RAIZ_OJ / "src/openjarvis/engine/_openai_compat.py"
 
 
-@pytest.mark.skipif(not ARQ_EXTRA.exists(), reason="OpenJarvis nao instalado")
+@pytest.mark.pc_real
 def test_chat_extra_aplicado_nos_tres_payloads():
     texto = ARQ_EXTRA.read_text(encoding="utf-8")
     assert "OPENJARVIS_CHAT_EXTRA" in texto and texto.count("**_chat_extra(),") == 3
@@ -34,7 +35,7 @@ CANAL = ARQ.parents[1] / "channels" / "telegram.py"
 PATCH_MARCA = Path(__file__).resolve().parents[2] / "scripts" / "openjarvis" / "patches" / "openjarvis-telegram-marca.patch"
 
 
-@pytest.mark.skipif(not CANAL.exists(), reason="OpenJarvis não instalado")
+@pytest.mark.pc_real
 @pytest.mark.parametrize("caso", ["permitido", "negado", "sem_variavel", "falha_escrita"])
 def test_patch_marca_so_mensagem_aceita_sem_derrubar_canal(tmp_path, monkeypatch, caso):
     clone = CANAL.parents[3]

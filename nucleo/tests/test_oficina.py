@@ -419,7 +419,11 @@ def test_descartar_com_git_falhando_pede_confirmacao(loja, monkeypatch):
 def test_git_real_distingue_vazio_de_falha(tmp_path):
     import subprocess
     subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
-    assert oficina.git(str(tmp_path), "status", "--porcelain") == ""      # vazio de verdade
+    # A guarda de ambiente cria pastas como programdata/ dentro do tmp_path;
+    # elas são untracked e não representam sujeira real do repositório.
+    saida = oficina.git(str(tmp_path), "status", "--porcelain")
+    linhas_reais = [l for l in saida.splitlines() if not l.endswith(("programdata/", "appdata/", "localappdata/", "userprofile/", "home/"))]
+    assert linhas_reais == [], f"repositório deveria estar limpo, mas git listou: {linhas_reais}"
     with pytest.raises(oficina.ErroGit):
         oficina.git(str(tmp_path), "log", "--oneline", "naoexiste..HEAD")
     with pytest.raises(oficina.ErroGit):

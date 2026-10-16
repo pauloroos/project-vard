@@ -125,3 +125,8 @@ def test_sem_atualizar_patch_que_nao_cabe_falha_alto(tmp_path: Path, repo: Path)
     saida = _aplicar(tmp_path, repo, novo, atualizando=False)
     assert "ERRO:" in saida and "fixado" in saida, saida
     assert _git(repo, "rev-parse", "HEAD") == novo and not _tem_patch(repo)
+
+
+@pytest.fixture(autouse=True)
+def _harness_powershell(powershell_isolado):
+    pass

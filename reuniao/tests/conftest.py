@@ -1,3 +1,26 @@
+"""Guarda do PC real compartilhada com os testes do núcleo."""
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "nucleo" / "tests"))
+from guarda_pc import (instalar, guarda_pc, powershell_isolado, pytest_addoption,
+                      pytest_configure, pytest_collection_modifyitems)
+
+instalar()
+
+# Constantes públicas sobre um backend falso: nunca enumera ou abre dispositivos reais.
+import types
+_pyaudio = types.ModuleType("pyaudiowpatch")
+_pyaudio.paWASAPI = 13
+_pyaudio.paFloat32 = 1
+_pyaudio.paContinue = 0
+
+def _audio_proibido(*args, **kwargs):
+    raise AssertionError("guarda do PC real: injete PyAudio falso")
+
+_pyaudio.PyAudio = _audio_proibido
+sys.modules["pyaudiowpatch"] = _pyaudio
+
 import os
 
 import numpy as np
