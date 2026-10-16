@@ -365,3 +365,36 @@ class TestIntegracaoComCliFalsa:
         finally:
             mod.argv_cli = original_argv  # type: ignore[assignment]
             await sup.encerrar_tudo()
+
+@pytest.mark.asyncio
+async def test_linha_maior_que_64kb_nao_derruba_o_canal(base_dados: Path) -> None:
+    """D6: a CLI claude real emite uma linha system/commands_changed de ~75 KB antes do init.
+    O canal precisa ler linhas grandes (o limite padrão do asyncio é 64 KB) sem virar cli_caiu."""
+    import vard.cerebro.cli_processos as mod
+
+    sup = SupervisorCli(base_dados=base_dados, ocioso_segundos=60.0)
+    original_argv = mod.argv_cli
+    mod.argv_cli = lambda p, pasta: [sys.executable, CLI_VIVA, "--dialeto", "claude", "--linha-grande", "200000"]  # type: ignore[assignment]
+    try:
+        prov = ProvedorCli(id="falso_claude", tipo="cli-claude", modelo="teste", yolo=False)
+        canal = await sup.canal(prov, "sess-linha-grande")
+        await canal.enviar(json.dumps({
+            "type": "user",
+            "message": {"role": "user", "content": [{"type": "text", "text": "ola"}]},
+        }))
+        recebidas: list[str] = []
+
+        async def ler() -> None:
+            async for linha in canal.linhas():
+                recebidas.append(linha)
+                if '"type": "result"' in linha:
+                    return
+
+        await asyncio.wait_for(ler(), timeout=20)
+        tamanhos = [len(l) for l in recebidas]
+        assert max(tamanhos) > 200000, "a linha grande precisa chegar inteira"
+        assert any('"subtype": "init"' in l for l in recebidas)
+        assert any("eco: ola" in l for l in recebidas), "a resposta precisa chegar depois da linha grande"
+    finally:
+        mod.argv_cli = original_argv  # type: ignore[assignment]
+        await sup.encerrar_tudo()

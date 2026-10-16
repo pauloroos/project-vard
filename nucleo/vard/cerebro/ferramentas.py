@@ -68,6 +68,7 @@ class _ClienteStdio:
                 stdin=asyncio.subprocess.PIPE,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
+                limit=16 * 1024 * 1024,  # tools/list de um MCP grande passa fácil de 64 KB (padrão do asyncio)
             )
         except (OSError, FileNotFoundError) as exc:
             raise ServidorIndisponivelError(
