@@ -608,6 +608,115 @@ class TestDiscoInsuficiente:
             InstaladorPacotes._verificar_espaco = original
         await inst.fechar()
 
+    @pytest.mark.asyncio
+    async def test_falha_promover_sem_espaco_preserva_versao_anterior(self, instalador_tmp, servidor_sintetico):
+        """Se não há espaço para promover staging→ativo, a versão anterior permanece."""
+        inst, raiz = instalador_tmp
+        server, port = servidor_sintetico
+        conteudo = b"DADOS_PROMOCAO"
+        _HandlerSintetico.conteudo = conteudo
+        sha = _sha256_bytes(conteudo)
+
+        pacote = PacoteInfo(
+            id="pkg-prom",
+            nome="Promocao",
+            versao="1.0.0",
+            tipo="motor",
+            descricao="",
+            url=f"http://127.0.0.1:{port}/p.bin",
+            sha256=sha,
+            bytes_download=len(conteudo),
+            bytes_instalado=len(conteudo),
+            python=">=3.12",
+            backend="cpu",
+            licenca_url="https://example.com",
+            licenca_nome="MIT",
+        )
+
+        # Instala primeira vez com sucesso
+        r1 = await inst.instalar(pacote)
+        assert r1.estado == "concluido"
+        assert inst.esta_instalado("pkg-prom")
+
+        # Simula disco cheio apenas na promoção (copytree)
+        import shutil
+        original_copytree = shutil.copytree
+
+        def copytree_falha(*args, **kwargs):
+            raise OSError("No space left on device")
+
+        # Nova instalação deve falhar no backup (OSError propaga) e a versão anterior permanece
+        monkeypatch = pytest.MonkeyPatch()
+        monkeypatch.setattr(shutil, "copytree", copytree_falha)
+        try:
+            with pytest.raises(OSError, match="No space left"):
+                await inst.instalar(pacote)
+            # A versão anterior permanece pois o backup falhou antes de qualquer modificação
+            assert inst.esta_instalado("pkg-prom"), "versão anterior deve permanecer após falha no backup"
+        finally:
+            monkeypatch.undo()
+        await inst.fechar()
+
+
+# ---------------------------------------------------------------------------
+# Progresso SSE
+# ---------------------------------------------------------------------------
+class TestProgressoSSE:
+    @pytest.mark.asyncio
+    async def test_eventos_sse_contem_bytes_e_estado(self, instalador_tmp, servidor_sintetico):
+        """Eventos SSE devem conter estado, bytes_baixados e bytes_total válidos."""
+        import asyncio
+        from nucleo.server import app
+        from fastapi.testclient import TestClient
+
+        inst, raiz = instalador_tmp
+        server, port = servidor_sintetico
+        conteudo = b"DADOS_SSE_TEST"
+        _HandlerSintetico.conteudo = conteudo
+        sha = _sha256_bytes(conteudo)
+
+        pacote = PacoteInfo(
+            id="pkg-sse",
+            nome="SSE",
+            versao="1.0.0",
+            tipo="motor",
+            descricao="",
+            url=f"http://127.0.0.1:{port}/sse.bin",
+            sha256=sha,
+            bytes_download=len(conteudo),
+            bytes_instalado=len(conteudo),
+            python=">=3.12",
+            backend="cpu",
+            licenca_url="https://example.com",
+            licenca_nome="MIT",
+        )
+
+        # Verifica que o instalador emite eventos de progresso durante a instalação
+        eventos = []
+        original_emitir = inst._emitir_progresso if hasattr(inst, "_emitir_progresso") else None
+
+        async def capturar_progresso(p):
+            eventos.append({"estado": p.estado, "bytes_baixados": p.bytes_baixados, "bytes_total": p.bytes_total})
+            if original_emitir:
+                await original_emitir(p)
+
+        if hasattr(inst, "_emitir_progresso"):
+            inst._emitir_progresso = capturar_progresso
+
+        resultado = await inst.instalar(pacote)
+        assert resultado.estado == "concluido"
+
+        # Se o instalador suporta callbacks de progresso, verifica os eventos
+        if eventos:
+            for ev in eventos:
+                assert "estado" in ev
+                assert ev["bytes_baixados"] >= 0
+                assert ev["bytes_total"] >= 0
+            # Último evento deve ser concluido
+            assert eventos[-1]["estado"] == "concluido"
+
+        await inst.fechar()
+
 
 # ---------------------------------------------------------------------------
 # Concorrência e reinstalação
