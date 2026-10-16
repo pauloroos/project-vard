@@ -4,6 +4,7 @@ import type { Config } from "../config/config";
 import { avisosDeUrl, limitarLado, mudancasQueExigemReinicio, salvarConfig, urlLocal } from "../config/config";
 import { ACOES_ATALHO, ROTULOS_ATALHO, avisoAltGr, validarAtalhos, type AcaoAtalho, type FalhaAtalho } from "../config/atalhos";
 import { campoIdioma } from "../config/idiomas";
+import { detectarClis } from "../config/clis";
 import { gravarPerfil, lerPerfil, previaPersona } from "../config/perfil";
 import { campoAtalho } from "./campo-atalho";
 import type { OpenJarvis } from "../conectores/openjarvis/cliente";
@@ -108,7 +109,9 @@ export class Configuracoes {
       aoMudarCerebro: (cerebro) => { this.cfg.cerebro = cerebro; void salvarConfig(this.cfg); },
     });
     void this.modelos.carregar();
-    this.paineisProvedores = new AbaPaineisProvedores(this.raiz.querySelector<HTMLElement>("#cfg-paineis-provedores")!);
+    this.paineisProvedores = new AbaPaineisProvedores(this.raiz.querySelector<HTMLElement>("#cfg-paineis-provedores")!, {
+      detectar: () => detectarClis(this.el("ponte_url").value),
+    });
     this.paineisVozes = new AbaPaineisVozes(this.raiz.querySelector<HTMLElement>("#cfg-paineis-vozes")!);
     this.paineisMcps = new AbaPaineisMcps(this.raiz.querySelector<HTMLElement>("#cfg-paineis-mcps")!);
     this.paineisAgentes = new AbaPaineisAgentes(this.raiz.querySelector<HTMLElement>("#cfg-paineis-agentes")!);

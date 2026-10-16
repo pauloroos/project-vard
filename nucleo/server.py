@@ -23,7 +23,7 @@ from contextlib import asynccontextmanager
 
 from vard import avisos as vavisos, central, config, modelos, modo, oficina, perfil, reuniao, segredos, tarefas
 from vard import config
-from vard.cerebro import contratos as cerebro_contratos, pedidos as cerebro_pedidos
+from vard.cerebro import cli_deteccao, contratos as cerebro_contratos, pedidos as cerebro_pedidos
 from vard.primeiro_uso import deteccao as primeiro_uso_deteccao, estado as primeiro_uso_estado
 from vard.seguro import Frase
 from vard import telegram as telegram_mod
@@ -459,6 +459,12 @@ def importacao_reverter(corpo: dict):
         return pu_importacao.reverter(corpo["operacao_id"])
     except pu_importacao.OperacaoDesconhecida:
         return JSONResponse({"erro": "operacao_desconhecida"}, status_code=404)
+
+
+@app.get("/cli/detectar")
+def detectar_clis():
+    """CLIs de agente no PATH (C11): só --version e `agy models`, sem caminho na resposta."""
+    return cli_deteccao.detectar()
 
 
 @app.post("/modo")
