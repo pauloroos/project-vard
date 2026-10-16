@@ -331,6 +331,7 @@ export class Conversa {
         if (ac.signal.aborted || this.emJogo()) { cancelarPedido(); return; }
         let ultimoSeq = -1;
         let textoAcumulado = "";
+        let jaTerminou = false;
         // Reconciliação inicial: consulta estado atual para pegar texto já produzido antes do SSE.
         try {
           const snap = await this.d.ponte.consultarPedido?.(pedidoId);
@@ -338,10 +339,12 @@ export class Conversa {
             textoAcumulado = snap.resposta;
             ultimoSeq = Number((snap as { ultimo_seq?: number }).ultimo_seq ?? 0);
           }
+          // O "fim" pode ter saído antes desta consulta: com o pedido encerrado, nenhum evento novo vai chegar.
+          jaTerminou = !!snap && ["concluido", "falhou", "cancelado"].includes(snap.estado);
         } catch { /* segue com SSE */ }
         // Escuta eventos SSE da sessão até fim/erro/cancelamento ou abort.
         if (ac.signal.aborted || this.emJogo()) return;
-        const esperarFim = new Promise<string>((resolve, reject) => {
+        const esperarFim = jaTerminou ? Promise.resolve(textoAcumulado.trim()) : new Promise<string>((resolve, reject) => {
           const onEvento = (ev: Event) => {
             if (ac.signal.aborted) return;
             const msg = (ev as MessageEvent).data;

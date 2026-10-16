@@ -258,7 +258,7 @@ export class Ponte {
         try { dados = JSON.parse((ev as MessageEvent).data); } catch { /* ping ou texto puro */ }
         cb(tipo, dados);
       });
-      ouvir("ping"); ouvir("oficina"); ouvir("reuniao");
+      ouvir("ping"); ouvir("oficina"); ouvir("reuniao"); ouvir("pedido");
       es.onmessage = (ev) => { try { cb("message", JSON.parse(ev.data)); } catch { cb("message", null); } };
     };
     abrir();
