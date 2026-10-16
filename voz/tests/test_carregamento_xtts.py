@@ -1,95 +1,64 @@
-"""Testes de carregamento condicional do motor XTTS (T5b).
+"""Carregamento condicional do motor XTTS (T5b) e serviço de pé sem ele (D12).
 
-Verifica que:
-- criar_app(motor=None) só instancia XTTS se pacote xtts-v2 estiver instalado.
-- Sem o pacote, motor permanece None e Kokoro/Edge/Piper assumem.
-- Falha na inicialização do motor é capturada e logada (motor=None).
-
-Nota: não importamos servidor diretamente porque ele puxa numpy/torch
-no nível do módulo. Testamos a lógica via inspeção do código-fonte
-e mocks controlados antes da importação.
+- Sem XTTS disponível, um motor vazio ocupa o lugar: /saude e /vozes respondem (antes, motor=None
+  fazia /saude dar 500 e o app nem abria).
+- O XTTS é detectado mesmo sem o núcleo importável (o serviço de voz roda no próprio ambiente).
+- Falha ao instanciar o Motor é capturada e logada.
 """
 from __future__ import annotations
 
-import ast
-from pathlib import Path
+import builtins
+import logging
+
+import pytest
+from fastapi.testclient import TestClient
+
+from vard_voz import servidor
 
 
-class TestCarregamentoXttsCondicional:
-    """Valida a lógica de carregamento condicional do XTTS no servidor."""
+@pytest.fixture
+def sem_motores_opcionais():
+    return dict(motor_kokoro=None, motor_edge=None, motor_piper=None, carregar_em_thread=False)
 
-    def _ler_fonte_criar_app(self) -> str:
-        """Lê o fonte de servidor.py para análise estática."""
-        caminho = Path(__file__).resolve().parent.parent / "vard_voz" / "servidor.py"
-        return caminho.read_text(encoding="utf-8")
 
-    def test_codigo_verifica_pacote_antes_de_instanciar_motor(self):
-        """O fonte deve conter verificação de InstaladorPacotes.esta_instalado('xtts-v2')."""
-        fonte = self._ler_fonte_criar_app()
-        assert "InstaladorPacotes" in fonte, "servidor.py deve importar InstaladorPacotes"
-        assert 'esta_instalado("xtts-v2")' in fonte or "esta_instalado('xtts-v2')" in fonte, (
-            "servidor.py deve verificar esta_instalado('xtts-v2') antes de instanciar Motor"
-        )
+def test_saude_responde_sem_xtts(monkeypatch, sem_motores_opcionais):
+    monkeypatch.setattr(servidor, "_xtts_disponivel", lambda: False)
+    app = servidor.criar_app(**sem_motores_opcionais)
+    with TestClient(app) as c:
+        r = c.get("/saude", headers={"host": "127.0.0.1"})
+        assert r.status_code == 200
+        assert r.json()["xtts"] is False and r.json()["pronta"] is False
+        assert c.get("/vozes", headers={"host": "127.0.0.1"}).status_code in (200, 503)
 
-    def test_motor_none_quando_pacote_nao_instalado(self):
-        """Quando _xtts_instalado é False, motor deve ser atribuído como None."""
-        fonte = self._ler_fonte_criar_app()
-        # Verifica que há branch else com motor = None
-        tree = ast.parse(fonte)
-        encontrou_else_motor_none = False
-        for node in ast.walk(tree):
-            if isinstance(node, ast.If):
-                # Procura o if _xtts_instalado
-                if isinstance(node.test, ast.Name) and node.test.id == "_xtts_instalado":
-                    # O corpo do else deve conter motor = None
-                    if node.orelse:
-                        for stmt in node.orelse:
-                            if isinstance(stmt, ast.Assign):
-                                for target in stmt.targets:
-                                    if isinstance(target, ast.Name) and target.id == "motor":
-                                        if isinstance(stmt.value, ast.Constant) and stmt.value.value is None:
-                                            encontrou_else_motor_none = True
-        assert encontrou_else_motor_none, (
-            "servidor.py deve ter 'else: motor = None' quando xtts-v2 não está instalado"
-        )
 
-    def test_falha_motor_capturada_com_warning(self):
-        """Falha na instanciação do Motor deve ser capturada e logada."""
-        fonte = self._ler_fonte_criar_app()
-        assert "log.warning" in fonte, "servidor.py deve logar warning quando motor falha"
-        assert "xtts-v2 instalado mas motor falhou" in fonte or "motor falhou ao iniciar" in fonte, (
-            "servidor.py deve logar mensagem específica sobre falha do motor XTTS"
-        )
+def test_xtts_detectado_sem_o_nucleo(monkeypatch):
+    """Sem o pacote `nucleo` importável, vale o pacote TTS (XTTS) presente neste ambiente."""
+    import importlib.util
 
-    def test_import_motor_dentro_do_if_xtts_instalado(self):
-        """A importação de Motor deve estar dentro do bloco if _xtts_instalado."""
-        fonte = self._ler_fonte_criar_app()
-        tree = ast.parse(fonte)
-        import_motor_dentro_do_if = False
-        for node in ast.walk(tree):
-            if isinstance(node, ast.If):
-                if isinstance(node.test, ast.Name) and node.test.id == "_xtts_instalado":
-                    # Procura import/from .motor dentro do corpo do if
-                    for stmt in ast.walk(node):
-                        if isinstance(stmt, ast.ImportFrom):
-                            if stmt.module and "motor" in stmt.module:
-                                import_motor_dentro_do_if = True
-        assert import_motor_dentro_do_if, (
-            "Import de Motor deve estar dentro do bloco if _xtts_instalado para evitar import desnecessário"
-        )
+    original_import = builtins.__import__
 
-    def test_kokoro_independente_de_xtts(self):
-        """Kokoro deve ser instanciado independentemente do estado do XTTS."""
-        fonte = self._ler_fonte_criar_app()
-        # Kokoro é instanciado após o bloco if/else do XTTS
-        assert "MotorKokoro" in fonte, "servidor.py deve suportar MotorKokoro"
-        # Verifica que motor_kokoro não depende de _xtts_instalado
-        linhas = fonte.split("\n")
-        linha_kokoro = next((i for i, l in enumerate(linhas) if "MotorKokoro" in l and "import" not in l), None)
-        linha_xtts_check = next((i for i, l in enumerate(linhas) if "_xtts_instalado" in l), None)
-        assert linha_kokoro is not None, "MotorKokoro deve ser instanciado em criar_app"
-        assert linha_xtts_check is not None, "_xtts_instalado deve ser verificado"
-        # Kokoro vem depois do bloco XTTS
-        assert linha_kokoro > linha_xtts_check, (
-            "MotorKokoro deve ser instanciado após o bloco condicional do XTTS"
-        )
+    def import_sem_nucleo(nome, *args, **kwargs):
+        if nome.startswith("nucleo"):
+            raise ModuleNotFoundError("No module named 'nucleo'")
+        return original_import(nome, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", import_sem_nucleo)
+    monkeypatch.setattr(importlib.util, "find_spec", lambda nome: object() if nome == "TTS" else None)
+    assert servidor._xtts_disponivel() is True
+    monkeypatch.setattr(importlib.util, "find_spec", lambda nome: None)
+    assert servidor._xtts_disponivel() is False
+
+
+def test_falha_ao_criar_motor_vira_motor_vazio_com_aviso(monkeypatch, caplog, sem_motores_opcionais):
+    monkeypatch.setattr(servidor, "_xtts_disponivel", lambda: True)
+    import vard_voz.motor as mod_motor
+
+    def explode(*_a, **_k):
+        raise RuntimeError("sem GPU")
+
+    monkeypatch.setattr(mod_motor, "Motor", explode)
+    with caplog.at_level(logging.WARNING, logger="vard_voz"):
+        app = servidor.criar_app(**sem_motores_opcionais)
+    assert "motor falhou ao iniciar" in caplog.text
+    with TestClient(app) as c:
+        assert c.get("/saude", headers={"host": "127.0.0.1"}).status_code == 200
