@@ -144,6 +144,31 @@ window.addEventListener("DOMContentLoaded", async () => {
     salvarNome: async (nome: string, variantes: string[]) => {
       await atualizarConfig({ nome, variantes });
     },
+    audio: {
+      config: cfg,
+      transcrever: async (wav: ArrayBuffer, sinal: AbortSignal) => {
+        // Usa o conector já configurado no widget; sem disparar por nome de chamada.
+        const texto = await oj.transcrever(wav, cfg.idioma, sinal);
+        return texto;
+      },
+      suspenderEscuta: async () => {
+        // Suspende a escuta por chamada durante o teste; devolve restauração.
+        const estavaMudo = estaMudo();
+        if (!estavaMudo) definirMudo(true);
+        return async () => {
+          if (!estavaMudo) definirMudo(false);
+        };
+      },
+      salvar: async (resultado: { microfone_id: string; saida_id: string; voz_id: string }) => {
+        await atualizarConfig({
+          microfone_id: resultado.microfone_id,
+          saida_id: resultado.saida_id,
+        });
+        // voz_id é salvo no estado do primeiro uso; a config ativa usa o campo do provedor.
+        // O assistente já persiste voz_id via atualizarEstadoPrimeiroUso em primeiro-uso.ts.
+      },
+    },
+    cerebro: {}, // T3c injeta o resto quando estiver pronta
   };
   try {
     if (await deveMostrarAssistente(cfg.ponte_url)) {
