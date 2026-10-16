@@ -27,6 +27,7 @@ from vard.cerebro.provedores import ErroProvedor
 
 FIXTURES_DIR = Path(__file__).parent / "fixtures"
 CLI_FALSA = str(FIXTURES_DIR / "cli_falsa.py")
+CLI_VIVA = str(FIXTURES_DIR / "cli_viva.py")
 
 
 @pytest.fixture
@@ -35,7 +36,22 @@ def base_dados(tmp_path: Path) -> Path:
 
 
 @pytest.fixture
-async def supervisor(base_dados: Path):
+async def supervisor(base_dados: Path, monkeypatch):
+    """Supervisor com argv_cli monkeypatchado para usar a CLI viva.
+
+    Os testes desta suíte não podem chamar o executável real (claude/agy);
+    a guarda do PC real bloqueia. Substituímos argv_cli para que o
+    subprocesso seja sempre [sys.executable, cli_viva.py, --dialeto, ...].
+    A cli_viva.py emite init imediatamente e responde linha a linha sem
+    esperar EOF, permitindo que o supervisor mantenha o processo vivo.
+    """
+    import vard.cerebro.cli_processos as mod
+
+    def _argv_vivo(provedor: ProvedorCli, pasta: Path) -> List[str]:
+        dialeto = "claude" if provedor.tipo == "cli-claude" else "agy"
+        return [sys.executable, CLI_VIVA, "--dialeto", dialeto]
+
+    monkeypatch.setattr(mod, "argv_cli", _argv_vivo)
     sup = SupervisorCli(base_dados=base_dados, ocioso_segundos=0.2)
     yield sup
     await sup.encerrar_tudo()
@@ -207,12 +223,13 @@ class TestSupervisorProcessos:
     @pytest.mark.asyncio
     async def test_cli_sumiu_do_path_aciona_reserva(self, supervisor: SupervisorCli, monkeypatch) -> None:
         """CLI não encontrada no PATH levanta cli_ausente (recuperável → reserva)."""
+        import asyncio as _asyncio
         import vard.cerebro.cli_processos as mod
 
-        def fake_popen(cmd, **kw):
+        async def fake_create_subprocess_exec(*args, **kwargs):
             raise FileNotFoundError("claude not found")
 
-        monkeypatch.setattr(mod.subprocess, "Popen", fake_popen)
+        monkeypatch.setattr(_asyncio, "create_subprocess_exec", fake_create_subprocess_exec)
         prov = _provedor("cli-claude")
         with pytest.raises(ErroProvedor) as excinfo:
             await supervisor.canal(prov, "sess-sumiu")

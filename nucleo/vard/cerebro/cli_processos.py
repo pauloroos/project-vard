@@ -49,33 +49,29 @@ class ProvedorCli:
 
 
 class _CanalProcesso(CanalCli):
-    """Canal real ligado a um subprocesso em stream-json."""
+    """Canal real ligado a um subprocesso em stream-json (asyncio nativo)."""
 
-    def __init__(self, processo: subprocess.Popen, loop: asyncio.AbstractEventLoop) -> None:
+    def __init__(self, processo: asyncio.subprocess.Process) -> None:
         self._proc = processo
-        self._loop = loop
         self._fila: asyncio.Queue[Optional[str]] = asyncio.Queue()
-        self._leitor_task = loop.create_task(self._ler_stdout())
+        self._leitor_task = asyncio.create_task(self._ler_stdout())
 
     async def enviar(self, linha: str) -> None:
-        if self._proc.poll() is not None:
+        if self._proc.returncode is not None:
             raise ErroProvedor("cli_caiu", True, "processo da CLI morreu antes do envio")
+        assert self._proc.stdin is not None
         dados = (linha + "\n").encode("utf-8")
-        await self._loop.run_in_executor(None, self._escrever_stdin, dados)
-
-    def _escrever_stdin(self, dados: bytes) -> None:
         try:
-            assert self._proc.stdin is not None
             self._proc.stdin.write(dados)
-            self._proc.stdin.flush()
-        except (BrokenPipeError, OSError) as exc:
+            await self._proc.stdin.drain()
+        except (BrokenPipeError, ConnectionResetError, OSError) as exc:
             log.warning("CLI stdin falhou: %s", exc)
 
     async def _ler_stdout(self) -> None:
         assert self._proc.stdout is not None
         try:
             while True:
-                linha_bytes = await self._loop.run_in_executor(None, self._proc.stdout.readline)
+                linha_bytes = await self._proc.stdout.readline()
                 if not linha_bytes:
                     break
                 try:
@@ -97,8 +93,8 @@ class _CanalProcesso(CanalCli):
 
     async def interromper(self) -> None:
         pid = self._proc.pid
-        if pid and self._proc.poll() is None:
-            await self._loop.run_in_executor(None, _encerrar_arvore, pid)
+        if pid and self._proc.returncode is None:
+            await asyncio.get_running_loop().run_in_executor(None, _encerrar_arvore, pid)
 
 
 def _dialeto_do_tipo(tipo: str) -> str:
@@ -213,7 +209,7 @@ class SupervisorCli:
     def __init__(self, *, base_dados: Optional[Path] = None, ocioso_segundos: float = OCIOSO_SEGUNDOS) -> None:
         self._base_dados = base_dados
         self._ocioso = float(ocioso_segundos)
-        self._processos: Dict[str, subprocess.Popen] = {}
+        self._processos: Dict[str, asyncio.subprocess.Process] = {}
         self._ultimo_uso: Dict[str, float] = {}
         self._trava = asyncio.Lock()
         self._limpeza_task: Optional[asyncio.Task] = None
@@ -223,22 +219,22 @@ class SupervisorCli:
         chave = f"{provedor.id}:{sessao_id}"
         async with self._trava:
             proc = self._processos.get(chave)
-            if proc is not None and proc.poll() is None:
+            if proc is not None and proc.returncode is None:
                 self._ultimo_uso[chave] = time.monotonic()
-                return _CanalProcesso(proc, asyncio.get_running_loop())
+                return _CanalProcesso(proc)
             # Abre novo processo
             pasta = _preparar_pasta_sessao(provedor, sessao_id, base_dados=self._base_dados)
             cmd = argv_cli(provedor, pasta)
             try:
                 kwargs: Dict[str, Any] = {
-                    "stdin": subprocess.PIPE,
-                    "stdout": subprocess.PIPE,
-                    "stderr": subprocess.PIPE,
+                    "stdin": asyncio.subprocess.PIPE,
+                    "stdout": asyncio.subprocess.PIPE,
+                    "stderr": asyncio.subprocess.PIPE,
                     "cwd": str(pasta),
                 }
                 if sys.platform != "win32":
                     kwargs["preexec_fn"] = os.setsid
-                proc = subprocess.Popen(cmd, **kwargs)
+                proc = await asyncio.create_subprocess_exec(*cmd, **kwargs)
             except FileNotFoundError as exc:
                 raise ErroProvedor("cli_ausente", True, "CLI nao encontrada no PATH") from exc
             except OSError as exc:
@@ -246,7 +242,7 @@ class SupervisorCli:
             self._processos[chave] = proc
             self._ultimo_uso[chave] = time.monotonic()
             self._garantir_limpeza()
-            return _CanalProcesso(proc, asyncio.get_running_loop())
+            return _CanalProcesso(proc)
 
     async def nova_conversa(self, sessao_id: str) -> None:
         """Reinicia todos os processos da sessão (nova conversa ou limite de trocas)."""
@@ -255,7 +251,7 @@ class SupervisorCli:
             for chave in chaves:
                 proc = self._processos.pop(chave, None)
                 self._ultimo_uso.pop(chave, None)
-                if proc is not None and proc.poll() is None:
+                if proc is not None and proc.returncode is None:
                     pid = proc.pid
                     await asyncio.get_running_loop().run_in_executor(None, _encerrar_arvore, pid)
 
@@ -266,7 +262,7 @@ class SupervisorCli:
                 self._limpeza_task.cancel()
                 self._limpeza_task = None
             for chave, proc in list(self._processos.items()):
-                if proc.poll() is None:
+                if proc.returncode is None:
                     pid = proc.pid
                     await asyncio.get_running_loop().run_in_executor(None, _encerrar_arvore, pid)
             self._processos.clear()
@@ -276,7 +272,7 @@ class SupervisorCli:
         """Lista PIDs vivos (para prova e diagnóstico)."""
         resultado: List[int] = []
         for proc in self._processos.values():
-            if proc.poll() is None:
+            if proc.returncode is None:
                 resultado.append(proc.pid)
         return resultado
 
@@ -298,7 +294,7 @@ class SupervisorCli:
                     for chave in vencidas:
                         proc = self._processos.pop(chave, None)
                         self._ultimo_uso.pop(chave, None)
-                        if proc is not None and proc.poll() is None:
+                        if proc is not None and proc.returncode is None:
                             pid = proc.pid
                             await asyncio.get_running_loop().run_in_executor(None, _encerrar_arvore, pid)
                             log.info("CLI ociosa fechada: %s pid=%s", chave, pid)
