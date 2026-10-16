@@ -62,7 +62,9 @@ async def test_mesma_sessao_fifo():
     pedidos.admitir(_pedido("p1", "s"))
     pedidos.admitir(_pedido("p2", "s"))
 
-    tarefa = asyncio.create_task(pedidos.processar_fila("s"))
+    # D2: admitir já dispara o laço; aguarda a task ativa em vez de criar outra
+    tarefa = pedidos._lacos_ativos.get("s")
+    assert tarefa is not None, "laço da sessão não foi disparado por admitir"
     await asyncio.sleep(0)  # cede para fila iniciar p1
     info1 = pedidos.consultar("p1")
     assert info1 and info1.estado == EstadoPedido.EXECUTANDO
@@ -96,8 +98,10 @@ async def test_outra_sessao_progride():
     pedidos.admitir(_pedido("a1", "sa"))
     pedidos.admitir(_pedido("b1", "sb"))
 
-    ta = asyncio.create_task(pedidos.processar_fila("sa"))
-    tb = asyncio.create_task(pedidos.processar_fila("sb"))
+    # D2: admitir já dispara os laços; usa as tasks ativas em vez de criar novas
+    ta = pedidos._lacos_ativos.get("sa")
+    tb = pedidos._lacos_ativos.get("sb")
+    assert ta is not None and tb is not None, "laços não foram disparados por admitir"
 
     await concluido_b.wait()
     assert pedidos.consultar("b1").estado == EstadoPedido.CONCLUIDO

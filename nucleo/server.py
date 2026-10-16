@@ -219,6 +219,19 @@ async def lifespan(app):
     """Ciclo de vida: inicia/para o TelegramPoller condicional (T11) e o SupervisorCli (T16)."""
     # Configura o executor do cérebro próprio (T16: ligação no despachante)
     cerebro_pedidos.configurar_executor(_executar_pedido_cerebro)
+    # D2: encaminha eventos do cérebro próprio para o SSE /events
+    def _emissor_sse(ev):
+        try:
+            publicar_evento_pedido(
+                pedido_id=ev.pedido_id,
+                sessao_id=ev.sessao_id,
+                seq=ev.seq,
+                tipo=ev.tipo.value if hasattr(ev.tipo, "value") else str(ev.tipo),
+                dados=ev.dados or {},
+            )
+        except Exception:  # noqa: BLE001
+            pass
+    cerebro_pedidos.configurar_emissor(_emissor_sse)
 
     poller = None
     tarefa_poller = None

@@ -26,8 +26,16 @@ _pasta_pedidos = None  # sobrescrito em testes
 _trava = threading.Lock()
 _fila_por_sessao: dict[str, list[str]] = {}
 _executores: dict[str, asyncio.Task] = {}
+_lacos_ativos: dict[str, asyncio.Task] = {}  # D2: laço de processamento por sessão
 _corpo_por_id: dict[str, str] = {}
 _rodar_fn: Callable[[Pedido, Callable[[EventoPedido], None]], Awaitable[None]] | None = None
+_emitir_evento: Callable[[EventoPedido], None] | None = None  # D2: callback para SSE
+
+
+def configurar_emissor(fn: Callable[[EventoPedido], None] | None) -> None:
+    """Define o callback que encaminha EventoPedido para o SSE (usado pelo server)."""
+    global _emitir_evento
+    _emitir_evento = fn
 
 
 def _base() -> Path:
@@ -105,7 +113,8 @@ def definir_pasta(caminho: str | Path | None) -> None:
 
 
 def admitir(pedido: Pedido) -> tuple[EstadoPedidoInfo, bool]:
-    """Admite um pedido. Devolve (info, criado). Se já existe com mesmo corpo, reutiliza; corpo diferente dá conflito."""
+    """Admite um pedido. Devolve (info, criado). Se já existe com mesmo corpo, reutiliza; corpo diferente dá conflito.
+    D2: dispara o processamento da sessão se não houver laço ativo para ela."""
     with _trava:
         existente = _ler_info(pedido.pedido_id)
         if existente is not None:
@@ -122,6 +131,18 @@ def admitir(pedido: Pedido) -> tuple[EstadoPedidoInfo, bool]:
         _corpo_por_id[pedido.pedido_id] = pedido.texto
         fila = _fila_por_sessao.setdefault(pedido.sessao_id, [])
         fila.append(pedido.pedido_id)
+        # D2: dispara laço da sessão se não estiver rodando
+        loop_task = _lacos_ativos.get(pedido.sessao_id)
+        if loop_task is None or loop_task.done():
+            try:
+                loop = asyncio.get_running_loop()
+            except RuntimeError:
+                try:
+                    loop = asyncio.get_event_loop()
+                except RuntimeError:
+                    loop = None
+            if loop is not None and loop.is_running():
+                _lacos_ativos[pedido.sessao_id] = loop.create_task(processar_fila(pedido.sessao_id))
     return info, True
 
 
@@ -180,8 +201,38 @@ async def processar_fila(sessao_id: str) -> None:
         info.ultimo_seq += 1
         _gravar_info(info)
 
+        # D2: recupera texto/origem reais e prepara emissor de eventos
+        texto_real = _corpo_por_id.get(proximo, "")
+        info_origem = _ler_info(proximo)
+        origem_real = Origem.PAINEL  # padrão; admitir sempre grava PAINEL via server
+        # Se houver como inferir origem do corpo salvo, usar; senão, mantém PAINEL
+
+        def _emissor(ev: EventoPedido) -> None:
+            with _trava:
+                cur = _ler_info(ev.pedido_id)
+                if cur is not None:
+                    if ev.seq > cur.ultimo_seq:
+                        cur.ultimo_seq = ev.seq
+                    if ev.tipo == TipoEvento.FIM and ev.dados.get("resposta") is not None:
+                        cur.resposta = ev.dados["resposta"]
+                    _gravar_info(cur)
+            if _emitir_evento is not None:
+                try:
+                    _emitir_evento(ev)
+                except Exception:
+                    pass
+
+        pedido_real = Pedido(
+            pedido_id=proximo,
+            sessao_id=sessao_id,
+            origem=origem_real,
+            texto=texto_real,
+        )
+        exec_task = asyncio.create_task(_rodar_fn(pedido_real, _emissor))
+        with _trava:
+            _executores[proximo] = exec_task
         try:
-            await _rodar_fn(Pedido(pedido_id=proximo, sessao_id=sessao_id, origem=Origem.PAINEL, texto=""), lambda ev: None)
+            await exec_task
             info = _ler_info(proximo) or info
             if info.estado == EstadoPedido.EXECUTANDO:
                 info.estado = EstadoPedido.CONCLUIDO
@@ -196,6 +247,9 @@ async def processar_fila(sessao_id: str) -> None:
             info.estado = EstadoPedido.FALHOU
             info.erro = str(exc)[:200]
             _gravar_info(info)
+        finally:
+            with _trava:
+                _executores.pop(proximo, None)
 
 
 def recuperar_interrupcoes() -> int:
@@ -227,10 +281,11 @@ def recuperar_interrupcoes() -> int:
 
 def limpar_tudo() -> None:
     """Remove todos os arquivos de pedidos e filas (usado em testes)."""
-    global _fila_por_sessao, _executores, _corpo_por_id
+    global _fila_por_sessao, _executores, _corpo_por_id, _lacos_ativos
     _fila_por_sessao.clear()
     _executores.clear()
     _corpo_por_id.clear()
+    _lacos_ativos.clear()
     base = _base()
     if base.exists():
         for arq in base.glob("*.json"):

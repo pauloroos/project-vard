@@ -30,6 +30,35 @@ CLI_FALSA = str(FIXTURES_DIR / "cli_falsa.py")
 CLI_VIVA = str(FIXTURES_DIR / "cli_viva.py")
 
 
+@pytest.fixture(autouse=True)
+def _garantia_sem_cli_viva_orfao():
+    """D3: garante que nenhum processo cli_viva.py sobrevive ao teste.
+
+    Roda antes/depois de cada teste; se houver órfão no teardown, falha o teste
+    e tenta encerrar por PID para não contaminar os próximos.
+    """
+    yield
+    import subprocess as _sp
+    try:
+        ps = _sp.run(
+            ["powershell", "-NoProfile", "-Command",
+             "Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -match 'cli_viva\\.py' } | Select-Object -ExpandProperty ProcessId"],
+            capture_output=True, text=True, timeout=10,
+        )
+        pids = [int(p.strip()) for p in ps.stdout.splitlines() if p.strip().isdigit()]
+    except Exception:
+        pids = []
+    if pids:
+        # Tenta limpar para não contaminar outros testes
+        for pid in pids:
+            try:
+                import os, signal
+                os.kill(pid, signal.SIGTERM)
+            except Exception:
+                pass
+        raise AssertionError(f"D3: processos cli_viva.py órfãos detectados: {pids}")
+
+
 @pytest.fixture
 def base_dados(tmp_path: Path) -> Path:
     return tmp_path / "dados"
