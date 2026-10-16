@@ -21,7 +21,7 @@ export interface DepsHospedeiro {
 
 export interface ContextoHospedeiro {
   /** Elemento raiz onde o assistente será montado. */
-  raiz: HTMLElement;
+  raiz?: HTMLElement;
   /** Verifica se o assistente deve abrir (ponte ausente = false). */
   deveMostrar: (ponteUrl: string) => Promise<boolean>;
   /** Monta o assistente; devolve função de limpeza ou null. */
@@ -54,18 +54,21 @@ export function construirDepsPrimeiroUso(deps: DepsHospedeiro): DepsPrimeiroUso 
 }
 
 /** Abre o assistente se necessário e devolve o controle de limpeza.
- *  Ponte ausente ou instalação concluída retornam null sem erro. */
+ *  Ponte ausente ou instalação concluída retornam null sem erro.
+ *  Se `ctx.apenasVerificar` for true, não monta nada e retorna true quando o assistente deveria abrir. */
 export async function abrirAssistenteSeNecessario(
   deps: DepsHospedeiro,
-  ctx: Partial<ContextoHospedeiro> = {},
-): Promise<(() => void) | null> {
+  ctx: Partial<ContextoHospedeiro> & { apenasVerificar?: boolean } = {},
+): Promise<(() => void) | boolean | null> {
   const contexto = { ...contextoPadrao, ...ctx };
-  if (!contexto.raiz) throw new Error("raiz é obrigatória");
   try {
-    if (!(await contexto.deveMostrar(deps.ponteUrl))) return null;
+    const deve = await contexto.deveMostrar(deps.ponteUrl);
+    if (ctx.apenasVerificar) return !!deve;
+    if (!deve) return null;
+    if (!contexto.raiz) throw new Error("raiz é obrigatória");
     return await contexto.montar(contexto.raiz, construirDepsPrimeiroUso(deps));
   } catch {
-    return null;
+    return ctx.apenasVerificar ? false : null;
   }
 }
 

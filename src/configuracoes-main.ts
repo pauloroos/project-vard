@@ -4,10 +4,12 @@ import { emitTo, listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { URL_RELEASE } from "./atualizacao/release";
 import { carregarConfig, lerNaoOuvirFalar, lerTopoCompacto, salvarConfig } from "./config/config";
+import { deveMostrarAssistente } from "./config/primeiro-uso";
 import { OpenJarvis } from "./conectores/openjarvis/cliente";
 import { Ponte } from "./conectores/ponte/cliente";
 import { Configuracoes, type Aba } from "./ui/configuracoes";
 import { montarImportacaoComPonte, resumirHudAtual } from "./ui/primeiro-uso-importacao";
+import { montarAssistentePrimeiroUso, type DepsPrimeiroUso } from "./ui/primeiro-uso";
 
 const ABAS: Aba[] = ["geral", "voz", "atalhos", "modelos", "paineis-provedores", "paineis-vozes", "paineis-mcps", "paineis-agentes", "sistema", "reuniao", "avisos", "atualizacao"];
 
@@ -63,4 +65,61 @@ window.addEventListener("DOMContentLoaded", async () => {
     if (typeof ev.payload !== "string" || !ABAS.includes(ev.payload as Aba)) return;
     painel.abrirAba(ev.payload as Aba);
   });
+
+  // Assistente de primeiro uso: monta na própria janela de Configurações quando necessário.
+  const containerPU = document.getElementById("primeiro-uso-container") as HTMLElement | null;
+  let limparAssistente: (() => void) | null = null;
+  const depsPU: DepsPrimeiroUso = {
+    ponteUrl: cfg.ponte_url,
+    salvarNome: async (nome, variantes) => {
+      cfg.nome = nome;
+      cfg.variantes = variantes;
+      await salvarConfig(cfg);
+    },
+    audio: {
+      config: cfg,
+      transcrever: async (wav, sinal) => {
+        const oj = new OpenJarvis(import.meta.env.DEV ? `${location.origin}/oj` : cfg.openjarvis_url, cfg.modelo);
+        return oj.transcrever(wav, cfg.idioma, sinal);
+      },
+      suspenderEscuta: async () => {
+        // Pede ao widget para silenciar o microfone enquanto o teste de áudio roda.
+        await emitTo("main", "pedir-mudo").catch(() => {});
+        return async () => {
+          await emitTo("main", "restaurar-mudo").catch(() => {});
+        };
+      },
+      salvar: async (resultado) => {
+        cfg.microfone_id = resultado.microfone_id;
+        cfg.saida_id = resultado.saida_id;
+        await salvarConfig(cfg);
+      },
+    },
+    cerebro: {},
+  };
+  const montarSeNecessario = async () => {
+    if (!containerPU) return;
+    limparAssistente?.();
+    limparAssistente = null;
+    const deve = await deveMostrarAssistente(cfg.ponte_url);
+    if (!deve) {
+      containerPU.hidden = true;
+      return;
+    }
+    containerPU.hidden = false;
+    limparAssistente = await montarAssistentePrimeiroUso(containerPU, depsPU);
+  };
+  await montarSeNecessario();
+
+  // Botão "Configurar primeiro uso" agora reabre o assistente nesta janela (não emite para o widget).
+  const btnPU = document.getElementById("cfg-primeiro-uso") as HTMLButtonElement | null;
+  if (btnPU) {
+    // Remove listeners antigos que emitiam para o widget (desenho do Configuracoes já adicionou um).
+    const clone = btnPU.cloneNode(true) as HTMLButtonElement;
+    btnPU.parentNode?.replaceChild(clone, btnPU);
+    clone.addEventListener("click", () => { void montarSeNecessario(); });
+  }
+
+  // Se o widget pedir para reabrir o assistente, faz aqui.
+  await listen("reabrir-primeiro-uso", () => { void montarSeNecessario(); });
 });

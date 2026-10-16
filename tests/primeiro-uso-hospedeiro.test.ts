@@ -58,10 +58,10 @@ describe("primeiro-uso-hospedeiro", () => {
         json: async () => ({ schema: 1, etapa: "importar", concluido: false, pendencias: [] }),
       });
       const raiz = document.createElement("div");
-      const limpar = await abrirAssistenteSeNecessario(depsBase(), { raiz });
-      expect(limpar).not.toBeNull();
+      const resultado = await abrirAssistenteSeNecessario(depsBase(), { raiz });
+      expect(typeof resultado).toBe("function");
       expect(raiz.querySelector("#primeiro-uso-etapa")).not.toBeNull();
-      limpar?.();
+      (resultado as () => void)?.();
       expect(raiz.querySelector("#primeiro-uso-etapa")).toBeNull();
     });
 
@@ -71,16 +71,16 @@ describe("primeiro-uso-hospedeiro", () => {
         json: async () => ({ schema: 1, etapa: "resumo", concluido: true, pendencias: [] }),
       });
       const raiz = document.createElement("div");
-      const limpar = await abrirAssistenteSeNecessario(depsBase(), { raiz });
-      expect(limpar).toBeNull();
+      const resultado = await abrirAssistenteSeNecessario(depsBase(), { raiz });
+      expect(resultado).toBeNull();
       expect(raiz.childElementCount).toBe(0);
     });
 
     it("ponte ausente não bloqueia e devolve null sem erro", async () => {
       fetchMock.mockRejectedValue(new Error("rede"));
       const raiz = document.createElement("div");
-      const limpar = await abrirAssistenteSeNecessario(depsBase(), { raiz });
-      expect(limpar).toBeNull();
+      const resultado = await abrirAssistenteSeNecessario(depsBase(), { raiz });
+      expect(resultado).toBeNull();
       expect(raiz.childElementCount).toBe(0);
     });
   });
@@ -98,9 +98,9 @@ describe("primeiro-uso-hospedeiro", () => {
         .mockResolvedValueOnce({ ok: true, json: async () => estadoReaberto }); // reabrir: GET montar
       const raiz = document.createElement("div");
       const limpar1 = await abrirAssistenteSeNecessario(depsBase(), { raiz });
-      expect(limpar1).not.toBeNull();
+      expect(typeof limpar1).toBe("function");
       expect(raiz.querySelector("#primeiro-uso-etapa")).not.toBeNull();
-      const limpar2 = await reabrirAssistente(depsBase(), limpar1, { raiz });
+      const limpar2 = await reabrirAssistente(depsBase(), limpar1 as (() => void) | null, { raiz });
       expect(limpar2).not.toBeNull();
       expect(fetchMock).toHaveBeenCalledWith(
         expect.stringContaining("/primeiro-uso/reabrir"),
