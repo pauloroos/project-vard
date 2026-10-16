@@ -419,3 +419,13 @@ input[type="search"].cards-busca {
   border: 1px solid rgba(0, 240, 255, 0.35); border-radius: 4px; font: inherit;
 }
 input[type="search"].cards-busca::placeholder { color: rgba(0, 240, 255, 0.5); }
+/* Campos dentro do modal: mesmo visual escuro de qualquer tipo (inclusive input sem type) */
+.modal input:not([type="checkbox"]):not([type="radio"]), .modal select, .modal textarea {
+  padding: 6px 10px; color: var(--ciano); background: rgba(0, 240, 255, 0.07);
+  border: 1px solid rgba(0, 240, 255, 0.35); border-radius: 4px; font: inherit; box-sizing: border-box;
+}
+.modal input::placeholder, .modal textarea::placeholder { color: rgba(0, 240, 255, 0.45); }
+.modal select option { background: var(--fundo); }
+/* Cards não esticam até a altura do vizinho; fichas compactas */
+.cards-grade { align-items: start; }
+.card-fichas .ficha { max-width: 100%; }
