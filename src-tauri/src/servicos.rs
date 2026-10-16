@@ -476,6 +476,32 @@ mod testes {
     use super::*;
     use std::path::PathBuf;
 
+    struct FilhoTeste(std::process::Child);
+    impl std::ops::Deref for FilhoTeste {
+        type Target = std::process::Child;
+        fn deref(&self) -> &Self::Target { &self.0 }
+    }
+    impl std::ops::DerefMut for FilhoTeste {
+        fn deref_mut(&mut self) -> &mut Self::Target { &mut self.0 }
+    }
+    impl Drop for FilhoTeste {
+        fn drop(&mut self) {
+            // O handle ainda vivo comprova autoria e impede atuar em PID reutilizado.
+            if matches!(self.0.try_wait(), Ok(None)) {
+                #[cfg(windows)]
+                let _ = std::process::Command::new("taskkill")
+                    .args(["/T", "/F", "/PID", &self.0.id().to_string()])
+                    .stdout(std::process::Stdio::null()).stderr(std::process::Stdio::null()).status();
+                let _ = self.0.kill();
+            }
+            let _ = self.0.wait();
+        }
+    }
+    fn porta_livre() -> u16 {
+        std::net::TcpListener::bind(("127.0.0.1", 0))
+            .expect("reservar porta de teste").local_addr().unwrap().port()
+    }
+
     #[test]
     fn handle_parada_sinaliza_corretamente() {
         let h = ServicoHandle::novo("teste", 9999);
@@ -531,7 +557,7 @@ mod testes {
 
     /// Servidor HTTP falso mínimo: responde /saude com PID próprio.
     /// Usado como filho real nos testes de integração do supervisor.
-    fn criar_filho_http_falso(porta: u16) -> std::process::Child {
+    fn criar_filho_http_falso(porta: u16) -> FilhoTeste {
         use std::io::Write;
         // Script Python inline que sobe um servidor HTTP mínimo respondendo /saude
         let script = format!(
@@ -556,12 +582,12 @@ http.server.HTTPServer(('127.0.0.1', {porta}), H).serve_forever()
         );
         // Usa o python.exe do sistema (não o embutido) para o filho falso de teste
         let python = if cfg!(windows) { "python" } else { "python3" };
-        std::process::Command::new(python)
+        FilhoTeste(std::process::Command::new(python)
             .args(["-c", &script])
             .stdout(std::process::Stdio::null())
             .stderr(std::process::Stdio::null())
             .spawn()
-            .expect("falha ao iniciar filho HTTP falso")
+            .expect("falha ao iniciar filho HTTP falso"))
     }
 
     /// Espera até o filho responder /saude ou timeout.
@@ -579,7 +605,7 @@ http.server.HTTPServer(('127.0.0.1', {porta}), H).serve_forever()
     #[test]
     fn filho_http_falso_responde_saude_com_pid_correto() {
         // Prova que o filho falso funciona e a sonda valida o PID
-        let porta = 19801;
+        let porta = porta_livre();
         let mut filho = criar_filho_http_falso(porta);
         let pid = filho.id();
         assert!(
@@ -593,7 +619,7 @@ http.server.HTTPServer(('127.0.0.1', {porta}), H).serve_forever()
     #[test]
     fn saude_aceita_pid_do_job_em_filho_real() {
         // Prova que saude_aceita valida PID via Job Object com filho real
-        let porta = 19802;
+        let porta = porta_livre();
         let mut filho = criar_filho_http_falso(porta);
         let pid = filho.id();
         let job = crate::supervisor::JobHandle::novo().expect("Job Object");
@@ -693,7 +719,7 @@ http.server.HTTPServer(('127.0.0.1', {porta}), H).serve_forever()
     // -----------------------------------------------------------------------------------------------------------------
 
     /// Filho que cria um neto (sleep infinito) e serve HTTP.
-    fn criar_filho_com_neto(porta: u16) -> (std::process::Child, u32) {
+    fn criar_filho_com_neto(porta: u16) -> (FilhoTeste, u32) {
         let script = format!(
             r#"
 import http.server, json, os, subprocess, sys
@@ -717,12 +743,12 @@ http.server.HTTPServer(('127.0.0.1', {porta}), H).serve_forever()
             porta = porta
         );
         let python = if cfg!(windows) { "python" } else { "python3" };
-        let mut child = std::process::Command::new(python)
+        let mut child = FilhoTeste(std::process::Command::new(python)
             .args(["-c", &script])
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::null())
             .spawn()
-            .expect("falha ao iniciar filho com neto");
+            .expect("falha ao iniciar filho com neto"));
         // Lê NETO_PID da stdout
         use std::io::{BufRead, BufReader};
         let mut reader = BufReader::new(child.stdout.take().unwrap());
@@ -759,7 +785,7 @@ http.server.HTTPServer(('127.0.0.1', {porta}), H).serve_forever()
     /// Uma falha isolada NÃO reinicia. Provado via sonda direta + kill simulando falha.
     #[test]
     fn t3c_duas_sondas_falhas_reiniciam_filho() {
-        let porta = 19810u16;
+        let porta = porta_livre();
         let mut f1 = criar_filho_http_falso(porta);
         let pid1 = f1.id();
         assert!(
@@ -789,9 +815,9 @@ http.server.HTTPServer(('127.0.0.1', {porta}), H).serve_forever()
     /// Três filhos reais em portas diferentes; matar um não afeta os outros.
     #[test]
     fn t3c_parar_um_servico_nao_mata_os_outros() {
-        let porta_n = 19820u16;
-        let porta_v = 19821u16;
-        let porta_r = 19822u16;
+        let porta_n = porta_livre();
+        let porta_v = porta_livre();
+        let porta_r = porta_livre();
         let mut nucleo = criar_filho_http_falso(porta_n);
         let mut voz = criar_filho_http_falso(porta_v);
         let mut reuniao = criar_filho_http_falso(porta_r);
@@ -863,7 +889,7 @@ http.server.HTTPServer(('127.0.0.1', {porta}), H).serve_forever()
     /// Filho que cria um neto → depois de job.terminar() nenhum dos dois vive.
     #[test]
     fn t3c_job_object_mata_filhos_e_netos() {
-        let porta = 19830u16;
+        let porta = porta_livre();
         let (mut filho, neto_pid) = criar_filho_com_neto(porta);
         let pai_pid = filho.id();
         // Guard de limpeza: garante que neto morra mesmo se o teste falhar
@@ -918,7 +944,7 @@ http.server.HTTPServer(('127.0.0.1', {porta}), H).serve_forever()
     /// Se adotar falhar, o filho deve ser morto imediatamente.
     #[test]
     fn t3c_job_indisponivel_aborta_sem_orfao() {
-        let porta = 19840u16;
+        let porta = porta_livre();
         let mut filho = criar_filho_http_falso(porta);
         let pid = filho.id();
         assert!(esperar_saude(porta, pid, Duration::from_secs(5)));
@@ -961,7 +987,7 @@ http.server.HTTPServer(('127.0.0.1', {porta}), H).serve_forever()
     #[test]
     fn t3c_ocupante_externo_da_porta_nao_e_morto() {
         use std::net::TcpListener;
-        let porta = 19850u16;
+        let porta = porta_livre();
         let listener = TcpListener::bind(format!("127.0.0.1:{porta}"))
             .expect("falha ao ocupar porta");
         // Tenta lançar filho na mesma porta → deve falhar ou sair com erro
@@ -977,12 +1003,12 @@ http.server.HTTPServer(('127.0.0.1', {porta}), H).serve_forever()
             porta = porta
         );
         let python = if cfg!(windows) { "python" } else { "python3" };
-        let mut child = std::process::Command::new(python)
+        let mut child = FilhoTeste(std::process::Command::new(python)
             .args(["-c", &script])
             .stdout(std::process::Stdio::null())
             .stderr(std::process::Stdio::null())
             .spawn()
-            .expect("spawn filho");
+            .expect("spawn filho"));
         // O filho deve sair rapidamente porque a porta está ocupada
         let status = child.wait().expect("wait filho");
         assert!(
@@ -996,4 +1022,27 @@ http.server.HTTPServer(('127.0.0.1', {porta}), H).serve_forever()
         );
         drop(listener);
     }
+    #[test]
+    fn guarda_libera_filho_mesmo_em_panic() {
+        let porta = std::net::TcpListener::bind(("127.0.0.1", 0))
+            .unwrap().local_addr().unwrap().port();
+        let pid = std::cell::Cell::new(0);
+        let resultado = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let filho = criar_filho_http_falso(porta);
+            pid.set(filho.id());
+            assert!(esperar_saude(porta, filho.id(), Duration::from_secs(5)));
+            panic!("falha controlada da prova");
+        }));
+        assert!(resultado.is_err());
+        let ficou_vivo = processo_vivo(pid.get());
+        // Limpa inclusive na fase vermelha, antes de reportar a regressao.
+        if ficou_vivo {
+            #[cfg(windows)]
+            let _ = std::process::Command::new("taskkill")
+                .args(["/T", "/F", "/PID", &pid.get().to_string()])
+                .stdout(std::process::Stdio::null()).stderr(std::process::Stdio::null()).status();
+        }
+        assert!(!ficou_vivo, "o filho sobreviveu ao desenrolamento do teste");
+    }
+
 }
