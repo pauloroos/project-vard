@@ -666,7 +666,7 @@ class TestProgressoSSE:
     async def test_eventos_sse_contem_bytes_e_estado(self, instalador_tmp, servidor_sintetico):
         """Eventos SSE devem conter estado, bytes_baixados e bytes_total válidos."""
         import asyncio
-        from nucleo.server import app
+        from server import app
         from fastapi.testclient import TestClient
 
         inst, raiz = instalador_tmp
