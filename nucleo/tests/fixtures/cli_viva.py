@@ -104,6 +104,8 @@ def _responder_agy(mensagem: dict) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser(description="CLI falsa viva para testes T16")
     parser.add_argument("--dialeto", choices=["claude", "agy"], required=True)
+    parser.add_argument("--lento", type=float, default=0.0,
+                        help="segundos de espera antes de cada resposta (simula uma resposta longa)")
     parser.add_argument("--linha-grande", type=int, default=0,
                         help="antes do init, emite eventos system como a CLI real (hooks e lista de comandos com N bytes)")
     args = parser.parse_args()
@@ -149,6 +151,9 @@ def main() -> None:
             msg = json.loads(linha)
         except json.JSONDecodeError:
             continue
+        if args.lento:
+            import time
+            time.sleep(args.lento)
         if args.dialeto == "claude":
             _responder_claude(msg)
         else:

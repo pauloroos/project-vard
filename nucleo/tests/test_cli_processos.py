@@ -439,3 +439,60 @@ async def test_dois_turnos_na_mesma_sessao_leem_do_mesmo_canal(base_dados: Path)
     finally:
         mod.argv_cli = original_argv  # type: ignore[assignment]
         await sup.encerrar_tudo()
+
+
+
+@pytest.mark.asyncio
+async def test_cancelar_turno_encerra_a_cli_e_a_proxima_pergunta_funciona(base_dados: Path) -> None:
+    """D10: cancelar o pedido (cancelamento da tarefa) precisa encerrar a CLI que ainda está
+    respondendo; senão a resposta velha disputa o processo e a pergunta seguinte falha."""
+    import vard.cerebro.cli_processos as mod
+    from vard.cerebro.cli import AdaptadorCli
+
+    sup = SupervisorCli(base_dados=base_dados, ocioso_segundos=60.0)
+    original_argv = mod.argv_cli
+    original_encerrar = mod._encerrar_arvore
+
+    def encerrar_por_psutil(pid: int) -> None:  # dublê do taskkill (proibido pela guarda dos testes)
+        import psutil
+        try:
+            raiz = psutil.Process(pid)
+        except psutil.NoSuchProcess:
+            return
+        for p in raiz.children(recursive=True) + [raiz]:
+            try:
+                p.kill()
+            except psutil.NoSuchProcess:
+                pass
+
+    mod._encerrar_arvore = encerrar_por_psutil  # type: ignore[assignment]
+    lento = {"s": 30.0}
+    mod.argv_cli = lambda p, pasta: [sys.executable, CLI_VIVA, "--dialeto", "claude", "--lento", str(lento["s"])]  # type: ignore[assignment]
+    try:
+        prov = ProvedorCli(id="falso_claude", tipo="cli-claude", modelo="teste", yolo=False)
+        canal = await sup.canal(prov, "sess-cancelar")
+        proc_antigo = sup._processos["falso_claude:sess-cancelar"]
+
+        async def turno_longo() -> None:
+            async for _ in AdaptadorCli(canal, "claude").inferir([{"role": "user", "content": "longo"}]):
+                pass
+
+        tarefa = asyncio.create_task(turno_longo())
+        await asyncio.sleep(0.5)
+        tarefa.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await tarefa
+        assert proc_antigo.returncode is not None, "a CLI que respondia precisa ter sido encerrada"
+
+        lento["s"] = 0.0
+        canal2 = await sup.canal(prov, "sess-cancelar")
+        assert sup._processos["falso_claude:sess-cancelar"].pid != proc_antigo.pid
+        partes = []
+        async for ev in AdaptadorCli(canal2, "claude").inferir([{"role": "user", "content": "de novo"}]):
+            if ev.tipo == "texto":
+                partes.append(ev.dados.get("conteudo", ""))
+        assert "".join(partes) == "eco: de novo"
+    finally:
+        mod.argv_cli = original_argv  # type: ignore[assignment]
+        mod._encerrar_arvore = original_encerrar  # type: ignore[assignment]
+        await sup.encerrar_tudo()

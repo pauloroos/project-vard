@@ -263,8 +263,19 @@ class AdaptadorCli(AdaptadorProvedor):
             raise ErroProvedor("imagem_nao_suportada", False, "CLI nao aceita imagem nesta versao")
         await self._interromper_se_cancelado(cancelamento)
         texto = _ultimo_texto_usuario(mensagens)
+        self._ja_interrompido = False
         await self._canal.enviar(self._dialeto.linha_usuario(texto))
+        try:
+            async for evento in self._ler_turno(cancelamento):
+                yield evento
+        except asyncio.CancelledError:
+            # Pedido cancelado (D10): a CLI ainda está respondendo; encerra a árvore para a resposta
+            # velha não disputar o processo com a próxima pergunta (que abre um processo novo).
+            if not self._ja_interrompido:
+                await asyncio.shield(self._canal.interromper())
+            raise
 
+    async def _ler_turno(self, cancelamento: Optional[asyncio.Event]) -> AsyncIterator[EventoInferencia]:
         aiter_linhas = await self._abrir_linhas()
         inicio = time.monotonic()
         ultimo_util = inicio
@@ -319,6 +330,7 @@ class AdaptadorCli(AdaptadorProvedor):
         if tarefa_cancel is not None and tarefa_cancel in prontas and tarefa_cancel.result():
             tarefa_linha.cancel()
             await self._canal.interromper()
+            self._ja_interrompido = True
             raise asyncio.CancelledError()
         if tarefa_linha in prontas:
             try:
