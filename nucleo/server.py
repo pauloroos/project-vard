@@ -22,6 +22,7 @@ from fastapi.staticfiles import StaticFiles
 from contextlib import asynccontextmanager
 
 from vard import avisos as vavisos, central, config, modelos, modo, oficina, perfil, reuniao, segredos, tarefas
+from vard import config
 from vard.cerebro import contratos as cerebro_contratos, pedidos as cerebro_pedidos
 from vard.primeiro_uso import deteccao as primeiro_uso_deteccao, estado as primeiro_uso_estado
 from vard.seguro import Frase
@@ -67,9 +68,74 @@ def _chave_lmstudio() -> str:
 
 
 CHAVE_LMSTUDIO = _chave_lmstudio()
+_supervisor_cli = None
+
+
+def _obter_supervisor_cli():
+    """Lazy import do SupervisorCli para evitar dependência circular no arranque."""
+    global _supervisor_cli
+    if _supervisor_cli is None:
+        from vard.cerebro.cli_processos import SupervisorCli
+        _supervisor_cli = SupervisorCli()
+    return _supervisor_cli
+
+
+async def _executar_pedido_cerebro(pedido, emitir):
+    """Executor do cérebro próprio: seleciona adaptador conforme provedor ativo.
+
+    T16: quando o provedor é cli-claude/cli-agy, usa SupervisorCli + AdaptadorCli.
+    Demais provedores seguem pelo laço tradicional com AdaptadorFalso (placeholder
+    até a T17/T18 conectarem os painéis reais).
+    """
+    from vard.cerebro import laco as cerebro_laco
+    from vard.cerebro.cli import AdaptadorCli
+    from vard.cerebro.cli_processos import ProvedorCli
+    from vard.cerebro.provedores import AdaptadorFalso
+
+    # Lê provedor ativo dos painéis (se disponível); fallback para falso
+    tipo_provedor = ""
+    modelo = ""
+    yolo = True
+    try:
+        import json as _json
+        cfg_paineis = config.arquivo_config("paineis.json")
+        if cfg_paineis.exists():
+            dados = _json.loads(cfg_paineis.read_text(encoding="utf-8"))
+            agentes = dados.get("agentes", {})
+            # Busca o primeiro agente marcado como ativo com tipo cli-*
+            for nome_ag, ag in agentes.items():
+                t = str(ag.get("tipo", ""))
+                if t.startswith("cli-") and ag.get("ativo", False):
+                    tipo_provedor = t
+                    modelo = str(ag.get("modelo", "") or "")
+                    yolo = bool(ag.get("yolo", True))
+                    break
+    except Exception:  # noqa: BLE001
+        pass
+
+    if tipo_provedor in ("cli-claude", "cli-agy"):
+        supervisor = _obter_supervisor_cli()
+        provedor = ProvedorCli(
+            id=tipo_provedor.replace("-", "_"),
+            tipo=tipo_provedor,
+            modelo=modelo,
+            yolo=yolo,
+        )
+        canal = await supervisor.canal(provedor, pedido.sessao_id)
+        dialeto = "claude" if tipo_provedor == "cli-claude" else "agy"
+        adaptador = AdaptadorCli(canal, dialeto)
+    else:
+        adaptador = AdaptadorFalso(resposta="cérebro local ainda não conectado")
+
+    await cerebro_laco.executar_pedido(pedido, adaptador, emitir)
+
+
 @asynccontextmanager
 async def lifespan(app):
-    """Ciclo de vida: inicia/para o TelegramPoller condicional (T11)."""
+    """Ciclo de vida: inicia/para o TelegramPoller condicional (T11) e o SupervisorCli (T16)."""
+    # Configura o executor do cérebro próprio (T16: ligação no despachante)
+    cerebro_pedidos.configurar_executor(_executar_pedido_cerebro)
+
     poller = None
     tarefa_poller = None
     if telegram_mod.deve_iniciar_poller():
@@ -92,6 +158,13 @@ async def lifespan(app):
     else:
         log.info("telegram desabilitado; poller nao iniciado")
     yield
+    # T16: encerra todos os processos vivos de CLI na saída
+    if _supervisor_cli is not None:
+        try:
+            await _supervisor_cli.encerrar_tudo()
+            log.info("SupervisorCli: processos encerrados na saída")
+        except Exception:  # noqa: BLE001
+            log.warning("SupervisorCli: erro ao encerrar processos na saída")
     if tarefa_poller is not None:
         tarefa_poller.cancel()
         try:
