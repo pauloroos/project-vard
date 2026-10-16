@@ -155,6 +155,10 @@ async def _ferramentas_iniciais(
             return ferramentas
 
 
+# Tamanho máximo de uma linha stream-json lida da CLI (D6).
+_LIMITE_LINHA = 16 * 1024 * 1024
+
+
 def argv_cli(provedor: ProvedorCli, pasta: Path) -> List[str]:
     """Monta o argv da CLI conforme docs/cli.md da T13 e spec C4/C6."""
     dialeto = _dialeto_do_tipo(provedor.tipo)
@@ -297,6 +301,9 @@ class SupervisorCli:
                 "stdout": asyncio.subprocess.PIPE,
                 "stderr": asyncio.subprocess.PIPE,
                 "cwd": str(pasta),
+                # A CLI claude real manda linhas de dezenas de KB (lista de comandos/skills); o padrão
+                # do asyncio (64 KB) faria o readline falhar e o canal virar cli_caiu.
+                "limit": _LIMITE_LINHA,
             }
             if sys.platform != "win32":
                 kwargs["preexec_fn"] = os.setsid

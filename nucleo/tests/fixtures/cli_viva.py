@@ -104,7 +104,15 @@ def _responder_agy(mensagem: dict) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser(description="CLI falsa viva para testes T16")
     parser.add_argument("--dialeto", choices=["claude", "agy"], required=True)
+    parser.add_argument("--linha-grande", type=int, default=0,
+                        help="antes do init, emite eventos system como a CLI real (hooks e lista de comandos com N bytes)")
     args = parser.parse_args()
+
+    if args.dialeto == "claude" and args.linha_grande:
+        # A CLI real (claude 2.1.x) manda hook_started/hook_response e um commands_changed de dezenas de KB
+        _emit({"type": "system", "subtype": "hook_started", "hook": "SessionStart"})
+        _emit({"type": "system", "subtype": "hook_response", "hook": "SessionStart", "output": "ok"})
+        _emit({"type": "system", "subtype": "commands_changed", "commands": ["x" * args.linha_grande]})
 
     sessao = "sess-viva-claude" if args.dialeto == "claude" else "conv-viva-agy"
 
