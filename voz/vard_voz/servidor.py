@@ -29,7 +29,14 @@ ORIGENS_OK = {
 _NAO_FORNECIDO = object()
 
 
-def criar_app(motor=None, motor_kokoro=_NAO_FORNECIDO, stt=None, carregar_em_thread: bool = True) -> FastAPI:
+def criar_app(
+    motor=None,
+    motor_kokoro=_NAO_FORNECIDO,
+    motor_edge=_NAO_FORNECIDO,
+    motor_piper=_NAO_FORNECIDO,
+    stt=None,
+    carregar_em_thread: bool = True,
+) -> FastAPI:
     if motor is None:
         from .motor import Motor
         motor = Motor(os.environ.get("VARD_VOZ_DEVICE", "cuda"))
@@ -38,8 +45,22 @@ def criar_app(motor=None, motor_kokoro=_NAO_FORNECIDO, stt=None, carregar_em_thr
             from .kokoro import MotorKokoro
             motor_kokoro = MotorKokoro(os.environ.get("VARD_VOZ_DEVICE", "cpu"))
         except Exception:
-            log.warning("kokoro indisponivel; apenas XTTS ativo")
+            log.warning("kokoro indisponivel")
             motor_kokoro = None
+    if motor_edge is _NAO_FORNECIDO:
+        try:
+            from .edge import MotorEdge
+            motor_edge = MotorEdge()
+        except Exception:
+            log.warning("edge-tts indisponivel")
+            motor_edge = None
+    if motor_piper is _NAO_FORNECIDO:
+        try:
+            from .piper import MotorPiper
+            motor_piper = MotorPiper()
+        except Exception:
+            log.warning("piper-tts indisponivel")
+            motor_piper = None
     if stt is None:
         # STT é opcional: só instancia se o extra estiver instalado. Sem ele, /transcribe devolve 503.
         try:
@@ -52,6 +73,13 @@ def criar_app(motor=None, motor_kokoro=_NAO_FORNECIDO, stt=None, carregar_em_thr
             log.warning("MotorSTT indisponível; /transcribe retornará 503 até instalação do extra stt")
             stt = None
 
+    # Lista de motores opcionais na ordem de prioridade de reserva.
+    motores_opcionais = [
+        ("kokoro", motor_kokoro),
+        ("edge", motor_edge),
+        ("piper", motor_piper),
+    ]
+
     @asynccontextmanager
     async def vida(app):
         if carregar_em_thread:
@@ -60,11 +88,12 @@ def criar_app(motor=None, motor_kokoro=_NAO_FORNECIDO, stt=None, carregar_em_thr
                     motor.carregar()
                 except Exception:
                     log.exception("falha ao carregar o motor XTTS")
-                if motor_kokoro is not None:
-                    try:
-                        motor_kokoro.carregar()
-                    except Exception:
-                        log.exception("falha ao carregar o motor Kokoro")
+                for nome, m in motores_opcionais:
+                    if m is not None:
+                        try:
+                            m.carregar()
+                        except Exception:
+                            log.exception("falha ao carregar o motor %s", nome)
             threading.Thread(target=_carga, daemon=True, name="carga-motor").start()
         yield
 
@@ -84,45 +113,92 @@ def criar_app(motor=None, motor_kokoro=_NAO_FORNECIDO, stt=None, carregar_em_thr
 
     @app.get("/saude")
     def saude():
-        kokoro_pronta = motor_kokoro is not None and motor_kokoro.pronta and motor_kokoro.aquecida
-        xtts_pronta = motor.pronta and motor.aquecida
-        pronta = xtts_pronta or kokoro_pronta
-        voz_atual = VOZ if xtts_pronta else (next(iter(VOZES_KOKORO), "") if kokoro_pronta else VOZ)
-        device = motor.device if xtts_pronta else (motor_kokoro.device if kokoro_pronta else motor.device)
+        xtts_ok = motor.pronta and motor.aquecida
+        kokoro_ok = motor_kokoro is not None and motor_kokoro.pronta and motor_kokoro.aquecida
+        edge_ok = motor_edge is not None and motor_edge.pronta and motor_edge.aquecida
+        piper_ok = motor_piper is not None and motor_piper.pronta and motor_piper.aquecida
+        pronta = xtts_ok or kokoro_ok or edge_ok or piper_ok
+        if xtts_ok:
+            voz_atual = VOZ
+            device = motor.device
+        elif kokoro_ok:
+            from .kokoro import VOZES_KOKORO
+            voz_atual = next(iter(VOZES_KOKORO), "")
+            device = motor_kokoro.device
+        elif edge_ok:
+            from .edge import VOZES_EDGE_PT_BR
+            voz_atual = next(iter(VOZES_EDGE_PT_BR), "")
+            device = "cloud"
+        elif piper_ok:
+            from .piper import VOZES_PIPER_PT_BR
+            voz_atual = next(iter(VOZES_PIPER_PT_BR), "")
+            device = "cpu"
+        else:
+            voz_atual = VOZ
+            device = motor.device
         return {
             "pronta": pronta,
             "voz": voz_atual,
             "device": device,
             "aquecida": pronta,
-            "kokoro": kokoro_pronta,
-            "xtts": xtts_pronta,
+            "xtts": xtts_ok,
+            "kokoro": kokoro_ok,
+            "edge": edge_ok,
+            "piper": piper_ok,
         }
 
     @app.get("/vozes")
     def vozes():
-        if not motor.pronta and motor_kokoro is None:
+        if not motor.pronta and all(m is None for _, m in motores_opcionais):
             return JSONResponse({"erro": "aquecendo"}, status_code=503)
         lista = list(motor.vozes()) if motor.pronta else []
-        if motor_kokoro is not None:
+        for nome, m in motores_opcionais:
+            if m is not None and m.pronta:
+                for v in m.vozes():
+                    if v not in lista:
+                        lista.append(v)
+        if motor.pronta:
+            atual = VOZ
+        elif motor_kokoro is not None and motor_kokoro.pronta:
             from .kokoro import VOZES_KOKORO
-            for vid in VOZES_KOKORO:
-                if vid not in lista:
-                    lista.append(vid)
-        atual = VOZ if motor.pronta else (next(iter(VOZES_KOKORO), "") if motor_kokoro is not None else "")
+            atual = next(iter(VOZES_KOKORO), "")
+        elif motor_edge is not None and motor_edge.pronta:
+            from .edge import VOZES_EDGE_PT_BR
+            atual = next(iter(VOZES_EDGE_PT_BR), "")
+        elif motor_piper is not None and motor_piper.pronta:
+            from .piper import VOZES_PIPER_PT_BR
+            atual = next(iter(VOZES_PIPER_PT_BR), "")
+        else:
+            atual = ""
         return {"vozes": lista, "atual": atual}
 
     def _motor_para_voz(voz: str | None):
-        """Escolhe o motor adequado para a voz pedida. Kokoro tem prioridade quando a voz é dele."""
-        if voz and motor_kokoro is not None:
-            from .kokoro import VOZES_KOKORO
-            if voz in VOZES_KOKORO:
-                if motor_kokoro.pronta and motor_kokoro.aquecida:
-                    return motor_kokoro
-                return None  # Kokoro pedido mas não pronto → 503
+        """Escolhe o motor adequado para a voz pedida; fallback segue ordem XTTS→Kokoro→Edge→Piper."""
+        if voz:
+            # Roteamento explícito por ID de voz
+            if motor_kokoro is not None:
+                from .kokoro import VOZES_KOKORO
+                if voz in VOZES_KOKORO:
+                    return motor_kokoro if motor_kokoro.pronta and motor_kokoro.aquecida else None
+            if motor_edge is not None:
+                from .edge import VOZES_EDGE_PT_BR
+                if voz in VOZES_EDGE_PT_BR:
+                    return motor_edge if motor_edge.pronta and motor_edge.aquecida else None
+            if motor_piper is not None:
+                from .piper import VOZES_PIPER_PT_BR
+                if voz in VOZES_PIPER_PT_BR:
+                    return motor_piper if motor_piper.pronta and motor_piper.aquecida else None
+            # Voz do XTTS: retorna o motor mesmo que não reconheça a voz,
+            # para que /falar valide e devolva 400 (voz_desconhecida) em vez de 503.
+            if motor.pronta and motor.aquecida:
+                return motor
+            return None  # Voz pedida mas nenhum motor pronto
+        # Sem voz específica: primeiro motor disponível
         if motor.pronta and motor.aquecida:
             return motor
-        if motor_kokoro is not None and motor_kokoro.pronta and motor_kokoro.aquecida:
-            return motor_kokoro
+        for _, m in motores_opcionais:
+            if m is not None and m.pronta and m.aquecida:
+                return m
         return None
 
     @app.post("/v1/speech/transcribe")

@@ -50,8 +50,18 @@ class STTFalso:
         return self._texto, self._confianca
 
 
-def cliente(motor, motor_kokoro=None, stt=None):
-    return TestClient(criar_app(motor, motor_kokoro=motor_kokoro, stt=stt, carregar_em_thread=False), base_url="http://127.0.0.1:4710")
+def cliente(motor, motor_kokoro=None, motor_edge=None, motor_piper=None, stt=None):
+    return TestClient(
+        criar_app(
+            motor,
+            motor_kokoro=motor_kokoro,
+            motor_edge=motor_edge,
+            motor_piper=motor_piper,
+            stt=stt,
+            carregar_em_thread=False,
+        ),
+        base_url="http://127.0.0.1:4710",
+    )
 
 
 def test_saude_antes_do_aquecimento():
@@ -130,24 +140,27 @@ def test_motor_recebe_texto_normalizado_wav_e_pcm():
 
 def test_vozes_lista_e_atual():
     # motor_kokoro=None isola o comportamento XTTS-only; com Kokoro ativo a lista inclui vozes Kokoro.
-    r = cliente(MotorFalso(), motor_kokoro=None).get("/vozes")
+    r = cliente(MotorFalso(), motor_kokoro=None, motor_edge=None, motor_piper=None).get("/vozes")
     assert r.status_code == 200 and r.json() == {"vozes": ["Suad Qasim", "Ana Florence"], "atual": "Suad Qasim"}
 
 
 def test_vozes_aquecendo_503():
-    # Sem Kokoro e XTTS não pronto → 503; com Kokoro ativo o endpoint retorna 200 (vozes Kokoro disponíveis).
-    assert cliente(MotorFalso(pronta=False), motor_kokoro=None).get("/vozes").status_code == 503
+    # Sem nenhum motor opcional e XTTS não pronto → 503; com qualquer motor ativo retorna 200.
+    assert cliente(MotorFalso(pronta=False), motor_kokoro=None, motor_edge=None, motor_piper=None).get("/vozes").status_code == 503
 
 
 def test_falar_com_voz_passa_ao_motor():
     m = MotorFalso()
-    r = cliente(m).post("/falar", json={"texto": "Oi.", "voz": "Ana Florence"}, headers={"Accept": "audio/pcm"})
+    r = cliente(m, motor_kokoro=None, motor_edge=None, motor_piper=None).post("/falar", json={"texto": "Oi.", "voz": "Ana Florence"}, headers={"Accept": "audio/pcm"})
     assert r.status_code == 200 and m.chamadas == [("Oi", 1.0, "Ana Florence")]
 
 
 def test_falar_voz_desconhecida_400():
+    # MotorFalso padrão tem pronta=True; com opcionais desativados, valida voz no XTTS.
     m = MotorFalso()
-    r = cliente(m).post("/falar", json={"texto": "Oi.", "voz": "Ninguém"})
+    r = cliente(m, motor_kokoro=None, motor_edge=None, motor_piper=None).post(
+        "/falar", json={"texto": "Oi.", "voz": "Ninguém"}
+    )
     assert r.status_code == 400 and r.json() == {"erro": "voz_desconhecida"}
     assert m.chamadas == []
 
