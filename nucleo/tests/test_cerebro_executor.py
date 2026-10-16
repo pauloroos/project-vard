@@ -436,3 +436,14 @@ class TestMontadorUnificado:
 
         adp = _montar_adaptador("openai_compat", "http://x", "m1", "k1")
         assert isinstance(adp, AdaptadorOpenAICompat)
+
+def test_paineis_com_bom_utf8_e_lido(paineis_dir: Path):
+    """D4: paineis.json salvo com BOM (Bloco de Notas, Set-Content do PowerShell) não pode
+    ser ignorado em silêncio — o provedor ativo tem de ser lido."""
+    from server import _ler_provedor_ativo
+
+    dados = {"versao": 1, "ativo": "cli_claude",
+             "provedores": [{"id": "cli_claude", "tipo": "cli-claude", "modelo": "", "yolo": True}]}
+    (paineis_dir / "paineis.json").write_bytes(b"\xef\xbb\xbf" + json.dumps(dados).encode("utf-8"))
+    with patch.object(config, "arquivo_config", return_value=paineis_dir / "paineis.json"):
+        assert _ler_provedor_ativo().get("tipo") == "cli-claude"
