@@ -60,6 +60,56 @@ def loja(tmp_path: Path, monkeypatch) -> Path:
     return arq
 
 
+@pytest.fixture(autouse=True, scope="session")
+def _d3_garantia_sem_cli_falsa_orfa():
+    """D3: suíte inteira encerra a ÁRVORE de toda CLI falsa que abrir.
+
+    - Dublê de `_encerrar_arvore` usando psutil (a guarda dos testes proíbe taskkill).
+    - Verificação ao fim da sessão que FALHA se sobrar processo com cli_viva.py/cli_falsa.py.
+    """
+    import psutil
+    import vard.cerebro.cli_processos as cli_mod
+
+    def _encerrar_arvore_psutil(pid: int) -> None:
+        if pid <= 0:
+            return
+        try:
+            raiz = psutil.Process(pid)
+            filhos = raiz.children(recursive=True)
+        except (psutil.NoSuchProcess, psutil.AccessDenied, OSError):
+            return
+        for proc in filhos + [raiz]:
+            try:
+                proc.kill()
+            except (psutil.NoSuchProcess, psutil.AccessDenied, OSError):
+                pass
+
+    original = cli_mod._encerrar_arvore
+    cli_mod._encerrar_arvore = _encerrar_arvore_psutil  # type: ignore[assignment]
+    yield
+    cli_mod._encerrar_arvore = original  # type: ignore[assignment]
+
+    # Verificação final: nenhum processo cli_viva.py/cli_falsa.py pode sobreviver.
+    import subprocess as _sp
+    try:
+        ps = _sp.run(
+            ["powershell", "-NoProfile", "-Command",
+             "Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -match 'cli_(viva|falsa)\\.py' } | Select-Object -ExpandProperty ProcessId"],
+            capture_output=True, text=True, timeout=15,
+        )
+        pids = [int(p.strip()) for p in ps.stdout.splitlines() if p.strip().isdigit()]
+    except Exception:
+        pids = []
+    if pids:
+        # Tenta limpar para não contaminar o ambiente do desenvolvedor.
+        for pid in pids:
+            try:
+                psutil.Process(pid).kill()
+            except psutil.NoSuchProcess:
+                pass
+        raise AssertionError(f"D3: processos cli_falsa/cli_viva órfãos ao fim da suíte: {pids}")
+
+
 @pytest.fixture
 def script_modo_isolado(tmp_path):
     fonte = Path(__file__).resolve().parents[2] / "scripts" / "windows" / "vard-modo.ps1"
