@@ -64,16 +64,9 @@ def _montar_adaptador(
     modelo: str,
     chave: str = "",
 ) -> mod_provedores.AdaptadorProvedor:
-    """Cria adaptador concreto pelo tipo informado; tipos desconhecidos levantam ValueError."""
-    if tipo in ("openai_compat", "lmstudio", "local"):
-        return mod_provedores.AdaptadorOpenAICompat(base_url=base_url, modelo=modelo, chave=chave, timeout=TIMEOUT_TOTAL_S)
-    if tipo == "anthropic":
-        return mod_provedores.AdaptadorAnthropic(chave=chave, modelo=modelo, base_url=base_url, timeout=TIMEOUT_TOTAL_S)
-    if tipo == "google":
-        return mod_provedores.AdaptadorGoogle(chave=chave, modelo=modelo, base_url=base_url, timeout=TIMEOUT_TOTAL_S)
-    if tipo == "openai_nativo":
-        return mod_provedores.AdaptadorOpenAINativo(chave=chave, modelo=modelo, base_url=base_url, timeout=TIMEOUT_TOTAL_S)
-    raise ValueError(f"tipo_de_provedor_desconhecido: {tipo}")
+    """Cria adaptador concreto pelo tipo informado; delega ao montador unificado."""
+    from vard.cerebro.montador import montar_adaptador
+    return montar_adaptador(tipo, base_url, modelo, chave, timeout=TIMEOUT_TOTAL_S)
 
 
 async def _testar_cerebro(

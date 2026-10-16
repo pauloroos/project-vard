@@ -80,67 +80,133 @@ def _obter_supervisor_cli():
     return _supervisor_cli
 
 
+class _ErroCerebro(Exception):
+    """Erro estruturado do executor do cérebro próprio.
+
+    O código é gravado no estado do pedido (campo erro) e emitido via SSE.
+    """
+
+    def __init__(self, codigo: str) -> None:
+        self.codigo = codigo
+        super().__init__(codigo)
+
+
+def _ler_provedor_ativo() -> dict:
+    """Lê o provedor ativo de paineis.json. Devolve dict com tipo/modelo/url_base/credencial_ref/yolo.
+
+    Contratos:
+      - TS (paineis.ts): ativo é id em provedores[]; provedor tem credencial_ref opcional.
+      - Fallback legado: agentes[nome].ativo=True com tipo cli-*.
+    Devolve dict vazio quando não há provedor ativo.
+    """
+    try:
+        import json as _json
+        cfg_paineis = config.arquivo_config("paineis.json")
+        if not cfg_paineis.exists():
+            return {}
+        dados = _json.loads(cfg_paineis.read_text(encoding="utf-8"))
+        ativo_id = dados.get("ativo")
+        provedores = dados.get("provedores", [])
+        if isinstance(ativo_id, str) and ativo_id and isinstance(provedores, list):
+            for p in provedores:
+                if isinstance(p, dict) and str(p.get("id", "")) == ativo_id:
+                    return {
+                        "tipo": str(p.get("tipo", "")),
+                        "modelo": str(p.get("modelo", "") or ""),
+                        "url_base": str(p.get("url_base", "") or ""),
+                        "credencial_ref": str(p.get("credencial_ref", "") or ""),
+                        "yolo": bool(p.get("yolo", True)),
+                    }
+        # Fallback legado: agentes com ativo=True e tipo cli-*
+        agentes = dados.get("agentes", {})
+        if isinstance(agentes, dict):
+            for _nome_ag, ag in agentes.items():
+                if not isinstance(ag, dict):
+                    continue
+                t = str(ag.get("tipo", ""))
+                if t.startswith("cli-") and ag.get("ativo", False):
+                    return {
+                        "tipo": t,
+                        "modelo": str(ag.get("modelo", "") or ""),
+                        "url_base": "",
+                        "credencial_ref": "",
+                        "yolo": bool(ag.get("yolo", True)),
+                    }
+    except Exception:  # noqa: BLE001
+        pass
+    return {}
+
+
+def _resolver_credencial_cofre(credencial_ref: str, tipo: str) -> str:
+    """Resolve credencial via cofre (credenciais.ler_para_uso_interno).
+
+    - Se credencial_ref está presente: lê do cofre como tipo='provedor'.
+    - Se ausente e tipo é lmstudio/local: tenta segredos.chave_lmstudio() (token opcional).
+    - Demais casos sem credencial_ref: retorna string vazia (alguns provedores locais não exigem).
+    Levanta _ErroCerebro('cerebro_sem_credencial') se o cofre falhar ou a ref existir mas estiver vazia.
+    """
+    if credencial_ref:
+        try:
+            from vard import credenciais
+            valor = credenciais.ler_para_uso_interno("provedor", credencial_ref)
+        except Exception as exc:  # noqa: BLE001
+            raise _ErroCerebro("cerebro_sem_credencial") from exc
+        if not valor:
+            raise _ErroCerebro("cerebro_sem_credencial")
+        return valor
+    # lmstudio/local podem funcionar sem credencial; tenta token opcional do segredos.toml
+    if tipo in ("lmstudio", "local"):
+        try:
+            from vard import segredos
+            return segredos.chave_lmstudio() or ""
+        except Exception:  # noqa: BLE001
+            return ""
+    return ""
+
+
 async def _executar_pedido_cerebro(pedido, emitir):
     """Executor do cérebro próprio: seleciona adaptador conforme provedor ativo.
 
-    T16: quando o provedor é cli-claude/cli-agy, usa SupervisorCli + AdaptadorCli.
-    Demais provedores seguem pelo laço tradicional com AdaptadorFalso (placeholder
-    até a T17/T18 conectarem os painéis reais).
+    T16: CLI (cli-claude/cli-agy) → SupervisorCli + AdaptadorCli.
+    T16d: API (openai_compat/anthropic/google/lmstudio/openai_nativo) → adaptador real
+          com credencial via cofre. Falhas levantam _ErroCerebro (gravado no estado do pedido).
     """
     from vard.cerebro import laco as cerebro_laco
     from vard.cerebro.cli import AdaptadorCli
     from vard.cerebro.cli_processos import ProvedorCli
-    from vard.cerebro.provedores import AdaptadorFalso
+    from vard.cerebro.montador import montar_adaptador
 
-    # Lê provedor ativo dos painéis (contrato TS: ativo é id em provedores[]).
-    # Fallback legado: agentes[nome].ativo=True com tipo cli-* (schema antigo).
-    tipo_provedor = ""
-    modelo = ""
-    yolo = True
-    try:
-        import json as _json
-        cfg_paineis = config.arquivo_config("paineis.json")
-        if cfg_paineis.exists():
-            dados = _json.loads(cfg_paineis.read_text(encoding="utf-8"))
-            ativo_id = dados.get("ativo")
-            provedores = dados.get("provedores", [])
-            # Schema correto: ativo é id de provedor na lista
-            if isinstance(ativo_id, str) and ativo_id and isinstance(provedores, list):
-                for p in provedores:
-                    if isinstance(p, dict) and str(p.get("id", "")) == ativo_id:
-                        tipo_provedor = str(p.get("tipo", ""))
-                        modelo = str(p.get("modelo", "") or "")
-                        yolo = bool(p.get("yolo", True))
-                        break
-            # Fallback legado: agentes com ativo=True e tipo cli-*
-            if not tipo_provedor:
-                agentes = dados.get("agentes", {})
-                if isinstance(agentes, dict):
-                    for nome_ag, ag in agentes.items():
-                        if not isinstance(ag, dict):
-                            continue
-                        t = str(ag.get("tipo", ""))
-                        if t.startswith("cli-") and ag.get("ativo", False):
-                            tipo_provedor = t
-                            modelo = str(ag.get("modelo", "") or "")
-                            yolo = bool(ag.get("yolo", True))
-                            break
-    except Exception:  # noqa: BLE001
-        pass
+    prov = _ler_provedor_ativo()
+    tipo_provedor = prov.get("tipo", "")
+
+    if not tipo_provedor:
+        raise _ErroCerebro("cerebro_sem_provedor")
 
     if tipo_provedor in ("cli-claude", "cli-agy"):
         supervisor = _obter_supervisor_cli()
-        provedor = ProvedorCli(
+        provedor_cli = ProvedorCli(
             id=tipo_provedor.replace("-", "_"),
             tipo=tipo_provedor,
-            modelo=modelo,
-            yolo=yolo,
+            modelo=prov.get("modelo", ""),
+            yolo=prov.get("yolo", True),
         )
-        canal = await supervisor.canal(provedor, pedido.sessao_id)
+        canal = await supervisor.canal(provedor_cli, pedido.sessao_id)
         dialeto = "claude" if tipo_provedor == "cli-claude" else "agy"
         adaptador = AdaptadorCli(canal, dialeto)
+    elif tipo_provedor in ("openai_compat", "lmstudio", "local", "anthropic", "google", "openai_nativo"):
+        url_base = prov.get("url_base", "")
+        modelo = prov.get("modelo", "")
+        if not url_base:
+            raise _ErroCerebro("cerebro_sem_url_base")
+        if not modelo:
+            raise _ErroCerebro("cerebro_sem_modelo")
+        chave = _resolver_credencial_cofre(prov.get("credencial_ref", ""), tipo_provedor)
+        try:
+            adaptador = montar_adaptador(tipo_provedor, url_base, modelo, chave)
+        except ValueError as exc:
+            raise _ErroCerebro("cerebro_tipo_desconhecido") from exc
     else:
-        adaptador = AdaptadorFalso(resposta="cérebro local ainda não conectado")
+        raise _ErroCerebro("cerebro_tipo_desconhecido")
 
     await cerebro_laco.executar_pedido(pedido, adaptador, emitir)
 
