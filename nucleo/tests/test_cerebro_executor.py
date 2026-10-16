@@ -279,18 +279,18 @@ class TestCredencialViaCofre:
         eventos: list = []
         pedido = _criar_pedido()
         modulo_pedidos.admitir(pedido)
-        chave_secreta = "sk-super-secreta-12345"
+        token_ficticio = "cofre-token-ficticio-abc123"
 
         with patch.object(config, "arquivo_config", return_value=paineis_dir / "paineis.json"):
-            with patch("vard.credenciais.ler_para_uso_interno", return_value=chave_secreta) as mock_cofre:
+            with patch("vard.credenciais.ler_para_uso_interno", return_value=token_ficticio) as mock_cofre:
                 await _executar_pedido_cerebro(pedido, lambda ev: eventos.append(ev))
                 # Cofre foi chamado com os parâmetros corretos
                 mock_cofre.assert_called_once_with("provedor", "minha-chave-api")
 
-        # A chave secreta NÃO deve aparecer nos eventos
+        # O token fictício NÃO deve aparecer nos eventos
         for ev in eventos:
             dados_str = str(getattr(ev, "dados", ""))
-            assert chave_secreta not in dados_str
+            assert token_ficticio not in dados_str
 
 
 # ---------------------------------------------------------------------------
