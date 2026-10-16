@@ -482,7 +482,84 @@ fn ponte_modo(verbo: &str) -> Result<bool, String> {
     Ok(body.get("ok").and_then(|v| v.as_bool()).unwrap_or(false))
 }
 
+/// Cancela todos os pedidos pendentes do cérebro próprio via POST /pedidos/{id}/cancelar.
+/// Melhor esforço: falhas são registradas no log mas não bloqueiam o modo jogo.
+fn cancelar_pedidos_cerebro() {
+    let base = match ler_ponte_url() {
+        Some(url) => url,
+        None => return, // ponte desligada: nada a cancelar
+    };
+    let cliente = match reqwest::blocking::Client::builder()
+        .timeout(std::time::Duration::from_secs(5))
+        .build()
+    {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("jogo: falha ao criar cliente http para cancelar pedidos: {}", e);
+            return;
+        }
+    };
+    // Lista pedidos ativos via GET /pedidos
+    let lista_url = format!("{}/pedidos", base);
+    let resp = match cliente.get(&lista_url).send() {
+        Ok(r) => r,
+        Err(e) => {
+            eprintln!("jogo: falha ao listar pedidos do cerebro: {}", e);
+            return;
+        }
+    };
+    if !resp.status().is_success() {
+        eprintln!("jogo: GET /pedidos retornou status {}", resp.status());
+        return;
+    }
+    let body_text = match resp.text() {
+        Ok(t) => t,
+        Err(e) => {
+            eprintln!("jogo: falha ao ler corpo da lista de pedidos: {}", e);
+            return;
+        }
+    };
+    let body: serde_json::Value = match serde_json::from_str(&body_text) {
+        Ok(v) => v,
+        Err(e) => {
+            eprintln!("jogo: falha ao parsear lista de pedidos: {}", e);
+            return;
+        }
+    };
+    let pedidos = match body.as_array() {
+        Some(arr) => arr,
+        None => return,
+    };
+    for p in pedidos {
+        let id = match p.get("pedido_id").and_then(|v| v.as_str()) {
+            Some(id) => id,
+            None => continue,
+        };
+        let estado = p.get("estado").and_then(|v| v.as_str()).unwrap_or("");
+        // Só cancela pedidos ainda ativos (na_fila ou executando)
+        if estado != "na_fila" && estado != "executando" {
+            continue;
+        }
+        let cancel_url = format!("{}/pedidos/{}/cancelar", base, id);
+        match cliente.post(&cancel_url).send() {
+            Ok(r) if r.status().is_success() => {
+                eprintln!("jogo: pedido {} cancelado com sucesso", id);
+            }
+            Ok(r) => {
+                eprintln!("jogo: falha ao cancelar pedido {}: status {}", id, r.status());
+            }
+            Err(e) => {
+                eprintln!("jogo: erro ao cancelar pedido {}: {}", id, e);
+            }
+        }
+    }
+}
+
 fn executar_jogo() -> Result<ModoCiclo, String> {
+    // T11: Cancela pedidos pendentes do cérebro próprio antes de entrar em modo jogo.
+    // Isso impede que inferências continuem consumindo GPU durante o jogo.
+    cancelar_pedidos_cerebro();
+
     // Modo jogo: pede à ponte para descarregar modelo e liberar GPU.
     // Em dev/teste sem ponte real, aceita como sucesso para permitir teste de fluxo.
     match ponte_modo("jogo") {

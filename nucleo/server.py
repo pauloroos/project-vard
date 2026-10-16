@@ -19,10 +19,13 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
+from contextlib import asynccontextmanager
+
 from vard import avisos as vavisos, central, config, modelos, modo, oficina, perfil, reuniao, segredos, tarefas
 from vard.cerebro import contratos as cerebro_contratos, pedidos as cerebro_pedidos
 from vard.primeiro_uso import estado as primeiro_uso_estado
 from vard.seguro import Frase
+from vard import telegram as telegram_mod
 
 # ----------------------------------------------------------------------------- PERSONA
 # Único lugar da personalidade: config/persona.md do usuário (a ponte e o OpenJarvis/Telegram
@@ -64,7 +67,41 @@ def _chave_lmstudio() -> str:
 
 
 CHAVE_LMSTUDIO = _chave_lmstudio()
-app = FastAPI(title="Vard")
+@asynccontextmanager
+async def lifespan(app):
+    """Ciclo de vida: inicia/para o TelegramPoller condicional (T11)."""
+    poller = None
+    tarefa_poller = None
+    if telegram_mod.deve_iniciar_poller():
+        cfg = telegram_mod._ler_config_telegram()
+        token = telegram_mod._token_seguro(cfg)
+        chats = telegram_mod._chats_permitidos(cfg)
+        if token and chats:
+            poller = telegram_mod.TelegramPoller(token=token, chats_permitidos=chats)
+            async def _loop():
+                while True:
+                    try:
+                        await poller.processar_updates()
+                    except Exception:  # noqa: BLE001
+                        log.warning("erro no loop do telegram poller")
+                    await asyncio.sleep(telegram_mod.POLL_INTERVAL_PADRAO)
+            tarefa_poller = asyncio.create_task(_loop())
+            log.info("telegram poller iniciado (chats=%d)", len(chats))
+        else:
+            log.info("telegram habilitado mas sem token/chats; poller nao iniciado")
+    else:
+        log.info("telegram desabilitado; poller nao iniciado")
+    yield
+    if tarefa_poller is not None:
+        tarefa_poller.cancel()
+        try:
+            await tarefa_poller
+        except asyncio.CancelledError:
+            pass
+        log.info("telegram poller parado")
+
+
+app = FastAPI(title="Vard", lifespan=lifespan)
 
 
 def _erro(exc: modelos.ErroModelo) -> JSONResponse:
