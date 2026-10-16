@@ -233,6 +233,7 @@ def test_executar_remoto_usa_sessao_por_tarefa_por_padrao(loja, remoto_config, m
     vistos = []
     monkeypatch.setattr(remoto, "perguntar",
                         lambda pedido, **kw: (vistos.append(remoto.sessao_atual()), "ok")[1])
+    monkeypatch.setattr(avisos, "resumo_curto", lambda texto, chave=None: "ok")  # dublê do resumo local
     t = tarefas.nova("agente_remoto", "", "x")
     remoto.executar(t.n)
     assert vistos == [f"tarefa-{t.n}"] and remoto.sessao_atual() is None
