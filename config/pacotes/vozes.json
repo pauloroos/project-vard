@@ -8,7 +8,7 @@
       "tipo": "motor",
       "descricao": "Motor de síntese de voz multilíngue Coqui XTTS-v2. Requer ~2 GB de espaço e Python 3.12.",
       "url": "https://huggingface.co/coqui/XTTS-v2/resolve/main/model.pth",
-      "sha256": "c7ea20001c6a0a841c77e252d8409f6a74fb423e79b3206a0771ba5989776187",
+      "sha256": "d4962c8fffe56f485d8fec88bb2ad90909f2749d333b38952cdfc4b82d0c107f",
       "bytes_download": 1867929118,
       "bytes_instalado": 2100000000,
       "python": ">=3.12,<3.13",
@@ -18,7 +18,39 @@
       "dependencias": ["coqui-tts>=0.27.5", "torch>=2.11"],
       "voz_id": null,
       "indisponivel": false,
-      "motivo_indisponivel": null
+      "motivo_indisponivel": null,
+      "arquivos_extras": [
+        {
+          "nome": "dvae.pth",
+          "url": "https://huggingface.co/coqui/XTTS-v2/resolve/main/dvae.pth",
+          "sha256": "ee7f46e532a9040132f2be10596c21e07c4f7a12bfb3bdb41e166770c640e3fc",
+          "bytes": 210514388
+        },
+        {
+          "nome": "mel_stats.pth",
+          "url": "https://huggingface.co/coqui/XTTS-v2/resolve/main/mel_stats.pth",
+          "sha256": "3b89bcd89909b61ecaf6a9ef2be464d146e2bcd2c5920b182573dbdedf4fcea7",
+          "bytes": 1067
+        },
+        {
+          "nome": "speakers_xtts.pth",
+          "url": "https://huggingface.co/coqui/XTTS-v2/resolve/main/speakers_xtts.pth",
+          "sha256": "cedb439d16482009788ed7055cf52db9287411da7c98a0f0412e6c33565b4066",
+          "bytes": 7754818
+        },
+        {
+          "nome": "config.json",
+          "url": "https://huggingface.co/coqui/XTTS-v2/resolve/main/config.json",
+          "sha256": "ef262b1454dd2a77e1461b0b2cd53e19b8a7624cc131b837d36df67356bc75e8",
+          "bytes": 4368
+        },
+        {
+          "nome": "vocab.json",
+          "url": "https://huggingface.co/coqui/XTTS-v2/resolve/main/vocab.json",
+          "sha256": "928260878a59da8a72a2a5b7687fea29d5106137669d90945430fe17e415304a",
+          "bytes": 361219
+        }
+      ]
     },
     {
       "id": "voz-pt-br-ana",

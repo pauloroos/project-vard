@@ -23,6 +23,16 @@ RAIZ_CONFIG = Path(__file__).resolve().parent.parent.parent.parent / "config" / 
 
 
 @dataclass(frozen=True)
+class ArquivoExtra:
+    """Arquivo adicional necessário para um pacote (ex: config.json, vocab.json)."""
+
+    nome: str
+    url: str
+    sha256: str
+    bytes: int
+
+
+@dataclass(frozen=True)
 class PacoteInfo:
     """Metadados imutáveis de um pacote opcional."""
 
@@ -43,6 +53,7 @@ class PacoteInfo:
     voz_id: str | None = None
     indisponivel: bool = False
     motivo_indisponivel: str | None = None
+    arquivos_extras: list[ArquivoExtra] = field(default_factory=list)
 
     def instalavel(self) -> bool:
         """True se o pacote pode ser instalado (hash presente e não indisponível)."""
@@ -94,6 +105,27 @@ def _validar_pacote_raw(dados: dict[str, Any], origem: str) -> PacoteInfo:
     if not isinstance(deps, list):
         raise ValueError(f"{origem} ({pid}): dependencias deve ser lista")
 
+    # Parse arquivos_extras (opcional)
+    extras_raw = dados.get("arquivos_extras", [])
+    if not isinstance(extras_raw, list):
+        raise ValueError(f"{origem} ({pid}): arquivos_extras deve ser lista")
+    extras: list[ArquivoExtra] = []
+    for i, ex in enumerate(extras_raw):
+        if not isinstance(ex, dict):
+            raise ValueError(f"{origem} ({pid}): arquivos_extras[{i}] não é objeto")
+        nome = str(ex.get("nome", "")).strip()
+        ex_url = str(ex.get("url", "")).strip()
+        ex_sha = str(ex.get("sha256", "")).strip()
+        try:
+            ex_bytes = int(ex.get("bytes", 0))
+        except (TypeError, ValueError):
+            raise ValueError(f"{origem} ({pid}): arquivos_extras[{i}].bytes inválido")
+        if not nome or not ex_url:
+            raise ValueError(f"{origem} ({pid}): arquivos_extras[{i}] requer nome e url")
+        if not ex_sha:
+            raise ValueError(f"{origem} ({pid}): arquivos_extras[{i}].sha256 obrigatório")
+        extras.append(ArquivoExtra(nome=nome, url=ex_url, sha256=ex_sha, bytes=ex_bytes))
+
     return PacoteInfo(
         id=pid,
         nome=str(dados["nome"]),
@@ -112,6 +144,7 @@ def _validar_pacote_raw(dados: dict[str, Any], origem: str) -> PacoteInfo:
         voz_id=dados.get("voz_id"),
         indisponivel=indisponivel,
         motivo_indisponivel=motivo,
+        arquivos_extras=extras,
     )
 
 

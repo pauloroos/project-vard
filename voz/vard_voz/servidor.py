@@ -38,8 +38,22 @@ def criar_app(
     carregar_em_thread: bool = True,
 ) -> FastAPI:
     if motor is None:
-        from .motor import Motor
-        motor = Motor(os.environ.get("VARD_VOZ_DEVICE", "cuda"))
+        # XTTS só é instanciado se o pacote opcional estiver instalado;
+        # sem ele, o motor permanece None e Kokoro/Edge/Piper assumem.
+        try:
+            from nucleo.vard.pacotes import InstaladorPacotes
+            _xtts_instalado = InstaladorPacotes().esta_instalado("xtts-v2")
+        except Exception:
+            _xtts_instalado = False
+        if _xtts_instalado:
+            try:
+                from .motor import Motor
+                motor = Motor(os.environ.get("VARD_VOZ_DEVICE", "cuda"))
+            except Exception:
+                log.warning("xtts-v2 instalado mas motor falhou ao iniciar")
+                motor = None
+        else:
+            motor = None
     if motor_kokoro is _NAO_FORNECIDO:
         try:
             from .kokoro import MotorKokoro
