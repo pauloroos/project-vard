@@ -28,6 +28,8 @@ export interface Config {
   conversa_ms: number;
   /** Quem fala: voz própria (XTTS), voz do OpenJarvis (Kokoro) ou nuvem (ElevenLabs, Gemini). */
   voz_provedor: ProvedorVoz;
+  /** Motor de fala dentro do serviço próprio (kokoro | edge | piper | xtts); vazio = automático pelo /saude. */
+  voz_motor?: string;
   /** Voz do serviço próprio; vazio = a atual dele. */
   voz_propria: string;
   elevenlabs_chave: string; elevenlabs_voz: string;
@@ -68,7 +70,7 @@ export const CONFIG_PADRAO: Config = {
   modelo: "",
   sala_monitor: "",
   conversa_ms: 20000,
-  voz_provedor: "propria", voz_propria: "", elevenlabs_chave: "", elevenlabs_voz: "", gemini_chave: "", gemini_voz: "Kore",
+  voz_provedor: "propria", voz_motor: "", voz_propria: "", elevenlabs_chave: "", elevenlabs_voz: "", gemini_chave: "", gemini_voz: "Kore",
   atualizacao_ao_abrir: false,
   nao_ouvir: false, nao_falar: false, falar_avisos: false,
   cerebro: CEREBRO_PADRAO,
@@ -105,6 +107,8 @@ function mesclar(salvo: unknown): Config {
       if (v === "energia" || v === "silero") saida[k] = v;
     } else if (k === "voz_provedor") {
       if (typeof v === "string" && (PROVEDORES_VOZ as readonly string[]).includes(v)) saida[k] = v;
+    } else if (k === "voz_motor") {
+      if (typeof v === "string") saida[k] = v;
     } else if (k === "conversa_ms") {
       if (typeof v === "number" && Number.isFinite(v) && v >= 0) saida[k] = Math.round(v);
     } else if (typeof v === typeof padrao) {
