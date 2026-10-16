@@ -412,9 +412,18 @@ async def status():
     ok_oj, (ok_lm, ids, modelo), reuniao = await asyncio.gather(
         _sondar_openjarvis(), _sondar_lmstudio(), _sondar_reuniao()
     )
+    # D3/0.9.3: campo cerebro reflete o provedor ativo e as sessões vivas do supervisor.
+    prov_ativo = _ler_provedor_ativo()
+    supervisor = _obter_supervisor_cli() if _supervisor_cli is not None else None
+    sessoes_vivas = len(supervisor.pids()) if supervisor is not None else 0
+    cerebro_status = {
+        "ativo": bool(prov_ativo.get("tipo")),
+        "provedor": str(prov_ativo.get("tipo", "")),
+        "sessoes": sessoes_vivas,
+    }
     return {"openjarvis": ok_oj, "lmstudio": ok_lm, "modelo": modelo, "modo": modo.ler_estado()["modo"],
             "modelos_lmstudio": ids, "tarefas_abertas": _tarefas_abertas(), "reuniao": reuniao,
-            "cerebro": {"ativo": False, "provedor": "", "sessoes": 0},
+            "cerebro": cerebro_status,
             "cli_enxuto": {"avisos": cli_capacidade.avisos()}}
 
 
