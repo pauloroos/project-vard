@@ -33,6 +33,8 @@ import { restaurarPreferencia, onDeviceChange, obterPreferencia } from "./audio/
 import { ladoDoTamanho, ladoMudou, medidasDoWidget } from "./ui/tamanho";
 import { ESPELHO_INICIAL, reduzir, salaExiste, type Espelho, type EventoEspelho } from "./sala/espelho";
 import { lerNiveis } from "./sala/espectro";
+import { montarAssistentePrimeiroUso, reabrirAssistentePrimeiroUso } from "./ui/primeiro-uso";
+import { deveMostrarAssistente } from "./config/primeiro-uso";
 
 const PRE_ROLL_MS = 300;
 /** Prazo da voz própria numa fala fixa que não está no cache (o aquecimento usa o prazo normal). */
@@ -134,6 +136,24 @@ window.addEventListener("DOMContentLoaded", async () => {
     // Só em desenvolvimento: força um estado visual com analisadores sintéticos (para capturas de tela).
     (await import("./prova")).ativarProva(String(import.meta.env.VITE_PROVA), nucleo, hud);
   }
+
+  // Assistente de primeiro uso: abre sozinho só em instalação nova; botão nas Configurações reabre.
+  let limparAssistente: (() => void) | null = null;
+  const depsPrimeiroUso = {
+    ponteUrl: cfg.ponte_url,
+    salvarNome: async (nome: string, variantes: string[]) => {
+      await atualizarConfig({ nome, variantes });
+    },
+  };
+  try {
+    if (await deveMostrarAssistente(cfg.ponte_url)) {
+      limparAssistente = await montarAssistentePrimeiroUso(app, depsPrimeiroUso);
+    }
+  } catch { /* ponte ausente não bloqueia o app */ }
+  listen("reabrir-primeiro-uso", async () => {
+    limparAssistente?.();
+    limparAssistente = await reabrirAssistentePrimeiroUso(app, depsPrimeiroUso);
+  }).catch(() => {});
 
   // No `tauri dev` a origem do webview (localhost:1420) é recusada pelo CORS do OpenJarvis; o Vite faz a ponte em /oj.
   const base = import.meta.env.DEV ? `${location.origin}/oj` : cfg.openjarvis_url;

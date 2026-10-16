@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { emitTo } from "@tauri-apps/api/event";
 import type { Config } from "../config/config";
 import { avisosDeUrl, limitarLado, mudancasQueExigemReinicio, salvarConfig, urlLocal } from "../config/config";
 import { ACOES_ATALHO, ROTULOS_ATALHO, avisoAltGr, validarAtalhos, type AcaoAtalho, type FalhaAtalho } from "../config/atalhos";
@@ -238,6 +239,9 @@ export class Configuracoes {
           ${this.marca("nao_falar", "Não falar (resposta só em texto)", c.nao_falar)}
           ${this.marca("falar_avisos", "Falar os avisos de tarefas (desligado por padrão)", c.falar_avisos)}
         </fieldset>
+        <fieldset><legend>Assistente</legend>
+          <button id="cfg-primeiro-uso" type="button">Configurar primeiro uso</button>
+        </fieldset>
       </section>
       <section data-aba="perfil"><div id="cfg-perfil"></div></section>
       <section data-aba="paineis-provedores"><div id="cfg-paineis-provedores"></div></section>
@@ -284,6 +288,9 @@ export class Configuracoes {
     this.raiz.querySelector("#cfg-fechar")!.addEventListener("click", () => this.deps.fechar?.());
     this.raiz.querySelector("#cfg-salvar")!.addEventListener("click", () => { void this.salvar(); });
     this.raiz.querySelector("#cfg-testar")!.addEventListener("click", () => { void this.testar(); });
+    this.raiz.querySelector("#cfg-primeiro-uso")?.addEventListener("click", () => {
+      void emitTo("main", "reabrir-primeiro-uso").catch(() => {});
+    });
     this.montarAtalhos(this.raiz.querySelector<HTMLElement>("#cfg-atalhos")!);
     for (const id of ["openjarvis_url", "gui_url", "ponte_url"]) this.marcarUrl(id);
   }
