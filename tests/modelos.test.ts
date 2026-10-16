@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { OpenJarvis, escolherModelo } from "../src/conectores/openjarvis/cliente";
 import { Ponte } from "../src/conectores/ponte/cliente";
+import { formatarSegundos } from "../src/ui/aba-modelos";
 
 const resposta = (corpo: unknown) => new Response(JSON.stringify(corpo), { status: 200, headers: { "Content-Type": "application/json" } });
 
@@ -54,4 +55,10 @@ describe("modelos", () => {
     expect(await new Ponte("").modo("jogo")).toBe(false);
     expect(f).not.toHaveBeenCalled();
   });
+
+  it("formatar_segundos", () => {
+    expect(formatarSegundos(1830)).toBe("1,8 s");
+    expect(formatarSegundos(500)).toBe("0,5 s");
+    expect(formatarSegundos(12345)).toBe("12,3 s");
   });
+});

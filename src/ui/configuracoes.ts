@@ -15,7 +15,6 @@ import { AbaDiagnostico } from "./aba-diagnostico";
 import { AbaModelos } from "./aba-modelos";
 import { AbaPerfil } from "./aba-perfil";
 import { AbaPaineisMcps } from "./paineis-mcps";
-import { AbaPaineisVozes } from "./paineis-vozes";
 import { AbaReuniao, type PonteReuniao } from "./aba-reuniao";
 import { AbaSaber } from "./aba-saber";
 import { AbaSistema } from "./aba-sistema";
@@ -42,10 +41,10 @@ export interface DepsConfiguracoes {
 /** Monitor como o comando listar_monitores devolve (pixels físicos). */
 export interface MonitorInfo { nome: string; x: number; y: number; largura: number; altura: number; escala: number; principal: boolean }
 
-export type Aba = "geral" | "perfil" | "voz" | "atalhos" | "saber" | "modelos" | "paineis-vozes" | "paineis-mcps" | "sistema" | "reuniao" | "avisos" | "atualizacao" | "diagnostico";
+export type Aba = "geral" | "perfil" | "voz" | "atalhos" | "saber" | "modelos" | "paineis-mcps" | "sistema" | "reuniao" | "avisos" | "atualizacao" | "diagnostico";
 const ABAS: [Aba, string][] = [
   ["geral", "Geral"], ["perfil", "Perfil"], ["voz", "Voz"], ["atalhos", "Atalhos"], ["saber", "O que eu sei fazer"], ["modelos", "Quem responde"],
-  ["paineis-vozes", "Painéis: Vozes"], ["paineis-mcps", "Ferramentas (MCP)"],
+  ["paineis-mcps", "Ferramentas (MCP)"],
   ["sistema", "Sistema"], ["reuniao", "Reunião"], ["avisos", "Avisos"], ["atualizacao", "Atualização"], ["diagnostico", "Diagnóstico"],
 ];
 const OPCOES_TAMANHO: [Config["tamanho"], string][] = [
@@ -70,8 +69,7 @@ export class Configuracoes {
   private diagnostico: AbaDiagnostico | null = null;
   private abaVoz!: AbaVoz;
   private abaPerfil!: AbaPerfil;
-  private paineisVozes!: AbaPaineisVozes;
-  private paineisMcps!: AbaPaineisMcps;
+    private paineisMcps!: AbaPaineisMcps;
   private linhasAtalho = new Map<AcaoAtalho, { campo: HTMLButtonElement; motivo: HTMLElement }>();
 
   constructor(private cfg: Config, private raiz: HTMLElement, private deps: DepsConfiguracoes) {
@@ -105,7 +103,6 @@ export class Configuracoes {
       aoMudarCerebro: (cerebro) => { this.cfg.cerebro = cerebro; void salvarConfig(this.cfg); },
     });
     void this.modelos.carregar();
-    this.paineisVozes = new AbaPaineisVozes(this.raiz.querySelector<HTMLElement>("#cfg-paineis-vozes")!);
     this.paineisMcps = new AbaPaineisMcps(this.raiz.querySelector<HTMLElement>("#cfg-paineis-mcps")!);
     this.abaPerfil = new AbaPerfil(this.raiz.querySelector<HTMLElement>("#cfg-perfil")!, {
       nome: () => this.el("nome").value,
@@ -168,7 +165,6 @@ export class Configuracoes {
       const mapaRotulo = new Map(ABAS);
       tituloEl.textContent = mapaRotulo.get(aba) ?? aba;
     }
-    if (aba === "paineis-vozes") void this.paineisVozes?.montar();
     if (aba === "paineis-mcps") void this.paineisMcps?.montar();
     if (aba === "perfil") {
       this.abaPerfil.definir("nome", this.el("nome").value);
@@ -224,8 +220,7 @@ export class Configuracoes {
       ["Conversa", ["geral", "perfil"]],
       ["Voz e áudio", ["voz", "atalhos"]],
       ["Cérebro", ["saber", "modelos", "paineis-mcps"]],
-      ["Voz e áudio (painéis)", ["paineis-vozes"]],
-      ["Sistema", ["sistema", "reuniao", "avisos", "atualizacao", "diagnostico"]],
+            ["Sistema", ["sistema", "reuniao", "avisos", "atualizacao", "diagnostico"]],
     ];
     const mapaRotulo = new Map(ABAS);
     const navHtml = GRUPOS.map(([titulo, ids]) =>
@@ -269,7 +264,6 @@ export class Configuracoes {
           </fieldset>
         </section>
         <section data-aba="perfil"><div id="cfg-perfil"></div></section>
-        <section data-aba="paineis-vozes"><div id="cfg-paineis-vozes"></div></section>
         <section data-aba="paineis-mcps"><div id="cfg-paineis-mcps"></div></section>
         <section data-aba="voz">
           <fieldset><legend>Fala</legend>

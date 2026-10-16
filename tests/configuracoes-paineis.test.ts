@@ -74,18 +74,11 @@ describe("configuracoes-paineis (T8)", () => {
     const botoes = Array.from(raiz.querySelectorAll<HTMLButtonElement>("nav button")).map((b) => b.dataset.aba);
     // "Quem responde" absorveu provedores e agentes
     expect(botoes).toContain("modelos");
-    expect(botoes).toContain("paineis-vozes");
     expect(botoes).toContain("paineis-mcps");
     // Abas removidas não devem mais existir
     expect(botoes).not.toContain("paineis-provedores");
     expect(botoes).not.toContain("paineis-agentes");
-  });
-
-  it("container cfg-paineis-vozes existe", async () => {
-    const raiz = criarRaiz();
-    const painel = new Configuracoes({ ...CONFIG_PADRAO } as Config, raiz, criarDeps());
-    await painel.montar();
-    expect(raiz.querySelector("#cfg-paineis-vozes")).toBeTruthy();
+    expect(botoes).not.toContain("paineis-vozes");
   });
 
   it("container cfg-paineis-mcps existe", async () => {
@@ -93,17 +86,6 @@ describe("configuracoes-paineis (T8)", () => {
     const painel = new Configuracoes({ ...CONFIG_PADRAO } as Config, raiz, criarDeps());
     await painel.montar();
     expect(raiz.querySelector("#cfg-paineis-mcps")).toBeTruthy();
-  });
-
-  it("abrir aba paineis-vozes renderiza conteúdo", async () => {
-    const raiz = criarRaiz();
-    const painel = new Configuracoes({ ...CONFIG_PADRAO } as Config, raiz, criarDeps());
-    await painel.montar();
-    painel.abrirAba("paineis-vozes" as Aba);
-    await new Promise((r) => setTimeout(r, 50));
-    const container = raiz.querySelector("#cfg-paineis-vozes") as HTMLElement;
-    expect(container.innerHTML.length).toBeGreaterThan(0);
-    expect(container.textContent).toContain("Vozes");
   });
 
   it("abrir aba paineis-mcps renderiza conteúdo", async () => {

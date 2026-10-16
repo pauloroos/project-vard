@@ -1,10 +1,10 @@
 /**
- * Seção "Quem responde" (0.9.3 U1–U4, U8).
+ * Seção "Quem responde" (0.9.3 U1–U4, U8) — Rodada 2.
  *
  * Cards de provedores (OpenJarvis fixo + cadastrados) com ações Usar este / Reserva / Testar / Editar / Remover.
- * Modal de adicionar/editar com tipo, nome, endpoint, chave (cofre), buscar modelos, modelo padrão e teste.
- * CLIs detectadas aparecem sugeridas; agentes gravados pelo card da CLI.
- * Ponte fora ⇒ aviso claro no topo (U8).
+ * Modal de adicionar/editar com tipo, nome, endpoint, chave de API (cofre), buscar modelos, modelo padrão (select)
+ * e botões Testar / Cancelar / Salvar. CLIs detectadas aparecem sugeridas; agentes gravados pelo card da CLI.
+ * Ponte fora ⇒ aviso claro no topo (U8). Card do OpenJarvis compacto (modelo em uso + "+N modelos").
  */
 import "./estilos/quem-responde.css";
 import type { OpenJarvis } from "../conectores/openjarvis/cliente";
@@ -13,6 +13,7 @@ import type { Cerebro } from "../config/cerebro";
 import { atualizarConfig, type Config } from "../config/config";
 import { lerPaineis, gravarPaineis, type PaineisConfig, type Provedor, type Agente, type EscolhaAgente } from "../config/paineis";
 import { detectarClis, type CliDetectada } from "../config/clis";
+import { cofreExiste, cofreGravar } from "../config/segredos";
 import { abrirModal, campoModal, desenharCards, type Card, type TomSelo } from "./componentes";
 
 /** Formata milissegundos como "1,8 s" (PT-BR). */
@@ -43,6 +44,14 @@ const TIPOS_PROVEDOR: [string, string][] = [
 
 const EH_CLI = new Set(["cli-claude", "cli-agy", "cli-codex", "cli-opencode"]);
 const SO_DELEGADA = new Set(["cli-codex", "cli-opencode"]);
+
+/** Normaliza endpoint: aceita com ou sem /v1 no final. */
+function normalizarEndpoint(url: string): string {
+  const t = url.trim().replace(/\/+$/, "");
+  if (!t) return "";
+  // LM Studio e Ollama usam /v1; outros podem não usar. Deixamos como o usuário digitou.
+  return t;
+}
 
 export class AbaModelos {
   private cfg!: PaineisConfig;
@@ -91,20 +100,26 @@ export class AbaModelos {
 
   private montarCards(): Card[] {
     const lista: Card[] = [];
-    // OpenJarvis fixo
+    // OpenJarvis fixo — card compacto (modelo em uso ou "automático" + "+N modelos")
     const ojSelos: { texto: string; tom: TomSelo }[] = [];
     if (this.deps.config.cerebro === "openjarvis") ojSelos.push({ texto: "Responde agora", tom: "ativo" });
     if (this.ojFora) ojSelos.push({ texto: "Fora do ar", tom: "aviso" });
+    const ojModeloEmUso = this.deps.config.modelo || "automático";
+    const ojFichasCompactas = [ojModeloEmUso];
+    if (this.ojModelos.length > 1) {
+      ojFichasCompactas.push(`+${this.ojModelos.length - 1} modelos`);
+    }
     lista.push({
       id: "__oj__",
       titulo: "OpenJarvis (servidor atual)",
       etiqueta: "openjarvis",
       selos: ojSelos,
       detalhes: [this.deps.config.openjarvis_url],
-      fichas: this.ojModelos.slice(0, 12),
+      fichas: ojFichasCompactas,
       acoes: [
         { rotulo: "Usar este", primaria: true, aoClicar: () => this.usarOpenJarvis() },
         { rotulo: "Testar", aoClicar: () => this.testarOpenJarvis() },
+        { rotulo: "Editar", aoClicar: () => this.abrirModalOpenJarvis() },
       ],
     });
     // Provedores cadastrados
@@ -168,8 +183,8 @@ export class AbaModelos {
 
   private async testarOpenJarvis() {
     const corpoTesteOj = document.createElement("p");
-corpoTesteOj.textContent = "Perguntando...";
-const modal = abrirModal({ titulo: "Testando OpenJarvis", corpo: corpoTesteOj }, this.raiz);
+    corpoTesteOj.textContent = "Perguntando...";
+    const modal = abrirModal({ titulo: "Testando OpenJarvis", corpo: corpoTesteOj }, this.raiz);
     try {
       const t0 = performance.now();
       const resp = await this.deps.criarOj("").perguntar([{ role: "user", content: "Responda apenas: ok." }]);
@@ -182,8 +197,8 @@ const modal = abrirModal({ titulo: "Testando OpenJarvis", corpo: corpoTesteOj },
 
   private async testarProvedor(p: Provedor) {
     const corpoTesteProv = document.createElement("p");
-corpoTesteProv.textContent = "Conectando...";
-const modal = abrirModal({ titulo: `Testando ${p.nome}`, corpo: corpoTesteProv }, this.raiz);
+    corpoTesteProv.textContent = "Conectando...";
+    const modal = abrirModal({ titulo: `Testando ${p.nome}`, corpo: corpoTesteProv }, this.raiz);
     try {
       const r = await fetch(`${this.deps.ponteUrl}/primeiro-uso/cerebro/testar`, {
         method: "POST",
@@ -196,6 +211,41 @@ const modal = abrirModal({ titulo: `Testando ${p.nome}`, corpo: corpoTesteProv }
     } catch (e) {
       modal.avisar(`Erro: ${String(e)}`, true);
     }
+  }
+
+  /** Modal de edição do OpenJarvis: escolha do modelo entre os disponíveis. */
+  private abrirModalOpenJarvis() {
+    const corpo = document.createElement("div");
+    corpo.className = "qr-modal-campos";
+    const modeloSel = document.createElement("select");
+    const opAuto = document.createElement("option");
+    opAuto.value = "";
+    opAuto.textContent = "automático";
+    modeloSel.append(opAuto);
+    for (const m of this.ojModelos) {
+      const o = document.createElement("option");
+      o.value = m;
+      o.textContent = m;
+      modeloSel.append(o);
+    }
+    modeloSel.value = this.deps.config.modelo || "";
+    corpo.append(campoModal("Modelo do OpenJarvis", modeloSel, "Escolha um modelo específico ou deixe em automático."));
+
+    const salvar = async (): Promise<boolean> => {
+      await atualizarConfig({ modelo: modeloSel.value });
+      this.deps.config.modelo = modeloSel.value;
+      this.desenhar();
+      return true;
+    };
+
+    abrirModal({
+      titulo: "Editar OpenJarvis",
+      corpo,
+      acoes: [
+        { rotulo: "Cancelar", aoClicar: () => true },
+        { rotulo: "Salvar", primaria: true, aoClicar: salvar },
+      ],
+    }, this.raiz);
   }
 
   private abrirModal(provedor?: Provedor) {
@@ -218,15 +268,30 @@ const modal = abrirModal({ titulo: `Testando ${p.nome}`, corpo: corpoTesteProv }
     urlInp.type = "url";
     urlInp.placeholder = "http://localhost:1234/v1";
     urlInp.value = provedor?.url_base ?? "";
-    const credInp = document.createElement("input");
-    credInp.type = "password";
-    credInp.placeholder = "Referência da credencial (tipo:id)";
-    credInp.value = provedor?.credencial_ref ?? "";
+    // Chave de API (cofre) — nunca mostra o valor salvo
+    const chaveInp = document.createElement("input");
+    chaveInp.type = "password";
+    chaveInp.placeholder = "Chave de API (opcional)";
+    let chaveExistente = false;
+    if (editando && provedor!.credencial_ref) {
+      // Verifica se existe no cofre; se sim, mostra placeholder informativo
+      void cofreExiste("provedor", provedor!.id).then((existe) => {
+        if (existe) {
+          chaveExistente = true;
+          chaveInp.placeholder = "Chave salva ✓ (deixe vazio para manter)";
+        }
+      });
+    }
+    // Select de modelo padrão (preenchido após Buscar modelos)
     const modeloSel = document.createElement("select");
-    const modeloPadrao = document.createElement("input");
-    modeloPadrao.type = "text";
-    modeloPadrao.placeholder = "Modelo padrão";
-    modeloPadrao.value = provedor?.modelo ?? "";
+    const modeloPadraoInput = document.createElement("input");
+    modeloPadraoInput.type = "text";
+    modeloPadraoInput.placeholder = "Modelo padrão (ou digite outro)";
+    modeloPadraoInput.value = provedor?.modelo ?? "";
+    // Container que alterna entre input e select após busca
+    const modeloContainer = document.createElement("div");
+    modeloContainer.className = "qr-modelo-container";
+    modeloContainer.append(modeloPadraoInput);
     const buscaBtn = document.createElement("button");
     buscaBtn.type = "button";
     buscaBtn.textContent = "Buscar modelos";
@@ -253,13 +318,13 @@ const modal = abrirModal({ titulo: `Testando ${p.nome}`, corpo: corpoTesteProv }
     const atualizarVisibilidade = () => {
       const ehCli = EH_CLI.has(tipoSel.value);
       urlInp.disabled = ehCli;
-      credInp.disabled = ehCli;
+      chaveInp.disabled = ehCli;
       buscaBtn.disabled = ehCli;
       delegadaLabel.hidden = !ehCli;
       delegadaAviso.hidden = !ehCli;
       if (ehCli) {
         urlInp.value = "";
-        credInp.value = "";
+        chaveInp.value = "";
         const cli = this.clis.find((c) => c.tipo === tipoSel.value);
         if (cli) {
           cliSugestao.hidden = false;
@@ -271,8 +336,8 @@ const modal = abrirModal({ titulo: `Testando ${p.nome}`, corpo: corpoTesteProv }
           btnUsar.textContent = "Usar este";
           btnUsar.addEventListener("click", () => {
             nomeInp.value = nomeInp.value || cli.tipo;
-            modeloPadrao.value = modeloPadrao.value || cli.modelos[0] || "";
-            preencherModelos(cli.modelos);
+            modeloPadraoInput.value = modeloPadraoInput.value || cli.modelos[0] || "";
+            preencherModelosSelect(cli.modelos);
           });
           cliSugestao.append(txt, btnUsar);
         } else {
@@ -285,12 +350,24 @@ const modal = abrirModal({ titulo: `Testando ${p.nome}`, corpo: corpoTesteProv }
       } else {
         cliSugestao.hidden = true;
         delegadaAviso.hidden = true;
+        // Ajuda contextual para LM Studio
+        if (tipoSel.value === "lmstudio") {
+          chaveInp.placeholder = chaveExistente
+            ? "Chave salva ✓ (deixe vazio para manter)"
+            : "Chave do servidor local, se ele pedir (opcional)";
+        } else {
+          chaveInp.placeholder = chaveExistente
+            ? "Chave salva ✓ (deixe vazio para manter)"
+            : "Chave de API (opcional)";
+        }
       }
     };
     tipoSel.addEventListener("change", atualizarVisibilidade);
     atualizarVisibilidade();
 
-    const preencherModelos = (ids: string[]) => {
+    /** Troca o container de modelo para um select com os modelos achados. */
+    const preencherModelosSelect = (ids: string[]) => {
+      modeloContainer.innerHTML = "";
       modeloSel.innerHTML = "";
       for (const m of ids) {
         const o = document.createElement("option");
@@ -298,23 +375,28 @@ const modal = abrirModal({ titulo: `Testando ${p.nome}`, corpo: corpoTesteProv }
         o.textContent = m;
         modeloSel.append(o);
       }
-      if (modeloPadrao.value && ids.includes(modeloPadrao.value)) modeloSel.value = modeloPadrao.value;
+      // Se já tinha um valor digitado e está na lista, seleciona
+      if (modeloPadraoInput.value && ids.includes(modeloPadraoInput.value)) {
+        modeloSel.value = modeloPadraoInput.value;
+      }
+      modeloContainer.append(modeloSel);
     };
 
     buscaBtn.addEventListener("click", async () => {
       statusEl.textContent = "Buscando...";
       statusEl.classList.remove("ruim");
       try {
+        const endpoint = normalizarEndpoint(urlInp.value);
         const r = await fetch(`${this.deps.ponteUrl}/primeiro-uso/cerebro/modelos`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ tipo: tipoSel.value, base_url: urlInp.value.trim(), chave: credInp.value.trim() }),
+          body: JSON.stringify({ tipo: tipoSel.value, base_url: endpoint, chave: chaveInp.value.trim() }),
           signal: AbortSignal.timeout(15000),
         });
         const j = await r.json().catch(() => ({ ok: false, detalhe: "sem resposta" }));
         if (!j.ok) { statusEl.textContent = `Falha: ${j.detalhe}`; statusEl.classList.add("ruim"); return; }
         const ids = (j.modelos as { id: string }[]).map((m) => m.id);
-        preencherModelos(ids);
+        preencherModelosSelect(ids);
         statusEl.textContent = `${ids.length} modelo(s) encontrado(s).`;
       } catch (e) {
         statusEl.textContent = `Erro: ${String(e)}`;
@@ -325,56 +407,108 @@ const modal = abrirModal({ titulo: `Testando ${p.nome}`, corpo: corpoTesteProv }
     corpo.append(
       campoModal("Tipo", tipoSel),
       campoModal("Nome", nomeInp),
-      campoModal("Endpoint", urlInp, "Vazio para CLIs."),
-      campoModal("Credencial", credInp, "Referência ao cofre (tipo:id). Nunca exibida."),
+      campoModal("Endpoint", urlInp, "Vazio para CLIs. Aceita com ou sem /v1."),
+      campoModal("Chave de API", chaveInp, "Salva no cofre; nunca exibida."),
       buscaWrap,
-      campoModal("Modelo padrão", modeloPadrao),
-      campoModal("Modelos disponíveis", modeloSel),
+      campoModal("Modelo padrão", modeloContainer),
       cliSugestao,
       delegadaLabel,
       delegadaAviso,
     );
 
+    let modalRef: ReturnType<typeof abrirModal> | undefined;
+
+    const testarNoModal = async () => {
+      const tipo = tipoSel.value;
+      const url = normalizarEndpoint(urlInp.value);
+      const modelo = (modeloContainer.querySelector("select") as HTMLSelectElement)?.value || modeloPadraoInput.value.trim();
+      if (!EH_CLI.has(tipo) && !url) {
+        modalRef?.avisar("Preencha o endpoint para testar.", true);
+        return;
+      }
+      if (!modelo) {
+        modalRef?.avisar("Preencha o modelo para testar.", true);
+        return;
+      }
+      modalRef?.avisar("Testando...");
+      try {
+        const r = await fetch(`${this.deps.ponteUrl}/primeiro-uso/cerebro/testar`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ tipo, base_url: url, modelo, chave: chaveInp.value.trim() }),
+          signal: AbortSignal.timeout(15000),
+        });
+        const j = await r.json().catch(() => ({ ok: false, detalhe: "sem resposta" }));
+        modalRef?.avisar(j.ok ? `Conexão OK (${j.primeiro_token_ms ?? "?"} ms)` : `Falha: ${j.detalhe}`, !j.ok);
+      } catch (e) {
+        modalRef?.avisar(`Erro: ${String(e)}`, true);
+      }
+    };
+
     const salvar = async (): Promise<boolean> => {
       const tipo = tipoSel.value;
       const nome = nomeInp.value.trim();
-      const url = urlInp.value.trim();
-      const cred = credInp.value.trim();
-      const modelo = modeloPadrao.value.trim() || modeloSel.value;
+      const url = normalizarEndpoint(urlInp.value);
+      const chave = chaveInp.value.trim();
+      const modelo = (modeloContainer.querySelector("select") as HTMLSelectElement)?.value || modeloPadraoInput.value.trim();
       if (!nome || !tipo || !modelo || (!EH_CLI.has(tipo) && !url)) {
-        modal.avisar("Preencha nome, tipo, endpoint e modelo.", true);
+        modalRef?.avisar("Preencha nome, tipo, endpoint e modelo.", true);
         return false;
       }
       const id = provedor?.id ?? (nome.toLowerCase().replace(/[^a-z0-9]+/g, "-").slice(0, 32) || `prov-${Date.now()}`);
+      // Grava chave no cofre se fornecida
+      let credRef: string | undefined;
+      if (!EH_CLI.has(tipo)) {
+        if (chave) {
+          try {
+            await cofreGravar("provedor", id, chave);
+          } catch (e) {
+            modalRef?.avisar(`Erro ao salvar chave: ${String(e)}`, true);
+            return false;
+          }
+        }
+        credRef = chave ? `provedor:${id}` : (editando ? provedor!.credencial_ref : undefined);
+      }
       const novo: Provedor = {
         id,
         nome,
         tipo,
         url_base: EH_CLI.has(tipo) ? "" : url,
         modelo,
-        ...(EH_CLI.has(tipo) ? {} : { credencial_ref: cred || undefined }),
+        ...(EH_CLI.has(tipo) ? {} : { credencial_ref: credRef }),
       };
       const idx = this.cfg.provedores.findIndex((p) => p.id === id);
-      if (editando && idx >= 0) this.cfg.provedores[idx] = novo;
-      else if (!editando && this.cfg.provedores.some((p) => p.id === id)) {
-        modal.avisar(`Já existe um provedor com ID "${id}".`, true);
+      if (editando && idx >= 0) {
+        this.cfg.provedores[idx] = novo;
+      } else if (!editando && this.cfg.provedores.some((p) => p.id === id)) {
+        modalRef?.avisar(`Já existe um provedor com ID "${id}".`, true);
         return false;
-      } else this.cfg.provedores.push(novo);
-      // Agentes delegados
+      } else {
+        this.cfg.provedores.push(novo);
+      }
+
+      // Agentes delegados (CLI)
       if (EH_CLI.has(tipo) && delegadaChk.checked) {
         const ag = tipo.replace("cli-", "") as Agente;
-        const modelos = [...modeloSel.options].map((o) => o.value);
+        const modelos = modeloContainer.querySelector("select")
+          ? Array.from((modeloContainer.querySelector("select") as HTMLSelectElement).options).map((o) => o.value)
+          : [];
         this.cfg.agentes[ag] = { padrao: modelo, modelos } as EscolhaAgente;
       }
+
       await gravarPaineis(this.cfg);
       this.desenhar();
       return true;
     };
 
-    const modal = abrirModal({
+    modalRef = abrirModal({
       titulo: editando ? `Editar ${provedor!.nome}` : "Adicionar provedor",
       corpo,
-      acoes: [{ rotulo: "Salvar", primaria: true, aoClicar: salvar }],
+      acoes: [
+        { rotulo: "Testar", aoClicar: () => { void testarNoModal(); return false; } },
+        { rotulo: "Cancelar", aoClicar: () => true },
+        { rotulo: "Salvar", primaria: true, aoClicar: salvar },
+      ],
     }, this.raiz);
   }
 }
