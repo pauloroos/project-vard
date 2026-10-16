@@ -2,7 +2,7 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { execSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
 
 const raiz = resolve(import.meta.dirname, "..");
 
@@ -47,7 +47,7 @@ describe("Versões alinhadas na 0.7", () => {
     // Smoke test: apenas verifica que o build do Vite não falha por versão
     // O build completo é rodado no CI/CD e no passo de release
     expect(() => {
-      execSync("npx tsc --noEmit", { cwd: raiz, stdio: "pipe", timeout: 60_000 });
+      execFileSync(process.execPath, [resolve(raiz, "node_modules/typescript/bin/tsc"), "--noEmit"], { cwd: raiz, stdio: "pipe", timeout: 60_000 });
     }).not.toThrow();
   }, 60_000);
 });

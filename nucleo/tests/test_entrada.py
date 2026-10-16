@@ -71,8 +71,11 @@ def test_saude_informa_pid_do_processo():
     assert corpo["pid"] == os.getpid()
 
 
-def test_status_conserva_campos_do_mvp():
-    """/status mantém os campos já usados pela aba (modo, openjarvis, lmstudio, modelo)."""
+def test_status_conserva_campos_do_mvp(respx_mock):
+    """/status mantém os campos já usados pela aba sobre serviços fictícios."""
+    respx_mock.get("http://127.0.0.1:8000/health").respond(200, json={"ok": True})
+    respx_mock.get("http://127.0.0.1:1234/v1/models").respond(200, json={"data": []})
+    respx_mock.get("http://127.0.0.1:4720/status").respond(200, json={"ativa": False})
     client = _cliente_nucleo()
     resposta = client.get("/status")
     assert resposta.status_code == 200
@@ -172,6 +175,7 @@ def _porta_livre(porta: int, timeout: float = 2.0) -> bool:
     return False
 
 
+@pytest.mark.pc_real
 def test_wheel_instalado_fora_do_repo(tmp_path: Path):
     """Wheel inclui server, MCPs, preflight e viewer; funciona fora do checkout com python -I.
     Estendido: sobe o núcleo como processo na venv, consulta /saude e /status por HTTP.
@@ -309,7 +313,10 @@ def test_prova_http_real_subprocesso(tmp_path: Path):
     env_proc["VARD_OPENJARVIS_URL"] = f"http://127.0.0.1:{porta_oj}"
     env_proc["VARD_LMSTUDIO_URL"] = f"http://127.0.0.1:{porta_lm}"
     proc = subprocess.Popen(
-        [sys.executable, "-m", "vard", "servir", "--porta", str(porta), "--host", "127.0.0.1"],
+        [sys.executable, "-c",
+         "import server as s; s.REUNIAO = 'http://127.0.0.1:0'; "
+         "from vard.__main__ import main; raise SystemExit(main())",
+         "servir", "--porta", str(porta), "--host", "127.0.0.1"],
         cwd=str(RAIZ_NUCLEO),
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
@@ -394,7 +401,10 @@ def test_status_responde_rapido_com_urls_lentas(tmp_path: Path):
     env_proc["VARD_OPENJARVIS_URL"] = f"http://127.0.0.1:{porta_oj}"
     env_proc["VARD_LMSTUDIO_URL"] = f"http://127.0.0.1:{porta_lm}"
     proc = subprocess.Popen(
-        [sys.executable, "-m", "vard", "servir", "--porta", str(porta), "--host", "127.0.0.1"],
+        [sys.executable, "-c",
+         "import server as s; s.REUNIAO = 'http://127.0.0.1:0'; "
+         "from vard.__main__ import main; raise SystemExit(main())",
+         "servir", "--porta", str(porta), "--host", "127.0.0.1"],
         cwd=str(RAIZ_NUCLEO),
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,

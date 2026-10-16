@@ -547,8 +547,8 @@ mod testes {
 
     #[test]
     fn sondar_saude_recusa_porta_fechada() {
-        // Porta que ninguém está ouvindo deve retornar false
-        assert!(!sondar_saude(59999, 99999, &[]));
+        // Porta livre escolhida pelo sistema, sem sondar uma porta fixa do PC.
+        assert!(!sondar_saude(porta_livre(), 99999, &[]));
     }
 
     // -----------------------------------------------------------------------------------------------------------------

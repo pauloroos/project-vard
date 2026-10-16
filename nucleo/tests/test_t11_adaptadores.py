@@ -12,6 +12,7 @@ import json
 import os
 import shutil
 import subprocess
+import sys
 import uuid
 from pathlib import Path
 
@@ -154,7 +155,7 @@ assert _supervisor_ativo() is {esperado}, f"esperado {esperado}, obtido {{_super
         venv_python = REPO / "nucleo" / ".venv" / "Scripts" / "python.exe"
         if venv_python.exists():
             return str(venv_python)
-        return "python"
+        return sys.executable
 
     def test_bandeja_nao_inicia_com_supervisor(self, tmp_path: Path) -> None:
         """Com supervisor ativo, _supervisor_ativo() retorna True."""
@@ -213,8 +214,10 @@ class TestTarefaLogonAdaptador:
     @staticmethod
     def _alvo(lnk: Path) -> tuple[str, str]:
         script = f"$l = (New-Object -ComObject WScript.Shell).CreateShortcut('{lnk}'); $l.TargetPath; $l.Arguments"
+        harness = lnk.parent / "ler-atalho.ps1"
+        harness.write_text(script, encoding="utf-8-sig")
         r = subprocess.run(
-            ["powershell", "-NoProfile", "-Command", script],
+            ["powershell", "-NoProfile", "-File", str(harness)],
             capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=30,
         )
         linhas = r.stdout.splitlines() + ["", ""]
@@ -253,3 +256,22 @@ class TestTarefaLogonAdaptador:
         assert resultado.returncode == 0, f"stderr={resultado.stderr}"
         alvo, _ = self._alvo(startup / "Vard.lnk")
         assert alvo.lower().endswith("powershell.exe")
+
+
+@pytest.fixture(autouse=True)
+def _harness_powershell(powershell_isolado):
+    pass
+
+
+@pytest.fixture(autouse=True)
+def _modo_sem_sondas(script_modo_isolado, monkeypatch):
+    import sys
+    monkeypatch.setattr(sys.modules[__name__], "SCRIPT_MODO", script_modo_isolado)
+
+
+@pytest.fixture(autouse=True)
+def _logon_temporario(tmp_path, monkeypatch):
+    import sys
+    copia = tmp_path / "tarefa-logon.ps1"
+    shutil.copyfile(SCRIPT_LOGON, copia)
+    monkeypatch.setattr(sys.modules[__name__], "SCRIPT_LOGON", copia)

@@ -233,8 +233,10 @@ def test_der_proprio():
     assert der(ref, [(0, 10, 1)]) == 0.5
 
 
-@pytest.mark.skipif(not dia.estado()["pronta"], reason="modelo não baixado")
+@pytest.mark.pc_real
 def test_real_dois_falantes_der_abaixo_de_30_por_cento():
+    if not dia.estado()["pronta"]:
+        pytest.skip("modelo n?o baixado")
     ref = [(d["t0"], d["t1"], d["falante"]) for d in json.loads((FIXTURES / "dois-falantes.json").read_text(encoding="utf-8"))]
     t0 = time.monotonic()
     trechos = dia.diarizar_community(FIXTURES / "dois-falantes.wav", "cpu")

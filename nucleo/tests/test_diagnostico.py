@@ -81,3 +81,29 @@ class TestRodarDiagnostico:
         for nome in nomes:
             assert "iniciar" not in nome
             assert "carregar modelo" not in nome
+
+@pytest.fixture(autouse=True)
+def sondas_falsas(monkeypatch):
+    """Exercita as checagens reais sobre respostas sintéticas, sem ler o Windows."""
+    import subprocess
+    from vard import diagnostico
+
+    class SocketFalso:
+        def settimeout(self, valor): pass
+        def connect_ex(self, endereco): return 0
+        def close(self): pass
+
+    def executar(args, **kwargs):
+        saidas = {
+            "netstat": "TCP 127.0.0.1:4700 LISTENING",
+            "tasklist": '"vard.exe","42"',
+            "reg": "Vard REG_SZ aplicativo-ficticio",
+            "wmic": "TotalPhysicalMemory=17179869184" if "ComputerSystem" in args else "Name=GPU ficticia",
+        }
+        return subprocess.CompletedProcess(args, 0, saidas[args[0]], "")
+
+    # Não muda socket global: o executor de threads continua com seu socketpair.
+    from types import SimpleNamespace
+    monkeypatch.setattr(diagnostico, "socket", SimpleNamespace(
+        socket=SocketFalso, AF_INET=2, SOCK_STREAM=1))
+    monkeypatch.setattr(diagnostico.subprocess, "run", executar)

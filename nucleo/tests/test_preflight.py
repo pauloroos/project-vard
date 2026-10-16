@@ -244,11 +244,21 @@ def test_avaliar_jogo_ordem():
     assert not preflight.avaliar_jogo("")[0]
 
 
-def test_reuniao_jogo_estrutura_le_o_script_de_verdade():
+def test_reuniao_jogo_estrutura_le_o_script_de_verdade(tmp_path, monkeypatch, powershell_isolado):
+    executar = preflight.subprocess.run
+
+    def harness(args, **kwargs):
+        assert args[:3] == ["powershell", "-NoProfile", "-Command"]
+        script = tmp_path / "estrutura.ps1"
+        script.write_text(args[3], encoding="utf-8-sig")
+        return executar(["powershell", "-NoProfile", "-File", str(script)], **kwargs)
+
+    monkeypatch.setattr(preflight.subprocess, "run", harness)
     ok, d = preflight.reuniao_jogo_estrutura()
     assert ok, d
 
 
+@pytest.mark.pc_real
 def test_reuniao_wav_a_16k_mono():
     import io, wave
     if not preflight.WAV_REUNIAO.exists():

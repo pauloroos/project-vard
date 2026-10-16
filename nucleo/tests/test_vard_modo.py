@@ -60,6 +60,7 @@ def _cauda_log(n: int = 15) -> str:
 
 
 @pytest.mark.skipif(os.environ.get("VARD_TESTE_REAL") != "1", reason="lê a instalação real do Vard; rodar com VARD_TESTE_REAL=1")
+@pytest.mark.pc_real
 def test_status_reporta_variaveis():
     r = _rodar("status")
     assert r.returncode == 0, r.stderr
@@ -93,6 +94,7 @@ def test_verbo_invalido_falha_alto(tmp_path: Path):
 
 
 @pytest.mark.skipif(os.environ.get("VARD_TESTE_CICLO") != "1", reason="derruba e sobe serviços; rodar com VARD_TESTE_CICLO=1")
+@pytest.mark.pc_real
 def test_jogo_duas_vezes():
     # jogo é idempotente: a segunda chamada não falha nem trava
     for _ in range(2):
@@ -241,3 +243,16 @@ def test_recarregar_consulta_a_reuniao_antes_de_qualquer_matar(tmp_path: Path):
                        capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=60)
     nomes = r.stdout.strip().split(",")
     assert "EstadoReuniao" in nomes and "Matar" in nomes and nomes.index("EstadoReuniao") < nomes.index("Matar"), r.stdout + r.stderr
+
+
+@pytest.fixture(autouse=True)
+def _harness_powershell(powershell_isolado):
+    pass
+
+
+@pytest.fixture(autouse=True)
+def _modo_sem_sondas(script_modo_isolado, monkeypatch, request):
+    if request.node.get_closest_marker("pc_real"):
+        return
+    import sys
+    monkeypatch.setattr(sys.modules[__name__], "SCRIPT", script_modo_isolado)
