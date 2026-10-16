@@ -3,10 +3,11 @@ import { invoke } from "@tauri-apps/api/core";
 import { emitTo, listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { URL_RELEASE } from "./atualizacao/release";
-import { carregarConfig, lerNaoOuvirFalar, lerTopoCompacto } from "./config/config";
+import { carregarConfig, lerNaoOuvirFalar, lerTopoCompacto, salvarConfig } from "./config/config";
 import { OpenJarvis } from "./conectores/openjarvis/cliente";
 import { Ponte } from "./conectores/ponte/cliente";
 import { Configuracoes, type Aba } from "./ui/configuracoes";
+import { montarImportacaoComPonte, resumirHudAtual } from "./ui/primeiro-uso-importacao";
 
 const ABAS: Aba[] = ["geral", "voz", "atalhos", "modelos", "paineis-provedores", "paineis-vozes", "paineis-mcps", "paineis-agentes", "sistema", "reuniao", "avisos", "atualizacao"];
 
@@ -29,6 +30,15 @@ window.addEventListener("DOMContentLoaded", async () => {
     },
   });
   await painel.montar();
+  // T7 (0.9): caixa de importação da instalação anterior, na aba Sistema, pela ponte do campo.
+  const caixaImportacao = document.querySelector<HTMLElement>("#cfg-importacao");
+  if (caixaImportacao) {
+    const ponteDoCampo = () => new Ponte(document.querySelector<HTMLInputElement>("#cfg-ponte_url")?.value?.trim() ?? "");
+    montarImportacaoComPonte(caixaImportacao, ponteDoCampo, () => cfg, async (c) => {
+      Object.assign(cfg, resumirHudAtual(c));
+      await salvarConfig(cfg);
+    });
+  }
   await listen<unknown>("config-mudou-no-widget", (ev) => {
     const v = lerTopoCompacto(ev.payload);
     if (!v) { console.warn("config-mudou-no-widget ignorado: payload inválido"); return; }

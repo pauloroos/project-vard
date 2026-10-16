@@ -85,6 +85,58 @@ export interface EventoPedidoSSE {
   dados: Record<string, unknown>;
 }
 
+/** Um item da prévia de importação (T7 0.9). Segredos vêm só como presença (origem_tem/destino_tem), nunca o valor. */
+export interface ItemPreviaImportacao {
+  campo: string;
+  origem?: unknown;
+  destino?: unknown;
+  origem_tem?: boolean;
+  destino_tem?: boolean;
+  conflito?: boolean;
+  estado?: string;
+}
+
+/** Uma categoria da prévia de importação. */
+export interface CategoriaPreviaImportacao {
+  id: string;
+  titulo: string;
+  estado: string;
+  itens: ItemPreviaImportacao[];
+  avisos: string[];
+}
+
+/** Prévia da importação de instalação anterior (POST /primeiro-uso/importacao/previa). */
+export interface PreviaImportacao {
+  schema: number;
+  previa_id: string;
+  origem: string;
+  ja_ativo: boolean;
+  categorias: CategoriaPreviaImportacao[];
+  avisos: string[];
+}
+
+/** Escolha por categoria na hora de aplicar. */
+export type EscolhaImportacao = "importar" | "manter";
+
+/** Resultado do aplicar (o `hud` o painel grava pelos acessores dele). */
+export interface ResultadoAplicacaoImportacao {
+  ok: boolean;
+  operacao_id: string | null;
+  aplicadas: string[];
+  hud: Record<string, unknown> | null;
+  avisos: string[];
+}
+
+/** Resultado do reverter (o `hud_anterior` o painel restaura). */
+export interface ResultadoReversaoImportacao {
+  ok: boolean;
+  operacao_id: string;
+  restaurados: string[];
+  mantidos: string[];
+  avisos: string[];
+  hud_anterior?: Record<string, unknown> | null;
+}
+
 export class Ponte {
   private base: string;
   constructor(base: string) { this.base = base.replace(/\/+$/, ""); }
@@ -374,6 +426,62 @@ export class Ponte {
       });
       return r.ok;
     } catch { return false; }
+  }
+
+  /** Prévia da importação de instalação anterior: categorias e conflitos, sem chaves. 422 vira ErroPonte(origem_invalida). */
+  async previaImportacao(origem: string, hudAtual: Record<string, unknown>): Promise<PreviaImportacao> {
+    return comTimeout(15000, async (signal) => {
+      let r: Response;
+      try {
+        r = await fetch(`${this.base}/primeiro-uso/importacao/previa`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          signal,
+          body: JSON.stringify({ origem, hud_atual: hudAtual }),
+        });
+      } catch { throw new ErroPonte("rede"); }
+      const j = await r.json().catch(() => null);
+      if (!r.ok) throw new ErroPonte(String(j?.erro ?? "previa_http"));
+      return j as PreviaImportacao;
+    });
+  }
+
+  /** Aplica a prévia identificada com as escolhas por categoria. 409 = origem mudou (refaça a prévia). */
+  async aplicarImportacao(
+    previaId: string, escolhas: Record<string, EscolhaImportacao>, hudAtual?: Record<string, unknown>,
+  ): Promise<ResultadoAplicacaoImportacao> {
+    return comTimeout(30000, async (signal) => {
+      let r: Response;
+      try {
+        r = await fetch(`${this.base}/primeiro-uso/importacao/aplicar`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          signal,
+          body: JSON.stringify({ previa_id: previaId, escolhas, ...(hudAtual ? { hud_atual: hudAtual } : {}) }),
+        });
+      } catch { throw new ErroPonte("rede"); }
+      const j = await r.json().catch(() => null);
+      if (!r.ok) throw new ErroPonte(String(j?.erro ?? "aplicar_http"));
+      return j as ResultadoAplicacaoImportacao;
+    });
+  }
+
+  /** Reverte uma aplicação pelo operacao_id (volta aos backups; dado novo de uso fica). */
+  async reverterImportacao(operacaoId: string): Promise<ResultadoReversaoImportacao> {
+    return comTimeout(30000, async (signal) => {
+      let r: Response;
+      try {
+        r = await fetch(`${this.base}/primeiro-uso/importacao/reverter`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          signal,
+          body: JSON.stringify({ operacao_id: operacaoId }),
+        });
+      } catch { throw new ErroPonte("rede"); }
+      const j = await r.json().catch(() => null);
+      if (!r.ok) throw new ErroPonte(String(j?.erro ?? "reverter_http"));
+      return j as ResultadoReversaoImportacao;
+    });
   }
 
   /** Gera a ata ou o relatório (qual: "ultima"). A ponte responde a `frase` pronta em ok e em erro (404/409). */
