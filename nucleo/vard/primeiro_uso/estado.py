@@ -50,18 +50,68 @@ def _gravar(dados: dict[str, Any]) -> None:
     os.replace(tmp, arq)
 
 
-def _config_existe() -> bool:
-    """True quando há config.toml legível com nome não vazio (instalação já configurada)."""
-    arq = modulo_config.arquivo_config("config.toml")
+def _hud_config_tem_nome() -> bool:
+    """True quando hud.config.json do widget tem campo nome não vazio.
+
+    Em testes, VARD_HUD_CONFIG_DIR sobrescreve o caminho base para evitar
+    leitura do APPDATA real do sistema. Sem essa variável, usa APPDATA.
+    """
+    hud_dir_override = os.environ.get("VARD_HUD_CONFIG_DIR", "")
+    if hud_dir_override:
+        hud_arq = Path(hud_dir_override) / "hud.config.json"
+    else:
+        appdata = os.environ.get("APPDATA", "")
+        if not appdata:
+            return False
+        hud_arq = Path(appdata) / "io.github.pauloroos.vard" / "hud.config.json"
     try:
-        with arq.open("rb") as f:
-            dados = tomllib.load(f)
+        texto = hud_arq.read_text(encoding="utf-8")
+        dados = json.loads(texto)
     except (OSError, ValueError, UnicodeDecodeError):
         return False
     if not isinstance(dados, dict):
         return False
     nome = dados.get("nome", "")
     return bool(str(nome).strip())
+
+
+def _config_existe() -> bool:
+    """True quando há qualquer sinal real de instalação já configurada.
+
+    Verifica em ordem: hud.config.json com nome, persona.md, openjarvis.toml,
+    instalacao.json com raiz_codigo. Config.toml com nome também conta para
+    compatibilidade com testes e instalações futuras.
+    """
+    # 1. hud.config.json do widget (fonte primária de nome/usuario)
+    if _hud_config_tem_nome():
+        return True
+    # 2. persona.md na pasta de config
+    persona = modulo_config.arquivo_config("persona.md")
+    if persona.exists():
+        return True
+    # 3. openjarvis.toml na pasta de config
+    oj_toml = modulo_config.arquivo_config("openjarvis.toml")
+    if oj_toml.exists():
+        return True
+    # 4. instalacao.json com raiz_codigo na pasta de dados
+    inst_arq = modulo_config.pasta_dados() / "instalacao.json"
+    try:
+        texto = inst_arq.read_text(encoding="utf-8")
+        inst = json.loads(texto)
+        if isinstance(inst, dict) and str(inst.get("raiz_codigo", "")).strip():
+            return True
+    except (OSError, ValueError, UnicodeDecodeError):
+        pass
+    # 5. config.toml com nome (compatibilidade)
+    cfg_toml = modulo_config.arquivo_config("config.toml")
+    try:
+        with cfg_toml.open("rb") as f:
+            dados = tomllib.load(f)
+        if isinstance(dados, dict) and str(dados.get("nome", "")).strip():
+            return True
+    except (OSError, ValueError, UnicodeDecodeError):
+        pass
+    return False
 
 
 def ler() -> dict[str, Any]:

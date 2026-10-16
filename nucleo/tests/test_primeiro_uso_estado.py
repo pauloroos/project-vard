@@ -18,10 +18,13 @@ from vard.primeiro_uso import estado
 def _isolar(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     dados = tmp_path / "dados"
     cfg = tmp_path / "config"
+    hud_dir = tmp_path / "hud_config"
     dados.mkdir()
     cfg.mkdir()
+    hud_dir.mkdir()
     monkeypatch.setenv("VARD_DADOS", str(dados))
     monkeypatch.setenv("VARD_CONFIG", str(cfg))
+    monkeypatch.setenv("VARD_HUD_CONFIG_DIR", str(hud_dir))
     yield
 
 
@@ -115,3 +118,51 @@ def test_gravacao_atomica(tmp_path: Path):
     # Arquivo temporário não deve existir após gravação
     tmp = arq.with_suffix(".tmp")
     assert not tmp.exists()
+
+
+def test_instalacao_existente_por_persona_md():
+    """persona.md na pasta de config marca instalação como existente."""
+    from vard import config as modulo_config
+    persona = modulo_config.arquivo_config("persona.md")
+    persona.parent.mkdir(parents=True, exist_ok=True)
+    persona.write_text("# Persona\nVocê é Aurora.", encoding="utf-8")
+    s = estado.ler()
+    assert s["concluido"] is True
+
+
+def test_instalacao_existente_por_openjarvis_toml():
+    """openjarvis.toml na pasta de config marca instalação como existente."""
+    from vard import config as modulo_config
+    oj = modulo_config.arquivo_config("openjarvis.toml")
+    oj.parent.mkdir(parents=True, exist_ok=True)
+    oj.write_text('[openjarvis]\nurl = "http://127.0.0.1:8000"\n', encoding="utf-8")
+    s = estado.ler()
+    assert s["concluido"] is True
+
+
+def test_instalacao_existente_por_instalacao_json():
+    """instalacao.json com raiz_codigo na pasta de dados marca instalação como existente."""
+    from vard import config as modulo_config
+    inst = modulo_config.pasta_dados() / "instalacao.json"
+    inst.parent.mkdir(parents=True, exist_ok=True)
+    inst.write_text('{"raiz_codigo": "/opt/vard"}', encoding="utf-8")
+    s = estado.ler()
+    assert s["concluido"] is True
+
+
+def test_instalacao_existente_por_hud_config_json(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    """hud.config.json com nome não vazio marca instalação como existente."""
+    hud_dir = tmp_path / "hud_config_real"
+    hud_dir.mkdir(parents=True)
+    hud_arq = hud_dir / "hud.config.json"
+    hud_arq.write_text('{"nome": "Aurora", "usuario": "Paulo"}', encoding="utf-8")
+    monkeypatch.setenv("VARD_HUD_CONFIG_DIR", str(hud_dir))
+    s = estado.ler()
+    assert s["concluido"] is True
+
+
+def test_sem_sinal_de_instalacao_abre_assistente():
+    """Sem nenhum sinal de instalação, o assistente abre normalmente."""
+    s = estado.ler()
+    assert s["concluido"] is False
+    assert s["etapa"] == "importar"
