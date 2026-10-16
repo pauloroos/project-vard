@@ -17,7 +17,9 @@
     "nucleo": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/windows/montar-nucleo.ps1"
   },
   "dependencies": {
-    "@tauri-apps/api": "^2"
+    "@ricky0123/vad-web": "0.0.31",
+    "@tauri-apps/api": "^2",
+    "onnxruntime-web": "1.22.0"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2",

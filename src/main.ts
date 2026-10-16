@@ -7,7 +7,8 @@ import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { aplicarAoVivo, atualizarConfig, carregarConfig, lerConfigAoVivo } from "./config/config";
 import type { FalhaAtalho } from "./config/atalhos";
 import { abrirMicrofone, definirMudo, fecharMicrofone, estaMudo, onAmostras, rmsAtual, taxaAtual, definirMicrofonePreferido } from "./audio/microfone";
-import { DetectorDeVoz } from "./audio/vad";
+import { DetectorSelecionavel, ControleCapturaVoz, pareceEco } from "./audio/vad-selecionavel";
+import { carregarSilero } from "./audio/silero";
 import { pcmParaWav, reamostrar } from "./audio/wav";
 import { Boca, aplicarSaidaNoContexto } from "./audio/boca";
 import { falaFixa, type FonteDeFala } from "./audio/cache";
@@ -205,6 +206,7 @@ window.addEventListener("DOMContentLoaded", async () => {
   let pcm: Float32Array[] = [];
   let capturando = false;
   let pttSegurado = false;
+  let cicloVoz = 0;
   let ocupado = false; // transcrevendo ou pensando: ignora novos eventos do VAD
   let pttPendente = false; // push-to-talk apertado durante a resposta: começa a capturar quando o ciclo terminar
   let estavaFalando = false;
@@ -349,7 +351,7 @@ window.addEventListener("DOMContentLoaded", async () => {
   };
   await listen("alternar-conversa", () => alternarConversaAberta());
 
-  const detector = new DetectorDeVoz({ limiar: cfg.limiar_vad, inicioMs: 150, fimMs: cfg.finish_ms, tetoMs: 12000 });
+  const detector = new DetectorSelecionavel(cfg.vad, { limiar: cfg.limiar_vad, inicioMs: cfg.interromper_ao_falar ? 250 : 150, fimMs: cfg.finish_ms, tetoMs: 12000 }, carregarSilero);
   // Descarta a captura em curso: a reunião que começa no meio dela (o VAD pararia de finalizar e o PCM
   // cresceria a reunião inteira) e o modo jogo que solta o microfone usam o mesmo caminho.
   const descartarCaptura = () => {
@@ -450,6 +452,7 @@ window.addEventListener("DOMContentLoaded", async () => {
       mostrarEstado(conversa.estado, conversa.detalhe);
       return;
     }
+    const ciclo = ++cicloVoz;
     ocupado = true;
     mostrarEstado("pensando", "", pushToTalk);
     try {
@@ -458,10 +461,12 @@ window.addEventListener("DOMContentLoaded", async () => {
       try {
         texto = await oj.transcrever(wav, cfg.idioma);
       } catch (erro) {
+        if (ciclo !== cicloVoz || estaMudo() || reuniaoAtiva) return;
         console.warn("transcrição falhou", erro);
         if (!naoFalar) { try { await boca.tocar(await fixa(FALAS.erroOuvido)); } catch { /* sem voz, fica só no HUD */ } }
         return;
       }
+      if (ciclo !== cicloVoz || estaMudo() || reuniaoAtiva) return;
       console.log("ouvi:", texto);
       if (texto) mostrarOuvido(texto);
       // Roteamento único (T14 + T13): fluxo de chamada tem prioridade; nome dispensado quando pushToTalk OU conversa aberta ligada.
@@ -478,6 +483,7 @@ window.addEventListener("DOMContentLoaded", async () => {
     } catch (erro) {
       console.error("ciclo de fala falhou", erro);
     } finally {
+      if (ciclo !== cicloVoz) return;
       fimDaFala = 0;
       ocupado = false;
       detector.reset();
@@ -487,6 +493,20 @@ window.addEventListener("DOMContentLoaded", async () => {
     }
   };
 
+  const controleVoz = new ControleCapturaVoz(cfg.interromper_ao_falar, {
+    interromper: () => {
+      ++cicloVoz;
+      // A transicao de estado limpa a cauda da boca; nesta interrupcao o anel ja contem a nova fala.
+      const preRoll = anel; const amostras = anelAmostras;
+      conversa.interromper();
+      anel = preRoll; anelAmostras = amostras;
+      ocupado = false; fimDaFala = 0;
+    },
+    capturar: () => { if (!capturando) comecarCaptura(); },
+    encerrar: () => { if (capturando) void encerrar(false); },
+  });
+  const referenciasSaida: Float32Array[] = [];
+  const entradaEco = new Float32Array(256);
   let ligado = false;
   let analisadorEntrada: AnalyserNode | null = null; // o do microfone, para a sala
   let relogioVad = 0;
@@ -497,6 +517,7 @@ window.addEventListener("DOMContentLoaded", async () => {
   const fecharTudoDoMicrofone = (): boolean => {
     if (!ligado) return false; // nunca foi aberto: a volta do jogo não abre sozinha
     clearInterval(relogioVad);
+    detector.fechar(); referenciasSaida.length = 0;
     largarAmostras?.(); largarAmostras = null;
     bocaReal?.parar(); bocaReal = null;
     nucleo.setAnalisadores(null, null);
@@ -525,13 +546,24 @@ window.addEventListener("DOMContentLoaded", async () => {
       mostrarEstado(conversa.estado, conversa.detalhe);
       nucleo.setAnalisadores(mic.analisador, bocaReal.analisador);
       largarAmostras = onAmostras(guardarAmostras);
+      void detector.iniciar(mic);
       relogioVad = window.setInterval(() => {
         tiques++;
         // Reunião em andamento conta como mudo (sem gravar nada na config e sem mexer no botão Mudo do usuário).
-        if (boca.falando || ocupado || pttSegurado || estaMudo() || reuniaoAtiva) { detector.reset(); return; }
-        const ev = detector.alimentar(rmsAtual(), performance.now());
-        if (ev === "inicio") comecarCaptura();
-        else if (ev === "fim" || ev === "teto") void encerrar(false);
+        if (cfg.interromper_ao_falar && bocaReal) {
+          const saida = new Float32Array(256);
+          bocaReal.analisador.getFloatTimeDomainData(saida);
+          referenciasSaida.push(saida);
+          if (referenciasSaida.length > 6) referenciasSaida.shift();
+        }
+        mic.analisador.getFloatTimeDomainData(entradaEco);
+        const contexto = {
+          falando: boca.falando, ocupado, mudo: estaMudo(), reuniao: reuniaoAtiva,
+          jogo: conversa.estado === "jogo", ptt: pttSegurado,
+          eco: cfg.interromper_ao_falar && !capturando && pareceEco(entradaEco, referenciasSaida),
+        };
+        if (controleVoz.bloqueado(contexto)) { detector.reset(); return; }
+        controleVoz.processar(detector.alimentar(rmsAtual(), performance.now()), contexto);
       }, 50);
     } catch (erro) {
       console.error("falha ao abrir o microfone", erro);

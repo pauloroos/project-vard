@@ -1,10 +1,12 @@
 import { defineConfig } from "vite";
+import { assetsSilero } from "./scripts/vite-silero.ts";
 // @ts-expect-error type error without @types/node package
 import process from "node:process";
 const host = process.env.TAURI_DEV_HOST;
 
 // https://vite.dev/config/
 export default defineConfig(() => ({
+  plugins: [assetsSilero()],
   // Três páginas: o widget, o painel de configurações e a sala (tela cheia).
   build: {
     rollupOptions: {

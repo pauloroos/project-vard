@@ -15,7 +15,7 @@ export interface DepsAbaVoz {
   dizer: (texto: string, ruim?: boolean) => void;
 }
 
-export type CamposVoz = Pick<Config, "voz_provedor" | "voz_propria" | "voz" | "elevenlabs_chave" | "elevenlabs_voz" | "gemini_chave" | "gemini_voz">;
+export type CamposVoz = Pick<Config, "vad" | "interromper_ao_falar" | "voz_provedor" | "voz_propria" | "voz" | "elevenlabs_chave" | "elevenlabs_voz" | "gemini_chave" | "gemini_voz">;
 
 const ROTULO_PROVEDOR: Record<ProvedorVoz, string> = {
   propria: "Voz própria (XTTS, no seu computador)",
@@ -67,6 +67,11 @@ export class AbaVoz {
     const c = this.cfg;
     const kokoroConhecida = VOZES_KOKORO.some((v) => v.id === c.voz);
     this.raiz.innerHTML = `
+      <fieldset><legend>Detecção de voz</legend>
+        <label>Detector<select id="cfg-vad"><option value="energia" ${c.vad === "energia" ? "selected" : ""}>Energia (padrão)</option><option value="silero" ${c.vad === "silero" ? "selected" : ""}>Silero (local)</option></select></label>
+        <label class="marca"><input id="cfg-interromper_ao_falar" type="checkbox" ${c.interromper_ao_falar ? "checked" : ""}> Interromper ao falar por cima</label>
+        <p class="nota">Mudanças valem após reiniciar. Para melhor separação de eco, use fones de ouvido.</p>
+      </fieldset>
       <fieldset><legend>Provedor</legend>
         ${PROVEDORES_VOZ.map((p) => `<label class="marca"><input type="radio" name="voz_provedor" id="cfg-prov-${p}" value="${p}" ${p === c.voz_provedor ? "checked" : ""}> ${ROTULO_PROVEDOR[p]}</label>`).join("")}
       </fieldset>
@@ -198,6 +203,7 @@ export class AbaVoz {
     // Atualiza a preferência em memória para que o devicechange e a captura usem imediatamente.
     definirPreferencia({ microfone_id: micId, microfone_rotulo: micRot, saida_id: saiId, saida_rotulo: saiRot });
     return {
+      vad: this.sel("vad").value === "silero" ? "silero" : "energia", interromper_ao_falar: this.el("interromper_ao_falar").checked,
       voz_provedor: this.provedor(), voz_propria: this.sel("voz_propria").value, voz,
       elevenlabs_chave: this.el("elevenlabs_chave").value.trim(), elevenlabs_voz: this.el("elevenlabs_voz_id").value.trim(),
       gemini_chave: this.el("gemini_chave").value.trim(), gemini_voz: this.sel("gemini_voz").value,
