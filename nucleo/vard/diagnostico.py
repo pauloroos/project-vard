@@ -25,6 +25,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable, Literal
 
+from vard.primeiro_uso import deteccao
+
 Estado = Literal["ok", "aviso", "falha"]
 
 
@@ -208,6 +210,51 @@ CHECAGENS_BASICAS: list[tuple[str, str, Callable[[], tuple[str, str]]]] = [
 ]
 
 
+# --- Detecção do primeiro uso (T1, 0.9) ------------------------------------------
+# Reaproveita o detector somente-leitura como um grupo do Diagnóstico. Opcional ausente vira
+# aviso, nunca falha; nada aqui instala ferramenta nem inicia serviço.
+
+_ROTULO_ITEM = {"encontrado": "encontrado", "nao_encontrado": "não encontrado",
+                "nao_verificado": "não verificado"}
+
+
+def _frase_deteccao(nome: str, estado: str, versao: str, detalhe: str) -> str:
+    texto = f"{nome}: {_ROTULO_ITEM.get(estado, estado)}"
+    if versao:
+        texto += f" ({versao})"
+    if detalhe:
+        texto += f" - {detalhe}"
+    return texto
+
+
+def checagens_deteccao(resultado: "deteccao.ResultadoDeteccao | None" = None) -> list[Checagem]:
+    """Converte a detecção local em checagens do Diagnóstico (grupo 'Primeiro uso')."""
+    r = resultado if resultado is not None else deteccao.detectar()
+    checagens: list[Checagem] = []
+    for item in r.itens:
+        estado: Estado = "ok" if item.estado == "encontrado" else "aviso"
+        checagens.append(Checagem(grupo="Primeiro uso", nome=item.nome, estado=estado,
+                                  frase=_seguro(_frase_deteccao(item.nome, item.estado, item.versao, item.detalhe))))
+    gpu = r.gpu
+    estado_gpu: Estado = "ok" if gpu.estado == "encontrado" else "aviso"
+    detalhe = f"backend {gpu.backend}" if gpu.backend else "backend desconhecido"
+    if gpu.vram_mb:
+        detalhe += f", VRAM ~{gpu.vram_mb} MB"
+    if gpu.detalhe:
+        detalhe += f" - {gpu.detalhe}"
+    checagens.append(Checagem(grupo="Primeiro uso", nome="GPU", estado=estado_gpu,
+                              frase=_seguro(f"GPU: {'encontrada' if gpu.estado == 'encontrado' else gpu.estado} - {detalhe}")))
+    return checagens
+
+
+def _deteccao_segura(prazo_s: float) -> list[Checagem]:
+    try:
+        return checagens_deteccao(deteccao.detectar(prazo_s=min(deteccao.PRAZO_PADRAO_S, max(0.5, prazo_s))))
+    except Exception as exc:  # noqa: BLE001
+        return [Checagem(grupo="Primeiro uso", nome="Detecção local", estado="aviso",
+                         frase=_seguro(f"não foi possível detectar: {type(exc).__name__}"))]
+
+
 def _executar_checagem(
     grupo: str, nome: str, fn: Callable[[], tuple[str, str]], prazo_s: float
 ) -> Checagem:
@@ -226,42 +273,50 @@ def rodar_diagnostico(
     *,
     prazo_s: float = 20.0,
     cancelado: Callable[[], bool] | None = None,
+    incluir_deteccao: bool = False,
 ) -> ResultadoDiagnostico:
     """Executa o diagnóstico e retorna o resultado estruturado.
 
     Args:
-        tipo: "basico" (somente leitura) ou "preflight" (checks completos).
+        tipo: "basico" (somente leitura), "preflight" (checks completos) ou
+            "deteccao" (só o grupo do primeiro uso).
         prazo_s: tempo máximo total em segundos.
         cancelado: callback que retorna True se o usuário cancelou.
+        incluir_deteccao: acrescenta o grupo "Primeiro uso" ao diagnóstico básico.
     """
     inicio = time.monotonic()
     resultado = ResultadoDiagnostico()
 
-    if tipo != "basico":
-        # Preflight completo: por enquanto usa as mesmas checagens básicas.
-        # Checks sintéticos do preflight.py serão integrados quando as
-        # integrações externas estiverem configuradas e habilitadas.
-        pass
+    if tipo == "deteccao":
+        resultado.checagens.extend(_deteccao_segura(prazo_s))
+    else:
+        if tipo != "basico":
+            # Preflight completo: por enquanto usa as mesmas checagens básicas.
+            # Checks sintéticos do preflight.py serão integrados quando as
+            # integrações externas estiverem configuradas e habilitadas.
+            pass
 
-    checks = CHECAGENS_BASICAS
-    with ThreadPoolExecutor(max_workers=min(4, len(checks))) as pool:
-        futuros = {
-            pool.submit(_executar_checagem, g, n, fn, prazo_s): (g, n)
-            for g, n, fn in checks
-        }
-        for futuro in as_completed(futuros, timeout=prazo_s):
-            if cancelado and cancelado():
-                pool.shutdown(wait=False, cancel_futures=True)
-                break
-            try:
-                checagem = futuro.result(timeout=1)
-                resultado.checagens.append(checagem)
-            except Exception as exc:  # noqa: BLE001
-                g, n = futuros[futuro]
-                resultado.checagens.append(
-                    Checagem(grupo=g, nome=n, estado="falha",
-                             frase=_seguro(f"timeout ou erro: {exc}"[:200]))
-                )
+        checks = CHECAGENS_BASICAS
+        with ThreadPoolExecutor(max_workers=min(4, len(checks))) as pool:
+            futuros = {
+                pool.submit(_executar_checagem, g, n, fn, prazo_s): (g, n)
+                for g, n, fn in checks
+            }
+            for futuro in as_completed(futuros, timeout=prazo_s):
+                if cancelado and cancelado():
+                    pool.shutdown(wait=False, cancel_futures=True)
+                    break
+                try:
+                    checagem = futuro.result(timeout=1)
+                    resultado.checagens.append(checagem)
+                except Exception as exc:  # noqa: BLE001
+                    g, n = futuros[futuro]
+                    resultado.checagens.append(
+                        Checagem(grupo=g, nome=n, estado="falha",
+                                 frase=_seguro(f"timeout ou erro: {exc}"[:200]))
+                    )
+        if incluir_deteccao:
+            resultado.checagens.extend(_deteccao_segura(prazo_s))
 
     # Ordena por grupo e nome para relatório consistente
     resultado.checagens.sort(key=lambda c: (c.grupo, c.nome))

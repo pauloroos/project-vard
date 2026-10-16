@@ -23,7 +23,7 @@ from contextlib import asynccontextmanager
 
 from vard import avisos as vavisos, central, config, modelos, modo, oficina, perfil, reuniao, segredos, tarefas
 from vard.cerebro import contratos as cerebro_contratos, pedidos as cerebro_pedidos
-from vard.primeiro_uso import estado as primeiro_uso_estado
+from vard.primeiro_uso import deteccao as primeiro_uso_deteccao, estado as primeiro_uso_estado
 from vard.seguro import Frase
 from vard import telegram as telegram_mod
 
@@ -245,6 +245,15 @@ async def status():
     return {"openjarvis": ok_oj, "lmstudio": ok_lm, "modelo": modelo, "modo": modo.ler_estado()["modo"],
             "modelos_lmstudio": ids, "tarefas_abertas": _tarefas_abertas(), "reuniao": reuniao,
             "cerebro": {"ativo": False, "provedor": "", "sessoes": 0}}
+
+
+# ----------------------------------------------------------------------------- PRIMEIRO USO (T1)
+# Detecção local somente-leitura: reconhece ferramentas já instaladas sem iniciar serviço,
+# fazer login ou carregar modelo. `item`+`caminho` permitem apontar o executável no painel.
+@app.get("/primeiro-uso/deteccao")
+def primeiro_uso_deteccao_rota(item: str = "", caminho: str = ""):
+    caminhos = {item: caminho} if item and caminho and item in primeiro_uso_deteccao.IDS else None
+    return primeiro_uso_deteccao.detectar(caminhos=caminhos).como_dict()
 
 
 # ----------------------------------------------------------------------------- PEDIDOS (T6)
