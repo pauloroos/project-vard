@@ -26,3 +26,5 @@ voz/tests/test_normalizar.py	a@b.
 nucleo/vard/reuniao.py	C:\
 reuniao/pyproject.toml	0.2.12.9
 scripts/windows/vard-modo.ps1	C:\
+# 192.0.2.0/24 e faixa de documentacao (RFC 5737): o teste da guarda prova que rede externa e recusada antes do DNS.
+nucleo/tests/test_guarda_pc.py	192.0.2.1
