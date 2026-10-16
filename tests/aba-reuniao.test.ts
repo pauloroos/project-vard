@@ -19,14 +19,6 @@ function porId(no: No, id: string): No | null {
   return null;
 }
 
-/** Encontra todos os nós com uma classe específica (busca recursiva). */
-function porClasse(no: No, cls: string): No[] {
-  const achados: No[] = [];
-  if (no.className.split(/\s+/).includes(cls)) achados.push(no);
-  for (const f of no.filhos) if (f instanceof No) achados.push(...porClasse(f, cls));
-  return achados;
-}
-
 /** Encontra o container de botões da ponte (div.acoes dentro da raiz, não dentro do pacote). */
 function caixaDeBotoes(raiz: No): No {
   // A caixa de botões da ponte é a div.acoes que NÃO está dentro de #reu-pacote

@@ -13,7 +13,7 @@
  * - Ações só habilitadas quando pacote saudável
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { AbaReuniao, type DepsPacoteReuniao, type EstadoPacoteReuniao } from "../src/ui/aba-reuniao";
+import { AbaReuniao, type DepsPacoteReuniao } from "../src/ui/aba-reuniao";
 import type { StatusReuniao, ReuniaoDaLista, ResultadoReuniao } from "../src/conectores/ponte/cliente";
 
 const mockFetch = vi.fn();
@@ -185,10 +185,10 @@ describe("AbaReuniao — seção de pacote", () => {
 
     expect(mockConfirm).toHaveBeenCalled();
     // Nenhuma chamada POST /remover deve ter sido feita
-    const chamadasRemover = mockFetch.mock.calls.filter(
-      ([url, opts]: [string, { method?: string }]) =>
-        String(url).includes("/remover") && opts?.method === "POST",
-    );
+    const chamadasRemover = mockFetch.mock.calls.filter((chamada) => {
+      const [url, opts] = chamada as unknown as [string, { method?: string } | undefined];
+      return String(url).includes("/remover") && opts?.method === "POST";
+    });
     expect(chamadasRemover.length).toBe(0);
   });
 
