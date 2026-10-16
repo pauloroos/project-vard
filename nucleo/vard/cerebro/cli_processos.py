@@ -4,7 +4,11 @@ Contratos (plano 0.8 T16 / spec C3-C7/C12-C13):
 - Um processo vivo por sessão (`cli-claude` ou `cli-agy`) em stream-json.
 - Pasta própria `VARD_DADOS/cli/<provedor_id>/<sessao_id>/` com CLAUDE.md/AGENTS.md/perfil.md/mcp.json.
 - Perfil montado vai por arquivo (--append-system-prompt-file no claude); nunca inline.
-- yolo liga `--dangerously-skip-permissions`; enxuto não é tratado aqui (capacidade na T17).
+- yolo liga `--dangerously-skip-permissions`.
+- enxuto (T17b/C5): ao abrir com enxuto=True o supervisor lê o evento de início,
+  confere `Dialeto.ferramentas_iniciais` contra as ferramentas do cérebro local
+  (`cli_capacidade.verificar_enxuto`) e, se faltar alguma, reabre a sessão SEM
+  enxuto registrando o aviso que o /status mostra.
 - Ocioso 600 s fecha o processo; próxima pergunta reabre.
 - Nova conversa reinicia o processo.
 - Jogo/saída encerram a árvore inteira por PID (taskkill /T /F /PID).
@@ -15,6 +19,7 @@ Contratos (plano 0.8 T16 / spec C3-C7/C12-C13):
 from __future__ import annotations
 
 import asyncio
+import inspect
 import json
 import logging
 import os
@@ -23,18 +28,21 @@ import signal
 import subprocess
 import sys
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any, AsyncIterator, Dict, List, Optional
 
 from vard import config as modulo_config
 from vard import perfil as modulo_perfil
 from .cli import AdaptadorCli, CanalCli, DIALETOS
+from .cli_capacidade import registrar_aviso, verificar_enxuto
 from .provedores import ErroProvedor
 
 log = logging.getLogger(__name__)
 
 OCIOSO_SEGUNDOS = 600.0
+# Prazo do primeiro evento útil da CLI (restrições globais do plano 0.8).
+PRAZO_FERRAMENTAS_INICIAIS = 15.0
 
 
 @dataclass
@@ -55,6 +63,11 @@ class _CanalProcesso(CanalCli):
         self._proc = processo
         self._fila: asyncio.Queue[Optional[str]] = asyncio.Queue()
         self._leitor_task = asyncio.create_task(self._ler_stdout())
+        self._inicio: Optional[str] = None
+
+    def guardar_inicio(self, linha: str) -> None:
+        """A conferência do enxuto leu o evento de início; o próximo leitor o vê de novo (T17b)."""
+        self._inicio = linha
 
     async def enviar(self, linha: str) -> None:
         if self._proc.returncode is not None:
@@ -85,6 +98,9 @@ class _CanalProcesso(CanalCli):
             await self._fila.put(None)
 
     async def linhas(self) -> AsyncIterator[str]:
+        if self._inicio is not None:
+            linha, self._inicio = self._inicio, None
+            yield linha
         while True:
             item = await self._fila.get()
             if item is None:
@@ -103,6 +119,40 @@ def _dialeto_do_tipo(tipo: str) -> str:
     if tipo == "cli-agy":
         return "agy"
     raise ValueError(f"tipo de CLI desconhecido: {tipo!r}")
+
+
+async def _ferramentas_iniciais(
+    canal: CanalCli,
+    dialeto: str,
+    prazo: float = PRAZO_FERRAMENTAS_INICIAIS,
+) -> Optional[List[str]]:
+    """Lê o evento de início da sessão e devolve as ferramentas que a CLI informa (C5).
+
+    None quando a CLI não informa a lista dentro do prazo ou o stream fecha:
+    nesse caso o enxuto não é confirmado. As linhas lidas aqui são só o início
+    do stream (antes de qualquer mensagem do usuário) e a linha do evento de
+    início fica guardada no canal, para o adaptador vê-la normalmente.
+    """
+    dia = DIALETOS[dialeto]
+    linhas = canal.linhas()
+    if inspect.isawaitable(linhas):
+        linhas = await linhas
+    aiter = linhas.__aiter__()
+    fim = time.monotonic() + prazo
+    while True:
+        restante = fim - time.monotonic()
+        if restante <= 0:
+            return None
+        try:
+            linha = await asyncio.wait_for(aiter.__anext__(), timeout=restante)
+        except (asyncio.TimeoutError, StopAsyncIteration):
+            return None
+        ferramentas = dia.ferramentas_iniciais(linha)
+        if ferramentas is not None:
+            guardar = getattr(canal, "guardar_inicio", None)
+            if callable(guardar):
+                guardar(linha)
+            return ferramentas
 
 
 def argv_cli(provedor: ProvedorCli, pasta: Path) -> List[str]:
@@ -206,11 +256,21 @@ def _encerrar_arvore(pid: int) -> None:
 class SupervisorCli:
     """Gerencia processos vivos de CLI, um por sessão."""
 
-    def __init__(self, *, base_dados: Optional[Path] = None, ocioso_segundos: float = OCIOSO_SEGUNDOS) -> None:
+    def __init__(
+        self,
+        *,
+        base_dados: Optional[Path] = None,
+        ocioso_segundos: float = OCIOSO_SEGUNDOS,
+        ferramentas_locais: Any = None,
+    ) -> None:
         self._base_dados = base_dados
         self._ocioso = float(ocioso_segundos)
+        # Fonte das ferramentas do cérebro local para o enxuto (C5):
+        # lista, chamada síncrona ou assíncrona; None = nenhuma registrada.
+        self._fonte_ferramentas_locais = ferramentas_locais
         self._processos: Dict[str, asyncio.subprocess.Process] = {}
         self._ultimo_uso: Dict[str, float] = {}
+        self._enxuto: Dict[str, bool] = {}
         self._trava = asyncio.Lock()
         self._limpeza_task: Optional[asyncio.Task] = None
 
@@ -222,27 +282,82 @@ class SupervisorCli:
             if proc is not None and proc.returncode is None:
                 self._ultimo_uso[chave] = time.monotonic()
                 return _CanalProcesso(proc)
-            # Abre novo processo
-            pasta = _preparar_pasta_sessao(provedor, sessao_id, base_dados=self._base_dados)
-            cmd = argv_cli(provedor, pasta)
-            try:
-                kwargs: Dict[str, Any] = {
-                    "stdin": asyncio.subprocess.PIPE,
-                    "stdout": asyncio.subprocess.PIPE,
-                    "stderr": asyncio.subprocess.PIPE,
-                    "cwd": str(pasta),
-                }
-                if sys.platform != "win32":
-                    kwargs["preexec_fn"] = os.setsid
-                proc = await asyncio.create_subprocess_exec(*cmd, **kwargs)
-            except FileNotFoundError as exc:
-                raise ErroProvedor("cli_ausente", True, "CLI nao encontrada no PATH") from exc
-            except OSError as exc:
-                raise ErroProvedor("cli_caiu", True, "nao foi possivel iniciar a CLI") from exc
-            self._processos[chave] = proc
-            self._ultimo_uso[chave] = time.monotonic()
-            self._garantir_limpeza()
-            return _CanalProcesso(proc)
+            if provedor.enxuto:
+                return await self._abrir_enxuto(provedor, sessao_id, chave)
+            self._enxuto[chave] = False
+            return await self._abrir(provedor, sessao_id, chave)
+
+    async def _abrir(self, provedor: ProvedorCli, sessao_id: str, chave: str) -> CanalCli:
+        """Abre processo novo para a chave e devolve o canal (T16)."""
+        pasta = _preparar_pasta_sessao(provedor, sessao_id, base_dados=self._base_dados)
+        cmd = argv_cli(provedor, pasta)
+        try:
+            kwargs: Dict[str, Any] = {
+                "stdin": asyncio.subprocess.PIPE,
+                "stdout": asyncio.subprocess.PIPE,
+                "stderr": asyncio.subprocess.PIPE,
+                "cwd": str(pasta),
+            }
+            if sys.platform != "win32":
+                kwargs["preexec_fn"] = os.setsid
+            proc = await asyncio.create_subprocess_exec(*cmd, **kwargs)
+        except FileNotFoundError as exc:
+            raise ErroProvedor("cli_ausente", True, "CLI nao encontrada no PATH") from exc
+        except OSError as exc:
+            raise ErroProvedor("cli_caiu", True, "nao foi possivel iniciar a CLI") from exc
+        self._processos[chave] = proc
+        self._ultimo_uso[chave] = time.monotonic()
+        self._garantir_limpeza()
+        return _CanalProcesso(proc)
+
+    async def _abrir_enxuto(self, provedor: ProvedorCli, sessao_id: str, chave: str) -> CanalCli:
+        """T17b/C5: confere as ferramentas iniciais; se faltar, reabre sem enxuto e avisa."""
+        locais = await self._ferramentas_locais()
+        canal = await self._abrir(provedor, sessao_id, chave)
+        ferramentas_cli = await _ferramentas_iniciais(canal, _dialeto_do_tipo(provedor.tipo))
+        if ferramentas_cli is None:
+            await self._fechar_chave(chave)
+            self._enxuto[chave] = False
+            registrar_aviso(f"enxuto recusado em {provedor.id}: a CLI nao informou as ferramentas iniciais")
+            return await self._abrir(replace(provedor, enxuto=False), sessao_id, chave)
+
+        ok, faltando = verificar_enxuto(ferramentas_cli, locais)
+        if ok:
+            self._enxuto[chave] = True
+            return canal
+
+        await self._fechar_chave(chave)
+        self._enxuto[chave] = False
+        registrar_aviso(f"enxuto recusado em {provedor.id}: falta {', '.join(faltando)}")
+        return await self._abrir(replace(provedor, enxuto=False), sessao_id, chave)
+
+    async def _ferramentas_locais(self) -> List[str]:
+        """Ferramentas do cérebro local usadas na conferência do enxuto (C5)."""
+        fonte = self._fonte_ferramentas_locais
+        if fonte is None:
+            return []
+        if isinstance(fonte, (list, tuple)):
+            return [str(nome) for nome in fonte]
+        valor = fonte()
+        if inspect.isawaitable(valor):
+            valor = await valor
+        return [str(nome) for nome in (valor or [])]
+
+    async def _fechar_chave(self, chave: str) -> None:
+        """Encerra o processo da chave por PID e esquece o registro."""
+        proc = self._processos.pop(chave, None)
+        self._ultimo_uso.pop(chave, None)
+        if proc is not None and proc.returncode is None:
+            pid = proc.pid
+            await asyncio.get_running_loop().run_in_executor(None, _encerrar_arvore, pid)
+
+    def enxuto(self, provedor_id: str, sessao_id: str) -> bool:
+        """Se a sessão viva está rodando com enxuto confirmado (T17b)."""
+        chave = f"{provedor_id}:{sessao_id}"
+        proc = self._processos.get(chave)
+        if proc is None or proc.returncode is not None:
+            return False
+        return bool(self._enxuto.get(chave, False))
 
     async def nova_conversa(self, sessao_id: str) -> None:
         """Reinicia todos os processos da sessão (nova conversa ou limite de trocas)."""
@@ -267,6 +382,7 @@ class SupervisorCli:
                     await asyncio.get_running_loop().run_in_executor(None, _encerrar_arvore, pid)
             self._processos.clear()
             self._ultimo_uso.clear()
+            self._enxuto.clear()
 
     def pids(self) -> List[int]:
         """Lista PIDs vivos (para prova e diagnóstico)."""

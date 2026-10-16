@@ -23,7 +23,7 @@ from contextlib import asynccontextmanager
 
 from vard import avisos as vavisos, central, config, modelos, modo, oficina, perfil, reuniao, segredos, tarefas
 from vard import config
-from vard.cerebro import cli_deteccao, contratos as cerebro_contratos, pedidos as cerebro_pedidos
+from vard.cerebro import cli_capacidade, cli_deteccao, contratos as cerebro_contratos, pedidos as cerebro_pedidos
 from vard.primeiro_uso import deteccao as primeiro_uso_deteccao, estado as primeiro_uso_estado
 from vard.seguro import Frase
 from vard import telegram as telegram_mod
@@ -92,7 +92,7 @@ class _ErroCerebro(Exception):
 
 
 def _ler_provedor_ativo() -> dict:
-    """Lê o provedor ativo de paineis.json. Devolve dict com tipo/modelo/url_base/credencial_ref/yolo.
+    """Lê o provedor ativo de paineis.json. Devolve dict com tipo/modelo/url_base/credencial_ref/yolo/enxuto.
 
     Contratos:
       - TS (paineis.ts): ativo é id em provedores[]; provedor tem credencial_ref opcional.
@@ -116,6 +116,7 @@ def _ler_provedor_ativo() -> dict:
                         "url_base": str(p.get("url_base", "") or ""),
                         "credencial_ref": str(p.get("credencial_ref", "") or ""),
                         "yolo": bool(p.get("yolo", True)),
+                        "enxuto": bool(p.get("enxuto", False)),
                     }
         # Fallback legado: agentes com ativo=True e tipo cli-*
         agentes = dados.get("agentes", {})
@@ -131,6 +132,7 @@ def _ler_provedor_ativo() -> dict:
                         "url_base": "",
                         "credencial_ref": "",
                         "yolo": bool(ag.get("yolo", True)),
+                        "enxuto": bool(ag.get("enxuto", False)),
                     }
     except Exception:  # noqa: BLE001
         pass
@@ -189,6 +191,7 @@ async def _executar_pedido_cerebro(pedido, emitir):
             tipo=tipo_provedor,
             modelo=prov.get("modelo", ""),
             yolo=prov.get("yolo", True),
+            enxuto=prov.get("enxuto", False),
         )
         canal = await supervisor.canal(provedor_cli, pedido.sessao_id)
         dialeto = "claude" if tipo_provedor == "cli-claude" else "agy"
@@ -398,7 +401,8 @@ async def status():
     )
     return {"openjarvis": ok_oj, "lmstudio": ok_lm, "modelo": modelo, "modo": modo.ler_estado()["modo"],
             "modelos_lmstudio": ids, "tarefas_abertas": _tarefas_abertas(), "reuniao": reuniao,
-            "cerebro": {"ativo": False, "provedor": "", "sessoes": 0}}
+            "cerebro": {"ativo": False, "provedor": "", "sessoes": 0},
+            "cli_enxuto": {"avisos": cli_capacidade.avisos()}}
 
 
 # ----------------------------------------------------------------------------- PRIMEIRO USO (T1)
