@@ -1,0 +1,33 @@
+/* Frente "Quem responde" (0.9.3) — cards de provedores + modal de cadastro/edição. */
+
+.qr-aviso-ponte {
+  margin: 0 0 12px;
+  padding: 10px 14px;
+  border: 1px solid rgba(255, 176, 32, 0.55);
+  border-radius: 6px;
+  background: rgba(255, 176, 32, 0.08);
+  color: #ffd070;
+  font: 12px/1.5 var(--sans);
+}
+
+.qr-modal-campos { display: flex; flex-direction: column; gap: 4px; }
+.qr-modal-busca { display: flex; gap: 8px; align-items: center; margin-top: 4px; }
+.qr-modal-busca button { margin: 0; white-space: nowrap; }
+.qr-modal-status { min-height: 18px; margin-top: 4px; font-size: 12px; opacity: 0.85; }
+.qr-modal-status.ruim { color: #ffb020; opacity: 1; }
+
+.qr-cli-sugestao {
+  margin: 6px 0 0;
+  padding: 8px 10px;
+  border: 1px dashed var(--borda);
+  border-radius: 6px;
+  font-size: 12px;
+  opacity: 0.9;
+}
+.qr-cli-sugestao button { margin: 4px 0 0; }
+
+.qr-delegada-aviso {
+  margin: 6px 0 0;
+  font-size: 12px;
+  opacity: 0.8;
+}

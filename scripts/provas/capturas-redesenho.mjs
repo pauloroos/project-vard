@@ -18,7 +18,7 @@ fs.mkdirSync(CAPTURAS_DIR, { recursive: true });
 
 const ABAS = [
   "geral", "perfil", "voz", "atalhos", "saber", "modelos",
-  "paineis-provedores", "paineis-vozes", "paineis-mcps", "paineis-agentes",
+  "paineis-vozes", "paineis-mcps",
   "sistema", "reuniao", "avisos", "atualizacao", "diagnostico"
 ];
 const ETAPAS_PU = ["importar", "detectar", "nome", "cerebro", "voz", "audio", "resumo"];
@@ -252,6 +252,52 @@ async function main() {
       const medida = await medirPagina(page, `${aba}@${scale}x`);
       resultados.push(medida);
       console.log(`[${scale}x] Capturada seção: ${aba} (${medida.nosComTextoVisiveis} nós com texto)`);
+    }
+
+    // Estados extras da seção "Quem responde" (brief 0.9.3)
+    const btnModelos = await page.$('nav button[data-aba="modelos"]');
+    if (btnModelos) {
+      // 1. Modal de adicionar aberto com modelos buscados
+      await btnModelos.click();
+      await page.waitForTimeout(400);
+      const btnAdd = await page.$('button.cards-adicionar, button[class*="adicionar"]');
+      if (btnAdd) {
+        await btnAdd.click();
+        await page.waitForTimeout(300);
+        await page.screenshot({ path: path.join(CAPTURAS_DIR, `quem-responde-modal-adicionar-escala${scale}.png`), fullPage: false });
+        resultados.push(await medirPagina(page, `quem-responde-modal-adicionar@${scale}x`));
+        // Fechar modal
+        await page.keyboard.press("Escape");
+        await page.waitForTimeout(200);
+      }
+      // 2. Seção vazia (sem provedores cadastrados)
+      await page.evaluate(() => {
+        window.__TAURI_INTERNALS__.invoke = async (cmd, args) => {
+          if (cmd === "ler_paineis") return { versao: 1, provedores: [], ativo: null, reserva: null, agentes: { claude: { padrao: "", modelos: [] }, codex: { padrao: "", modelos: [] }, opencode: { padrao: "", modelos: [] }, agy: { padrao: "", modelos: [] } }, mcps: [] };
+          if (cmd === "ler_config") return { schema: 3, ponte_url: "", nome: "Aurora", variantes: ["Auri"], idioma: "pt", openjarvis_url: "http://localhost:8765", gui_url: "", usuario: "Ana", tamanho: "medio", tamanho_px: 320, compacto: false, sempre_no_topo: false, click_through: false, invisivel: false, logon: false, sala_monitor: "", nao_ouvir: false, nao_falar: false, falar_avisos: true, velocidade: 1.1, instrucao_formato: "", finish_ms: 600, limiar_vad: 0.03, conversa_ms: 5000, atualizacao_ao_abrir: true, modelo: "", microfone_id: "", saida_id: "", caminho_instalacao: "" };
+          return null;
+        };
+      });
+      await btnModelos.click();
+      await page.waitForTimeout(600);
+      await page.screenshot({ path: path.join(CAPTURAS_DIR, `quem-responde-vazia-escala${scale}.png`), fullPage: false });
+      resultados.push(await medirPagina(page, `quem-responde-vazia@${scale}x`));
+      // 3. Aviso de ponte fora
+      await page.evaluate(() => {
+        window.__TAURI_INTERNALS__.invoke = async (cmd) => {
+          if (cmd === "ler_paineis") return { versao: 1, provedores: [], ativo: null, reserva: null, agentes: { claude: { padrao: "", modelos: [] }, codex: { padrao: "", modelos: [] }, opencode: { padrao: "", modelos: [] }, agy: { padrao: "", modelos: [] } }, mcps: [] };
+          if (cmd === "ler_config") return { schema: 3, ponte_url: "http://127.0.0.1:99999", nome: "Aurora", variantes: ["Auri"], idioma: "pt", openjarvis_url: "http://localhost:8765", gui_url: "", usuario: "Ana", tamanho: "medio", tamanho_px: 320, compacto: false, sempre_no_topo: false, click_through: false, invisivel: false, logon: false, sala_monitor: "", nao_ouvir: false, nao_falar: false, falar_avisos: true, velocidade: 1.1, instrucao_formato: "", finish_ms: 600, limiar_vad: 0.03, conversa_ms: 5000, atualizacao_ao_abrir: true, modelo: "", microfone_id: "", saida_id: "", caminho_instalacao: "" };
+          return null;
+        };
+      });
+      await btnModelos.click();
+      await page.waitForTimeout(600);
+      await page.screenshot({ path: path.join(CAPTURAS_DIR, `quem-responde-ponte-fora-escala${scale}.png`), fullPage: false });
+      resultados.push(await medirPagina(page, `quem-responde-ponte-fora@${scale}x`));
+      // Restaurar invoke original para as próximas iterações
+      await page.reload();
+      await page.waitForSelector("#painel nav button", { timeout: 20000 });
+      await page.waitForTimeout(400);
     }
 
     // Captura etapas do assistente
