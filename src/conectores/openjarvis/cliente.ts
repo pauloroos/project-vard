@@ -38,7 +38,7 @@ export class OpenJarvis implements Conector {
     } catch { return false; }
   }
 
-  async transcrever(wav: ArrayBuffer, idioma: string): Promise<string> {
+  async transcrever(wav: ArrayBuffer, idioma: string, externo?: AbortSignal): Promise<string> {
     const form = new FormData();
     form.append("file", new Blob([wav], { type: "audio/wav" }), "fala.wav");
     if (idioma) form.append("language", idioma);
@@ -47,7 +47,7 @@ export class OpenJarvis implements Conector {
       if (!r.ok) throw new Error(`transcrever HTTP ${r.status}`);
       const j = await r.json();
       return String(j.text ?? "").trim();
-    });
+    }, externo);
   }
 
   async modelos(): Promise<string[]> {
@@ -83,7 +83,7 @@ export class OpenJarvis implements Conector {
     }, externo);
   }
 
-  async sintetizar(texto: string, voz: string, velocidade: number): Promise<ArrayBuffer> {
+  async sintetizar(texto: string, voz: string, velocidade: number, externo?: AbortSignal): Promise<ArrayBuffer> {
     return comTimeout(30000, async (signal) => {
       const r = await fetch(`${this.base}/v1/speech/synthesize`, {
         method: "POST", headers: { "Content-Type": "application/json" }, signal,
@@ -91,6 +91,6 @@ export class OpenJarvis implements Conector {
       });
       if (!r.ok) throw new Error(`sintetizar HTTP ${r.status}`);
       return r.arrayBuffer();
-    });
+    }, externo);
   }
 }
