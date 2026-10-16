@@ -49,5 +49,5 @@ describe("Versões alinhadas na 0.7", () => {
     expect(() => {
       execSync("npx tsc --noEmit", { cwd: raiz, stdio: "pipe", timeout: 60_000 });
     }).not.toThrow();
-  });
+  }, 60_000);
 });

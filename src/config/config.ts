@@ -10,6 +10,8 @@ export interface Config {
   /** Serviço de voz próprio (POST /falar); vazio desliga e a voz fica sempre a do OpenJarvis. */
   voz_url: string;
   nome: string; usuario: string; variantes: string[]; idioma: string; voz: string; velocidade: number;
+  vad: "energia" | "silero";
+  interromper_ao_falar: boolean;
   finish_ms: number; limiar_vad: number; sempre_no_topo: boolean; click_through: boolean; invisivel: boolean;
   posicao: { x: number; y: number } | null;
   /** Tamanho do widget: preset ou "personalizado" (usa tamanho_px, lado em px lógicos). */
@@ -54,6 +56,7 @@ export const CONFIG_PADRAO: Config = {
   openjarvis_url: "http://127.0.0.1:8000", gui_url: "http://127.0.0.1:5173", ponte_url: "http://127.0.0.1:4700",
   voz_url: "http://127.0.0.1:4710",
   nome: "vard", usuario: "", variantes: ["vard", "varde", "vardi", "ward", "bard"], idioma: "pt", voz: "pm_alex", velocidade: 1.05,
+  vad: "energia", interromper_ao_falar: false,
   finish_ms: 900, limiar_vad: 0.02, sempre_no_topo: true, click_through: false, invisivel: false, posicao: null,
   tamanho: "medio", tamanho_px: 320, compacto: false,
   atalhos: {
@@ -98,6 +101,8 @@ function mesclar(salvo: unknown): Config {
       if (Array.isArray(v) && v.every((x) => typeof x === "string")) saida[k] = v;
     } else if (k === "tamanho") {
       if (typeof v === "string" && (TAMANHOS as readonly string[]).includes(v)) saida[k] = v;
+    } else if (k === "vad") {
+      if (v === "energia" || v === "silero") saida[k] = v;
     } else if (k === "voz_provedor") {
       if (typeof v === "string" && (PROVEDORES_VOZ as readonly string[]).includes(v)) saida[k] = v;
     } else if (k === "conversa_ms") {
@@ -169,6 +174,7 @@ const REINICIO: [keyof Config, string][] = [
   ["nome", "nome de chamada"], ["variantes", "nome de chamada"], ["idioma", "idioma"],
   ["voz", "voz"], ["velocidade", "voz"], ["voz_provedor", "voz"], ["voz_propria", "voz"],
   ["elevenlabs_chave", "voz"], ["elevenlabs_voz", "voz"], ["gemini_chave", "voz"], ["gemini_voz", "voz"], ["instrucao_formato", "instrução de formato"],
+  ["vad", "ouvido"], ["interromper_ao_falar", "ouvido"],
   ["finish_ms", "ouvido"], ["limiar_vad", "ouvido"], ["atalhos", "atalhos"],
 ];
 

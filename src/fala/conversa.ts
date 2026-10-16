@@ -305,8 +305,16 @@ export class Conversa {
         // Cérebro próprio: admite pedido e espera texto via EventoPedido (SSE).
         const sessaoId = this.d.sessaoVoz();
         const estado = await this.d.ponte.pedir(comando, sessaoId);
-        if (ac.signal.aborted || this.emJogo()) return;
         const pedidoId = estado.pedido_id;
+        // O abort pode chegar enquanto /pedidos ainda admite ou reconcilia o pedido.
+        let cancelado = false;
+        const cancelarPedido = () => {
+          if (cancelado) return;
+          cancelado = true;
+          void this.d.ponte?.cancelar?.(pedidoId).catch(() => {});
+        };
+        ac.signal.addEventListener("abort", cancelarPedido, { once: true });
+        if (ac.signal.aborted || this.emJogo()) { cancelarPedido(); return; }
         let ultimoSeq = -1;
         let textoAcumulado = "";
         // Reconciliação inicial: consulta estado atual para pegar texto já produzido antes do SSE.
@@ -318,6 +326,7 @@ export class Conversa {
           }
         } catch { /* segue com SSE */ }
         // Escuta eventos SSE da sessão até fim/erro/cancelamento ou abort.
+        if (ac.signal.aborted || this.emJogo()) return;
         const esperarFim = new Promise<string>((resolve, reject) => {
           const onEvento = (ev: Event) => {
             if (ac.signal.aborted) return;
@@ -348,7 +357,7 @@ export class Conversa {
           resposta = await esperarFim;
         } catch (erro) {
           // Cancela pedido se a fala foi cortada (abort) ou houve erro.
-          try { await this.d.ponte.cancelar?.(pedidoId); } catch { /* melhor esforço */ }
+          cancelarPedido();
           if (ac.signal.aborted || this.emJogo()) return;
           throw erro;
         }
