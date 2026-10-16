@@ -88,6 +88,16 @@ describe("Conversa.cerebro", () => {
     expect(deps.aoResposta).toHaveBeenCalledWith("resposta propria");
   });
 
+  it("pedido_ja_concluido_na_consulta_inicial_responde_sem_esperar_sse", async () => {
+    const { deps, consultarPedido } = montarDeps({ cerebro: "proprio" });
+    consultarPedido.mockResolvedValue({ estado: "concluido", resposta: "já pronto", ultimo_seq: 3 } as any);
+    const c = new Conversa(deps as any);
+    const promessa = c.aoTextoTranscrito("oi vard", true);
+    await vi.runAllTimersAsync();
+    await promessa;
+    expect(deps.aoResposta).toHaveBeenCalledWith("já pronto");
+  });
+
   it("ignora_eventos_de_outra_sessao", async () => {
     const { deps } = montarDeps({ cerebro: "proprio" });
     const c = new Conversa(deps as any);
