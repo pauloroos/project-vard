@@ -80,12 +80,70 @@ def _obter_supervisor_cli():
     return _supervisor_cli
 
 
+def _resolver_credencial(tipo: str, url_base: str) -> str:
+    """Resolve a chave/credencial para o provedor a partir de segredos.toml.
+
+    Mapeamento por tipo:
+      - openai_compat / lmstudio / local → chave_lmstudio() ou chave_omniroute()
+      - anthropic → chave_omniroute() (rota OmniRoute) ou vazio se direto
+      - google → huggingface() não serve; usa chave_omniroute() como proxy
+      - openai_nativo → chave_omniroute()
+    Retorna string vazia quando não há credencial configurada.
+    """
+    try:
+        from vard import segredos
+        if tipo in ("openai_compat", "lmstudio", "local"):
+            chave = segredos.chave_lmstudio()
+            if not chave:
+                chave = segredos.chave_omniroute()
+            return chave
+        if tipo == "anthropic":
+            return segredos.chave_omniroute()
+        if tipo == "google":
+            return segredos.chave_omniroute()
+        if tipo == "openai_nativo":
+            return segredos.chave_omniroute()
+    except Exception:  # noqa: BLE001
+        pass
+    return ""
+
+
+def _montar_adaptador_real(
+    tipo: str,
+    url_base: str,
+    modelo: str,
+    chave: str,
+) -> "AdaptadorProvedor":
+    """Instancia o adaptador concreto para provedores API (não-CLI).
+
+    Segue o mesmo mapa de primeiro_uso/cerebro._montar_adaptador().
+    Levanta ValueError para tipos desconhecidos.
+    """
+    from vard.cerebro.provedores import (
+        AdaptadorAnthropic,
+        AdaptadorGoogle,
+        AdaptadorOpenAICompat,
+        AdaptadorOpenAINativo,
+    )
+
+    timeout = 90.0
+    if tipo in ("openai_compat", "lmstudio", "local"):
+        return AdaptadorOpenAICompat(base_url=url_base, modelo=modelo, chave=chave, timeout=timeout)
+    if tipo == "anthropic":
+        return AdaptadorAnthropic(chave=chave, modelo=modelo, base_url=url_base, timeout=timeout)
+    if tipo == "google":
+        return AdaptadorGoogle(chave=chave, modelo=modelo, base_url=url_base, timeout=timeout)
+    if tipo == "openai_nativo":
+        return AdaptadorOpenAINativo(chave=chave, modelo=modelo, base_url=url_base, timeout=timeout)
+    raise ValueError(f"tipo_de_provedor_desconhecido: {tipo}")
+
+
 async def _executar_pedido_cerebro(pedido, emitir):
     """Executor do cérebro próprio: seleciona adaptador conforme provedor ativo.
 
-    T16: quando o provedor é cli-claude/cli-agy, usa SupervisorCli + AdaptadorCli.
-    Demais provedores seguem pelo laço tradicional com AdaptadorFalso (placeholder
-    até a T17/T18 conectarem os painéis reais).
+    T16: CLI (cli-claude/cli-agy) → SupervisorCli + AdaptadorCli.
+    T16c: API (openai_compat/anthropic/google/lmstudio/openai_nativo) → adaptador real.
+    Sem provedor reconhecido → AdaptadorFalso com mensagem clara.
     """
     from vard.cerebro import laco as cerebro_laco
     from vard.cerebro.cli import AdaptadorCli
@@ -96,6 +154,7 @@ async def _executar_pedido_cerebro(pedido, emitir):
     # Fallback legado: agentes[nome].ativo=True com tipo cli-* (schema antigo).
     tipo_provedor = ""
     modelo = ""
+    url_base = ""
     yolo = True
     try:
         import json as _json
@@ -110,6 +169,7 @@ async def _executar_pedido_cerebro(pedido, emitir):
                     if isinstance(p, dict) and str(p.get("id", "")) == ativo_id:
                         tipo_provedor = str(p.get("tipo", ""))
                         modelo = str(p.get("modelo", "") or "")
+                        url_base = str(p.get("url_base", "") or "")
                         yolo = bool(p.get("yolo", True))
                         break
             # Fallback legado: agentes com ativo=True e tipo cli-*
@@ -139,8 +199,19 @@ async def _executar_pedido_cerebro(pedido, emitir):
         canal = await supervisor.canal(provedor, pedido.sessao_id)
         dialeto = "claude" if tipo_provedor == "cli-claude" else "agy"
         adaptador = AdaptadorCli(canal, dialeto)
+    elif tipo_provedor in ("openai_compat", "lmstudio", "local", "anthropic", "google", "openai_nativo"):
+        if not url_base:
+            adaptador = AdaptadorFalso(resposta="provedor sem url_base configurada")
+        elif not modelo:
+            adaptador = AdaptadorFalso(resposta="provedor sem modelo configurado")
+        else:
+            chave = _resolver_credencial(tipo_provedor, url_base)
+            try:
+                adaptador = _montar_adaptador_real(tipo_provedor, url_base, modelo, chave)
+            except ValueError:
+                adaptador = AdaptadorFalso(resposta=f"tipo de provedor desconhecido: {tipo_provedor}")
     else:
-        adaptador = AdaptadorFalso(resposta="cérebro local ainda não conectado")
+        adaptador = AdaptadorFalso(resposta="nenhum provedor ativo configurado")
 
     await cerebro_laco.executar_pedido(pedido, adaptador, emitir)
 
