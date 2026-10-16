@@ -29,6 +29,35 @@ ORIGENS_OK = {
 _NAO_FORNECIDO = object()
 
 
+class _MotorAusente:
+    """Lugar do XTTS quando ele não está disponível: nunca fica pronto e não tem vozes."""
+
+    pronta = False
+    aquecida = False
+    device = ""
+
+    def carregar(self) -> None:
+        return None
+
+    def vozes(self) -> list:
+        return []
+
+
+def _xtts_disponivel() -> bool:
+    """XTTS instalado? Pelo registro de pacotes do núcleo quando ele está importável; o serviço de voz
+    roda no próprio ambiente (sem o núcleo), e aí decide pelo pacote do XTTS presente (D12)."""
+    try:
+        from nucleo.vard.pacotes import InstaladorPacotes
+    except Exception:
+        import importlib.util
+
+        return importlib.util.find_spec("TTS") is not None
+    try:
+        return InstaladorPacotes().esta_instalado("xtts-v2")
+    except Exception:
+        return False
+
+
 def criar_app(
     motor=None,
     motor_kokoro=_NAO_FORNECIDO,
@@ -38,22 +67,16 @@ def criar_app(
     carregar_em_thread: bool = True,
 ) -> FastAPI:
     if motor is None:
-        # XTTS só é instanciado se o pacote opcional estiver instalado;
-        # sem ele, o motor permanece None e Kokoro/Edge/Piper assumem.
-        try:
-            from nucleo.vard.pacotes import InstaladorPacotes
-            _xtts_instalado = InstaladorPacotes().esta_instalado("xtts-v2")
-        except Exception:
-            _xtts_instalado = False
-        if _xtts_instalado:
+        # XTTS só é instanciado se estiver disponível; sem ele, um motor vazio (não pronto)
+        # ocupa o lugar e Kokoro/Edge/Piper assumem. Nunca None: o resto do serviço usa motor.pronta.
+        if _xtts_disponivel():
             try:
                 from .motor import Motor
                 motor = Motor(os.environ.get("VARD_VOZ_DEVICE", "cuda"))
             except Exception:
                 log.warning("xtts-v2 instalado mas motor falhou ao iniciar")
-                motor = None
-        else:
-            motor = None
+        if motor is None:
+            motor = _MotorAusente()
     if motor_kokoro is _NAO_FORNECIDO:
         try:
             from .kokoro import MotorKokoro
