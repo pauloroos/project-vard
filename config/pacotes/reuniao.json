@@ -1,0 +1,23 @@
+{
+  "schema": 1,
+  "pacotes": [
+    {
+      "id": "reuniao",
+      "nome": "Reunião (transcrição e diarização)",
+      "versao": "0.1.0",
+      "tipo": "reuniao",
+      "descricao": "Serviço de reunião com transcrição, VAD e diarização. Requer Python 3.12 e ~500 MB.",
+      "url": "",
+      "sha256": "",
+      "bytes_download": 0,
+      "bytes_instalado": 524288000,
+      "python": ">=3.12,<3.13",
+      "backend": "cpu|cuda",
+      "licenca_url": "https://github.com/project-vard/vard-reuniao/blob/main/LICENSE",
+      "licenca_nome": "MIT",
+      "dependencias": [],
+      "indisponivel": true,
+      "motivo_indisponivel": "instalacao via venv local; download direto nao suportado nesta versao"
+    }
+  ]
+}

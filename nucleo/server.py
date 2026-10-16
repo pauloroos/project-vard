@@ -730,7 +730,7 @@ async def primeiro_uso_cerebro_trocar(request: Request):
 
 
 # --------------------------------------------------------------------------- PACOTES OPCIONAIS (T5)
-from vard.pacotes import carregar_manifesto, InstaladorPacotes
+from vard.pacotes import carregar_manifesto, carregar_todos_manifestos, InstaladorPacotes
 
 _instalador_pacotes = InstaladorPacotes()
 
@@ -739,7 +739,7 @@ _instalador_pacotes = InstaladorPacotes()
 def pacotes_listar():
     """Lista pacotes opcionais disponíveis no manifesto + estado de instalação."""
     try:
-        manifesto = carregar_manifesto()
+        manifesto = carregar_todos_manifestos()
     except (FileNotFoundError, ValueError) as exc:
         return JSONResponse({"erro": str(exc)}, status_code=500)
     estado = _instalador_pacotes.ler_estado()
@@ -770,7 +770,7 @@ def pacotes_listar():
 async def pacote_instalar(pacote_id: str):
     """Inicia instalação de um pacote opcional. Devolve 404 se não existir no manifesto."""
     try:
-        manifesto = carregar_manifesto()
+        manifesto = carregar_todos_manifestos()
     except (FileNotFoundError, ValueError) as exc:
         return JSONResponse({"erro": str(exc)}, status_code=500)
     pkg = manifesto.get(pacote_id)

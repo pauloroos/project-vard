@@ -115,6 +115,28 @@ def _validar_pacote_raw(dados: dict[str, Any], origem: str) -> PacoteInfo:
     )
 
 
+def carregar_todos_manifestos() -> dict[str, PacoteInfo]:
+    """Carrega todos os manifestos (*.json) em config/pacotes/.
+
+    Retorna dict unificado id → PacoteInfo. IDs duplicados entre arquivos
+    levantam ValueError. Arquivos inválidos são logados e ignorados (não bloqueiam).
+    """
+    resultado: dict[str, PacoteInfo] = {}
+    if not RAIZ_CONFIG.exists():
+        return resultado
+    for arquivo in sorted(RAIZ_CONFIG.glob("*.json")):
+        try:
+            pkgs = carregar_manifesto(arquivo)
+        except (FileNotFoundError, ValueError) as exc:
+            log.warning("manifesto %s ignorado: %s", arquivo.name, exc)
+            continue
+        for pid, pkg in pkgs.items():
+            if pid in resultado:
+                raise ValueError(f"id duplicado '{pid}' em {arquivo.name}")
+            resultado[pid] = pkg
+    return resultado
+
+
 def carregar_manifesto(caminho: Path | None = None) -> dict[str, PacoteInfo]:
     """Carrega todos os pacotes de um arquivo de manifesto JSON.
 

@@ -12,11 +12,12 @@ Regras de segurança:
 - Cancelamento limpa apenas staging; interrupção permite reiniciar.
 - Licença deve ser apresentada antes da instalação (CPML para XTTS-v2).
 """
-from .manifesto import carregar_manifesto, validar_pacote, PacoteInfo
+from .manifesto import carregar_manifesto, carregar_todos_manifestos, validar_pacote, PacoteInfo
 from .instalador import InstaladorPacotes, ProgressoInstalacao
 
 __all__ = [
     "carregar_manifesto",
+    "carregar_todos_manifestos",
     "validar_pacote",
     "PacoteInfo",
     "InstaladorPacotes",
