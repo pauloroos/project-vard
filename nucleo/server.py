@@ -92,7 +92,8 @@ async def _executar_pedido_cerebro(pedido, emitir):
     from vard.cerebro.cli_processos import ProvedorCli
     from vard.cerebro.provedores import AdaptadorFalso
 
-    # Lê provedor ativo dos painéis (se disponível); fallback para falso
+    # Lê provedor ativo dos painéis (contrato TS: ativo é id em provedores[]).
+    # Fallback legado: agentes[nome].ativo=True com tipo cli-* (schema antigo).
     tipo_provedor = ""
     modelo = ""
     yolo = True
@@ -101,15 +102,29 @@ async def _executar_pedido_cerebro(pedido, emitir):
         cfg_paineis = config.arquivo_config("paineis.json")
         if cfg_paineis.exists():
             dados = _json.loads(cfg_paineis.read_text(encoding="utf-8"))
-            agentes = dados.get("agentes", {})
-            # Busca o primeiro agente marcado como ativo com tipo cli-*
-            for nome_ag, ag in agentes.items():
-                t = str(ag.get("tipo", ""))
-                if t.startswith("cli-") and ag.get("ativo", False):
-                    tipo_provedor = t
-                    modelo = str(ag.get("modelo", "") or "")
-                    yolo = bool(ag.get("yolo", True))
-                    break
+            ativo_id = dados.get("ativo")
+            provedores = dados.get("provedores", [])
+            # Schema correto: ativo é id de provedor na lista
+            if isinstance(ativo_id, str) and ativo_id and isinstance(provedores, list):
+                for p in provedores:
+                    if isinstance(p, dict) and str(p.get("id", "")) == ativo_id:
+                        tipo_provedor = str(p.get("tipo", ""))
+                        modelo = str(p.get("modelo", "") or "")
+                        yolo = bool(p.get("yolo", True))
+                        break
+            # Fallback legado: agentes com ativo=True e tipo cli-*
+            if not tipo_provedor:
+                agentes = dados.get("agentes", {})
+                if isinstance(agentes, dict):
+                    for nome_ag, ag in agentes.items():
+                        if not isinstance(ag, dict):
+                            continue
+                        t = str(ag.get("tipo", ""))
+                        if t.startswith("cli-") and ag.get("ativo", False):
+                            tipo_provedor = t
+                            modelo = str(ag.get("modelo", "") or "")
+                            yolo = bool(ag.get("yolo", True))
+                            break
     except Exception:  # noqa: BLE001
         pass
 
