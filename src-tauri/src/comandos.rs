@@ -191,27 +191,30 @@ fn caminho_por_env(var_name: &str, nome_arquivo: &str) -> Option<PathBuf> {
         .map(|v| PathBuf::from(v).join(nome_arquivo))
 }
 
-/// Resolve caminho de painéis respeitando VARD_CONFIG/VARD_DADOS; fallback para app_config_dir/app_data_dir.
+/// Painéis ficam na MESMA pasta que o núcleo lê (D5): `VARD_CONFIG` ou `%LOCALAPPDATA%/rdl-vard/config`
+/// (contrato de `vard/config.py`). Antes, sem a variável, o app gravava em `app_config_dir` e o núcleo
+/// nunca via os provedores cadastrados. Um arquivo deixado na pasta antiga é trazido uma vez.
 fn caminho_paineis_config(app: &tauri::AppHandle) -> PathBuf {
-    if let Some(p) = caminho_por_env("VARD_CONFIG", "paineis.json") {
-        return p;
-    }
-    let dir = tauri::Manager::path(app)
-        .app_config_dir()
-        .expect("app_config_dir");
-    fs::create_dir_all(&dir).ok();
-    dir.join("paineis.json")
+    let legado = tauri::Manager::path(app).app_config_dir().ok().map(|d| d.join("paineis.json"));
+    resolver_paineis(crate::ciclo::pasta_config().join("paineis.json"), legado)
 }
 
 fn caminho_paineis_estado(app: &tauri::AppHandle) -> PathBuf {
-    if let Some(p) = caminho_por_env("VARD_DADOS", "paineis-estado.json") {
-        return p;
+    let legado = tauri::Manager::path(app).app_data_dir().ok().map(|d| d.join("paineis-estado.json"));
+    resolver_paineis(crate::ciclo::pasta_dados().join("paineis-estado.json"), legado)
+}
+
+/// Garante a pasta do destino e migra (copia) o arquivo da pasta antiga se o destino ainda não existe.
+fn resolver_paineis(destino: PathBuf, legado: Option<PathBuf>) -> PathBuf {
+    if let Some(pai) = destino.parent() {
+        fs::create_dir_all(pai).ok();
     }
-    let dir = tauri::Manager::path(app)
-        .app_data_dir()
-        .expect("app_data_dir");
-    fs::create_dir_all(&dir).ok();
-    dir.join("paineis-estado.json")
+    if let Some(antigo) = legado {
+        if !destino.exists() && antigo.exists() && antigo != destino {
+            let _ = fs::copy(&antigo, &destino);
+        }
+    }
+    destino
 }
 
 #[tauri::command]
@@ -843,6 +846,22 @@ mod testes {
         assert_eq!(texto_da_dica(false, false, 1), "Vard | 1 tarefa em andamento");
         assert_eq!(texto_da_dica(false, false, 3), "Vard | 3 tarefas em andamento");
         assert_eq!(texto_da_dica(true, false, 2), "Vard (não ouvindo) | 2 tarefas em andamento");
+    }
+
+    #[test]
+    fn resolver_paineis_migra_da_pasta_antiga_uma_vez() {
+        let dir = tempfile::tempdir().unwrap();
+        let antigo = dir.path().join("antigo").join("paineis.json");
+        fs::create_dir_all(antigo.parent().unwrap()).unwrap();
+        fs::write(&antigo, r#"{"ativo":"x"}"#).unwrap();
+        let destino = dir.path().join("rdl-vard").join("config").join("paineis.json");
+        let p = super::resolver_paineis(destino.clone(), Some(antigo.clone()));
+        assert_eq!(p, destino);
+        assert_eq!(fs::read_to_string(&destino).unwrap(), r#"{"ativo":"x"}"#);
+        // Destino já existe: não sobrescreve com o antigo.
+        fs::write(&antigo, r#"{"ativo":"velho"}"#).unwrap();
+        super::resolver_paineis(destino.clone(), Some(antigo));
+        assert_eq!(fs::read_to_string(&destino).unwrap(), r#"{"ativo":"x"}"#);
     }
 
     #[test]

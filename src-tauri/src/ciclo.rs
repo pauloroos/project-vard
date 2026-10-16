@@ -29,6 +29,17 @@ pub fn emitir_ciclo_estado() {
     }
 }
 
+/// Pasta de configuração com o mesmo contrato do Python (`vard/config.py`):
+/// `VARD_CONFIG` se definida; senão `<pasta_dados()>/config`.
+pub fn pasta_config() -> PathBuf {
+    if let Ok(c) = std::env::var("VARD_CONFIG") {
+        if !c.trim().is_empty() {
+            return PathBuf::from(c);
+        }
+    }
+    pasta_dados().join("config")
+}
+
 /// Resolve a pasta de dados seguindo o mesmo contrato do Python.
 pub fn pasta_dados() -> PathBuf {
     if let Ok(d) = std::env::var("VARD_DADOS") {

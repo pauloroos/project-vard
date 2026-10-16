@@ -22,7 +22,7 @@ const TITULOS_ETAPA: Record<Etapa, string> = {
   importar: "Importar ou começar",
   detectar: "Detectar PC",
   nome: "Nome de chamada",
-  cerebro: "Cérebro",
+  cerebro: "Quem responde",
   voz: "Voz e dispositivos",
   audio: "Teste de áudio",
   resumo: "Resumo",

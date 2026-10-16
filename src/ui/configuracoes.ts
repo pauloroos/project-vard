@@ -47,7 +47,7 @@ export interface MonitorInfo { nome: string; x: number; y: number; largura: numb
 
 export type Aba = "geral" | "perfil" | "voz" | "atalhos" | "saber" | "modelos" | "paineis-provedores" | "paineis-vozes" | "paineis-mcps" | "paineis-agentes" | "sistema" | "reuniao" | "avisos" | "atualizacao" | "diagnostico";
 const ABAS: [Aba, string][] = [
-  ["geral", "Geral"], ["perfil", "Perfil"], ["voz", "Voz"], ["atalhos", "Atalhos"], ["saber", "O que eu sei fazer"], ["modelos", "Modelos"],
+  ["geral", "Geral"], ["perfil", "Perfil"], ["voz", "Voz"], ["atalhos", "Atalhos"], ["saber", "O que eu sei fazer"], ["modelos", "Quem responde"],
   ["paineis-provedores", "Painéis: Provedores"], ["paineis-vozes", "Painéis: Vozes"], ["paineis-mcps", "Painéis: MCPs"], ["paineis-agentes", "Painéis: Agentes"],
   ["sistema", "Sistema"], ["reuniao", "Reunião"], ["avisos", "Avisos"], ["atualizacao", "Atualização"], ["diagnostico", "Diagnóstico"],
 ];

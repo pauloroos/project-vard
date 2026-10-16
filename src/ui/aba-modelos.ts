@@ -31,8 +31,8 @@ export interface DepsAbaModelos {
 }
 
 const ROTULOS_CEREBRO: Record<Cerebro, string> = {
-  openjarvis: "OpenJarvis (padrão)",
-  proprio: "Cérebro próprio (experimental)",
+  openjarvis: "Pelo OpenJarvis (servidor atual)",
+  proprio: "Direto num modelo (LM Studio, Claude, Antigravity)",
 };
 
 /** Aba Modelos: o que o conector expõe, a reserva informada pela ponte e o teste de tempo. A escolha fica em `escolhido`. */

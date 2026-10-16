@@ -54,8 +54,8 @@ export function montarEtapaCerebro(container: HTMLElement, deps: DepsEtapaCerebr
   }
   function desenhar() {
     geracao++; container.innerHTML = ""; testar = undefined;
-    const f = document.createElement("fieldset"); f.innerHTML = "<legend>Cérebro</legend>";
-    for (const [valor, rotulo] of [["openjarvis", "OpenJarvis"], ["proprio", "Cérebro próprio"]]) {
+    const f = document.createElement("fieldset"); f.innerHTML = "<legend>Quem responde às perguntas</legend>";
+    for (const [valor, rotulo] of [["openjarvis", "Pelo OpenJarvis (servidor atual)"], ["proprio", "Direto num modelo (LM Studio, Claude, Antigravity)"]]) {
       const radio = document.createElement("input"); radio.type = "radio"; radio.name = "cerebro-escolha";
       radio.value = valor; radio.checked = escolhido === valor;
       radio.addEventListener("change", () => { if (radio.checked) { escolhido = valor; invalidar(); desenhar(); } }, { signal });
