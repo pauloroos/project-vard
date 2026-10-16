@@ -132,7 +132,11 @@ class AdaptadorOpenAICompat(AdaptadorProvedor):
         chave: str = "",
         timeout: float = 90.0,
     ) -> None:
-        self._base = base_url.rstrip("/")
+        base = base_url.rstrip("/")
+        # A URL costuma vir no padrão OpenAI/LM Studio (".../v1"); o /v1 é acrescentado no pedido (D9).
+        if base.endswith("/v1"):
+            base = base[: -len("/v1")]
+        self._base = base
         self._modelo = modelo
         self._chave = chave
         self._timeout = timeout
