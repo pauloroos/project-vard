@@ -306,7 +306,10 @@ async function main() {
       await page.screenshot({ path: path.join(CAPTURAS_DIR, `quem-responde-ponte-fora-escala${scale}.png`), fullPage: false });
       resultados.push(await medirPagina(page, `quem-responde-ponte-fora@${scale}x`));
 
-      // 4. Modal de CLI detectada (Claude Code) — rota registrada ANTES do reload
+      // 4. Modal de CLI detectada (Claude Code) — rota registrada ANTES do reload.
+      // O invoke trocado por evaluate se perde no reload; o mock base lê a ponte de __PROVA_PONTE__,
+      // e sem ponte a detecção nem é consultada.
+      await page.addInitScript(() => { window.__PROVA_PONTE__ = "http://127.0.0.1:8765"; });
       await page.route("**/cli/detectar", (route) => {
         route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify([{ tipo: "cli-claude", instalada: true, versao: "2.1.301", modelos: ["claude-sonnet-5-5", "claude-opus-5-5"] }]) });
       });
@@ -369,6 +372,8 @@ async function main() {
           await tipoSelCodex.selectOption("cli-codex");
           await page.waitForTimeout(500);
         }
+        await page.$eval(".modal-miolo", (el) => { el.scrollTop = el.scrollHeight; }).catch(() => null);
+        await page.waitForTimeout(150);
         await page.screenshot({ path: path.join(CAPTURAS_DIR, `quem-responde-modal-codex-escala${scale}.png`), fullPage: false });
         resultados.push(await medirPagina(page, `quem-responde-modal-codex@${scale}x`));
         await page.keyboard.press("Escape");
