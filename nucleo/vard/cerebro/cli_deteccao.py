@@ -13,15 +13,26 @@ from typing import Any, Dict, List
 log = logging.getLogger(__name__)
 
 # Tipos de provedor que são uma CLI de agente (0.8).
+# TIPOS_CLI é usado para validação de cadastro (cérebro ativo); só claude/agy são aceitos.
 TIPOS_CLI = ("cli-claude", "cli-agy")
+
+# Tipos detectáveis pelo modal (inclui Codex/OpenCode, que só servem para tarefas delegadas).
+TIPOS_DETECTAVEIS = ("cli-claude", "cli-agy", "cli-codex", "cli-opencode")
 
 # Sugestões do Claude (C11); o agy lista os modelos com `agy models`.
 MODELOS_SUGERIDOS: Dict[str, List[str]] = {
     "cli-claude": ["claude-haiku-5-5", "claude-sonnet-5-5", "claude-opus-5-5"],
     "cli-agy": [],
+    "cli-codex": [],
+    "cli-opencode": [],
 }
 
-_COMANDOS = {"cli-claude": "claude", "cli-agy": "agy"}
+_COMANDOS = {
+    "cli-claude": "claude",
+    "cli-agy": "agy",
+    "cli-codex": "codex",
+    "cli-opencode": "opencode",
+}
 TEMPO_LIMITE = 10.0
 _TAMANHO_MAX = 100
 _MODELOS_MAX = 50
@@ -63,14 +74,15 @@ def _modelos_agy(exe: str) -> List[str]:
 def detectar() -> List[Dict[str, Any]]:
     """Sonda o PATH pelas CLIs conhecidas (C11); resposta sem caminho algum."""
     itens: List[Dict[str, Any]] = []
-    for tipo in TIPOS_CLI:
+    for tipo in TIPOS_DETECTAVEIS:
         exe = shutil.which(_COMANDOS[tipo])
         item: Dict[str, Any] = {"tipo": tipo, "instalada": exe is not None, "versao": "", "modelos": []}
         if exe:
             item["versao"] = _primeira_linha(_rodar([exe, "--version"]))
-            item["modelos"] = (
-                _modelos_agy(exe) if tipo == "cli-agy" else list(MODELOS_SUGERIDOS["cli-claude"])
-            )
+            if tipo == "cli-agy":
+                item["modelos"] = _modelos_agy(exe)
+            else:
+                item["modelos"] = list(MODELOS_SUGERIDOS.get(tipo, []))
         itens.append(item)
     return itens
 

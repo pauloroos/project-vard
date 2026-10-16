@@ -306,11 +306,20 @@ async function main() {
       await page.screenshot({ path: path.join(CAPTURAS_DIR, `quem-responde-ponte-fora-escala${scale}.png`), fullPage: false });
       resultados.push(await medirPagina(page, `quem-responde-ponte-fora@${scale}x`));
 
-      // 4. Modal de CLI detectada (Claude Code)
+      // 4. Modal de CLI detectada (Claude Code) — rota registrada ANTES do reload
       await page.route("**/cli/detectar", (route) => {
         route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify([{ tipo: "cli-claude", instalada: true, versao: "2.1.301", modelos: ["claude-sonnet-5-5", "claude-opus-5-5"] }]) });
       });
-      await prepararEstadoExtras(() => {
+      // Recarrega com a rota ativa para que detectarClis() pegue o mock
+      await page.reload();
+      await page.waitForSelector("#painel nav button", { timeout: 20000 });
+      await page.waitForTimeout(300);
+      const btnModelosCli = await page.$('nav button[data-aba="modelos"]');
+      if (btnModelosCli) await btnModelosCli.click();
+      await page.waitForSelector('button.cards-adicionar', { timeout: 10000 }).catch(() => null);
+      await page.waitForTimeout(600);
+      // Agora prepara o invoke mock (depois do reload, pois o evaluate anterior se perde)
+      await page.evaluate(() => {
         window.__TAURI_INTERNALS__.invoke = async (cmd) => {
           if (cmd === "ler_paineis") return { versao: 1, provedores: [], ativo: null, reserva: null, agentes: { claude: { padrao: "", modelos: [] }, codex: { padrao: "", modelos: [] }, opencode: { padrao: "", modelos: [] }, agy: { padrao: "", modelos: [] } }, mcps: [] };
           if (cmd === "ler_config") return { schema: 3, ponte_url: "http://127.0.0.1:8765", nome: "Aurora", variantes: ["Auri"], idioma: "pt", openjarvis_url: "http://localhost:8765", gui_url: "", usuario: "Ana", tamanho: "medio", tamanho_px: 320, compacto: false, sempre_no_topo: false, click_through: false, invisivel: false, logon: false, sala_monitor: "", nao_ouvir: false, nao_falar: false, falar_avisos: true, velocidade: 1.1, instrucao_formato: "", finish_ms: 600, limiar_vad: 0.03, conversa_ms: 5000, atualizacao_ao_abrir: true, modelo: "", microfone_id: "", saida_id: "", caminho_instalacao: "" };
@@ -333,11 +342,18 @@ async function main() {
       }
       await page.unroute("**/cli/detectar");
 
-      // 4b. Modal de CLI Codex (tarefas longas travadas)
+      // 4b. Modal de CLI Codex (tarefas longas travadas) — rota ANTES do reload
       await page.route("**/cli/detectar", (route) => {
         route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify([{ tipo: "cli-codex", instalada: true, versao: "0.1.2504", modelos: ["o3-mini", "o4-mini"] }]) });
       });
-      await prepararEstadoExtras(() => {
+      await page.reload();
+      await page.waitForSelector("#painel nav button", { timeout: 20000 });
+      await page.waitForTimeout(300);
+      const btnModelosCodex = await page.$('nav button[data-aba="modelos"]');
+      if (btnModelosCodex) await btnModelosCodex.click();
+      await page.waitForSelector('button.cards-adicionar', { timeout: 10000 }).catch(() => null);
+      await page.waitForTimeout(600);
+      await page.evaluate(() => {
         window.__TAURI_INTERNALS__.invoke = async (cmd) => {
           if (cmd === "ler_paineis") return { versao: 1, provedores: [], ativo: null, reserva: null, agentes: { claude: { padrao: "", modelos: [] }, codex: { padrao: "", modelos: [] }, opencode: { padrao: "", modelos: [] }, agy: { padrao: "", modelos: [] } }, mcps: [] };
           if (cmd === "ler_config") return { schema: 3, ponte_url: "http://127.0.0.1:8765", nome: "Aurora", variantes: ["Auri"], idioma: "pt", openjarvis_url: "http://localhost:8765", gui_url: "", usuario: "Ana", tamanho: "medio", tamanho_px: 320, compacto: false, sempre_no_topo: false, click_through: false, invisivel: false, logon: false, sala_monitor: "", nao_ouvir: false, nao_falar: false, falar_avisos: true, velocidade: 1.1, instrucao_formato: "", finish_ms: 600, limiar_vad: 0.03, conversa_ms: 5000, atualizacao_ao_abrir: true, modelo: "", microfone_id: "", saida_id: "", caminho_instalacao: "" };
@@ -360,11 +376,18 @@ async function main() {
       }
       await page.unroute("**/cli/detectar");
 
-      // 4c. Modal de CLI não encontrada
+      // 4c. Modal de CLI não encontrada — rota ANTES do reload
       await page.route("**/cli/detectar", (route) => {
         route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify([]) });
       });
-      await prepararEstadoExtras(() => {
+      await page.reload();
+      await page.waitForSelector("#painel nav button", { timeout: 20000 });
+      await page.waitForTimeout(300);
+      const btnModelosNao = await page.$('nav button[data-aba="modelos"]');
+      if (btnModelosNao) await btnModelosNao.click();
+      await page.waitForSelector('button.cards-adicionar', { timeout: 10000 }).catch(() => null);
+      await page.waitForTimeout(600);
+      await page.evaluate(() => {
         window.__TAURI_INTERNALS__.invoke = async (cmd) => {
           if (cmd === "ler_paineis") return { versao: 1, provedores: [], ativo: null, reserva: null, agentes: { claude: { padrao: "", modelos: [] }, codex: { padrao: "", modelos: [] }, opencode: { padrao: "", modelos: [] }, agy: { padrao: "", modelos: [] } }, mcps: [] };
           if (cmd === "ler_config") return { schema: 3, ponte_url: "http://127.0.0.1:8765", nome: "Aurora", variantes: ["Auri"], idioma: "pt", openjarvis_url: "http://localhost:8765", gui_url: "", usuario: "Ana", tamanho: "medio", tamanho_px: 320, compacto: false, sempre_no_topo: false, click_through: false, invisivel: false, logon: false, sala_monitor: "", nao_ouvir: false, nao_falar: false, falar_avisos: true, velocidade: 1.1, instrucao_formato: "", finish_ms: 600, limiar_vad: 0.03, conversa_ms: 5000, atualizacao_ao_abrir: true, modelo: "", microfone_id: "", saida_id: "", caminho_instalacao: "" };

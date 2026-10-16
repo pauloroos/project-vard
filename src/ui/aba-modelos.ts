@@ -375,7 +375,13 @@ export class AbaModelos {
           cliDetectadoEl.hidden = false;
           cliDetectadoEl.innerHTML = "";
           const txt = document.createElement("span");
-          txt.textContent = `Encontrado no PC: ${cli.tipo.replace("cli-", "")} ${cli.versao}`;
+          const ROTULOS_CLI: Record<string, string> = {
+  "cli-claude": "Claude Code",
+  "cli-agy": "Antigravity",
+  "cli-codex": "Codex",
+  "cli-opencode": "OpenCode",
+};
+txt.textContent = `Encontrado no PC: ${ROTULOS_CLI[cli.tipo] ?? cli.tipo} ${cli.versao}`;
           const btnUsar = document.createElement("button");
           btnUsar.type = "button";
           btnUsar.textContent = "Usar modelos detectados";
@@ -464,7 +470,7 @@ export class AbaModelos {
       campoBusca,
       cliDetectadoEl,
       cliNaoEncontradoEl,
-      campoModal("Modelo", modeloContainer, "Opcional para CLIs; select após buscar ou detectar."),
+      campoModal("Modelo", modeloContainer, "Opcional para CLIs: escolha da lista detectada ou digite outro."),
       yoloLabel,
       enxutoLabel,
       avisoC11El,

@@ -276,7 +276,7 @@ describe("AbaModelos (Quem responde 0.9.3)", () => {
     await new Promise((r) => setTimeout(r, 50));
 
     expect(raiz.textContent).toContain("Encontrado no PC");
-    expect(raiz.textContent).toContain("claude 2.1.301");
+    expect(raiz.textContent).toContain("Claude Code 2.1.301");
   });
 
   it("Agentes gravados pelo card da CLI com checkbox delegada", async () => {
@@ -353,7 +353,7 @@ describe("AbaModelos (Quem responde 0.9.3)", () => {
     expect(modal.textContent).toContain("Rodar sem pedir permissão (yolo)");
     expect(modal.textContent).toContain("Modo enxuto");
     expect(modal.textContent).toContain("poder completo");
-    expect(modal.textContent).toContain("Encontrado no PC: claude 2.1.301");
+    expect(modal.textContent).toContain("Encontrado no PC: Claude Code 2.1.301");
   });
 
   it("Codex/OpenCode: tarefas longas travada e marcada, aviso visível", async () => {
