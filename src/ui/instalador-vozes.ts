@@ -79,8 +79,9 @@ export class InstaladorVozes {
           versao_instalada: dados.instalados?.[pkg.id]?.versao,
         };
       }
-    } catch (exc) {
-      this.deps.notificar(`Falha ao carregar pacotes: ${exc instanceof Error ? exc.message : "erro"}`, true);
+    } catch {
+      // Falha silenciosa: a seção fica vazia sem poluir o status global.
+      // Erros reais de instalação/remoção são notificados separadamente.
       this.pacotes = [];
     }
   }

@@ -272,10 +272,8 @@ describe("InstaladorVozes", () => {
     const tela = new InstaladorVozes(raiz, deps);
     await tela.montar();
 
-    expect(notificarSpy).toHaveBeenCalledWith(
-      expect.stringContaining("Falha ao carregar pacotes"),
-      true
-    );
+    // Carregamento falho é silencioso: não polui o status global da aba.
+    expect(notificarSpy).not.toHaveBeenCalled();
     expect(raiz.textContent).toContain("Nenhum pacote disponível");
   });
 });

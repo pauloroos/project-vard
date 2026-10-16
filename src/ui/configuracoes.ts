@@ -22,6 +22,7 @@ import { AbaReuniao, type PonteReuniao } from "./aba-reuniao";
 import { AbaSaber } from "./aba-saber";
 import { AbaSistema } from "./aba-sistema";
 import { AbaVoz } from "./aba-voz";
+import { InstaladorVozes } from "./instalador-vozes";
 
 export interface DepsConfiguracoes {
   /** Cliente do OpenJarvis para o endereço dado (o main decide se passa pelo proxy do dev). */
@@ -90,6 +91,15 @@ export class Configuracoes {
       dizer: (t, ruim) => this.dizer(t, ruim),
     });
     this.abaVoz.montar();
+    // Instalador de vozes opcionais (T5c): monta abaixo da aba Voz; sem pacotes, a seção fica vazia.
+    const raizInstalador = this.raiz.querySelector<HTMLElement>("#cfg-instalador-vozes");
+    if (raizInstalador) {
+      const instalador = new InstaladorVozes(raizInstalador, {
+        baseUrl: this.cfg.openjarvis_url.replace(/\/$/, ""),
+        notificar: (msg, erro) => this.dizer(msg, erro),
+      });
+      void instalador.montar();
+    }
     this.marcarUrl("voz_url");
     this.modelos = new AbaModelos(this.raiz.querySelector<HTMLElement>("#cfg-modelos")!, this.cfg.modelo, {
       criarOj: (modelo) => this.deps.criarOj(this.cfg.openjarvis_url, modelo),
@@ -254,6 +264,7 @@ export class Configuracoes {
           ${this.campo("instrucao_formato", "Instrução de formato", c.instrucao_formato)}
         </fieldset>
         <div id="cfg-voz"></div>
+        <div id="cfg-instalador-vozes"></div>
         <fieldset><legend>Ouvido</legend>
           ${this.campo("finish_ms", "Silêncio para encerrar a fala (ms)", c.finish_ms, "number", 'step="50" min="200" max="3000"')}
           ${this.campo("limiar_vad", "Limiar do microfone", c.limiar_vad, "number", 'step="0.005" min="0.001" max="0.5"')}
