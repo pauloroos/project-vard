@@ -15,6 +15,9 @@ import { invoke } from "@tauri-apps/api/core";
 
 export type Agente = "claude" | "codex" | "opencode" | "agy";
 
+/** Tipos de provedor que são uma CLI de agente (0.8): só aparecem no painel se detectadas. */
+export const TIPOS_CLI = ["cli-claude", "cli-agy"] as const;
+
 export interface Provedor {
   id: string;
   nome: string;
@@ -22,6 +25,10 @@ export interface Provedor {
   url_base: string;
   modelo: string;
   credencial_ref?: string;
+  /** Só cli-* (0.8): roda com poder completo; yolo liga por padrão, enxuto desliga. */
+  yolo?: boolean;
+  enxuto?: boolean;
+  esforco?: string;
 }
 
 export interface EscolhaAgente {
@@ -104,10 +111,35 @@ export function validarPaineis(raw: unknown): PaineisConfig {
     if (typeof pv.id !== "string" || !pv.id) throw new Error("provedor sem id");
     if (typeof pv.nome !== "string") throw new Error(`provedor ${pv.id} sem nome`);
     if (typeof pv.tipo !== "string" || !pv.tipo) throw new Error(`provedor ${pv.id} sem tipo`);
-    if (typeof pv.url_base !== "string") throw new Error(`provedor ${pv.id} sem url_base`);
+    const ehCli = (TIPOS_CLI as readonly string[]).includes(pv.tipo);
+    if (ehCli) {
+      // CLI de agente (0.8): sem url_base nem credencial; yolo/enxuto/esforco são as opções.
+      if (pv.url_base !== undefined && pv.url_base !== "") {
+        throw new Error(`provedor cli ${pv.id} não aceita url_base`);
+      }
+      if (pv.credencial_ref !== undefined) {
+        throw new Error(`provedor cli ${pv.id} não aceita credencial`);
+      }
+      if (pv.yolo !== undefined && typeof pv.yolo !== "boolean") {
+        throw new Error(`provedor cli ${pv.id} com yolo inválido`);
+      }
+      if (pv.enxuto !== undefined && typeof pv.enxuto !== "boolean") {
+        throw new Error(`provedor cli ${pv.id} com enxuto inválido`);
+      }
+      if (pv.esforco !== undefined && typeof pv.esforco !== "string") {
+        throw new Error(`provedor cli ${pv.id} com esforco inválido`);
+      }
+    } else if (typeof pv.url_base !== "string") {
+      throw new Error(`provedor ${pv.id} sem url_base`);
+    }
     if (typeof pv.modelo !== "string") throw new Error(`provedor ${pv.id} sem modelo`);
     if (pv.credencial_ref !== undefined && typeof pv.credencial_ref !== "string") {
       throw new Error(`provedor ${pv.id} com credencial_ref inválida`);
+    }
+    if (ehCli) {
+      if (pv.url_base === undefined) pv.url_base = "";
+      if (pv.yolo === undefined) pv.yolo = true;   // padrão do 0.8: yolo ligado ao habilitar
+      if (pv.enxuto === undefined) pv.enxuto = false;
     }
   }
 

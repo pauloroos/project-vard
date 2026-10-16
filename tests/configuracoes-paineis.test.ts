@@ -8,6 +8,11 @@ vi.mock("../src/config/segredos", () => ({
   cofreLer: vi.fn().mockResolvedValue(null),
 }));
 
+// A detecção de CLIs vem da ponte; aqui nenhuma detectada (nunca rede nos testes).
+vi.mock("../src/config/clis", () => ({
+  detectarClis: vi.fn().mockResolvedValue([]),
+}));
+
 vi.mock("@tauri-apps/api/core", () => ({
   invoke: vi.fn().mockImplementation((cmd: string) => {
     if (cmd === "falhas_de_atalho") return Promise.resolve([]);
