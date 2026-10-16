@@ -84,7 +84,7 @@ export function abrirModalVoz(op: OpcoesModalVoz): ModalAberto {
   nome.type = "text";
   nome.value = atual?.nome ?? "";
   const tipo = document.createElement("select");
-  for (const t of TIPOS_VOZ) tipo.append(new Option(t, t, false, t === (atual?.tipo ?? TIPOS_VOZ[0])));
+  for (const t of TIPOS_VOZ) tipo.append(new Option(MOTOR_DO_TIPO[t], t, false, t === (atual?.tipo ?? TIPOS_VOZ[0])));
   const url = document.createElement("input");
   url.type = "text";
   url.value = atual?.url_base ?? "";
@@ -226,7 +226,7 @@ export class AbaPaineisVozes {
     const titulo = p ? "Editar voz" : "Nova voz";
     const v = (k: keyof Provedor) => p ? esc(String(p[k] ?? "")) : "";
     const tipoOptions = TIPOS_VOZ.map((t) =>
-      `<option value="${t}" ${p?.tipo === t ? "selected" : ""}>${t}</option>`,
+      `<option value="${t}" ${p?.tipo === t ? "selected" : ""}>${MOTOR_DO_TIPO[t]}</option>`,
     ).join("");
 
     return `

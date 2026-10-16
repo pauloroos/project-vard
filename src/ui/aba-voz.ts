@@ -157,7 +157,8 @@ export class AbaVoz {
 
   montar() {
     const c = this.cfg;
-    this.raiz.innerHTML = `
+    // A lista vai no topo e as caixas desta aba no fim; o que a tela já pôs no contêiner (Fala, Ouvido) fica no meio.
+    this.raiz.insertAdjacentHTML("afterbegin", `
       <div id="cfg-voz-aviso" class="voz-aviso" hidden>
         <strong id="cfg-voz-aviso-texto"></strong>
         <p id="cfg-voz-aviso-detalhe"></p>
@@ -165,7 +166,8 @@ export class AbaVoz {
       <div class="voz-lista-topo">
         <button id="cfg-voz-adicionar" class="primaria" type="button">Adicionar voz</button>
       </div>
-      <div id="cfg-voz-lista"><p class="nota">Carregando vozes…</p></div>
+      <div id="cfg-voz-lista"><p class="nota">Carregando vozes…</p></div>`);
+    this.raiz.insertAdjacentHTML("beforeend", `
       <fieldset><legend>Detecção de voz</legend>
         <label>Detector<select id="cfg-vad"><option value="energia" ${c.vad === "energia" ? "selected" : ""}>Energia (padrão)</option><option value="silero" ${c.vad === "silero" ? "selected" : ""}>Silero (local)</option></select></label>
         <label class="marca"><input id="cfg-interromper_ao_falar" type="checkbox" ${c.interromper_ao_falar ? "checked" : ""}> Interromper ao falar por cima</label>
@@ -183,7 +185,7 @@ export class AbaVoz {
         <p class="nota" id="cfg-microfone_nota"></p>
         <label>Saída de áudio<select id="cfg-saida_id"></select></label>
         <p class="nota" id="cfg-saida_nota"></p>
-      </fieldset>`;
+      </fieldset>`);
     this.lista = this.raiz.querySelector<HTMLElement>("#cfg-voz-lista")!;
     this.aviso = this.raiz.querySelector<HTMLElement>("#cfg-voz-aviso")!;
     this.avisoDetalhe = this.raiz.querySelector<HTMLElement>("#cfg-voz-aviso-detalhe")!;

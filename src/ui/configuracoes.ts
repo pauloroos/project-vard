@@ -283,17 +283,18 @@ export class Configuracoes {
         <section data-aba="paineis-mcps"><div id="cfg-paineis-mcps"></div></section>
         <section data-aba="paineis-agentes"><div id="cfg-paineis-agentes"></div></section>
         <section data-aba="voz">
+          <div id="cfg-voz">
           <fieldset><legend>Fala</legend>
             ${this.campo("velocidade", "Velocidade da fala", c.velocidade, "number", 'step="0.05" min="0.5" max="2"')}
             ${this.campo("instrucao_formato", "Instrução de formato", c.instrucao_formato)}
           </fieldset>
-          <div id="cfg-voz"></div>
-          <div id="cfg-instalador-vozes"></div>
           <fieldset><legend>Ouvido</legend>
             ${this.campo("finish_ms", "Silêncio para encerrar a fala (ms)", c.finish_ms, "number", 'step="50" min="200" max="3000"')}
             ${this.campo("limiar_vad", "Limiar do microfone", c.limiar_vad, "number", 'step="0.005" min="0.001" max="0.5"')}
             ${this.campo("conversa_s", "Modo conversa: segundos ouvindo sem o nome depois de uma resposta (0 desliga)", c.conversa_ms / 1000, "number", 'step="1" min="0" max="300"')}
           </fieldset>
+          </div>
+          <div id="cfg-instalador-vozes"></div>
         </section>
         <section data-aba="atalhos">
           <p class="nota">Clique num atalho e pressione a nova combinação (Ctrl, Alt ou Win mais uma tecla). Esc cancela. Valem depois de reiniciar o Vard.</p>
