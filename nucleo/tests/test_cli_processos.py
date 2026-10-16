@@ -7,6 +7,7 @@ Processos são encerrados por PID ao fim de cada teste.
 from __future__ import annotations
 
 import asyncio
+from dataclasses import replace
 import json
 import sys
 import time
@@ -155,10 +156,20 @@ class TestArgvEMontagemDePasta:
         assert "--append-system-prompt-file" in cmd
 
     def test_argv_agy_tem_stream_json(self, base_dados: Path) -> None:
+        """D8: o agy 1.4 não tem --stream-json; o modo vivo é --input/--output-format stream-json
+        com --print vazio (docs/cli.md). --stream-json fazia o agy sair na hora (cli_caiu)."""
         pasta = _preparar_pasta_sessao(_provedor("cli-agy"), "s1", base_dados=base_dados)
         cmd = argv_cli(_provedor("cli-agy"), pasta)
         assert "agy" in cmd[0]
-        assert "--stream-json" in cmd
+        assert "--stream-json" not in cmd
+        assert cmd[cmd.index("--input-format") + 1] == "stream-json"
+        assert cmd[cmd.index("--output-format") + 1] == "stream-json"
+        assert "--print=" in cmd
+
+    def test_argv_agy_yolo_pula_permissoes(self, base_dados: Path) -> None:
+        pasta = _preparar_pasta_sessao(_provedor("cli-agy"), "s1", base_dados=base_dados)
+        assert "--dangerously-skip-permissions" in argv_cli(replace(_provedor("cli-agy"), yolo=True), pasta)
+        assert "--dangerously-skip-permissions" not in argv_cli(replace(_provedor("cli-agy"), yolo=False), pasta)
 
 
 class TestSupervisorProcessos:

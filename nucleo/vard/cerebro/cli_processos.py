@@ -185,10 +185,14 @@ def argv_cli(provedor: ProvedorCli, pasta: Path) -> List[str]:
             cmd.extend(["--effort", provedor.esforco])
         return cmd
 
-    # agy
-    cmd = ["agy", "--stream-json"]
+    # agy (1.4): modo vivo = uma mensagem NDJSON por linha, um turno por mensagem (docs/cli.md).
+    # O --print precisa do valor junto (vazio); --stream-json não existe e fazia o agy sair na hora.
+    cmd = ["agy", "--input-format", "stream-json", "--output-format", "stream-json"]
     if provedor.modelo:
         cmd.extend(["--model", provedor.modelo])
+    if provedor.yolo:
+        cmd.append("--dangerously-skip-permissions")
+    cmd.append("--print=")
     # agy lê AGENTS.md da pasta automaticamente quando cwd é a pasta
     return cmd
 
