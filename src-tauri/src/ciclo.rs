@@ -798,7 +798,7 @@ pub(crate) mod testes {
     // evitando condições de corrida entre testes paralelos.
     static ENV_LOCK: Mutex<()> = Mutex::new(());
 
-    /// Serializa e restaura o ambiente do processo; nenhum fallback l? dados do usu?rio.
+    /// Serializa e restaura o ambiente do processo; nenhum fallback lê dados do usuário.
     pub(crate) struct AmbienteTeste {
         anteriores: Vec<(&'static str, Option<std::ffi::OsString>)>,
         _pasta: tempfile::TempDir,

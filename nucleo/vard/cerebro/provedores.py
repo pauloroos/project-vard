@@ -745,7 +745,7 @@ class ClienteLMStudio:
     async def trocar(self, modelo: str) -> str:
         modelos = await self.listar()
         if not any(m["id"] == modelo for m in modelos):
-            raise ErroProvedor("modelo_inexistente", False, "modelo n?o baixado")
+            raise ErroProvedor("modelo_inexistente", False, "modelo não baixado")
         instancias = [i for m in modelos for i in m["instancias"]]
         alvo = next(m for m in modelos if m["id"] == modelo)
         if len(instancias) == 1 and alvo["instancias"]:
