@@ -104,7 +104,7 @@ def _ler_provedor_ativo() -> dict:
         cfg_paineis = config.arquivo_config("paineis.json")
         if not cfg_paineis.exists():
             return {}
-        dados = _json.loads(cfg_paineis.read_text(encoding="utf-8"))
+        dados = _json.loads(cfg_paineis.read_text(encoding="utf-8-sig"))  # aceita BOM (D4)
         ativo_id = dados.get("ativo")
         provedores = dados.get("provedores", [])
         if isinstance(ativo_id, str) and ativo_id and isinstance(provedores, list):

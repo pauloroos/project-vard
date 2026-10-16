@@ -215,7 +215,7 @@ def _preparar_pasta_sessao(
         import json as _json
         cfg_arq = modulo_config.arquivo_config("config.json")
         if cfg_arq.exists():
-            _cfg = _json.loads(cfg_arq.read_text(encoding="utf-8"))
+            _cfg = _json.loads(cfg_arq.read_text(encoding="utf-8-sig"))  # aceita BOM (D4)
             if isinstance(_cfg, dict):
                 nome = str(_cfg.get("nome", "") or "")
                 usuario = str(_cfg.get("usuario", "") or "")
