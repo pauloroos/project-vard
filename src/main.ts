@@ -33,7 +33,7 @@ import { restaurarPreferencia, onDeviceChange, obterPreferencia } from "./audio/
 import { ladoDoTamanho, ladoMudou, medidasDoWidget } from "./ui/tamanho";
 import { ESPELHO_INICIAL, reduzir, salaExiste, type Espelho, type EventoEspelho } from "./sala/espelho";
 import { lerNiveis } from "./sala/espectro";
-import { abrirAssistenteSeNecessario, reabrirAssistente, type DepsHospedeiro } from "./ui/primeiro-uso-hospedeiro";
+import { abrirAssistenteSeNecessario, type DepsHospedeiro } from "./ui/primeiro-uso-hospedeiro";
 
 const PRE_ROLL_MS = 300;
 /** Prazo da voz própria numa fala fixa que não está no cache (o aquecimento usa o prazo normal). */
@@ -136,8 +136,8 @@ window.addEventListener("DOMContentLoaded", async () => {
     (await import("./prova")).ativarProva(String(import.meta.env.VITE_PROVA), nucleo, hud);
   }
 
-  // Assistente de primeiro uso: lógica extraída para src/ui/primeiro-uso-hospedeiro.ts (testável).
-  let limparAssistente: (() => void) | null = null;
+  // Assistente de primeiro uso: abre na janela de Configurações (não no widget).
+  // Se deveMostrarAssistente for true, abre a janela de configurações automaticamente.
   const depsHospedeiro: DepsHospedeiro = {
     ponteUrl: cfg.ponte_url,
     salvarNome: async (nome: string, variantes: string[]) => {
@@ -165,9 +165,14 @@ window.addEventListener("DOMContentLoaded", async () => {
     },
     cerebro: {}, // T3c injeta o resto quando estiver pronta
   };
-  limparAssistente = await abrirAssistenteSeNecessario(depsHospedeiro, { raiz: app });
+  // Verifica se o assistente deve aparecer e abre a janela de configurações automaticamente.
+  const deveAbrir = await abrirAssistenteSeNecessario(depsHospedeiro, { raiz: app, apenasVerificar: true });
+  if (deveAbrir) {
+    void invoke("abrir_configuracoes").catch((erro) => console.warn("não abri o painel para o assistente", erro));
+  }
+  // Evento de reabertura agora é tratado na janela de configurações; aqui só mantemos compatibilidade.
   listen("reabrir-primeiro-uso", async () => {
-    limparAssistente = await reabrirAssistente(depsHospedeiro, limparAssistente, { raiz: app });
+    void invoke("abrir_configuracoes").catch(() => {});
   }).catch(() => {});
 
   // No `tauri dev` a origem do webview (localhost:1420) é recusada pelo CORS do OpenJarvis; o Vite faz a ponte em /oj.

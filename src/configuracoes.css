@@ -37,6 +37,24 @@ footer { padding: 10px 14px; border-top: 1px solid rgba(0, 240, 255, 0.25); }
 #cfg-msg.ruim { color: #ffb020; }
 footer .acoes { display: flex; gap: 8px; justify-content: flex-end; }
 
+/* Assistente de primeiro uso: sobreposição legível no topo da janela de Configurações */
+#primeiro-uso-container {
+  position: fixed; inset: 0; z-index: 1000;
+  background: var(--fundo); color: var(--ciano);
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  padding: 24px; box-sizing: border-box; overflow-y: auto;
+}
+#primeiro-uso-container[hidden] { display: none; }
+#primeiro-uso-container .primeiro-uso { width: 100%; max-width: 520px; }
+#primeiro-uso-container h2 { margin: 0 0 16px; font-size: 18px; text-transform: uppercase; letter-spacing: 0.12em; }
+#primeiro-uso-container input, #primeiro-uso-container select, #primeiro-uso-container button {
+  font: inherit; color: var(--ciano); background: rgba(0, 240, 255, 0.07);
+  border: 1px solid rgba(0, 240, 255, 0.35); border-radius: 4px; padding: 6px 10px;
+}
+#primeiro-uso-container button { cursor: pointer; margin-top: 12px; }
+#primeiro-uso-container button:hover { background: rgba(0, 240, 255, 0.22); }
+#primeiro-uso-container .botoes { display: flex; gap: 8px; justify-content: flex-end; margin-top: 18px; }
+
 #sis-estado { margin: 10px 0; }
 #sis-msg { min-height: 20px; margin-top: 6px; opacity: 0.8; }
 

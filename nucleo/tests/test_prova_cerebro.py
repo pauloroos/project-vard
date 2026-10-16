@@ -154,16 +154,17 @@ class TestP1HTTPSSe:
         async def executar_um(ped: Pedido):
             eventos: list = []
             modulo_pedidos.admitir(ped)
-            with patch.object(config, "arquivo_config", return_value=paineis_dir / "paineis.json"):
-                await _executar_pedido_cerebro(ped, lambda ev: eventos.append(ev))
+            await _executar_pedido_cerebro(ped, lambda ev: eventos.append(ev))
             resultados[ped.sessao_id] = eventos
 
-        # Executa os três concurrentemente
-        await asyncio.gather(
-            executar_um(pedidos[0]),
-            executar_um(pedidos[1]),
-            executar_um(pedidos[2]),
-        )
+        # Executa os três concorrentemente. O patch fica FORA das corrotinas: patches aninhados que
+        # saem fora de ordem deixariam arquivo_config trocado para o resto da suíte.
+        with patch.object(config, "arquivo_config", return_value=paineis_dir / "paineis.json"):
+            await asyncio.gather(
+                executar_um(pedidos[0]),
+                executar_um(pedidos[1]),
+                executar_um(pedidos[2]),
+            )
 
         # Cada sessão tem seus próprios eventos
         assert len(resultados) == 3
