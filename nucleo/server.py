@@ -341,6 +341,53 @@ def persona_montada(nome: str = "", usuario: str = ""):
     return {"texto": perfil.montar_persona(perfil.ler(), nome, usuario)}
 
 
+# ----------------------------------------------------------------------------- PRIMEIRO USO: IMPORTAÇÃO (T7 0.9)
+# Prévia/aplicar/reverter da instalação anterior. Respostas nunca trazem chaves;
+# a origem é só lida. Erros usam código curto (origem_invalida, previa_obsoleta...).
+
+@app.post("/primeiro-uso/importacao/previa")
+def importacao_previa(corpo: dict):
+    from vard.primeiro_uso import importacao as pu_importacao
+    if not isinstance(corpo.get("origem"), str) or not corpo["origem"].strip():
+        return JSONResponse({"erro": "origem_invalida"}, status_code=422)
+    hud = corpo.get("hud_atual")
+    try:
+        return pu_importacao.previa(corpo["origem"], hud if isinstance(hud, dict) else None)
+    except pu_importacao.OrigemInvalida:
+        return JSONResponse({"erro": "origem_invalida"}, status_code=422)
+
+
+@app.post("/primeiro-uso/importacao/aplicar")
+def importacao_aplicar(corpo: dict):
+    from vard.primeiro_uso import importacao as pu_importacao
+    if not isinstance(corpo.get("previa_id"), str) or not corpo["previa_id"]:
+        return JSONResponse({"erro": "previa_invalida"}, status_code=422)
+    escolhas = corpo.get("escolhas")
+    hud = corpo.get("hud_atual")
+    try:
+        return pu_importacao.aplicar(corpo["previa_id"], escolhas if isinstance(escolhas, dict) else {},
+                                     hud if isinstance(hud, dict) else None)
+    except pu_importacao.PreviaDesconhecida:
+        return JSONResponse({"erro": "previa_desconhecida"}, status_code=404)
+    except pu_importacao.PreviaObsoleta:
+        return JSONResponse({"erro": "previa_obsoleta"}, status_code=409)
+    except pu_importacao.EscolhaInvalida:
+        return JSONResponse({"erro": "escolha_invalida"}, status_code=422)
+    except pu_importacao.FalhaAplicacao:
+        return JSONResponse({"erro": "aplicacao_falhou"}, status_code=500)
+
+
+@app.post("/primeiro-uso/importacao/reverter")
+def importacao_reverter(corpo: dict):
+    from vard.primeiro_uso import importacao as pu_importacao
+    if not isinstance(corpo.get("operacao_id"), str) or not corpo["operacao_id"]:
+        return JSONResponse({"erro": "operacao_invalida"}, status_code=422)
+    try:
+        return pu_importacao.reverter(corpo["operacao_id"])
+    except pu_importacao.OperacaoDesconhecida:
+        return JSONResponse({"erro": "operacao_desconhecida"}, status_code=404)
+
+
 @app.post("/modo")
 def mudar_modo(corpo: dict):
     verbo = str(corpo.get("modo", "")).strip().lower()

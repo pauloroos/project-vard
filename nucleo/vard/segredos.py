@@ -5,6 +5,7 @@ Nada aqui imprime valores.
 """
 from __future__ import annotations
 
+import copy
 import json
 import os
 import tomllib
@@ -76,6 +77,52 @@ def gravar(secao: str, chave: str, valor: str, arq: Path | None = None) -> None:
     tmp = alvo.with_suffix(".tmp")
     tmp.write_text(tomli_w.dumps(dados), encoding="utf-8")
     os.replace(tmp, alvo)
+
+
+def _vazio(valor) -> bool:
+    """Vazio para a importação: ausente, texto em branco, coleção vazia."""
+    if valor is None:
+        return True
+    if isinstance(valor, str):
+        return not valor.strip()
+    if isinstance(valor, (dict, list)):
+        return not valor
+    return False
+
+
+def mesclar_novos(destino: dict, origem: dict, secoes) -> tuple[dict, dict[str, list[str]]]:
+    """Preenche só o que está vazio no destino com valores da origem (primeiro uso).
+
+    Só as `secoes` permitidas entram; o que já tem valor no destino nunca sai.
+    Subseções de um nível (p. ex. coolify.*) mesclam chave a chave.
+    Devolve (mesclado, preenchidos{secao: [chaves]}); nunca imprime valores.
+    """
+    mesclado = copy.deepcopy(destino) if isinstance(destino, dict) else {}
+    if not isinstance(origem, dict):
+        return mesclado, {}
+    preenchidos: dict[str, list[str]] = {}
+    for secao in secoes:
+        bloco = origem.get(secao)
+        if not isinstance(bloco, dict):
+            continue
+        atual = mesclado.setdefault(secao, {})
+        if not isinstance(atual, dict):
+            continue
+        for chave, valor in bloco.items():
+            if isinstance(valor, dict):
+                sub = atual.setdefault(chave, {})
+                if not isinstance(sub, dict):
+                    continue
+                for subchave, subvalor in valor.items():
+                    if _vazio(sub.get(subchave)) and not _vazio(subvalor):
+                        sub[subchave] = subvalor
+                        preenchidos.setdefault(secao, []).append(f"{chave}.{subchave}")
+            elif _vazio(atual.get(chave)) and not _vazio(valor):
+                atual[chave] = valor
+                preenchidos.setdefault(secao, []).append(str(chave))
+    for chaves in preenchidos.values():
+        chaves.sort()
+    return mesclado, preenchidos
 
 
 def _dados(segredos: dict | None) -> dict:
