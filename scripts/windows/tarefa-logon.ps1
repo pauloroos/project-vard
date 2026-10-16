@@ -5,8 +5,9 @@ param([switch]$Remover)
 $ErrorActionPreference = "Stop"
 $Repo    = Split-Path (Split-Path $PSScriptRoot -Parent) -Parent   # scripts/windows -> raiz do repositório
 $Script  = Join-Path $PSScriptRoot "vard-modo.ps1"
-$Startup = [Environment]::GetFolderPath("Startup")
-$Desk    = [Environment]::GetFolderPath("Desktop")
+# VARD_PASTA_STARTUP / VARD_PASTA_DESKTOP desviam as pastas (testes usam pastas temporárias, nunca as reais).
+$Startup = if ($env:VARD_PASTA_STARTUP) { $env:VARD_PASTA_STARTUP } else { [Environment]::GetFolderPath("Startup") }
+$Desk    = if ($env:VARD_PASTA_DESKTOP) { $env:VARD_PASTA_DESKTOP } else { [Environment]::GetFolderPath("Desktop") }
 $Atalhos = @{ (Join-Path $Startup "Vard.lnk") = "iniciar"; (Join-Path $Desk "Vard - Modo jogo.lnk") = "jogo"; (Join-Path $Desk "Vard - Voltar.lnk") = "voltar" }
 
 if ($Remover) {
@@ -23,7 +24,7 @@ if (Test-Path $InstArquivo) {
   try {
     $instCfg = Get-Content $InstArquivo -Raw -Encoding UTF8 | ConvertFrom-Json
     if ($instCfg.supervisor -eq $true) {
-      $candidato = Join-Path $Repo "src-tauri\target\release\vard.exe"
+      $candidato = if ($env:VARD_HUD_EXE) { $env:VARD_HUD_EXE } else { Join-Path $Repo "src-tauri\target\release\vard.exe" }
       if (-not (Test-Path $candidato)) { $candidato = Join-Path $Repo "vard.exe" }
       if (Test-Path $candidato) { $Supervisor = $true; $HudExe = $candidato }
     }
