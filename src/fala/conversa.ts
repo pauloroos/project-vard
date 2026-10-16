@@ -32,7 +32,10 @@ export interface DepsConversa {
     parar(): void;
   };
   /** Serviço de voz próprio e opcional (docs/voz-propria.md). Sem ele, ou quando ele falha, a voz é a do OpenJarvis. */
-  voz?: { falar(texto: string, velocidade: number, sinal?: AbortSignal): Promise<FalaEmFluxo> };
+  voz?: {
+    falar(texto: string, velocidade: number, sinal?: AbortSignal): Promise<FalaEmFluxo>;
+    falarWav?(texto: string, velocidade: number, prazoMs?: number): Promise<ArrayBuffer>;
+  };
   /** Fala fixa já sintetizada (com cache). */
   falas: (texto: string) => Promise<ArrayBuffer>;
   /** false = "não falar": nenhuma síntese nem áudio; a resposta fica só em texto. */
@@ -171,7 +174,18 @@ export class Conversa {
       if (sinal.aborted) return null;
       return { wav: await reserva(frase) };
     };
-    const reserva = (frase: string) => d.oj.sintetizar(frase, d.config.voz, d.config.velocidade);
+    // Reserva de fala: usa o serviço de voz próprio (Kokoro/Edge/Piper via backend) quando disponível;
+    // só aciona OpenJarvis se não houver voz própria configurada. Nunca liga OJ por queda do motor escolhido.
+    const reserva = async (frase: string): Promise<ArrayBuffer> => {
+      if (d.voz?.falarWav) {
+        try {
+          return await d.voz.falarWav(frase, d.config.velocidade);
+        } catch (erro) {
+          console.warn("reserva pela voz própria falhou", erro);
+        }
+      }
+      return d.oj.sintetizar(frase, d.config.voz, d.config.velocidade);
+    };
     let caiuNoMeio = false; // a voz caiu no meio de uma frase: o resto da resposta nem tenta a voz
     const pararBoca = () => d.boca.parar();
     sinal.addEventListener("abort", pararBoca);

@@ -1,18 +1,40 @@
 # Third-Party Notices
 
-Este arquivo lista os componentes de terceiros incluídos no instalador do Vard.
+Este projeto inclui código portado/adaptado de projetos de terceiros sob licenças compatíveis.
 
-## Python Runtime (embutido)
+## Open-LLM-VTuber (MIT)
 
-- **Nome:** CPython 3.13.15 (python-build-standalone)
-- **Origem:** https://github.com/astral-sh/python-build-standalone
-- **Licença:** Python Software Foundation License Version 2
-- **Copyright:** © 2001-2026 Python Software Foundation
+Os módulos `voz/vard_voz/edge.py` e `voz/vard_voz/piper.py` foram portados/adaptados do projeto
+[Open-LLM-VTuber](https://github.com/Open-LLM-VTuber/Open-LLM-VTuber), especificamente dos arquivos:
+
+- `src/open_llm_vtuber/tts/edge_tts.py`
+- `src/open_llm_vtuber/tts/piper_tts.py`
+
+**Copyright (c) Yi-Ting Chiu**
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+## Python Software Foundation License
+
+O runtime Python embutido é distribuído sob a PSF License Agreement for Python 3.13:
 
 ```
-PYTHON SOFTWARE FOUNDATION LICENSE VERSION 2
---------------------------------------------
-
 1. This LICENSE AGREEMENT is between the Python Software Foundation
 ("PSF"), and the Individual or Organization ("Licensee") accessing and
 otherwise using this software ("Python") in source or binary form and
@@ -23,8 +45,10 @@ grants Licensee a nonexclusive, royalty-free, world-wide license to reproduce,
 analyze, test, perform and/or display publicly, prepare derivative works,
 distribute, and otherwise use Python alone or in any derivative version,
 provided, however, that PSF's License Agreement and PSF's notice of copyright,
-i.e., "Copyright (c) 2001-2026 Python Software Foundation; All Rights Reserved"
-are retained in Python alone or in any derivative version prepared by Licensee.
+i.e., "Copyright (c) 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010,
+2011, 2012, 2013, 2014, 2015, 2016, 2017, 2018, 2019, 2020, 2021, 2022, 2023 Python Software Foundation;
+All Rights Reserved" are retained in Python alone or in any derivative version
+prepared by Licensee.
 
 3. In the event Licensee prepares a derivative work that is based on
 or incorporates Python or any part thereof, and wants to make
