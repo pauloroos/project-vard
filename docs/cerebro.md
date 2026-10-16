@@ -22,6 +22,13 @@ para tarefas que dependem de módulos ainda não entregues ou renomeados.
 | `EstadoPedidoInfo` | `estado:na_fila|executando|concluido|falhou|cancelado`, IDs, `ultimo_seq`, `resposta`, `erro`, `provedor_usado`, `tarefas`. |
 | `Despachante` | `admitir(pedido) -> (info, criado)`, `consultar(id) -> info`, `cancelar(id) -> info`, `processar_fila(sessao_id)`. Persiste antes do 202; um turno por sessão. |
 
+## Módulos entregues (T12/T16)
+
+- `nucleo/vard/cerebro/montador.py` — fábrica unificada de adaptadores (`montar_adaptador`) usada por `server.py` e `primeiro_uso/cerebro.py`. Mapeia `tipo` → classe concreta (OpenAICompat, Anthropic, Google, OpenAINativo).
+- `nucleo/server.py::_executar_pedido_cerebro` — executor real com credenciais via cofre (`credenciais.ler_para_uso_interno`), fallback para `segredos.chave_lmstudio()` em lmstudio/local. Falhas estruturadas por `_ErroCerebro` (códigos: `cerebro_sem_provedor`, `cerebro_sem_url_base`, `cerebro_sem_modelo`, `cerebro_tipo_desconhecido`).
+- `scripts/provas/prova-cerebro.py` — prova integrativa P1/P2/P4 com servidores falsos em portas livres e núcleo real.
+- `nucleo/tests/test_prova_cerebro.py` — 6 testes unitários cobrindo sobreposição, FIFO, cancelamento, falha/reserva, telegram próprio e sem provedor.
+
 ## Módulos ainda não entregues (Parte B / 0.7+)
 
 - Controle local de motores (LM Studio/llama-server): mapear na T5 o caminho efetivo entregue pela 0.6/0.7.
@@ -30,6 +37,7 @@ para tarefas que dependem de módulos ainda não entregues ou renomeados.
 - Telegram próprio: T9.
 - Manhã sem OpenJarvis: entregue na T10 como caminho novo opt-in (ver abaixo).
 - Retirada do OpenJarvis do caminho padrão: T11.
+- P5 (CDP/um app só): pendente de prova real com `npm run tauri dev` + WebView2.
 
 ## Manhã, pesquisa e remoto sem OpenJarvis (T10)
 
