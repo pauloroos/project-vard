@@ -1,24 +1,48 @@
 /**
- * Aba de cadastro manual de servidores MCP (0.6 Painéis).
+ * Seção "Ferramentas (MCP)" das Configurações (0.9.3, U6 e U8).
  *
- * Renderiza lista + formulário de adicionar/editar; persiste via paineis.json.
- * Credencial por referência ao cofre; botão "Testar" verifica existência sem expor valor.
- * Tipos: stdio (command + args) e http (url).
+ * Os servidores MCP dão ferramentas ao Vard; aqui eles aparecem em cards (nome, stdio/http,
+ * habilitado e, quando existe, o resultado do teste de credencial), com adicionar/editar em
+ * modal. A credencial nunca aparece na tela: fica no cofre e o cadastro guarda só a
+ * referência tipo:id; o "Testar" confere a existência sem expor valor.
+ *
+ * Com a ponte/núcleo fora, um aviso claro no topo diz que os serviços estão desligados (U8):
+ * sem eles os MCPs ficam cadastrados, mas não são usados de verdade.
  */
+import "./estilos/mcp.css";
 import { cofreExiste } from "../config/segredos";
-import type { PaineisConfig, Mcp } from "../config/paineis";
-import { lerPaineis, gravarPaineis } from "../config/paineis";
+import type { Mcp, PaineisConfig } from "../config/paineis";
+import { gravarPaineis, lerPaineis } from "../config/paineis";
+import { Ponte } from "../conectores/ponte/cliente";
+import type { StatusPonte } from "../conectores/ponte/cliente";
+import { abrirModal, campoModal, desenharCards } from "./componentes";
+import type { Card, ModalAberto, TomSelo } from "./componentes";
 
-const esc = (t: string) => t.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
+/** Aviso do topo quando a ponte/núcleo não responde (U8). */
+export const AVISO_SERVICOS_DESLIGADOS =
+  "Os serviços do Vard estão desligados — abra pelo atalho do Vard ou ligue em Sistema.";
+
+/** Texto do card quando a lista não tem nenhum servidor. */
+export const VAZIO_LISTA = "Nenhum servidor MCP cadastrado.";
+
+type TipoMcp = "stdio" | "http";
+type EstadoCredencial = "ok" | "ausente";
 
 export interface DepsMcps {
   /** Notifica quando a config mudou para que o painel possa reagir. */
   aoMudar?: () => void;
+  /** Status da ponte (null = fora do ar). Sem isto, a seção sonda o endereço da aba Sistema. */
+  statusPonte?: () => Promise<StatusPonte | null>;
 }
 
 export class AbaPaineisMcps {
   private cfg!: PaineisConfig;
-  private editando: number | null = null;
+  private lista!: HTMLElement;
+  private aviso!: HTMLElement;
+  private recado!: HTMLElement;
+  private modal: ModalAberto | null = null;
+  /** Resultado do último "Testar" por servidor (fica só nesta sessão da tela). */
+  private testeCredencial = new Map<string, EstadoCredencial>();
 
   constructor(
     private raiz: HTMLElement,
@@ -27,201 +51,284 @@ export class AbaPaineisMcps {
 
   async montar() {
     this.cfg = await lerPaineis();
+    this.montarEstrutura();
     this.desenhar();
+    void this.atualizarAvisoServicos();
+  }
+
+  private montarEstrutura() {
+    this.raiz.innerHTML = "";
+
+    this.aviso = document.createElement("div");
+    this.aviso.id = "mcp-aviso-servicos";
+    this.aviso.className = "mcp-aviso";
+    this.aviso.setAttribute("role", "alert");
+    this.aviso.textContent = AVISO_SERVICOS_DESLIGADOS;
+    this.aviso.hidden = true;
+
+    const titulo = document.createElement("div");
+    titulo.className = "mcp-titulo";
+    const h2 = document.createElement("h2");
+    h2.textContent = "Ferramentas (MCP)";
+    const explicacao = document.createElement("p");
+    explicacao.textContent = "Servidores MCP dão ferramentas ao Vard, como arquivos, banco de dados e a web.";
+    titulo.append(h2, explicacao);
+
+    this.lista = document.createElement("div");
+    this.lista.id = "mcp-lista";
+
+    this.recado = document.createElement("div");
+    this.recado.id = "msg-mcps";
+    this.recado.setAttribute("role", "status");
+
+    this.raiz.append(this.aviso, titulo, this.lista, this.recado);
   }
 
   private desenhar() {
-    const linhas = this.cfg.mcps.map((m, i) => `
-      <tr data-idx="${i}">
-        <td>${esc(m.nome)}</td>
-        <td>${m.command ? "stdio" : "http"}</td>
-        <td>${m.habilitado ? "Sim" : "Não"}</td>
-        <td>${m.credencial_ref ? `<button type="button" class="btn-testar-cred-mcp" data-ref="${esc(m.credencial_ref)}">Testar</button>` : "—"}</td>
-        <td>
-          <button type="button" class="btn-toggle-mcp" data-idx="${i}">${m.habilitado ? "Desabilitar" : "Habilitar"}</button>
-          <button type="button" class="btn-editar-mcp" data-idx="${i}">Editar</button>
-          <button type="button" class="btn-remover-mcp" data-idx="${i}">Remover</button>
-        </td>
-      </tr>
-    `).join("");
-
-    const formHtml = this.editando !== null
-      ? this.formularioEdicao(this.editando >= 0 ? this.cfg.mcps[this.editando] : undefined)
-      : "";
-
-    this.raiz.innerHTML = `
-      <fieldset><legend>Servidores MCP cadastrados</legend>
-        ${this.cfg.mcps.length === 0 ? "<p>Nenhum MCP cadastrado.</p>" : `
-        <table>
-          <thead><tr><th>Nome</th><th>Tipo</th><th>Habilitado</th><th>Credencial</th><th>Ações</th></tr></thead>
-          <tbody>${linhas}</tbody>
-        </table>`}
-        <button id="btn-adicionar-mcp" type="button">Adicionar MCP</button>
-      </fieldset>
-      ${formHtml}
-      <div id="msg-mcps" role="status"></div>
-    `;
-    this.vincularEventos();
-  }
-
-  private formularioEdicao(m?: Mcp): string {
-    const titulo = m ? "Editar MCP" : "Novo MCP";
-    const v = (k: keyof Mcp) => m ? esc(String(m[k] ?? "")) : "";
-    const tipo = m?.command ? "stdio" : "http";
-    const argsStr = m?.args ? m.args.join(" ") : "";
-
-    return `
-      <fieldset id="form-mcp"><legend>${titulo}</legend>
-        <label>ID<input id="mcp-id" type="text" value="${v("id")}" ${m ? "readonly" : ""}></label>
-        <label>Nome<input id="mcp-nome" type="text" value="${v("nome")}"></label>
-        <label>Tipo
-          <select id="mcp-tipo">
-            <option value="stdio" ${tipo === "stdio" ? "selected" : ""}>stdio (comando local)</option>
-            <option value="http" ${tipo === "http" ? "selected" : ""}>HTTP (Streamable)</option>
-          </select>
-        </label>
-        <div id="campo-stdio" style="display:${tipo === "stdio" ? "block" : "none"}">
-          <label>Command<input id="mcp-command" type="text" value="${v("command")}"></label>
-          <label>Args (separados por espaço)<input id="mcp-args" type="text" value="${esc(argsStr)}"></label>
-        </div>
-        <div id="campo-http" style="display:${tipo === "http" ? "block" : "none"}">
-          <label>URL<input id="mcp-url" type="text" value="${v("url")}"></label>
-        </div>
-        <label>Referência da credencial (opcional)<input id="mcp-cred" type="text" value="${v("credencial_ref")}"></label>
-        <div class="acoes-form">
-          <button id="btn-salvar-mcp" type="button">Salvar</button>
-          <button id="btn-cancelar-mcp" type="button">Cancelar</button>
-        </div>
-      </fieldset>
-    `;
-  }
-
-  private vincularEventos() {
-    // Toggle tipo no formulário
-    this.raiz.querySelector("#mcp-tipo")?.addEventListener("change", (e) => {
-      const tipo = (e.target as HTMLSelectElement).value;
-      const stdio = this.raiz.querySelector("#campo-stdio") as HTMLElement;
-      const http = this.raiz.querySelector("#campo-http") as HTMLElement;
-      if (stdio) stdio.style.display = tipo === "stdio" ? "block" : "none";
-      if (http) http.style.display = tipo === "http" ? "block" : "none";
-    });
-
-    this.raiz.querySelector("#btn-adicionar-mcp")?.addEventListener("click", () => {
-      this.editando = -1;
-      this.desenhar();
-    });
-
-    this.raiz.querySelectorAll(".btn-editar-mcp").forEach((btn) => {
-      btn.addEventListener("click", () => {
-        this.editando = Number((btn as HTMLElement).dataset.idx);
-        this.desenhar();
-      });
-    });
-
-    this.raiz.querySelectorAll(".btn-remover-mcp").forEach((btn) => {
-      btn.addEventListener("click", () => {
-        const idx = Number((btn as HTMLElement).dataset.idx);
-        this.cfg.mcps.splice(idx, 1);
-        this.persistir();
-      });
-    });
-
-    this.raiz.querySelectorAll(".btn-toggle-mcp").forEach((btn) => {
-      btn.addEventListener("click", () => {
-        const idx = Number((btn as HTMLElement).dataset.idx);
-        this.cfg.mcps[idx].habilitado = !this.cfg.mcps[idx].habilitado;
-        this.persistir();
-      });
-    });
-
-    this.raiz.querySelectorAll(".btn-testar-cred-mcp").forEach((btn) => {
-      btn.addEventListener("click", async () => {
-        const ref = (btn as HTMLElement).dataset.ref!;
-        const [tipo, id] = ref.split(":");
-        const ok = await cofreExiste(tipo, id);
-        this.msg(ok ? "Credencial encontrada no cofre." : "Credencial NÃO encontrada no cofre.", !ok);
-      });
-    });
-
-    this.raiz.querySelector("#btn-salvar-mcp")?.addEventListener("click", () => this.salvarFormulario());
-    this.raiz.querySelector("#btn-cancelar-mcp")?.addEventListener("click", () => {
-      this.editando = null;
-      this.desenhar();
+    const cards: Card[] = this.cfg.mcps.map((m) => this.cardDe(m));
+    desenharCards(this.lista, cards, {
+      vazio: VAZIO_LISTA,
+      adicionar: { rotulo: "Adicionar servidor", aoClicar: () => this.abrirModal() },
     });
   }
 
-  private salvarFormulario() {
-    const id = (this.raiz.querySelector("#mcp-id") as HTMLInputElement).value.trim();
-    const nome = (this.raiz.querySelector("#mcp-nome") as HTMLInputElement).value.trim();
-    const tipo = (this.raiz.querySelector("#mcp-tipo") as HTMLSelectElement).value;
-    const command = (this.raiz.querySelector("#mcp-command") as HTMLInputElement).value.trim();
-    const argsRaw = (this.raiz.querySelector("#mcp-args") as HTMLInputElement).value.trim();
-    const url = (this.raiz.querySelector("#mcp-url") as HTMLInputElement).value.trim();
-    const cred = (this.raiz.querySelector("#mcp-cred") as HTMLInputElement).value.trim() || undefined;
+  private cardDe(m: Mcp): Card {
+    const selos: { texto: string; tom: TomSelo }[] = [
+      m.habilitado ? { texto: "Habilitado", tom: "ok" } : { texto: "Desabilitado", tom: "neutro" },
+    ];
+    const teste = this.testeCredencial.get(m.id);
+    if (teste) selos.push({ texto: teste === "ok" ? "credencial ok" : "credencial ausente", tom: teste === "ok" ? "ok" : "aviso" });
 
-    if (!id || !nome) {
-      this.msg("Preencha todos os campos obrigatórios (ID, Nome).", true);
-      return;
-    }
+    const detalhes: string[] = [];
+    if (m.command) detalhes.push(`comando: ${m.command}${m.args?.length ? ` ${m.args.join(" ")}` : ""}`);
+    if (m.url) detalhes.push(`url: ${m.url}`);
+    if (m.credencial_ref) detalhes.push(`credencial: ${m.credencial_ref}`);
 
-    if (this.editando === -1 && this.cfg.mcps.some((m) => m.id === id)) {
-      this.msg(`Já existe um MCP com ID "${id}".`, true);
-      return;
-    }
-
-    if (tipo === "stdio" && !command) {
-      this.msg("MCP stdio exige o campo Command.", true);
-      return;
-    }
-
-    if (tipo === "http" && !url) {
-      this.msg("MCP HTTP exige o campo URL.", true);
-      return;
-    }
-
-    if (cred && !/^[\w.-]+:[\w.-]+$/.test(cred)) {
-      this.msg("Referência de credencial deve estar no formato tipo:id.", true);
-      return;
-    }
-
-    const args = tipo === "stdio" && argsRaw ? argsRaw.split(/\s+/) : undefined;
-
-    const novo: Mcp = {
-      id,
-      nome,
-      habilitado: this.editando !== null && this.editando >= 0
-        ? this.cfg.mcps[this.editando].habilitado
-        : true,
-      ...(tipo === "stdio" ? { command, args } : { url }),
-      credencial_ref: cred,
+    return {
+      id: m.id,
+      titulo: m.nome,
+      etiqueta: m.command ? "stdio" : "http",
+      selos,
+      detalhes,
+      busca: m.id,
+      acoes: [
+        { rotulo: m.habilitado ? "Desabilitar" : "Habilitar", aoClicar: () => void this.alternar(m.id) },
+        ...(m.credencial_ref ? [{ rotulo: "Testar", aoClicar: () => void this.testarCredencial(m.id) }] : []),
+        { rotulo: "Editar", aoClicar: () => this.abrirModal(m.id) },
+        { rotulo: "Remover", perigo: true, aoClicar: () => void this.remover(m.id) },
+      ],
     };
-
-    if (this.editando === -1) {
-      this.cfg.mcps.push(novo);
-    } else if (this.editando !== null) {
-      this.cfg.mcps[this.editando] = novo;
-    }
-
-    this.editando = null;
-    this.persistir();
   }
 
-  private persistir() {
+  /** Abre o modal de adicionar (sem id) ou de editar (com o id de um existente). */
+  private abrirModal(id?: string) {
+    this.modal?.fechar(); // nunca dois modais um em cima do outro
+    const atual = id ? this.cfg.mcps.find((m) => m.id === id) : undefined;
+
+    const campoId = document.createElement("input");
+    campoId.id = "mcp-id";
+    campoId.type = "text";
+    if (atual) { campoId.value = atual.id; campoId.readOnly = true; }
+
+    const campoNome = document.createElement("input");
+    campoNome.id = "mcp-nome";
+    campoNome.type = "text";
+    campoNome.value = atual?.nome ?? "";
+
+    const tipoInicial: TipoMcp = atual ? (atual.command ? "stdio" : "http") : "stdio";
+    const campoTipo = document.createElement("select");
+    campoTipo.id = "mcp-tipo";
+    for (const [valor, rotulo] of [["stdio", "stdio (comando local)"], ["http", "http (servidor remoto)"]] as const) {
+      const opcao = document.createElement("option");
+      opcao.value = valor;
+      opcao.textContent = rotulo;
+      campoTipo.append(opcao);
+    }
+    campoTipo.value = tipoInicial;
+
+    const campoCommand = document.createElement("input");
+    campoCommand.id = "mcp-command";
+    campoCommand.type = "text";
+    campoCommand.value = atual?.command ?? "";
+
+    const campoArgs = document.createElement("input");
+    campoArgs.id = "mcp-args";
+    campoArgs.type = "text";
+    campoArgs.value = atual?.args?.join(" ") ?? "";
+
+    const campoUrl = document.createElement("input");
+    campoUrl.id = "mcp-url";
+    campoUrl.type = "text";
+    campoUrl.value = atual?.url ?? "";
+
+    const campoCred = document.createElement("input");
+    campoCred.id = "mcp-cred";
+    campoCred.type = "text";
+    campoCred.value = atual?.credencial_ref ?? "";
+
+    const grupoStdio = document.createElement("div");
+    grupoStdio.id = "mcp-grupo-stdio";
+    grupoStdio.append(
+      campoModal("Comando", campoCommand, "O programa que roda o servidor, sozinho, sem shell."),
+      campoModal("Argumentos (um por vez, separados por espaço)", campoArgs, "Cada argumento vai direto ao programa; nada de aspas nem comandos encadeados."),
+    );
+
+    const grupoHttp = document.createElement("div");
+    grupoHttp.id = "mcp-grupo-http";
+    grupoHttp.append(
+      campoModal("URL", campoUrl, "Endereço do servidor MCP no formato http."),
+      campoModal("Referência da credencial (opcional)", campoCred, "Formato tipo:id, como cofre:github. O valor fica no cofre e nunca aparece aqui."),
+    );
+
+    const corpo = document.createElement("div");
+    corpo.append(
+      campoModal("Identificador", campoId, atual ? "O identificador não muda depois de criado." : "Único na lista; use letras, números, ponto ou hífen."),
+      campoModal("Nome", campoNome),
+      campoModal("Tipo", campoTipo),
+      grupoStdio,
+      grupoHttp,
+    );
+    grupoStdio.hidden = tipoInicial !== "stdio";
+    grupoHttp.hidden = tipoInicial !== "http";
+    campoTipo.addEventListener("change", () => {
+      grupoStdio.hidden = campoTipo.value !== "stdio";
+      grupoHttp.hidden = campoTipo.value !== "http";
+    });
+
+    let modal: ModalAberto;
+    modal = abrirModal({
+      titulo: atual ? "Editar servidor MCP" : "Adicionar servidor MCP",
+      corpo,
+      acoes: [
+        {
+          rotulo: "Salvar",
+          primaria: true,
+          aoClicar: () => this.salvar(modal, {
+            id: campoId.value.trim(),
+            nome: campoNome.value.trim(),
+            tipo: campoTipo.value === "http" ? "http" : "stdio",
+            command: campoCommand.value.trim(),
+            args: campoArgs.value.trim(),
+            url: campoUrl.value.trim(),
+            credencial: campoCred.value.trim(),
+          }, atual?.id),
+        },
+        { rotulo: "Cancelar" },
+      ],
+      aoFechar: () => { this.modal = null; },
+    });
+    this.modal = modal;
+  }
+
+  private async salvar(
+    modal: ModalAberto,
+    v: { id: string; nome: string; tipo: TipoMcp; command: string; args: string; url: string; credencial: string },
+    editando?: string,
+  ): Promise<boolean> {
+    if (!v.id || !v.nome) { modal.avisar("Preencha o identificador e o nome.", true); return false; }
+    if (!editando && this.cfg.mcps.some((m) => m.id === v.id)) {
+      modal.avisar(`Já existe um servidor com o identificador "${v.id}".`, true);
+      return false;
+    }
+    if (v.tipo === "stdio" && !v.command) { modal.avisar("stdio exige o campo Comando.", true); return false; }
+    if (v.tipo === "http" && !v.url) { modal.avisar("http exige o campo URL.", true); return false; }
+    if (v.credencial && !/^[\w.-]+:[\w.-]+$/.test(v.credencial)) {
+      modal.avisar("A referência da credencial precisa estar no formato tipo:id.", true);
+      return false;
+    }
+
+    const anterior = editando ? this.cfg.mcps.find((m) => m.id === editando) : undefined;
+    const novo: Mcp = {
+      id: v.id,
+      nome: v.nome,
+      habilitado: anterior?.habilitado ?? true,
+      ...(v.tipo === "stdio"
+        ? { command: v.command, args: v.args ? v.args.split(/\s+/) : undefined }
+        : { url: v.url }),
+      credencial_ref: v.credencial || undefined,
+    };
+    if (editando) {
+      const idx = this.cfg.mcps.findIndex((m) => m.id === editando);
+      this.cfg.mcps[idx] = novo;
+    } else {
+      this.cfg.mcps.push(novo);
+    }
+    // Cadastro mudou: o teste anterior da credencial não vale mais.
+    this.testeCredencial.delete(v.id);
+
     try {
-      void gravarPaineis(this.cfg);
-      this.deps.aoMudar?.();
-      this.desenhar();
-      this.msg("Salvo.");
+      await gravarPaineis(this.cfg);
     } catch (e) {
-      this.msg(`Erro ao salvar: ${String(e)}`, true);
+      this.msg(`Não consegui salvar: ${e instanceof Error ? e.message : String(e)}`, true);
+      return false;
+    }
+    this.deps.aoMudar?.();
+    this.desenhar();
+    this.msg("Salvo.");
+    return true;
+  }
+
+  private async alternar(id: string) {
+    const m = this.cfg.mcps.find((x) => x.id === id);
+    if (!m) return;
+    m.habilitado = !m.habilitado;
+    await this.persistir(m.habilitado ? `${m.nome} habilitado.` : `${m.nome} desabilitado.`);
+  }
+
+  private async remover(id: string) {
+    const m = this.cfg.mcps.find((x) => x.id === id);
+    if (!m) return;
+    this.cfg.mcps = this.cfg.mcps.filter((x) => x.id !== id);
+    this.testeCredencial.delete(id);
+    await this.persistir(`${m.nome} removido.`);
+  }
+
+  private async persistir(recado: string) {
+    try {
+      await gravarPaineis(this.cfg);
+    } catch (e) {
+      this.msg(`Não consegui salvar: ${e instanceof Error ? e.message : String(e)}`, true);
+      return;
+    }
+    this.deps.aoMudar?.();
+    this.desenhar();
+    this.msg(recado);
+  }
+
+  /** Confere se a credencial existe no cofre, sem expor o valor; o card ganha o selo do resultado. */
+  private async testarCredencial(id: string) {
+    const m = this.cfg.mcps.find((x) => x.id === id);
+    if (!m?.credencial_ref) return;
+    const [tipo, refId] = m.credencial_ref.split(":");
+    const ok = await cofreExiste(tipo, refId);
+    this.testeCredencial.set(id, ok ? "ok" : "ausente");
+    this.desenhar();
+    this.msg(
+      ok ? `Credencial de ${m.nome} encontrada no cofre.` : `Credencial de ${m.nome} não está no cofre.`,
+      !ok,
+    );
+  }
+
+  /** U8: com a ponte/núcleo fora, o aviso claro fica no topo da seção. */
+  private async atualizarAvisoServicos() {
+    const fora = (await this.sondarPonte()) === null;
+    this.aviso.hidden = !fora;
+  }
+
+  private async sondarPonte(): Promise<StatusPonte | null> {
+    if (this.deps.statusPonte) return this.deps.statusPonte();
+    // Sem injecção, o endereço é o da aba Sistema, que é o que vale na hora.
+    const url = document.querySelector<HTMLInputElement>("#cfg-ponte_url")?.value.trim() ?? "";
+    if (!url) return null;
+    try {
+      return await new Ponte(url).status();
+    } catch {
+      return null;
     }
   }
 
   private msg(texto: string, ruim = false) {
-    const el = this.raiz.querySelector("#msg-mcps") as HTMLElement;
-    if (el) {
-      el.textContent = texto;
-      el.classList.toggle("ruim", ruim);
-    }
+    this.recado.textContent = texto;
+    this.recado.classList.toggle("ruim", ruim);
   }
 }

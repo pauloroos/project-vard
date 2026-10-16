@@ -1,0 +1,32 @@
+/* Frente VOZ (0.9.3): aviso de serviço fora e a lista de vozes em blocos por motor.
+   Os cards e o modal vêm de src/ui/componentes.ts (configuracoes.css); aqui só o que é da Voz. */
+
+.voz-aviso {
+  border: 1px solid var(--aviso, #ffb347);
+  background: rgba(255, 179, 71, 0.12);
+  color: inherit;
+  border-radius: 6px;
+  padding: 8px 10px;
+  margin: 0 0 10px;
+}
+
+.voz-aviso p {
+  margin: 4px 0 0;
+  opacity: 0.85;
+}
+
+.voz-lista-topo {
+  display: flex;
+  justify-content: flex-end;
+  margin: 0 0 6px;
+}
+
+.grupo-motor {
+  margin: 0 0 14px;
+}
+
+.grupo-motor h3 {
+  margin: 0 0 6px;
+  font-size: 1rem;
+  letter-spacing: 0.02em;
+}

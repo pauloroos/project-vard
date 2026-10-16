@@ -4,7 +4,6 @@ import type { Config } from "../config/config";
 import { avisosDeUrl, limitarLado, mudancasQueExigemReinicio, salvarConfig, urlLocal } from "../config/config";
 import { ACOES_ATALHO, ROTULOS_ATALHO, avisoAltGr, validarAtalhos, type AcaoAtalho, type FalhaAtalho } from "../config/atalhos";
 import { campoIdioma } from "../config/idiomas";
-import { detectarClis } from "../config/clis";
 import { gravarPerfil, lerPerfil, previaPersona } from "../config/perfil";
 import { campoAtalho } from "./campo-atalho";
 import type { OpenJarvis } from "../conectores/openjarvis/cliente";
@@ -15,10 +14,7 @@ import { AbaAvisos } from "./aba-avisos";
 import { AbaDiagnostico } from "./aba-diagnostico";
 import { AbaModelos } from "./aba-modelos";
 import { AbaPerfil } from "./aba-perfil";
-import { AbaPaineisAgentes } from "./paineis-agentes";
 import { AbaPaineisMcps } from "./paineis-mcps";
-import { AbaPaineisProvedores } from "./paineis-provedores";
-import { AbaPaineisVozes } from "./paineis-vozes";
 import { AbaReuniao, type PonteReuniao } from "./aba-reuniao";
 import { AbaSaber } from "./aba-saber";
 import { AbaSistema } from "./aba-sistema";
@@ -45,10 +41,10 @@ export interface DepsConfiguracoes {
 /** Monitor como o comando listar_monitores devolve (pixels físicos). */
 export interface MonitorInfo { nome: string; x: number; y: number; largura: number; altura: number; escala: number; principal: boolean }
 
-export type Aba = "geral" | "perfil" | "voz" | "atalhos" | "saber" | "modelos" | "paineis-provedores" | "paineis-vozes" | "paineis-mcps" | "paineis-agentes" | "sistema" | "reuniao" | "avisos" | "atualizacao" | "diagnostico";
+export type Aba = "geral" | "perfil" | "voz" | "atalhos" | "saber" | "modelos" | "paineis-mcps" | "sistema" | "reuniao" | "avisos" | "atualizacao" | "diagnostico";
 const ABAS: [Aba, string][] = [
   ["geral", "Geral"], ["perfil", "Perfil"], ["voz", "Voz"], ["atalhos", "Atalhos"], ["saber", "O que eu sei fazer"], ["modelos", "Quem responde"],
-  ["paineis-provedores", "Painéis: Provedores"], ["paineis-vozes", "Painéis: Vozes"], ["paineis-mcps", "Painéis: MCPs"], ["paineis-agentes", "Painéis: Agentes"],
+  ["paineis-mcps", "Ferramentas (MCP)"],
   ["sistema", "Sistema"], ["reuniao", "Reunião"], ["avisos", "Avisos"], ["atualizacao", "Atualização"], ["diagnostico", "Diagnóstico"],
 ];
 const OPCOES_TAMANHO: [Config["tamanho"], string][] = [
@@ -73,10 +69,7 @@ export class Configuracoes {
   private diagnostico: AbaDiagnostico | null = null;
   private abaVoz!: AbaVoz;
   private abaPerfil!: AbaPerfil;
-  private paineisProvedores!: AbaPaineisProvedores;
-  private paineisVozes!: AbaPaineisVozes;
-  private paineisMcps!: AbaPaineisMcps;
-  private paineisAgentes!: AbaPaineisAgentes;
+    private paineisMcps!: AbaPaineisMcps;
   private linhasAtalho = new Map<AcaoAtalho, { campo: HTMLButtonElement; motivo: HTMLElement }>();
 
   constructor(private cfg: Config, private raiz: HTMLElement, private deps: DepsConfiguracoes) {
@@ -102,19 +95,15 @@ export class Configuracoes {
       void instalador.montar();
     }
     this.marcarUrl("voz_url");
-    this.modelos = new AbaModelos(this.raiz.querySelector<HTMLElement>("#cfg-modelos")!, this.cfg.modelo, {
+    this.modelos = new AbaModelos(this.raiz.querySelector<HTMLElement>("#cfg-modelos")!, {
       criarOj: (modelo) => this.deps.criarOj(this.cfg.openjarvis_url, modelo),
       statusPonte: () => this.deps.statusPonte(this.cfg.ponte_url),
-      cerebroInicial: this.cfg.cerebro,
+      ponteUrl: this.cfg.ponte_url,
+      config: this.cfg,
       aoMudarCerebro: (cerebro) => { this.cfg.cerebro = cerebro; void salvarConfig(this.cfg); },
     });
     void this.modelos.carregar();
-    this.paineisProvedores = new AbaPaineisProvedores(this.raiz.querySelector<HTMLElement>("#cfg-paineis-provedores")!, {
-      detectar: () => detectarClis(this.el("ponte_url").value),
-    });
-    this.paineisVozes = new AbaPaineisVozes(this.raiz.querySelector<HTMLElement>("#cfg-paineis-vozes")!);
     this.paineisMcps = new AbaPaineisMcps(this.raiz.querySelector<HTMLElement>("#cfg-paineis-mcps")!);
-    this.paineisAgentes = new AbaPaineisAgentes(this.raiz.querySelector<HTMLElement>("#cfg-paineis-agentes")!);
     this.abaPerfil = new AbaPerfil(this.raiz.querySelector<HTMLElement>("#cfg-perfil")!, {
       nome: () => this.el("nome").value,
       usuario: () => this.el("usuario").value,
@@ -176,10 +165,7 @@ export class Configuracoes {
       const mapaRotulo = new Map(ABAS);
       tituloEl.textContent = mapaRotulo.get(aba) ?? aba;
     }
-    if (aba === "paineis-provedores") void this.paineisProvedores?.montar();
-    if (aba === "paineis-vozes") void this.paineisVozes?.montar();
     if (aba === "paineis-mcps") void this.paineisMcps?.montar();
-    if (aba === "paineis-agentes") void this.paineisAgentes?.montar();
     if (aba === "perfil") {
       this.abaPerfil.definir("nome", this.el("nome").value);
       this.abaPerfil.definir("usuario", this.el("usuario").value);
@@ -233,8 +219,8 @@ export class Configuracoes {
     const GRUPOS: [string, Aba[]][] = [
       ["Conversa", ["geral", "perfil"]],
       ["Voz e áudio", ["voz", "atalhos"]],
-      ["Cérebro e agentes", ["saber", "modelos", "paineis-provedores", "paineis-vozes", "paineis-mcps", "paineis-agentes"]],
-      ["Sistema", ["sistema", "reuniao", "avisos", "atualizacao", "diagnostico"]],
+      ["Cérebro", ["saber", "modelos", "paineis-mcps"]],
+            ["Sistema", ["sistema", "reuniao", "avisos", "atualizacao", "diagnostico"]],
     ];
     const mapaRotulo = new Map(ABAS);
     const navHtml = GRUPOS.map(([titulo, ids]) =>
@@ -278,22 +264,20 @@ export class Configuracoes {
           </fieldset>
         </section>
         <section data-aba="perfil"><div id="cfg-perfil"></div></section>
-        <section data-aba="paineis-provedores"><div id="cfg-paineis-provedores"></div></section>
-        <section data-aba="paineis-vozes"><div id="cfg-paineis-vozes"></div></section>
         <section data-aba="paineis-mcps"><div id="cfg-paineis-mcps"></div></section>
-        <section data-aba="paineis-agentes"><div id="cfg-paineis-agentes"></div></section>
         <section data-aba="voz">
+          <div id="cfg-voz">
           <fieldset><legend>Fala</legend>
             ${this.campo("velocidade", "Velocidade da fala", c.velocidade, "number", 'step="0.05" min="0.5" max="2"')}
             ${this.campo("instrucao_formato", "Instrução de formato", c.instrucao_formato)}
           </fieldset>
-          <div id="cfg-voz"></div>
-          <div id="cfg-instalador-vozes"></div>
           <fieldset><legend>Ouvido</legend>
             ${this.campo("finish_ms", "Silêncio para encerrar a fala (ms)", c.finish_ms, "number", 'step="50" min="200" max="3000"')}
             ${this.campo("limiar_vad", "Limiar do microfone", c.limiar_vad, "number", 'step="0.005" min="0.001" max="0.5"')}
             ${this.campo("conversa_s", "Modo conversa: segundos ouvindo sem o nome depois de uma resposta (0 desliga)", c.conversa_ms / 1000, "number", 'step="1" min="0" max="300"')}
           </fieldset>
+          </div>
+          <div id="cfg-instalador-vozes"></div>
         </section>
         <section data-aba="atalhos">
           <p class="nota">Clique num atalho e pressione a nova combinação (Ctrl, Alt ou Win mais uma tecla). Esc cancela. Valem depois de reiniciar o Vard.</p>
@@ -410,7 +394,7 @@ export class Configuracoes {
       nao_falar: this.el("nao_falar").checked,
       falar_avisos: this.el("falar_avisos").checked,
       atalhos: { ...this.atalhos },
-      modelo: this.modelos?.escolhido ?? c.modelo,
+      modelo: c.modelo,
       sala_monitor: this.sel("sala_monitor").options.length ? this.sel("sala_monitor").value : c.sala_monitor, // lista ainda não chegou: mantém
     };
   }

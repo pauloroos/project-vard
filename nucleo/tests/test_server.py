@@ -89,6 +89,8 @@ def test_host_estranho():
 def test_status_reporta_servicos(cliente, monkeypatch, tmp_path):
     monkeypatch.setattr(server.modo, "ARQUIVO_ESTADO", tmp_path / "nao-existe.json")
     monkeypatch.setattr(server, "_tarefas_abertas", lambda: 0)  # não depende das tarefas reais da máquina
+    monkeypatch.setattr(server, "_ler_provedor_ativo", lambda: {})  # sem provedor ativo
+    monkeypatch.setattr(server, "_supervisor_cli", None)  # sem supervisor
     respx.get("http://127.0.0.1:8000/health").mock(return_value=httpx.Response(200, json={"status": "ok"}))
     respx.get("http://127.0.0.1:1234/v1/models").mock(return_value=httpx.Response(200, json={"data": [{"id": "gemma-4-12b-it-qat@q4_k_xl"}]}))
     respx.get("http://127.0.0.1:4720/status").mock(side_effect=httpx.ConnectError("x"))
@@ -100,6 +102,26 @@ def test_status_reporta_servicos(cliente, monkeypatch, tmp_path):
                 "cerebro": {"ativo": False, "provedor": "", "sessoes": 0},
                 "cli_enxuto": {"avisos": []}}
     assert corpo == esperado
+
+
+@respx.mock
+def test_status_cerebro_reflete_provedor_ativo_e_sessoes(cliente, monkeypatch, tmp_path):
+    """0.9.3: campo cerebro reflete provedor ativo e sessões vivas do supervisor."""
+    monkeypatch.setattr(server.modo, "ARQUIVO_ESTADO", tmp_path / "nao-existe.json")
+    monkeypatch.setattr(server, "_tarefas_abertas", lambda: 0)
+    monkeypatch.setattr(server, "_ler_provedor_ativo", lambda: {"tipo": "cli-claude", "modelo": "claude-opus-5-5"})
+
+    class _SupFake:
+        def pids(self):
+            return [1001, 1002]
+
+    monkeypatch.setattr(server, "_supervisor_cli", _SupFake())
+    respx.get("http://127.0.0.1:8000/health").mock(return_value=httpx.Response(200, json={"status": "ok"}))
+    respx.get("http://127.0.0.1:1234/v1/models").mock(return_value=httpx.Response(200, json={"data": []}))
+    respx.get("http://127.0.0.1:4720/status").mock(side_effect=httpx.ConnectError("x"))
+    r = cliente.get("/status")
+    cerebro = r.json()["cerebro"]
+    assert cerebro == {"ativo": True, "provedor": "cli-claude", "sessoes": 2}
 
 
 @respx.mock

@@ -18,7 +18,7 @@ fs.mkdirSync(CAPTURAS_DIR, { recursive: true });
 
 const ABAS = [
   "geral", "perfil", "voz", "atalhos", "saber", "modelos",
-  "paineis-provedores", "paineis-vozes", "paineis-mcps", "paineis-agentes",
+  "paineis-mcps",
   "sistema", "reuniao", "avisos", "atualizacao", "diagnostico"
 ];
 const ETAPAS_PU = ["importar", "detectar", "nome", "cerebro", "voz", "audio", "resumo"];
@@ -252,6 +252,222 @@ async function main() {
       const medida = await medirPagina(page, `${aba}@${scale}x`);
       resultados.push(medida);
       console.log(`[${scale}x] Capturada seção: ${aba} (${medida.nosComTextoVisiveis} nós com texto)`);
+    }
+
+    // Estados extras da seção "Quem responde" (brief 0.9.3 + rodada 2)
+    // Cada estado recarrega a página com o mock adequado e espera o botão ficar visível antes de interagir.
+    const btnModelos = await page.$('nav button[data-aba="modelos"]');
+    if (btnModelos) {
+      // Helper: recarrega, espera nav, clica em modelos, espera botão Adicionar ficar visível
+      async function prepararEstadoExtras(setupInvoke) {
+        if (setupInvoke) {
+          await page.evaluate(setupInvoke);
+        }
+        await page.reload();
+        await page.waitForSelector("#painel nav button", { timeout: 20000 });
+        await page.waitForTimeout(300);
+        const btn = await page.$('nav button[data-aba="modelos"]');
+        if (btn) await btn.click();
+        await page.waitForSelector('button.cards-adicionar', { timeout: 10000 }).catch(() => null);
+        await page.waitForTimeout(400);
+      }
+
+      // 1. Modal de adicionar aberto
+      await prepararEstadoExtras(null);
+      const btnAdd1 = await page.$('button.cards-adicionar');
+      if (btnAdd1) {
+        await btnAdd1.click();
+        await page.waitForTimeout(400);
+        await page.screenshot({ path: path.join(CAPTURAS_DIR, `quem-responde-modal-adicionar-escala${scale}.png`), fullPage: false });
+        resultados.push(await medirPagina(page, `quem-responde-modal-adicionar@${scale}x`));
+        await page.keyboard.press("Escape");
+        await page.waitForTimeout(200);
+      }
+
+      // 2. Seção vazia
+      await prepararEstadoExtras(() => {
+        window.__TAURI_INTERNALS__.invoke = async (cmd) => {
+          if (cmd === "ler_paineis") return { versao: 1, provedores: [], ativo: null, reserva: null, agentes: { claude: { padrao: "", modelos: [] }, codex: { padrao: "", modelos: [] }, opencode: { padrao: "", modelos: [] }, agy: { padrao: "", modelos: [] } }, mcps: [] };
+          if (cmd === "ler_config") return { schema: 3, ponte_url: "", nome: "Aurora", variantes: ["Auri"], idioma: "pt", openjarvis_url: "http://localhost:8765", gui_url: "", usuario: "Ana", tamanho: "medio", tamanho_px: 320, compacto: false, sempre_no_topo: false, click_through: false, invisivel: false, logon: false, sala_monitor: "", nao_ouvir: false, nao_falar: false, falar_avisos: true, velocidade: 1.1, instrucao_formato: "", finish_ms: 600, limiar_vad: 0.03, conversa_ms: 5000, atualizacao_ao_abrir: true, modelo: "", microfone_id: "", saida_id: "", caminho_instalacao: "" };
+          return null;
+        };
+      });
+      await page.screenshot({ path: path.join(CAPTURAS_DIR, `quem-responde-vazia-escala${scale}.png`), fullPage: false });
+      resultados.push(await medirPagina(page, `quem-responde-vazia@${scale}x`));
+
+      // 3. Aviso de ponte fora
+      await prepararEstadoExtras(() => {
+        window.__TAURI_INTERNALS__.invoke = async (cmd) => {
+          if (cmd === "ler_paineis") return { versao: 1, provedores: [], ativo: null, reserva: null, agentes: { claude: { padrao: "", modelos: [] }, codex: { padrao: "", modelos: [] }, opencode: { padrao: "", modelos: [] }, agy: { padrao: "", modelos: [] } }, mcps: [] };
+          if (cmd === "ler_config") return { schema: 3, ponte_url: "http://127.0.0.1:99999", nome: "Aurora", variantes: ["Auri"], idioma: "pt", openjarvis_url: "http://localhost:8765", gui_url: "", usuario: "Ana", tamanho: "medio", tamanho_px: 320, compacto: false, sempre_no_topo: false, click_through: false, invisivel: false, logon: false, sala_monitor: "", nao_ouvir: false, nao_falar: false, falar_avisos: true, velocidade: 1.1, instrucao_formato: "", finish_ms: 600, limiar_vad: 0.03, conversa_ms: 5000, atualizacao_ao_abrir: true, modelo: "", microfone_id: "", saida_id: "", caminho_instalacao: "" };
+          return null;
+        };
+      });
+      await page.screenshot({ path: path.join(CAPTURAS_DIR, `quem-responde-ponte-fora-escala${scale}.png`), fullPage: false });
+      resultados.push(await medirPagina(page, `quem-responde-ponte-fora@${scale}x`));
+
+      // 4. Modal de CLI detectada (Claude Code) — rota registrada ANTES do reload.
+      // O invoke trocado por evaluate se perde no reload; o mock base lê a ponte de __PROVA_PONTE__,
+      // e sem ponte a detecção nem é consultada.
+      await page.addInitScript(() => { window.__PROVA_PONTE__ = "http://127.0.0.1:8765"; });
+      await page.route("**/cli/detectar", (route) => {
+        route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify([{ tipo: "cli-claude", instalada: true, versao: "2.1.301", modelos: ["claude-sonnet-5-5", "claude-opus-5-5"] }]) });
+      });
+      // Recarrega com a rota ativa para que detectarClis() pegue o mock
+      await page.reload();
+      await page.waitForSelector("#painel nav button", { timeout: 20000 });
+      await page.waitForTimeout(300);
+      const btnModelosCli = await page.$('nav button[data-aba="modelos"]');
+      if (btnModelosCli) await btnModelosCli.click();
+      await page.waitForSelector('button.cards-adicionar', { timeout: 10000 }).catch(() => null);
+      await page.waitForTimeout(600);
+      // Agora prepara o invoke mock (depois do reload, pois o evaluate anterior se perde)
+      await page.evaluate(() => {
+        window.__TAURI_INTERNALS__.invoke = async (cmd) => {
+          if (cmd === "ler_paineis") return { versao: 1, provedores: [], ativo: null, reserva: null, agentes: { claude: { padrao: "", modelos: [] }, codex: { padrao: "", modelos: [] }, opencode: { padrao: "", modelos: [] }, agy: { padrao: "", modelos: [] } }, mcps: [] };
+          if (cmd === "ler_config") return { schema: 3, ponte_url: "http://127.0.0.1:8765", nome: "Aurora", variantes: ["Auri"], idioma: "pt", openjarvis_url: "http://localhost:8765", gui_url: "", usuario: "Ana", tamanho: "medio", tamanho_px: 320, compacto: false, sempre_no_topo: false, click_through: false, invisivel: false, logon: false, sala_monitor: "", nao_ouvir: false, nao_falar: false, falar_avisos: true, velocidade: 1.1, instrucao_formato: "", finish_ms: 600, limiar_vad: 0.03, conversa_ms: 5000, atualizacao_ao_abrir: true, modelo: "", microfone_id: "", saida_id: "", caminho_instalacao: "" };
+          return null;
+        };
+      });
+      const btnAddCli = await page.$('button.cards-adicionar');
+      if (btnAddCli) {
+        await btnAddCli.click();
+        await page.waitForTimeout(400);
+        const tipoSelCli = await page.$('.modal select');
+        if (tipoSelCli) {
+          await tipoSelCli.selectOption("cli-claude");
+          await page.waitForTimeout(500);
+        }
+        await page.screenshot({ path: path.join(CAPTURAS_DIR, `quem-responde-modal-cli-escala${scale}.png`), fullPage: false });
+        resultados.push(await medirPagina(page, `quem-responde-modal-cli@${scale}x`));
+        await page.keyboard.press("Escape");
+        await page.waitForTimeout(200);
+      }
+      await page.unroute("**/cli/detectar");
+
+      // 4b. Modal de CLI Codex (tarefas longas travadas) — rota ANTES do reload
+      await page.route("**/cli/detectar", (route) => {
+        route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify([{ tipo: "cli-codex", instalada: true, versao: "0.1.2504", modelos: ["o3-mini", "o4-mini"] }]) });
+      });
+      await page.reload();
+      await page.waitForSelector("#painel nav button", { timeout: 20000 });
+      await page.waitForTimeout(300);
+      const btnModelosCodex = await page.$('nav button[data-aba="modelos"]');
+      if (btnModelosCodex) await btnModelosCodex.click();
+      await page.waitForSelector('button.cards-adicionar', { timeout: 10000 }).catch(() => null);
+      await page.waitForTimeout(600);
+      await page.evaluate(() => {
+        window.__TAURI_INTERNALS__.invoke = async (cmd) => {
+          if (cmd === "ler_paineis") return { versao: 1, provedores: [], ativo: null, reserva: null, agentes: { claude: { padrao: "", modelos: [] }, codex: { padrao: "", modelos: [] }, opencode: { padrao: "", modelos: [] }, agy: { padrao: "", modelos: [] } }, mcps: [] };
+          if (cmd === "ler_config") return { schema: 3, ponte_url: "http://127.0.0.1:8765", nome: "Aurora", variantes: ["Auri"], idioma: "pt", openjarvis_url: "http://localhost:8765", gui_url: "", usuario: "Ana", tamanho: "medio", tamanho_px: 320, compacto: false, sempre_no_topo: false, click_through: false, invisivel: false, logon: false, sala_monitor: "", nao_ouvir: false, nao_falar: false, falar_avisos: true, velocidade: 1.1, instrucao_formato: "", finish_ms: 600, limiar_vad: 0.03, conversa_ms: 5000, atualizacao_ao_abrir: true, modelo: "", microfone_id: "", saida_id: "", caminho_instalacao: "" };
+          return null;
+        };
+      });
+      const btnAddCodex = await page.$('button.cards-adicionar');
+      if (btnAddCodex) {
+        await btnAddCodex.click();
+        await page.waitForTimeout(400);
+        const tipoSelCodex = await page.$('.modal select');
+        if (tipoSelCodex) {
+          await tipoSelCodex.selectOption("cli-codex");
+          await page.waitForTimeout(500);
+        }
+        await page.$eval(".modal-miolo", (el) => { el.scrollTop = el.scrollHeight; }).catch(() => null);
+        await page.waitForTimeout(150);
+        await page.screenshot({ path: path.join(CAPTURAS_DIR, `quem-responde-modal-codex-escala${scale}.png`), fullPage: false });
+        resultados.push(await medirPagina(page, `quem-responde-modal-codex@${scale}x`));
+        await page.keyboard.press("Escape");
+        await page.waitForTimeout(200);
+      }
+      await page.unroute("**/cli/detectar");
+
+      // 4c. Modal de CLI não encontrada — rota ANTES do reload
+      await page.route("**/cli/detectar", (route) => {
+        route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify([]) });
+      });
+      await page.reload();
+      await page.waitForSelector("#painel nav button", { timeout: 20000 });
+      await page.waitForTimeout(300);
+      const btnModelosNao = await page.$('nav button[data-aba="modelos"]');
+      if (btnModelosNao) await btnModelosNao.click();
+      await page.waitForSelector('button.cards-adicionar', { timeout: 10000 }).catch(() => null);
+      await page.waitForTimeout(600);
+      await page.evaluate(() => {
+        window.__TAURI_INTERNALS__.invoke = async (cmd) => {
+          if (cmd === "ler_paineis") return { versao: 1, provedores: [], ativo: null, reserva: null, agentes: { claude: { padrao: "", modelos: [] }, codex: { padrao: "", modelos: [] }, opencode: { padrao: "", modelos: [] }, agy: { padrao: "", modelos: [] } }, mcps: [] };
+          if (cmd === "ler_config") return { schema: 3, ponte_url: "http://127.0.0.1:8765", nome: "Aurora", variantes: ["Auri"], idioma: "pt", openjarvis_url: "http://localhost:8765", gui_url: "", usuario: "Ana", tamanho: "medio", tamanho_px: 320, compacto: false, sempre_no_topo: false, click_through: false, invisivel: false, logon: false, sala_monitor: "", nao_ouvir: false, nao_falar: false, falar_avisos: true, velocidade: 1.1, instrucao_formato: "", finish_ms: 600, limiar_vad: 0.03, conversa_ms: 5000, atualizacao_ao_abrir: true, modelo: "", microfone_id: "", saida_id: "", caminho_instalacao: "" };
+          return null;
+        };
+      });
+      const btnAddNaoEncontrado = await page.$('button.cards-adicionar');
+      if (btnAddNaoEncontrado) {
+        await btnAddNaoEncontrado.click();
+        await page.waitForTimeout(400);
+        const tipoSelNao = await page.$('.modal select');
+        if (tipoSelNao) {
+          await tipoSelNao.selectOption("cli-claude");
+          await page.waitForTimeout(500);
+        }
+        await page.screenshot({ path: path.join(CAPTURAS_DIR, `quem-responde-modal-cli-nao-encontrado-escala${scale}.png`), fullPage: false });
+        resultados.push(await medirPagina(page, `quem-responde-modal-cli-nao-encontrado@${scale}x`));
+        await page.keyboard.press("Escape");
+        await page.waitForTimeout(200);
+      }
+      await page.unroute("**/cli/detectar");
+
+      // 5. Modal de LM Studio após Buscar modelos
+      await page.route("**/primeiro-uso/cerebro/modelos", (route) => {
+        route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ ok: true, modelos: [{ id: "llama-3.2-3b-instruct" }, { id: "qwen2.5-7b-instruct" }, { id: "mistral-7b-v0.3" }, { id: "gemma-3-4b-it" }] }) });
+      });
+      await prepararEstadoExtras(() => {
+        window.__TAURI_INTERNALS__.invoke = async (cmd) => {
+          if (cmd === "ler_paineis") return { versao: 1, provedores: [], ativo: null, reserva: null, agentes: { claude: { padrao: "", modelos: [] }, codex: { padrao: "", modelos: [] }, opencode: { padrao: "", modelos: [] }, agy: { padrao: "", modelos: [] } }, mcps: [] };
+          if (cmd === "ler_config") return { schema: 3, ponte_url: "http://127.0.0.1:8765", nome: "Aurora", variantes: ["Auri"], idioma: "pt", openjarvis_url: "http://localhost:8765", gui_url: "", usuario: "Ana", tamanho: "medio", tamanho_px: 320, compacto: false, sempre_no_topo: false, click_through: false, invisivel: false, logon: false, sala_monitor: "", nao_ouvir: false, nao_falar: false, falar_avisos: true, velocidade: 1.1, instrucao_formato: "", finish_ms: 600, limiar_vad: 0.03, conversa_ms: 5000, atualizacao_ao_abrir: true, modelo: "", microfone_id: "", saida_id: "", caminho_instalacao: "" };
+          return null;
+        };
+      });
+      const btnAddLm = await page.$('button.cards-adicionar');
+      if (btnAddLm) {
+        await btnAddLm.click();
+        await page.waitForTimeout(400);
+        const urlInputLm = await page.$('.modal input[type="url"]');
+        if (urlInputLm) await urlInputLm.fill("http://localhost:1234/v1");
+        const btnBuscarLm = await page.$('.modal button:has-text("Buscar modelos")');
+        if (btnBuscarLm) {
+          await btnBuscarLm.click();
+          await page.waitForTimeout(800);
+        }
+        await page.screenshot({ path: path.join(CAPTURAS_DIR, `quem-responde-modal-lmstudio-escala${scale}.png`), fullPage: false });
+        resultados.push(await medirPagina(page, `quem-responde-modal-lmstudio@${scale}x`));
+        await page.keyboard.press("Escape");
+        await page.waitForTimeout(200);
+      }
+      await page.unroute("**/primeiro-uso/cerebro/modelos");
+
+      // 6. Seção compacta com 6+ provedores
+      await prepararEstadoExtras(() => {
+        window.__TAURI_INTERNALS__.invoke = async (cmd) => {
+          if (cmd === "ler_paineis") return {
+            versao: 1,
+            provedores: [
+              { id: "lm1", nome: "LM Studio Local", tipo: "lmstudio", url_base: "http://localhost:1234/v1", modelo: "llama-3.2-3b-instruct" },
+              { id: "ollama1", nome: "Ollama Servidor", tipo: "ollama", url_base: "http://localhost:11434", modelo: "qwen2.5:7b" },
+              { id: "openai1", nome: "OpenAI API Produção", tipo: "openai_nativo", url_base: "https://api.openai.com/v1", modelo: "gpt-4o-mini" },
+              { id: "anthropic1", nome: "Anthropic Claude", tipo: "anthropic", url_base: "https://api.anthropic.com", modelo: "claude-sonnet-5-5" },
+              { id: "google1", nome: "Google Gemini", tipo: "google", url_base: "https://generativelanguage.googleapis.com", modelo: "gemini-2.5-flash" },
+              { id: "compat1", nome: "Servidor OpenAI Compatível Interno com Nome Longo", tipo: "openai_compat", url_base: "http://127.0.0.1:8080/v1", modelo: "modelo-interno-v2" },
+            ],
+            ativo: "lm1",
+            reserva: "ollama1",
+            agentes: { claude: { padrao: "", modelos: [] }, codex: { padrao: "", modelos: [] }, opencode: { padrao: "", modelos: [] }, agy: { padrao: "", modelos: [] } },
+            mcps: [],
+          };
+          if (cmd === "ler_config") return { schema: 3, ponte_url: "http://127.0.0.1:8765", nome: "Aurora", variantes: ["Auri"], idioma: "pt", openjarvis_url: "http://localhost:8765", gui_url: "", usuario: "Ana", tamanho: "medio", tamanho_px: 320, compacto: false, sempre_no_topo: false, click_through: false, invisivel: false, logon: false, sala_monitor: "", nao_ouvir: false, nao_falar: false, falar_avisos: true, velocidade: 1.1, instrucao_formato: "", finish_ms: 600, limiar_vad: 0.03, conversa_ms: 5000, atualizacao_ao_abrir: true, modelo: "", microfone_id: "", saida_id: "", caminho_instalacao: "" };
+          return null;
+        };
+      });
+      await page.screenshot({ path: path.join(CAPTURAS_DIR, `quem-responde-compacta-escala${scale}.png`), fullPage: false });
+      resultados.push(await medirPagina(page, `quem-responde-compacta@${scale}x`));
     }
 
     // Captura etapas do assistente

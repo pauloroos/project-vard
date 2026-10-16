@@ -1,161 +1,414 @@
-import { describe, it, expect, vi, afterEach } from "vitest";
-import { AbaModelos, agruparModelos, type DepsAbaModelos } from "../src/ui/aba-modelos";
-import { OpenJarvis } from "../src/conectores/openjarvis/cliente";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import type { PaineisConfig } from "../src/config/paineis";
+import { PAINEIS_PADRAO } from "../src/config/paineis";
+import type { Config } from "../src/config/config";
+import { CONFIG_PADRAO } from "../src/config/config";
 
-// DOM mínimo: o suficiente para a aba (os testes rodam em node, sem navegador).
-class No {
-  textContent = ""; className = ""; checked = false; value = ""; name = ""; type = "";
-  filhos: unknown[] = []; ouvintes: Record<string, (() => void)[]> = {}; achados = new Map<string, No>();
-  set innerHTML(_: string) { this.filhos = []; }
-  append(...n: unknown[]) { this.filhos.push(...n); }
-  addEventListener(t: string, f: () => void) { (this.ouvintes[t] ??= []).push(f); }
-  querySelector(s: string) { if (!this.achados.has(s)) this.achados.set(s, new No()); return this.achados.get(s)!; }
-}
-vi.stubGlobal("document", { createElement: () => new No(), createTextNode: (t: string) => ({ texto: t }) });
+// Estado em memória simulando o arquivo paineis.json via invoke
+let cfgEmMemoria: PaineisConfig | null = null;
+let configEmMemoria: Config = { ...CONFIG_PADRAO };
 
-function montar(ids: string[] | Error, status: Awaited<ReturnType<DepsAbaModelos["statusPonte"]>>, modelo = "") {
-  const raiz = new No();
-  const oj = { modelos: async () => { if (ids instanceof Error) throw ids; return ids; } } as unknown as OpenJarvis;
-  const aba = new AbaModelos(raiz as unknown as HTMLElement, modelo, { criarOj: () => oj, statusPonte: async () => status });
-  return { aba, raiz, lista: raiz.querySelector("#mod-lista"), reserva: raiz.querySelector("#mod-reserva") };
-}
-/** Os rótulos (labels) da lista, entrando nos fieldsets: um label tem o rádio em filhos[0] e o texto em filhos[1]. */
-const labels = (lista: No): No[] => lista.filhos.flatMap((f) => ((f as No).filhos[0] instanceof No && ((f as No).filhos[0] as No).type === "radio" ? [f as No] : labels(f as No)));
-const rotulos = (lista: No) => labels(lista).map((l) => (l.filhos[1] as { texto: string }).texto.trim());
-const titulos = (lista: No) => lista.filhos.filter((f) => (f as No).className === "grupo").map((f) => ((f as No).filhos[0] as No).textContent);
+vi.mock("@tauri-apps/api/core", () => ({
+  invoke: vi.fn().mockImplementation((cmd: string, args?: Record<string, unknown>) => {
+    if (cmd === "ler_paineis") return Promise.resolve(cfgEmMemoria);
+    if (cmd === "gravar_paineis") {
+      cfgEmMemoria = (args?.valor as PaineisConfig) ?? null;
+      return Promise.resolve(undefined);
+    }
+    if (cmd === "ler_config") return Promise.resolve(configEmMemoria);
+    if (cmd === "gravar_config") {
+      configEmMemoria = (args?.valor as Config) ?? configEmMemoria;
+      return Promise.resolve(undefined);
+    }
+    return Promise.resolve(null);
+  }),
+}));
 
-describe("AbaModelos", () => {
-  afterEach(() => vi.restoreAllMocks());
+vi.mock("../src/config/clis", () => ({
+  detectarClis: vi.fn().mockResolvedValue([]),
+}));
 
-  it("lista_vazia_oferece_so_o_automatico", async () => {
-    const t = montar([], null);
-    await t.aba.carregar();
-    expect(rotulos(t.lista)).toEqual(["Automático (o primeiro: nenhum)"]);
-  });
-  it("conector_fora_mostra_o_erro_e_nao_quebra", async () => {
-    const t = montar(new Error("HTTP 500"), null);
-    await t.aba.carregar();
-    expect(t.lista.textContent).toContain("não respondeu");
-    expect(t.reserva.textContent).toContain("sem informação de reserva");
-  });
-  it("modelo_salvo_que_sumiu_aparece_marcado_como_ausente", async () => {
-    const t = montar(["a", "b"], null, "c");
-    await t.aba.carregar();
-    const r = rotulos(t.lista);
-    expect(r).toHaveLength(4);
-    expect(r[3]).toContain("não está mais no OpenJarvis");
-    expect(labels(t.lista)[3].filhos[0]).toMatchObject({ value: "c", checked: true });
-    expect(t.aba.escolhido).toBe("c");
-  });
-  it("escolher_um_modelo_atualiza_escolhido", async () => {
-    const t = montar(["a", "b"], null);
-    await t.aba.carregar();
-    const r = labels(t.lista)[2].filhos[0] as No;
-    r.checked = true; r.ouvintes.change[0]();
-    expect(t.aba.escolhido).toBe("b");
-  });
-  it("com_modelos_do_lmstudio_a_lista_vem_em_dois_grupos", async () => {
-    const t = montar(["a", "b", "c"], { ok: true, modo: "ligado", modelos_lmstudio: ["b"] });
-    await t.aba.carregar();
-    expect(titulos(t.lista)).toEqual(["LM Studio (local)", "OmniRouter (nuvem)"]);
-    expect(rotulos(t.lista)).toEqual(["Automático (o primeiro: a)", "b", "a", "c"]);
-  });
-  it("sem_a_ponte_um_grupo_so", async () => {
-    const t = montar(["a"], null);
-    await t.aba.carregar();
-    expect(titulos(t.lista)).toEqual(["Todos"]);
-  });
-  it("reserva_presente_e_ausente", async () => {
-    const com = montar(["a"], { ok: true, modo: "ligado", reserva: "combo/t1" });
-    await com.aba.carregar();
-    expect(com.reserva.textContent).toBe("Se o principal falhar, o OpenJarvis usa combo/t1.");
-    const sem = montar(["a"], { ok: true, modo: "ligado" });
-    await sem.aba.carregar();
-    expect(sem.reserva.textContent).toBe("A ponte não informa um modelo de reserva.");
-  });
-  it("modelos_com_data_nao_array_devolve_lista_vazia", async () => {
-    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ data: "x" }), { status: 200 })));
-    expect(await new OpenJarvis("http://127.0.0.1:8000").modelos()).toEqual([]);
-    vi.unstubAllGlobals();
-    vi.stubGlobal("document", { createElement: () => new No(), createTextNode: (t: string) => ({ texto: t }) });
-  });
-  it("definirModelo_durante_a_espera_nao_deixa_cache_obsoleto", async () => {
-    vi.spyOn(console, "warn").mockImplementation(() => {});
-    let liberar!: () => void;
-    const portao = new Promise<void>((r) => { liberar = r; });
-    const corpos: string[] = [];
-    vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
-      if (url.endsWith("/v1/models")) { await portao; return new Response(JSON.stringify({ data: [{ id: "a" }, { id: "b" }] }), { status: 200 }); }
-      corpos.push(JSON.parse(String(init?.body)).model);
-      return new Response(JSON.stringify({ choices: [{ message: { content: "ok" } }] }), { status: 200 });
-    }));
-    const oj = new OpenJarvis("http://127.0.0.1:8000", "a");
-    const p = oj.perguntar([{ role: "user", content: "oi" }]);
-    oj.definirModelo("b");
-    liberar();
-    await p;
-    await oj.perguntar([{ role: "user", content: "oi" }]);
-    expect(corpos).toEqual(["b", "b"]);
-    vi.unstubAllGlobals();
-    vi.stubGlobal("document", { createElement: () => new No(), createTextNode: (t: string) => ({ texto: t }) });
-  });
+// Mock de atualizarConfig para refletir mudanças no configEmMemoria
+vi.mock("../src/config/config", async () => {
+  const actual = await vi.importActual<typeof import("../src/config/config")>("../src/config/config");
+  return {
+    ...actual,
+    atualizarConfig: vi.fn(async (patch: Partial<Config>) => {
+      configEmMemoria = { ...configEmMemoria, ...patch };
+      return configEmMemoria;
+    }),
+  };
 });
 
-describe("AbaModelos.cerebro", () => {
-  it("renderiza_dois_radios_de_cerebro_com_openjarvis_marcado_por_padrao", async () => {
-    const t = montar(["a"], null);
-    await t.aba.carregar();
-    const campo = t.raiz.querySelector("#mod-cerebro");
-    const radios = labels(campo).filter((l) => (l.filhos[0] as No).name === "cerebro");
-    expect(radios).toHaveLength(2);
-    expect(radios[0].filhos[0]).toMatchObject({ value: "openjarvis", checked: true });
-    expect(radios[1].filhos[0]).toMatchObject({ value: "proprio", checked: false });
+import { AbaModelos, type DepsQuemResponde } from "../src/ui/aba-modelos";
+import { detectarClis } from "../src/config/clis";
+
+const mockDetectarClis = vi.mocked(detectarClis);
+
+function criarRaiz(): HTMLElement {
+  const el = document.createElement("div");
+  document.body.appendChild(el);
+  return el;
+}
+
+function criarDeps(overrides: Partial<DepsQuemResponde> = {}): DepsQuemResponde {
+  return {
+    criarOj: () => ({
+      modelos: async () => ["modelo-oj-1", "modelo-oj-2"],
+      perguntar: async () => "ok",
+    }) as any,
+    statusPonte: async () => ({ ok: true, modo: "ligado" }) as any,
+    ponteUrl: "http://127.0.0.1:8765",
+    config: { ...configEmMemoria },
+    ...overrides,
+  };
+}
+
+describe("AbaModelos (Quem responde 0.9.3)", () => {
+  beforeEach(() => {
+    cfgEmMemoria = null;
+    configEmMemoria = { ...CONFIG_PADRAO };
+    mockDetectarClis.mockResolvedValue([]);
   });
 
-  it("respeita_cerebroInicial_proprio", async () => {
-    const raiz = new No();
-    const oj = { modelos: async () => [] } as unknown as OpenJarvis;
-    const aba = new AbaModelos(raiz as unknown as HTMLElement, "", { criarOj: () => oj, statusPonte: async () => null, cerebroInicial: "proprio" });
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("renderiza card fixo do OpenJarvis e botão adicionar", async () => {
+    const raiz = criarRaiz();
+    const aba = new AbaModelos(raiz, criarDeps());
     await aba.carregar();
-    const radios = labels(raiz.querySelector("#mod-cerebro")).filter((l) => (l.filhos[0] as No).name === "cerebro");
-    expect(radios[1].filhos[0]).toMatchObject({ value: "proprio", checked: true });
-    expect(aba.cerebro).toBe("proprio");
+    expect(raiz.textContent).toContain("OpenJarvis (servidor atual)");
+    expect(raiz.textContent).toContain("Adicionar provedor");
   });
 
-  it("aoMudarCerebro_eh_chamado_ao_trocar_radio", async () => {
-    const cb = vi.fn();
-    const t = montar(["a"], null);
-    (t.aba as any).deps.aoMudarCerebro = cb;
-    await t.aba.carregar();
-    const radios = labels(t.raiz.querySelector("#mod-cerebro")).filter((l) => (l.filhos[0] as No).name === "cerebro");
-    const proprio = radios[1].filhos[0] as No;
-    proprio.checked = true;
-    proprio.ouvintes.change[0]();
-    expect(cb).toHaveBeenCalledWith("proprio");
-    expect(t.aba.cerebro).toBe("proprio");
+  it("OpenJarvis fora do ar mostra selo de aviso", async () => {
+    const raiz = criarRaiz();
+    const deps = criarDeps({
+      criarOj: () => ({ modelos: async () => { throw new Error("fora"); } }) as any,
+    });
+    const aba = new AbaModelos(raiz, deps);
+    await aba.carregar();
+    expect(raiz.textContent).toContain("Fora do ar");
   });
 
-  it("nao_chama_aoMudarCerebro_quando_valor_nao_muda", async () => {
-    const cb = vi.fn();
-    const t = montar(["a"], null);
-    (t.aba as any).deps.aoMudarCerebro = cb;
-    await t.aba.carregar();
-    const radios = labels(t.raiz.querySelector("#mod-cerebro")).filter((l) => (l.filhos[0] as No).name === "cerebro");
-    const oj = radios[0].filhos[0] as No;
-    oj.checked = true;
-    oj.ouvintes.change[0]();
-    expect(cb).not.toHaveBeenCalled();
+  it("ponte fora mostra aviso U8 no topo", async () => {
+    const raiz = criarRaiz();
+    const deps = criarDeps({ statusPonte: async () => null });
+    const aba = new AbaModelos(raiz, deps);
+    await aba.carregar();
+    // Aguardar renderização
+    await new Promise((r) => setTimeout(r, 10));
+    expect(raiz.textContent).toContain("Os serviços do Vard estão desligados");
   });
-});
 
-describe("agruparModelos", () => {
-  it("separa_local_e_nuvem", () => {
-    expect(agruparModelos(["a", "b", "c"], ["b"])).toEqual([{ titulo: "LM Studio (local)", ids: ["b"] }, { titulo: "OmniRouter (nuvem)", ids: ["a", "c"] }]);
+  it("Usar este no OpenJarvis grava cerebro=openjarvis", async () => {
+    configEmMemoria = { ...CONFIG_PADRAO, cerebro: "proprio" };
+    const raiz = criarRaiz();
+    const deps = criarDeps({ config: { ...configEmMemoria } });
+    const aba = new AbaModelos(raiz, deps);
+    await aba.carregar();
+
+    const btns = Array.from(raiz.querySelectorAll<HTMLButtonElement>("button"));
+    const usarOj = btns.find((b) => b.textContent === "Usar este");
+    expect(usarOj).toBeTruthy();
+    usarOj!.click();
+    await new Promise((r) => setTimeout(r, 50));
+
+    expect(configEmMemoria.cerebro).toBe("openjarvis");
   });
-  it("sem_lista_da_ponte_e_um_grupo_todos", () => {
-    expect(agruparModelos(["a"], null)).toEqual([{ titulo: "Todos", ids: ["a"] }]);
+
+  it("Usar este em provedor grava cerebro=proprio e paineis.ativo", async () => {
+    cfgEmMemoria = {
+      ...PAINEIS_PADRAO,
+      provedores: [{ id: "lm", nome: "LM Studio", tipo: "lmstudio", url_base: "http://localhost:1234/v1", modelo: "llama-3" }],
+    };
+    configEmMemoria = { ...CONFIG_PADRAO, cerebro: "openjarvis" };
+    const raiz = criarRaiz();
+    const deps = criarDeps({ config: { ...configEmMemoria } });
+    const aba = new AbaModelos(raiz, deps);
+    await aba.carregar();
+
+    // O segundo "Usar este" é o do provedor (o primeiro é do OpenJarvis)
+    const btns = Array.from(raiz.querySelectorAll<HTMLButtonElement>("button"));
+    const usarProv = btns.filter((b) => b.textContent === "Usar este")[1];
+    expect(usarProv).toBeTruthy();
+    usarProv!.click();
+    await new Promise((r) => setTimeout(r, 50));
+
+    expect(configEmMemoria.cerebro).toBe("proprio");
+    expect(cfgEmMemoria!.ativo).toBe("lm");
   });
-  it("so_local_omite_o_grupo_vazio", () => {
-    expect(agruparModelos(["a"], ["a"])).toEqual([{ titulo: "LM Studio (local)", ids: ["a"] }]);
+
+  it("Reserva alterna entre provedores", async () => {
+    cfgEmMemoria = {
+      ...PAINEIS_PADRAO,
+      provedores: [
+        { id: "a", nome: "A", tipo: "lmstudio", url_base: "http://a", modelo: "m" },
+        { id: "b", nome: "B", tipo: "lmstudio", url_base: "http://b", modelo: "m" },
+      ],
+    };
+    const raiz = criarRaiz();
+    const aba = new AbaModelos(raiz, criarDeps());
+    await aba.carregar();
+
+    const btns = Array.from(raiz.querySelectorAll<HTMLButtonElement>("button"));
+    const reservaA = btns.filter((b) => b.textContent === "Reserva")[0];
+    reservaA!.click();
+    await new Promise((r) => setTimeout(r, 50));
+    expect(cfgEmMemoria!.reserva).toBe("a");
+
+    // Clicar de novo desmarca
+    const btns2 = Array.from(raiz.querySelectorAll<HTMLButtonElement>("button"));
+    const reservaA2 = btns2.filter((b) => b.textContent === "Reserva")[0];
+    reservaA2!.click();
+    await new Promise((r) => setTimeout(r, 50));
+    expect(cfgEmMemoria!.reserva).toBeNull();
+  });
+
+  it("Remover provedor atualiza lista e limpa ativo/reserva", async () => {
+    cfgEmMemoria = {
+      ...PAINEIS_PADRAO,
+      provedores: [{ id: "x", nome: "X", tipo: "lmstudio", url_base: "http://x", modelo: "m" }],
+      ativo: "x",
+      reserva: "x",
+    };
+    const raiz = criarRaiz();
+    const aba = new AbaModelos(raiz, criarDeps());
+    await aba.carregar();
+
+    const btns = Array.from(raiz.querySelectorAll<HTMLButtonElement>("button"));
+    const remover = btns.find((b) => b.textContent === "Remover");
+    remover!.click();
+    await new Promise((r) => setTimeout(r, 50));
+
+    expect(cfgEmMemoria!.provedores).toHaveLength(0);
+    expect(cfgEmMemoria!.ativo).toBeNull();
+    expect(cfgEmMemoria!.reserva).toBeNull();
+  });
+
+  it("Modal valida endpoint vazio para provedor não-CLI", async () => {
+    const raiz = criarRaiz();
+    const aba = new AbaModelos(raiz, criarDeps());
+    await aba.carregar();
+
+    const btnAdd = Array.from(raiz.querySelectorAll<HTMLButtonElement>("button")).find((b) => b.textContent === "Adicionar provedor");
+    expect(btnAdd).toBeTruthy();
+    btnAdd!.click();
+    await new Promise((r) => setTimeout(r, 50));
+
+    // Preencher nome e modelo mas deixar URL vazia
+    const inputs = Array.from(raiz.querySelectorAll<HTMLInputElement>("input"));
+    const nomeInput = inputs.find((i) => i.placeholder?.includes("Nome"));
+    const modeloInput = inputs.find((i) => i.placeholder?.includes("Modelo padrão"));
+    if (nomeInput) nomeInput.value = "Teste";
+    if (modeloInput) modeloInput.value = "modelo-x";
+
+    const btnSalvar = Array.from(raiz.querySelectorAll<HTMLButtonElement>("button")).find((b) => b.textContent === "Salvar");
+    expect(btnSalvar).toBeTruthy();
+    btnSalvar!.click();
+    await new Promise((r) => setTimeout(r, 50));
+
+    // Modal deve mostrar erro e não fechar
+    expect(raiz.textContent).toContain("Preencha nome, tipo, endpoint e modelo");
+  });
+
+  it("Buscar modelos preenche select via fetch simulado", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (url: string | URL | Request) => {
+      const s = typeof url === "string" ? url : url.toString();
+      if (s.includes("/primeiro-uso/cerebro/modelos")) {
+        return new Response(JSON.stringify({ ok: true, modelos: [{ id: "m1" }, { id: "m2" }] }), { status: 200 });
+      }
+      return new Response(JSON.stringify({ ok: false }), { status: 404 });
+    }));
+
+    const raiz = criarRaiz();
+    const aba = new AbaModelos(raiz, criarDeps());
+    await aba.carregar();
+
+    // Abrir modal
+    const btnAdd = Array.from(raiz.querySelectorAll<HTMLButtonElement>("button")).find((b) => b.textContent === "Adicionar provedor");
+    btnAdd!.click();
+    await new Promise((r) => setTimeout(r, 50));
+
+    // Preencher URL e clicar Buscar modelos
+    const urlInput = Array.from(raiz.querySelectorAll<HTMLInputElement>("input")).find((i) => i.placeholder?.includes("localhost"));
+    if (urlInput) urlInput.value = "http://localhost:1234/v1";
+
+    const btnBuscar = Array.from(raiz.querySelectorAll<HTMLButtonElement>("button")).find((b) => b.textContent === "Buscar modelos");
+    expect(btnBuscar).toBeTruthy();
+    btnBuscar!.click();
+    await new Promise((r) => setTimeout(r, 100));
+
+    // O select de modelos é o segundo select dentro do modal (o primeiro é o de tipo)
+    const modal = raiz.querySelector(".modal");
+    expect(modal).toBeTruthy();
+    const selects = Array.from(modal!.querySelectorAll<HTMLSelectElement>("select"));
+    const modelosSel = selects[1];
+    expect(modelosSel).toBeTruthy();
+    const opcoes = Array.from(modelosSel!.options).map((o) => o.value);
+    expect(opcoes).toContain("m1");
+    expect(opcoes).toContain("m2");
+
+    vi.unstubAllGlobals();
+  });
+
+  it("CLI detectada aparece sugerida no modal", async () => {
+    mockDetectarClis.mockResolvedValue([
+      { tipo: "cli-claude", instalada: true, versao: "2.1.301", modelos: ["claude-sonnet-5-5"] },
+    ]);
+    const raiz = criarRaiz();
+    const aba = new AbaModelos(raiz, criarDeps());
+    await aba.carregar();
+
+    // Abrir modal
+    const btnAdd = Array.from(raiz.querySelectorAll<HTMLButtonElement>("button")).find((b) => b.textContent === "Adicionar provedor");
+    btnAdd!.click();
+    await new Promise((r) => setTimeout(r, 50));
+
+    // Selecionar tipo cli-claude
+    const selects = Array.from(raiz.querySelectorAll<HTMLSelectElement>("select"));
+    const tipoSel = selects.find((s) => Array.from(s.options).some((o) => o.value === "cli-claude"));
+    expect(tipoSel).toBeTruthy();
+    tipoSel!.value = "cli-claude";
+    tipoSel!.dispatchEvent(new Event("change"));
+    await new Promise((r) => setTimeout(r, 50));
+
+    expect(raiz.textContent).toContain("Encontrado no PC");
+    expect(raiz.textContent).toContain("Claude Code 2.1.301");
+  });
+
+  it("Agentes gravados pelo card da CLI com checkbox delegada", async () => {
+    mockDetectarClis.mockResolvedValue([
+      { tipo: "cli-claude", instalada: true, versao: "2.1.301", modelos: ["claude-sonnet-5-5"] },
+    ]);
+    const raiz = criarRaiz();
+    const aba = new AbaModelos(raiz, criarDeps());
+    await aba.carregar();
+
+    // Abrir modal
+    const btnAdd = Array.from(raiz.querySelectorAll<HTMLButtonElement>("button")).find((b) => b.textContent === "Adicionar provedor");
+    btnAdd!.click();
+    await new Promise((r) => setTimeout(r, 50));
+
+    // Selecionar CLI
+    const selects = Array.from(raiz.querySelectorAll<HTMLSelectElement>("select"));
+    const tipoSel = selects.find((s) => Array.from(s.options).some((o) => o.value === "cli-claude"));
+    tipoSel!.value = "cli-claude";
+    tipoSel!.dispatchEvent(new Event("change"));
+    await new Promise((r) => setTimeout(r, 50));
+
+    // Preencher nome e modelo
+    const inputs = Array.from(raiz.querySelectorAll<HTMLInputElement>("input"));
+    const nomeInput = inputs.find((i) => i.placeholder?.includes("Nome"));
+    const modeloInput = inputs.find((i) => i.placeholder?.includes("Modelo padrão"));
+    if (nomeInput) nomeInput.value = "Claude CLI";
+    if (modeloInput) modeloInput.value = "claude-sonnet-5-5";
+
+    // Marcar checkbox delegada
+    const checkboxes = Array.from(raiz.querySelectorAll<HTMLInputElement>("input[type='checkbox']"));
+    const delegadaChk = checkboxes.find((c) => c.parentElement?.textContent?.includes("delegadas"));
+    if (delegadaChk) delegadaChk.checked = true;
+
+    // Salvar
+    const btnSalvar = Array.from(raiz.querySelectorAll<HTMLButtonElement>("button")).find((b) => b.textContent === "Salvar");
+    btnSalvar!.click();
+    await new Promise((r) => setTimeout(r, 100));
+
+    expect(cfgEmMemoria!.provedores).toHaveLength(1);
+    expect(cfgEmMemoria!.provedores[0].tipo).toBe("cli-claude");
+    expect(cfgEmMemoria!.agentes.claude.padrao).toBe("claude-sonnet-5-5");
+  });
+
+  it("Modal adapta campos para CLI: esconde endpoint/chave/buscar, mostra yolo/enxuto/C11 e detecção", async () => {
+    mockDetectarClis.mockResolvedValue([
+      { tipo: "cli-claude", instalada: true, versao: "2.1.301", modelos: ["claude-sonnet-5-5"] },
+    ]);
+    const raiz = criarRaiz();
+    const aba = new AbaModelos(raiz, criarDeps());
+    await aba.carregar();
+
+    const btnAdd = Array.from(raiz.querySelectorAll<HTMLButtonElement>("button")).find((b) => b.textContent === "Adicionar provedor");
+    btnAdd!.click();
+    await new Promise((r) => setTimeout(r, 50));
+
+    // Selecionar tipo CLI
+    const selects = Array.from(raiz.querySelectorAll<HTMLSelectElement>("select"));
+    const tipoSel = selects.find((s) => Array.from(s.options).some((o) => o.value === "cli-claude"));
+    tipoSel!.value = "cli-claude";
+    tipoSel!.dispatchEvent(new Event("change"));
+    await new Promise((r) => setTimeout(r, 50));
+
+    // Endpoint, chave e buscar devem estar escondidos
+    const modal = raiz.querySelector(".modal")!;
+    const labels = Array.from(modal.querySelectorAll<HTMLElement>(".campo-modal"));
+    const endpointLabel = labels.find((l) => l.textContent?.includes("Endpoint"));
+    const chaveLabel = labels.find((l) => l.textContent?.includes("Chave de API"));
+    expect(endpointLabel?.hidden).toBe(true);
+    expect(chaveLabel?.hidden).toBe(true);
+    expect(modal.querySelector(".qr-modal-busca")?.closest("[hidden]")).toBeTruthy();
+
+    // Yolo, enxuto, C11 e detecção visíveis
+    expect(modal.textContent).toContain("Rodar sem pedir permissão (yolo)");
+    expect(modal.textContent).toContain("Modo enxuto");
+    expect(modal.textContent).toContain("poder completo");
+    expect(modal.textContent).toContain("Encontrado no PC: Claude Code 2.1.301");
+  });
+
+  it("Codex/OpenCode: tarefas longas travada e marcada, aviso visível", async () => {
+    const raiz = criarRaiz();
+    const aba = new AbaModelos(raiz, criarDeps());
+    await aba.carregar();
+
+    const btnAdd = Array.from(raiz.querySelectorAll<HTMLButtonElement>("button")).find((b) => b.textContent === "Adicionar provedor");
+    btnAdd!.click();
+    await new Promise((r) => setTimeout(r, 50));
+
+    const selects = Array.from(raiz.querySelectorAll<HTMLSelectElement>("select"));
+    const tipoSel = selects.find((s) => Array.from(s.options).some((o) => o.value === "cli-codex"));
+    tipoSel!.value = "cli-codex";
+    tipoSel!.dispatchEvent(new Event("change"));
+    await new Promise((r) => setTimeout(r, 50));
+
+    const modal = raiz.querySelector(".modal")!;
+    const checkboxes = Array.from(modal.querySelectorAll<HTMLInputElement>("input[type='checkbox']"));
+    const delegadaChk = checkboxes.find((c) => c.parentElement?.textContent?.includes("delegadas"));
+    expect(delegadaChk).toBeTruthy();
+    expect(delegadaChk!.checked).toBe(true);
+    expect(delegadaChk!.disabled).toBe(true);
+    expect(modal.textContent).toContain("serve só para tarefas longas");
+  });
+
+  it("CLI não encontrada: mostra aviso e Testar recusa", async () => {
+    mockDetectarClis.mockResolvedValue([]);
+    const raiz = criarRaiz();
+    const aba = new AbaModelos(raiz, criarDeps());
+    await aba.carregar();
+
+    const btnAdd = Array.from(raiz.querySelectorAll<HTMLButtonElement>("button")).find((b) => b.textContent === "Adicionar provedor");
+    btnAdd!.click();
+    await new Promise((r) => setTimeout(r, 50));
+
+    const selects = Array.from(raiz.querySelectorAll<HTMLSelectElement>("select"));
+    const tipoSel = selects.find((s) => Array.from(s.options).some((o) => o.value === "cli-claude"));
+    tipoSel!.value = "cli-claude";
+    tipoSel!.dispatchEvent(new Event("change"));
+    await new Promise((r) => setTimeout(r, 50));
+
+    const modal = raiz.querySelector(".modal")!;
+    expect(modal.textContent).toContain("Não encontrado neste PC");
+
+    // Preencher nome e modelo para poder clicar Testar
+    const inputs = Array.from(modal.querySelectorAll<HTMLInputElement>("input"));
+    const nomeInput = inputs.find((i) => i.placeholder?.includes("Nome"));
+    if (nomeInput) nomeInput.value = "Claude CLI";
+
+    const btnTestar = Array.from(modal.querySelectorAll<HTMLButtonElement>("button")).find((b) => b.textContent === "Testar");
+    expect(btnTestar).toBeTruthy();
+    btnTestar!.click();
+    await new Promise((r) => setTimeout(r, 50));
+
+    expect(modal.textContent).toContain("não encontrada neste PC");
   });
 });
