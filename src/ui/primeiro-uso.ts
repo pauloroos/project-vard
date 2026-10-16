@@ -3,6 +3,7 @@
  * botão "Configurar primeiro uso" nas Configurações reabre sem apagar escolhas. */
 import type { EstadoPrimeiroUso } from "../config/primeiro-uso";
 import { atualizarEstadoPrimeiroUso, lerEstadoPrimeiroUso, reabrirPrimeiroUso } from "../config/primeiro-uso";
+import { montarEtapaAudio, type DepsEtapaAudio, type ResultadoEtapaAudio } from "./primeiro-uso-audio";
 
 const ETAPAS = ["importar", "detectar", "nome", "cerebro", "voz", "audio", "resumo"] as const;
 type Etapa = (typeof ETAPAS)[number];
@@ -21,6 +22,8 @@ export interface DepsPrimeiroUso {
   ponteUrl: string;
   /** Salva o nome de chamada e variantes na config ativa (acessor existente). */
   salvarNome?: (nome: string, variantes: string[]) => Promise<void>;
+  /** Recursos da janela hospedeira; a restauração da escuta permanece com o widget. */
+  audio?: DepsEtapaAudio;
 }
 
 function criarContainer(): HTMLDivElement {
@@ -36,7 +39,10 @@ function renderizarEtapa(
   estado: EstadoPrimeiroUso,
   deps: DepsPrimeiroUso,
   onAtualizado: (novo: EstadoPrimeiroUso) => void,
-): void {
+): () => void {
+  let limparConteudo = () => {};
+  let pararTeste = () => {};
+  let salvarAudio: (() => Promise<void>) | undefined;
   container.innerHTML = "";
   const titulo = document.createElement("h2");
   titulo.textContent = TITULOS_ETAPA[etapa];
@@ -57,9 +63,35 @@ function renderizarEtapa(
     const resumoDiv = document.createElement("div");
     resumoDiv.id = "primeiro-uso-resumo";
     resumoDiv.textContent = estado.concluido
-      ? "Tudo pronto para conversar."
-      : "Revise suas escolhas e conclua.";
+      ? estado.pendencias.length ? `Configuração concluída com pendências: ${estado.pendencias.join(", ")}` : "Tudo pronto para conversar."
+      : estado.pendencias.length ? `Revise suas escolhas. Pendências: ${estado.pendencias.join(", ")}` : "Revise suas escolhas e conclua.";
     corpo.appendChild(resumoDiv);
+  } else if ((etapa === "audio" || etapa === "voz") && deps.audio) {
+    const containerAudio = document.createElement("div");
+    containerAudio.id = `primeiro-uso-container-${etapa}`;
+    corpo.appendChild(containerAudio);
+    const salvarResultado = async (r: ResultadoEtapaAudio) => {
+      await deps.audio!.salvar(r);
+      const pendencias = estado.pendencias.filter((p) => p !== "microfone_nao_testado" && p !== "voz_nao_testada");
+      if (!r.microfone_testado) pendencias.push("microfone_nao_testado");
+      if (!r.voz_ouvida) pendencias.push("voz_nao_testada");
+      const novo = await atualizarEstadoPrimeiroUso(deps.ponteUrl, {
+        microfone_id: r.microfone_id, saida_id: r.saida_id, voz_id: r.voz_id, pendencias,
+      });
+      if (!novo) throw new Error("Não consegui salvar o teste de áudio");
+      Object.assign(estado, novo);
+    };
+    const config = { ...deps.audio.config,
+      microfone_id: estado.microfone_id ?? deps.audio.config.microfone_id,
+      saida_id: estado.saida_id ?? deps.audio.config.saida_id };
+    const campoVoz = config.voz_provedor === "propria" ? "voz_propria" : config.voz_provedor === "gemini" ? "gemini_voz" : config.voz_provedor === "elevenlabs" ? "elevenlabs_voz" : "voz";
+    if (estado.voz_id !== undefined) config[campoVoz] = estado.voz_id;
+    const audio = montarEtapaAudio(containerAudio, { ...deps.audio, config, salvar: salvarResultado,
+      resultadoInicial: { microfone_testado: estado.microfone_id !== undefined && !estado.pendencias.includes("microfone_nao_testado"),
+        voz_ouvida: estado.saida_id !== undefined && !estado.pendencias.includes("voz_nao_testada") } });
+    limparConteudo = audio.sair;
+    pararTeste = audio.cancelar;
+    salvarAudio = () => salvarResultado(audio.resultado());
   } else if (etapa === "audio" || etapa === "cerebro") {
     // Ponto de montagem para T3 (cerebro) e T4 (audio): container DOM próprio
     // sem conteúdo implementado aqui; os módulos montarEtapaCerebro/montarEtapaAudio
@@ -78,11 +110,21 @@ function renderizarEtapa(
   botoes.className = "primeiro-uso-botoes";
 
   const idxAtual = ETAPAS.indexOf(etapa);
+  const prepararNavegacao = async () => {
+    pararTeste();
+    try { await salvarAudio?.(); return true; }
+    catch {
+      const aviso = document.createElement("p"); aviso.role = "alert";
+      aviso.textContent = "Não consegui salvar o teste de áudio. Tente novamente.";
+      corpo.appendChild(aviso); return false;
+    }
+  };
   if (idxAtual > 0) {
     const voltar = document.createElement("button");
     voltar.id = "primeiro-uso-voltar";
     voltar.textContent = "Voltar";
     voltar.onclick = async () => {
+      if (!(await prepararNavegacao())) return;
       const novo = await atualizarEstadoPrimeiroUso(deps.ponteUrl, { etapa: ETAPAS[idxAtual - 1] });
       if (novo) onAtualizado(novo);
     };
@@ -93,6 +135,7 @@ function renderizarEtapa(
   proximo.id = "primeiro-uso-proximo";
   proximo.textContent = etapa === "resumo" ? "Concluir" : "Próximo";
   proximo.onclick = async () => {
+    if (!(await prepararNavegacao())) return;
     if (etapa === "nome") {
       const inputEl = corpo.querySelector<HTMLInputElement>("#primeiro-uso-nome-input");
       const nome = (inputEl?.value || "").trim();
@@ -121,6 +164,7 @@ function renderizarEtapa(
   };
   botoes.appendChild(proximo);
   container.appendChild(botoes);
+  return limparConteudo;
 }
 
 /** Monta o assistente no elemento raiz dado; lê o estado atual e renderiza a etapa correta.
@@ -136,9 +180,11 @@ export async function montarAssistentePrimeiroUso(
   raiz.appendChild(container);
 
   let estadoAtual = estado;
+  let limparEtapa = () => {};
   const render = () => {
+    limparEtapa();
     const etapa = (ETAPAS.includes(estadoAtual.etapa as Etapa) ? estadoAtual.etapa : "importar") as Etapa;
-    renderizarEtapa(container, etapa, estadoAtual, deps, (novo) => {
+    limparEtapa = renderizarEtapa(container, etapa, estadoAtual, deps, (novo) => {
       estadoAtual = novo;
       render();
     });
@@ -146,6 +192,7 @@ export async function montarAssistentePrimeiroUso(
   render();
 
   return () => {
+    limparEtapa();
     container.remove();
   };
 }
