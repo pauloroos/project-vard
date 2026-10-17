@@ -43,6 +43,15 @@ def cli_pronta(tmp_path):
     return TestClient(app, base_url="http://127.0.0.1:4720"), s
 
 
+def test_saude_supervisor_nao_inicia_reuniao_nem_carrega_modelo(cli):
+    import os
+    c, sessao, _ = cli
+    r = c.get("/saude")
+    assert r.status_code == 200
+    assert r.json() == {"ok": True, "pid": os.getpid(), "versao": servico.VERSAO}
+    assert not sessao.ativa and sessao.chamadas == []
+
+
 def _reuniao(raiz, nome="2026-10-13_1500"):
     from vard_reuniao import armazenamento as arm
     p = raiz / nome

@@ -71,6 +71,13 @@ def test_saude_antes_do_aquecimento():
     assert d["pronta"] is False and d["voz"] == "Suad Qasim" and d["aquecida"] is False
 
 
+def test_saude_identifica_processo_mesmo_sem_modelo_carregado():
+    import os
+    d = cliente(MotorFalso(pronta=False)).get("/saude").json()
+    assert d["ok"] is True and d["pid"] == os.getpid()
+    assert isinstance(d["versao"], str) and d["versao"]
+
+
 def test_falar_aquecendo_503():
     r = cliente(MotorFalso(pronta=False)).post("/falar", json={"texto": "Oi."})
     assert r.status_code == 503 and r.json() == {"erro": "aquecendo"}

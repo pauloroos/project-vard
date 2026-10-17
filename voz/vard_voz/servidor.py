@@ -183,6 +183,9 @@ def criar_app(
             device = motor.device
         return {
             "pronta": pronta,
+            "ok": True,
+            "pid": os.getpid(),
+            "versao": "0.1.0",
             "voz": voz_atual,
             "device": device,
             "aquecida": pronta,

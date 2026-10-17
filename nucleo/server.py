@@ -293,6 +293,12 @@ async def lifespan(app):
 app = FastAPI(title="Vard", lifespan=lifespan)
 
 
+@app.get("/saude")
+def saude_supervisor():
+    from vard import __version__
+    return {"ok": True, "versao": __version__, "pid": os.getpid()}
+
+
 def _erro(exc: modelos.ErroModelo) -> JSONResponse:
     # O detalhe técnico fica no log da ponte; a aba recebe só o código curto.
     log.warning("erro de modelo %s: %s", exc.codigo, exc.detalhe)
