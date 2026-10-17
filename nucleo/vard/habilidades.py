@@ -43,6 +43,11 @@ def _texto(valor):
     return isinstance(valor, str) and bool(re.search(r"[^\s\ufeff]", valor))
 
 
+def _tamanho_texto(valor: str) -> int:
+    """Unidades UTF-16, como maxlength no HTML e String.length no TypeScript."""
+    return len(valor.encode("utf-16-le", errors="surrogatepass")) // 2
+
+
 def _data(valor):
     if not isinstance(valor, str) or not re.fullmatch(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{3})?Z", valor, re.ASCII):
         return False
@@ -58,6 +63,8 @@ def validar_habilidades(raw) -> dict:
     obj = _objeto(raw, ("versao", "habilidades", "desligadas"))
     if isinstance(obj.get("versao"), bool) or obj.get("versao") != 1 or not isinstance(obj.get("habilidades"), list):
         raise ValueError("Versão ou lista de habilidades inválida")
+    if len(obj["habilidades"]) > 200:
+        raise ValueError("Cadastre até 200 habilidades")
     desligadas = obj.get("desligadas", [])
     if not isinstance(desligadas, list) or any(not isinstance(id_, str) or id_ not in IDS_FABRICA for id_ in desligadas) or len(set(desligadas)) != len(desligadas):
         raise ValueError("Lista de habilidades de fábrica desligadas inválida")
@@ -70,6 +77,14 @@ def validar_habilidades(raw) -> dict:
         ids.add(id_)
         if not _texto(h.get("nome")) or not _texto(h.get("instrucoes")) or not isinstance(h.get("quando"), list) or not h["quando"] or not all(_texto(f) for f in h["quando"]):
             raise ValueError("Preencha nome, frases de exemplo e instruções")
+        if _tamanho_texto(h["nome"]) > 80:
+            raise ValueError("Nome deve ter até 80 caracteres")
+        if len(h["quando"]) > 10:
+            raise ValueError("Use até 10 frases de exemplo")
+        if any(_tamanho_texto(f) > 200 for f in h["quando"]):
+            raise ValueError("Cada frase deve ter até 200 caracteres")
+        if _tamanho_texto(h["instrucoes"]) > 4000:
+            raise ValueError("Instruções devem ter até 4000 caracteres")
         if not isinstance(h.get("ligada"), bool) or h.get("situacao") not in ("treinada", "validada") or not _data(h.get("criada_em")):
             raise ValueError("Estado ou data de criação inválidos")
         if "validada_em" not in h or (h["validada_em"] is not None if h["situacao"] == "treinada" else not _data(h["validada_em"])):

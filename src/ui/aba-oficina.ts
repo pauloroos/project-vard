@@ -1,6 +1,6 @@
 import type { StatusPonte } from "../conectores/ponte/cliente";
 import { habilidadesFabrica } from "../config/habilidades-fabrica";
-import { lerHabilidades, gravarHabilidades, HABILIDADES_PADRAO, validarHabilidades, type Habilidade, type HabilidadesConfig } from "../config/habilidades";
+import { lerHabilidades, gravarHabilidades, HABILIDADES_PADRAO, LIMITES_HABILIDADES, validarHabilidades, type Habilidade, type HabilidadesConfig } from "../config/habilidades";
 import { abrirModal, campoModal, desenharCards, type Card } from "./componentes";
 
 export interface DepsAbaOficina {
@@ -30,7 +30,7 @@ export class AbaOficina {
   montar() {
     this.raiz.innerHTML = "";
     const ajuda = document.createElement("p");
-    ajuda.textContent = "Ensine receitas para o assistente cumprir com as ferramentas disponíveis. Capaz vem de fábrica; Treinada foi cadastrada; Validada já deu certo. As alterações são salvas a cada ação.";
+    ajuda.textContent = "Ensine até 200 receitas para o assistente cumprir com as ferramentas disponíveis. Capaz vem de fábrica; Treinada foi cadastrada; Validada já deu certo. As alterações são salvas a cada ação.";
     const topo = document.createElement("div"); topo.className = "oficina-filtros";
     this.busca = document.createElement("input"); this.busca.type = "search"; this.busca.className = "cards-busca"; this.busca.placeholder = "Buscar habilidades…"; this.busca.setAttribute("aria-label", "Buscar habilidades");
     this.filtro = document.createElement("select"); this.filtro.setAttribute("aria-label", "Situação");
@@ -119,13 +119,19 @@ export class AbaOficina {
     const nome = document.createElement("input"); nome.value = h?.nome ?? "";
     const quando = document.createElement("textarea"); quando.rows = 3; quando.value = h?.quando.join("\n") ?? "";
     const instrucoes = document.createElement("textarea"); instrucoes.rows = 6; instrucoes.value = h?.instrucoes ?? "";
+    nome.maxLength = LIMITES_HABILIDADES.nome;
+    quando.maxLength = LIMITES_HABILIDADES.frases * LIMITES_HABILIDADES.frase + LIMITES_HABILIDADES.frases - 1;
+    instrucoes.maxLength = LIMITES_HABILIDADES.instrucoes;
+    const contador = document.createElement("p"); contador.setAttribute("role", "status");
+    const contar = () => { contador.textContent = `${instrucoes.value.length}/${LIMITES_HABILIDADES.instrucoes} caracteres`; };
+    instrucoes.addEventListener("input", contar); contar();
     const ligada = document.createElement("input"); ligada.type = "checkbox"; ligada.checked = h?.ligada ?? true;
     const situacao = document.createElement("select");
     for (const [valor, rotulo] of [["treinada", "Treinada"], ["validada", "Validada"]]) {
       const op = document.createElement("option"); op.value = valor; op.textContent = rotulo; situacao.append(op);
     }
     situacao.value = h?.situacao ?? "treinada";
-    corpo.append(campoModal("Nome", nome), campoModal("Quando usar (uma frase por linha)", quando), campoModal("O que fazer", instrucoes, "Instruções em português, passo a passo."), campoModal("Ligada", ligada), campoModal("Situação", situacao));
+    corpo.append(campoModal("Nome", nome, "Até 80 caracteres."), campoModal("Quando usar (uma frase por linha)", quando, "Até 10 frases de até 200 caracteres cada."), campoModal("O que fazer", instrucoes, "Instruções em português, passo a passo. Até 4000 caracteres."), contador, campoModal("Ligada", ligada), campoModal("Situação", situacao));
     const modal = abrirModal({ titulo: h ? "Editar habilidade" : "Nova habilidade", corpo, aoFechar: () => { this.fecharModal = null; }, acoes: [
       { rotulo: "Cancelar" },
       { rotulo: "Salvar", primaria: true, aoClicar: async () => {

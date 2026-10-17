@@ -6,11 +6,12 @@ import { invoke } from "@tauri-apps/api/core";
 import { validarHabilidades, lerHabilidades, gravarHabilidades, HABILIDADES_PADRAO } from "../src/config/habilidades";
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }));
-const casos = JSON.parse(readFileSync("tests/fixtures/habilidades/contrato.json", "utf8")) as { nome: string; valido: boolean; valor: unknown }[];
+const casos = JSON.parse(readFileSync("tests/fixtures/habilidades/contrato.json", "utf8")) as { nome: string; valido: boolean; valor: unknown; erro?: string }[];
 
 describe("contrato compartilhado de habilidades", () => {
   for (const caso of casos) it(caso.nome, () => {
     if (caso.valido) expect(() => validarHabilidades(caso.valor)).not.toThrow();
+    else if (caso.erro) expect(() => validarHabilidades(caso.valor)).toThrow(caso.erro);
     else expect(() => validarHabilidades(caso.valor)).toThrow();
   });
 });

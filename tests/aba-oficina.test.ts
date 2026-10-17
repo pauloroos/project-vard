@@ -30,6 +30,51 @@ beforeEach(async () => {
 afterEach(() => { aba.desativar(); document.querySelectorAll<HTMLButtonElement>(".modal-acoes button").forEach((b) => { if (b.textContent === "Cancelar") b.click(); }); document.body.innerHTML = ""; });
 
 describe("Oficina", () => {
+  it("mostra os limites e atualiza o contador de instruções ao criar e editar", async () => {
+    botao("Nova habilidade").click();
+    expect((campo("Nome") as HTMLInputElement).maxLength).toBe(80);
+    expect((campo("Quando usar (uma frase por linha)") as HTMLTextAreaElement).maxLength).toBe(2009);
+    expect((campo("O que fazer") as HTMLTextAreaElement).maxLength).toBe(4000);
+    const dialogo = document.querySelector('[role="dialog"]')!;
+    expect(dialogo.textContent).toContain("Até 80 caracteres");
+    expect(dialogo.textContent).toContain("Até 10 frases de até 200 caracteres");
+    expect(dialogo.textContent).toContain("0/4000 caracteres");
+    campo("O que fazer").value = "Passo";
+    campo("O que fazer").dispatchEvent(new Event("input"));
+    expect(dialogo.textContent).toContain("5/4000 caracteres");
+    botao("Cancelar").click();
+    cfg.habilidades = [structuredClone(receita)]; await aba.ativar();
+    botao("Editar", card(receita.id)).click();
+    expect(document.querySelector('[role="dialog"]')!.textContent).toContain(`${receita.instrucoes.length}/4000 caracteres`);
+  });
+  it.each([
+    ["Nome", "a".repeat(81), "Nome deve ter até 80 caracteres"],
+    ["Quando usar (uma frase por linha)", Array(11).fill("oi").join("\n"), "Use até 10 frases de exemplo"],
+    ["Quando usar (uma frase por linha)", "a".repeat(201), "Cada frase deve ter até 200 caracteres"],
+    ["O que fazer", "a".repeat(4001), "Instruções devem ter até 4000 caracteres"],
+  ])("recusa excesso em %s sem gravar e mantém o modal aberto", async (rotulo, valor, erro) => {
+    botao("Nova habilidade").click();
+    campo("Nome").value = "Planejar";
+    campo("Quando usar (uma frase por linha)").value = "bom dia";
+    campo("O que fazer").value = "Consultar agenda.";
+    campo(rotulo).value = valor;
+    botao("Salvar").click(); await assentar();
+    expect(gravar).not.toHaveBeenCalled();
+    const dialogo = document.querySelector('[role="dialog"]');
+    expect(dialogo).not.toBeNull();
+    expect(dialogo!.textContent).toContain(erro);
+  });
+  it("recusa a habilidade 201 sem persistir", async () => {
+    cfg.habilidades = Array.from({ length: 200 }, (_, i) => ({ ...receita, id: `receita-${i}` }));
+    await aba.ativar(); botao("Nova habilidade").click();
+    campo("Nome").value = "Planejar";
+    campo("Quando usar (uma frase por linha)").value = "bom dia";
+    campo("O que fazer").value = "Consultar agenda.";
+    botao("Salvar").click(); await assentar();
+    expect(gravar).not.toHaveBeenCalled();
+    expect(document.querySelector('[role="dialog"]')!.textContent).toContain("Cadastre até 200 habilidades");
+    expect(cfg.habilidades).toHaveLength(200);
+  });
   it("sete capacidades com frases personalizadas e ações restritas", () => {
     expect(habilidadesFabrica("aurora", false).map((h) => h.nome)).toEqual(["Conversa", "Computador", "Oficina", "Consultas", "Memória", "Reunião", "Sistema"]);
     expect(raiz.querySelectorAll("article")).toHaveLength(7);

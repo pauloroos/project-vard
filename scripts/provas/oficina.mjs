@@ -122,11 +122,22 @@ try {
   await capturar("oficina-fabrica");
   await clicar("Nova habilidade");
   await esperar("!!document.querySelector('[role=dialog]')");
+  assert.deepEqual(await canal.avaliar("[...document.querySelectorAll('.modal input:not([type=checkbox]), .modal textarea')].map(c => c.maxLength)"), [80, 2009, 4000]);
+  await canal.avaliar(`(() => {
+    const campos = document.querySelectorAll('.modal input:not([type=checkbox]), .modal textarea');
+    campos[0].value = 'Planejar'; campos[1].value = 'bom dia'; campos[2].value = 'a'.repeat(4001);
+    campos[2].dispatchEvent(new Event('input', { bubbles: true }));
+  })()`);
+  await clicar("Salvar", "document.querySelector('[role=dialog]')");
+  await esperar("document.querySelector('[role=dialog]')?.textContent.includes('Instruções devem ter até 4000 caracteres')");
+  assert.equal(await canal.avaliar("window.__oficina.habilidades.length"), 0);
   await canal.avaliar(`(() => {
     const campos = document.querySelectorAll('.modal input:not([type=checkbox]), .modal textarea');
     campos[0].value = 'Planejar o dia'; campos[1].value = 'bom dia\\nvamos começar o dia';
     campos[2].value = '1. Consultar a agenda.\\n2. Resumir os compromissos.\\n' + '3. Confirmar a próxima tarefa.\\n'.repeat(20);
+    campos[2].dispatchEvent(new Event('input', { bubbles: true }));
   })()`);
+  assert.ok(await canal.avaliar("document.querySelector('[role=dialog]').textContent.includes(document.querySelectorAll('.modal textarea')[1].value.length + '/4000 caracteres')"));
   await capturar("oficina-cadastro-modal");
   await clicar("Salvar", "document.querySelector('[role=dialog]')");
   await esperar("window.__oficina.habilidades.length === 1 && !document.querySelector('[role=dialog]')");

@@ -14,7 +14,7 @@ def test_contrato_compartilhado(caso):
     if caso["valido"]:
         habilidades.validar_habilidades(caso["valor"])
     else:
-        with pytest.raises(ValueError):
+        with pytest.raises(ValueError, match=caso.get("erro")):
             habilidades.validar_habilidades(caso["valor"])
 
 

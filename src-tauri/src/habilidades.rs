@@ -21,6 +21,7 @@ pub fn validar_habilidades(valor: &Value) -> Result<(), String> {
     let obj = objeto(valor, &["versao", "habilidades", "desligadas"])?;
     if obj.get("versao").and_then(Value::as_f64) != Some(1.0) { return Err("Versão de habilidades inválida".into()); }
     let habilidades = obj.get("habilidades").and_then(Value::as_array).ok_or("Lista de habilidades inválida")?;
+    if habilidades.len() > 200 { return Err("Cadastre até 200 habilidades".into()); }
     if let Some(desligadas) = obj.get("desligadas") {
         let lista = desligadas.as_array().ok_or("Lista de desligadas inválida")?;
         let mut ids = HashSet::new();
@@ -38,6 +39,12 @@ pub fn validar_habilidades(valor: &Value) -> Result<(), String> {
         if !texto(&bruto["nome"]) || !texto(&bruto["instrucoes"]) || !bruto["quando"].as_array().is_some_and(|f| !f.is_empty() && f.iter().all(texto)) {
             return Err("Preencha nome, frases de exemplo e instruções".into());
         }
+        // Mesma contagem UTF-16 de maxlength no HTML e String.length no TypeScript.
+        if bruto["nome"].as_str().unwrap().encode_utf16().count() > 80 { return Err("Nome deve ter até 80 caracteres".into()); }
+        let frases = bruto["quando"].as_array().unwrap();
+        if frases.len() > 10 { return Err("Use até 10 frases de exemplo".into()); }
+        if frases.iter().any(|f| f.as_str().unwrap().encode_utf16().count() > 200) { return Err("Cada frase deve ter até 200 caracteres".into()); }
+        if bruto["instrucoes"].as_str().unwrap().encode_utf16().count() > 4000 { return Err("Instruções devem ter até 4000 caracteres".into()); }
         let situacao = bruto["situacao"].as_str().unwrap_or("");
         if !bruto["ligada"].is_boolean() || !["treinada", "validada"].contains(&situacao) || !data(&bruto["criada_em"]) {
             return Err("Estado ou data de criação inválidos".into());
@@ -85,6 +92,9 @@ mod tests {
         let casos: Vec<Value> = serde_json::from_str(include_str!("../../tests/fixtures/habilidades/contrato.json")).unwrap();
         for caso in casos {
             assert_eq!(validar_habilidades(&caso["valor"]).is_ok(), caso["valido"].as_bool().unwrap(), "{}", caso["nome"]);
+            if let Some(erro) = caso["erro"].as_str() {
+                assert_eq!(validar_habilidades(&caso["valor"]).unwrap_err(), erro, "{}", caso["nome"]);
+            }
         }
     }
 
