@@ -21,6 +21,7 @@ log = logging.getLogger(__name__)
 
 VERSAO = 1
 EXEMPLO_PERSONA = Path(__file__).resolve().parents[2] / "config" / "examples" / "persona.example.md"
+IDENTIDADE_EXEMPLO = "Você é o Vard, assistente de Fulano."
 
 
 @dataclass
@@ -52,7 +53,13 @@ def ler() -> Perfil:
     if not isinstance(dados, dict):
         log.warning("perfil.json inválido (conteúdo não é objeto); usando o padrão")
         return Perfil()
-    return _de_dict(dados)
+    lido = _de_dict(dados)
+    # Um perfil salvo em branco pela tela não pode esconder a persona.md que o usuário já escreveu.
+    if not any(getattr(lido, c).strip() for c in ("tom", "personalidade", "instrucoes", "sobre_usuario")):
+        migrado = _migrar_persona_md()
+        if migrado.instrucoes.strip():
+            return migrado
+    return lido
 
 
 def gravar(perfil: Perfil) -> None:
@@ -83,6 +90,10 @@ def montar_persona(perfil: Perfil, nome: str, usuario: str) -> str:
     if perfil.sobre_usuario.strip():
         partes.append(f"# Sobre a pessoa\n{perfil.sobre_usuario.strip()}")
     produto = _bloco_produto().strip()
+    if produto and nome:
+        # O exemplo do produto apresenta "o Vard, assistente de Fulano": troca pelos nomes reais.
+        quem = f"Você é {nome}, assistente de {usuario}." if usuario else f"Você é {nome}."
+        produto = produto.replace(IDENTIDADE_EXEMPLO, quem, 1)
     if produto:
         partes.append(produto)
     return "\n\n".join(partes)

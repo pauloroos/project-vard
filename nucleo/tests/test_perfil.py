@@ -75,3 +75,16 @@ def test_perfil_json_invalido_cai_no_padrao_e_avisa(caplog):
     assert p == perfil.Perfil()
     assert arq.exists(), "o arquivo ilegível fica no lugar, para o usuário"
     assert any("perfil" in r.getMessage().lower() for r in caplog.records), "o aviso é registrado"
+
+
+def test_perfil_json_em_branco_ainda_migra_persona_md():
+    """Um perfil.json salvo com todos os campos vazios não esconde a persona.md do usuário."""
+    _persona_md("Você é a Aurora, assistente de Fulano.")
+    perfil.gravar(perfil.Perfil())
+    assert perfil.ler().instrucoes == "Você é a Aurora, assistente de Fulano."
+
+
+def test_bloco_do_produto_usa_nome_e_usuario_reais():
+    texto = perfil.montar_persona(perfil.Perfil(), "Aurora", "Beltrano")
+    assert "Você é o Vard, assistente de Fulano" not in texto
+    assert "Você é Aurora, assistente de Beltrano." in texto

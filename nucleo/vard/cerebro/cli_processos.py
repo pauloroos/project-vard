@@ -213,19 +213,24 @@ def _preparar_pasta_sessao(
     pasta = raiz / "cli" / provedor.id / sessao_id
     pasta.mkdir(parents=True, exist_ok=True)
 
-    # nome/usuario vêm da config.json; se não existir ou falhar, usa vazio
+    # nome/usuario vêm da config do widget (hud.config.json, onde a tela grava) e, na falta dela, da
+    # config.json da pasta de configuração; se nenhuma tiver, ficam vazios.
     nome = ""
     usuario = ""
-    try:
-        import json as _json
-        cfg_arq = modulo_config.arquivo_config("config.json")
-        if cfg_arq.exists():
-            _cfg = _json.loads(cfg_arq.read_text(encoding="utf-8-sig"))  # aceita BOM (D4)
-            if isinstance(_cfg, dict):
-                nome = str(_cfg.get("nome", "") or "")
-                usuario = str(_cfg.get("usuario", "") or "")
-    except Exception:  # noqa: BLE001
-        pass
+    hud_dir = os.environ.get("VARD_HUD_CONFIG_DIR", "") or (
+        str(Path(os.environ["APPDATA"]) / "io.github.pauloroos.vard") if os.environ.get("APPDATA") else ""
+    )
+    candidatos = [Path(hud_dir) / "hud.config.json"] if hud_dir else []
+    candidatos.append(modulo_config.arquivo_config("config.json"))
+    for cfg_arq in candidatos:
+        try:
+            _cfg = json.loads(cfg_arq.read_text(encoding="utf-8-sig"))  # aceita BOM (D4)
+        except (OSError, ValueError, UnicodeDecodeError):
+            continue
+        if isinstance(_cfg, dict) and str(_cfg.get("nome", "") or "").strip():
+            nome = str(_cfg.get("nome", "") or "")
+            usuario = str(_cfg.get("usuario", "") or "")
+            break
 
     p = modulo_perfil.ler()
     persona = modulo_perfil.montar_persona(p, nome, usuario)
