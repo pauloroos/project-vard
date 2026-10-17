@@ -261,6 +261,17 @@ pub fn gravar_paineis(app: tauri::AppHandle, arquivo: String, valor: Value) -> R
     fs::rename(&tmp, &p).map_err(|e| e.to_string())
 }
 
+/// Mesmo diretório de paineis.json e do leitor Python; valida antes de devolver ou gravar.
+#[tauri::command]
+pub fn ler_habilidades() -> Result<Value, String> {
+    crate::habilidades::ler_em(&crate::ciclo::pasta_config().join("habilidades.json"))
+}
+
+#[tauri::command]
+pub fn gravar_habilidades(valor: Value) -> Result<(), String> {
+    crate::habilidades::gravar_em(&crate::ciclo::pasta_config().join("habilidades.json"), &valor)
+}
+
 /// Caminho do perfil do agente: `VARD_CONFIG/perfil.json` (mesmo contrato do Python); sem a
 /// variável, a pasta de configuração do app.
 fn caminho_perfil(app: &tauri::AppHandle) -> PathBuf {

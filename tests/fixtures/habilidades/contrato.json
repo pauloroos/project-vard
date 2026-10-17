@@ -1,0 +1,869 @@
+[
+  {
+    "nome": "vazio",
+    "valor": {
+      "versao": 1,
+      "habilidades": [],
+      "desligadas": []
+    },
+    "valido": true
+  },
+  {
+    "nome": "desligadas opcionais",
+    "valor": {
+      "versao": 1,
+      "habilidades": []
+    },
+    "valido": true
+  },
+  {
+    "nome": "treinada",
+    "valor": {
+      "versao": 1,
+      "habilidades": [
+        {
+          "id": "rotina-bom-dia",
+          "nome": "Começar o dia",
+          "quando": [
+            "bom dia, vamos começar o dia"
+          ],
+          "instrucoes": "1. Consultar a agenda.\n2. Resumir os compromissos.",
+          "ligada": true,
+          "situacao": "treinada",
+          "criada_em": "2026-10-17T12:00:00Z",
+          "validada_em": null
+        }
+      ]
+    },
+    "valido": true
+  },
+  {
+    "nome": "validada",
+    "valor": {
+      "versao": 1,
+      "habilidades": [
+        {
+          "id": "rotina-bom-dia",
+          "nome": "Começar o dia",
+          "quando": [
+            "bom dia, vamos começar o dia"
+          ],
+          "instrucoes": "1. Consultar a agenda.\n2. Resumir os compromissos.",
+          "ligada": true,
+          "situacao": "validada",
+          "criada_em": "2026-10-17T12:00:00Z",
+          "validada_em": "2026-10-17T12:01:00.123Z"
+        }
+      ],
+      "desligadas": [
+        "computador"
+      ]
+    },
+    "valido": true
+  },
+  {
+    "nome": "nulo",
+    "valor": null,
+    "valido": false
+  },
+  {
+    "nome": "lista",
+    "valor": [],
+    "valido": false
+  },
+  {
+    "nome": "versao desconhecida",
+    "valor": {
+      "versao": 2,
+      "habilidades": []
+    },
+    "valido": false
+  },
+  {
+    "nome": "versao booleana",
+    "valor": {
+      "versao": true,
+      "habilidades": []
+    },
+    "valido": false
+  },
+  {
+    "nome": "sem habilidades",
+    "valor": {
+      "versao": 1
+    },
+    "valido": false
+  },
+  {
+    "nome": "habilidades objeto",
+    "valor": {
+      "versao": 1,
+      "habilidades": {}
+    },
+    "valido": false
+  },
+  {
+    "nome": "desligadas texto",
+    "valor": {
+      "versao": 1,
+      "habilidades": [],
+      "desligadas": "sistema"
+    },
+    "valido": false
+  },
+  {
+    "nome": "fabrica desconhecida",
+    "valor": {
+      "versao": 1,
+      "habilidades": [],
+      "desligadas": [
+        "outra"
+      ]
+    },
+    "valido": false
+  },
+  {
+    "nome": "fabrica duplicada",
+    "valor": {
+      "versao": 1,
+      "habilidades": [],
+      "desligadas": [
+        "sistema",
+        "sistema"
+      ]
+    },
+    "valido": false
+  },
+  {
+    "nome": "campo raiz desconhecido",
+    "valor": {
+      "versao": 1,
+      "habilidades": [],
+      "segredo": "ficticio"
+    },
+    "valido": false
+  },
+  {
+    "nome": "id duplicado",
+    "valor": {
+      "versao": 1,
+      "habilidades": [
+        {
+          "id": "rotina-bom-dia",
+          "nome": "Começar o dia",
+          "quando": [
+            "bom dia, vamos começar o dia"
+          ],
+          "instrucoes": "1. Consultar a agenda.\n2. Resumir os compromissos.",
+          "ligada": true,
+          "situacao": "treinada",
+          "criada_em": "2026-10-17T12:00:00Z",
+          "validada_em": null
+        },
+        {
+          "id": "rotina-bom-dia",
+          "nome": "Começar o dia",
+          "quando": [
+            "bom dia, vamos começar o dia"
+          ],
+          "instrucoes": "1. Consultar a agenda.\n2. Resumir os compromissos.",
+          "ligada": true,
+          "situacao": "treinada",
+          "criada_em": "2026-10-17T12:00:00Z",
+          "validada_em": null
+        }
+      ]
+    },
+    "valido": false
+  },
+  {
+    "nome": "item nulo",
+    "valor": {
+      "versao": 1,
+      "habilidades": [
+        null
+      ]
+    },
+    "valido": false
+  },
+  {
+    "nome": "id vazio",
+    "valor": {
+      "versao": 1,
+      "habilidades": [
+        {
+          "id": "",
+          "nome": "Começar o dia",
+          "quando": [
+            "bom dia, vamos começar o dia"
+          ],
+          "instrucoes": "1. Consultar a agenda.\n2. Resumir os compromissos.",
+          "ligada": true,
+          "situacao": "treinada",
+          "criada_em": "2026-10-17T12:00:00Z",
+          "validada_em": null
+        }
+      ]
+    },
+    "valido": false
+  },
+  {
+    "nome": "id formato",
+    "valor": {
+      "versao": 1,
+      "habilidades": [
+        {
+          "id": "Rotina com espaços",
+          "nome": "Começar o dia",
+          "quando": [
+            "bom dia, vamos começar o dia"
+          ],
+          "instrucoes": "1. Consultar a agenda.\n2. Resumir os compromissos.",
+          "ligada": true,
+          "situacao": "treinada",
+          "criada_em": "2026-10-17T12:00:00Z",
+          "validada_em": null
+        }
+      ]
+    },
+    "valido": false
+  },
+  {
+    "nome": "id fabrica",
+    "valor": {
+      "versao": 1,
+      "habilidades": [
+        {
+          "id": "conversa",
+          "nome": "Começar o dia",
+          "quando": [
+            "bom dia, vamos começar o dia"
+          ],
+          "instrucoes": "1. Consultar a agenda.\n2. Resumir os compromissos.",
+          "ligada": true,
+          "situacao": "treinada",
+          "criada_em": "2026-10-17T12:00:00Z",
+          "validada_em": null
+        }
+      ]
+    },
+    "valido": false
+  },
+  {
+    "nome": "nome vazio",
+    "valor": {
+      "versao": 1,
+      "habilidades": [
+        {
+          "id": "rotina-bom-dia",
+          "nome": "  ",
+          "quando": [
+            "bom dia, vamos começar o dia"
+          ],
+          "instrucoes": "1. Consultar a agenda.\n2. Resumir os compromissos.",
+          "ligada": true,
+          "situacao": "treinada",
+          "criada_em": "2026-10-17T12:00:00Z",
+          "validada_em": null
+        }
+      ]
+    },
+    "valido": false
+  },
+  {
+    "nome": "nome numerico",
+    "valor": {
+      "versao": 1,
+      "habilidades": [
+        {
+          "id": "rotina-bom-dia",
+          "nome": 3,
+          "quando": [
+            "bom dia, vamos começar o dia"
+          ],
+          "instrucoes": "1. Consultar a agenda.\n2. Resumir os compromissos.",
+          "ligada": true,
+          "situacao": "treinada",
+          "criada_em": "2026-10-17T12:00:00Z",
+          "validada_em": null
+        }
+      ]
+    },
+    "valido": false
+  },
+  {
+    "nome": "quando vazio",
+    "valor": {
+      "versao": 1,
+      "habilidades": [
+        {
+          "id": "rotina-bom-dia",
+          "nome": "Começar o dia",
+          "quando": [],
+          "instrucoes": "1. Consultar a agenda.\n2. Resumir os compromissos.",
+          "ligada": true,
+          "situacao": "treinada",
+          "criada_em": "2026-10-17T12:00:00Z",
+          "validada_em": null
+        }
+      ]
+    },
+    "valido": false
+  },
+  {
+    "nome": "quando texto",
+    "valor": {
+      "versao": 1,
+      "habilidades": [
+        {
+          "id": "rotina-bom-dia",
+          "nome": "Começar o dia",
+          "quando": "oi",
+          "instrucoes": "1. Consultar a agenda.\n2. Resumir os compromissos.",
+          "ligada": true,
+          "situacao": "treinada",
+          "criada_em": "2026-10-17T12:00:00Z",
+          "validada_em": null
+        }
+      ]
+    },
+    "valido": false
+  },
+  {
+    "nome": "frase vazia",
+    "valor": {
+      "versao": 1,
+      "habilidades": [
+        {
+          "id": "rotina-bom-dia",
+          "nome": "Começar o dia",
+          "quando": [
+            " "
+          ],
+          "instrucoes": "1. Consultar a agenda.\n2. Resumir os compromissos.",
+          "ligada": true,
+          "situacao": "treinada",
+          "criada_em": "2026-10-17T12:00:00Z",
+          "validada_em": null
+        }
+      ]
+    },
+    "valido": false
+  },
+  {
+    "nome": "frase numerica",
+    "valor": {
+      "versao": 1,
+      "habilidades": [
+        {
+          "id": "rotina-bom-dia",
+          "nome": "Começar o dia",
+          "quando": [
+            1
+          ],
+          "instrucoes": "1. Consultar a agenda.\n2. Resumir os compromissos.",
+          "ligada": true,
+          "situacao": "treinada",
+          "criada_em": "2026-10-17T12:00:00Z",
+          "validada_em": null
+        }
+      ]
+    },
+    "valido": false
+  },
+  {
+    "nome": "instrucoes vazias",
+    "valor": {
+      "versao": 1,
+      "habilidades": [
+        {
+          "id": "rotina-bom-dia",
+          "nome": "Começar o dia",
+          "quando": [
+            "bom dia, vamos começar o dia"
+          ],
+          "instrucoes": " ",
+          "ligada": true,
+          "situacao": "treinada",
+          "criada_em": "2026-10-17T12:00:00Z",
+          "validada_em": null
+        }
+      ]
+    },
+    "valido": false
+  },
+  {
+    "nome": "ligada numerica",
+    "valor": {
+      "versao": 1,
+      "habilidades": [
+        {
+          "id": "rotina-bom-dia",
+          "nome": "Começar o dia",
+          "quando": [
+            "bom dia, vamos começar o dia"
+          ],
+          "instrucoes": "1. Consultar a agenda.\n2. Resumir os compromissos.",
+          "ligada": 1,
+          "situacao": "treinada",
+          "criada_em": "2026-10-17T12:00:00Z",
+          "validada_em": null
+        }
+      ]
+    },
+    "valido": false
+  },
+  {
+    "nome": "situacao capaz proibida",
+    "valor": {
+      "versao": 1,
+      "habilidades": [
+        {
+          "id": "rotina-bom-dia",
+          "nome": "Começar o dia",
+          "quando": [
+            "bom dia, vamos começar o dia"
+          ],
+          "instrucoes": "1. Consultar a agenda.\n2. Resumir os compromissos.",
+          "ligada": true,
+          "situacao": "capaz",
+          "criada_em": "2026-10-17T12:00:00Z",
+          "validada_em": null
+        }
+      ]
+    },
+    "valido": false
+  },
+  {
+    "nome": "situacao desconhecida",
+    "valor": {
+      "versao": 1,
+      "habilidades": [
+        {
+          "id": "rotina-bom-dia",
+          "nome": "Começar o dia",
+          "quando": [
+            "bom dia, vamos começar o dia"
+          ],
+          "instrucoes": "1. Consultar a agenda.\n2. Resumir os compromissos.",
+          "ligada": true,
+          "situacao": "nova",
+          "criada_em": "2026-10-17T12:00:00Z",
+          "validada_em": null
+        }
+      ]
+    },
+    "valido": false
+  },
+  {
+    "nome": "criacao invalida",
+    "valor": {
+      "versao": 1,
+      "habilidades": [
+        {
+          "id": "rotina-bom-dia",
+          "nome": "Começar o dia",
+          "quando": [
+            "bom dia, vamos começar o dia"
+          ],
+          "instrucoes": "1. Consultar a agenda.\n2. Resumir os compromissos.",
+          "ligada": true,
+          "situacao": "treinada",
+          "criada_em": "ontem",
+          "validada_em": null
+        }
+      ]
+    },
+    "valido": false
+  },
+  {
+    "nome": "dia inexistente",
+    "valor": {
+      "versao": 1,
+      "habilidades": [
+        {
+          "id": "rotina-bom-dia",
+          "nome": "Começar o dia",
+          "quando": [
+            "bom dia, vamos começar o dia"
+          ],
+          "instrucoes": "1. Consultar a agenda.\n2. Resumir os compromissos.",
+          "ligada": true,
+          "situacao": "treinada",
+          "criada_em": "2026-02-30T12:00:00Z",
+          "validada_em": null
+        }
+      ]
+    },
+    "valido": false
+  },
+  {
+    "nome": "data sem UTC",
+    "valor": {
+      "versao": 1,
+      "habilidades": [
+        {
+          "id": "rotina-bom-dia",
+          "nome": "Começar o dia",
+          "quando": [
+            "bom dia, vamos começar o dia"
+          ],
+          "instrucoes": "1. Consultar a agenda.\n2. Resumir os compromissos.",
+          "ligada": true,
+          "situacao": "treinada",
+          "criada_em": "2026-10-17T12:00:00",
+          "validada_em": null
+        }
+      ]
+    },
+    "valido": false
+  },
+  {
+    "nome": "data com offset",
+    "valor": {
+      "versao": 1,
+      "habilidades": [
+        {
+          "id": "rotina-bom-dia",
+          "nome": "Começar o dia",
+          "quando": [
+            "bom dia, vamos começar o dia"
+          ],
+          "instrucoes": "1. Consultar a agenda.\n2. Resumir os compromissos.",
+          "ligada": true,
+          "situacao": "treinada",
+          "criada_em": "2026-10-17T12:00:00-03:00",
+          "validada_em": null
+        }
+      ]
+    },
+    "valido": false
+  },
+  {
+    "nome": "treinada com validacao",
+    "valor": {
+      "versao": 1,
+      "habilidades": [
+        {
+          "id": "rotina-bom-dia",
+          "nome": "Começar o dia",
+          "quando": [
+            "bom dia, vamos começar o dia"
+          ],
+          "instrucoes": "1. Consultar a agenda.\n2. Resumir os compromissos.",
+          "ligada": true,
+          "situacao": "treinada",
+          "criada_em": "2026-10-17T12:00:00Z",
+          "validada_em": "2026-10-17T12:00:00Z"
+        }
+      ]
+    },
+    "valido": false
+  },
+  {
+    "nome": "validada sem data",
+    "valor": {
+      "versao": 1,
+      "habilidades": [
+        {
+          "id": "rotina-bom-dia",
+          "nome": "Começar o dia",
+          "quando": [
+            "bom dia, vamos começar o dia"
+          ],
+          "instrucoes": "1. Consultar a agenda.\n2. Resumir os compromissos.",
+          "ligada": true,
+          "situacao": "validada",
+          "criada_em": "2026-10-17T12:00:00Z",
+          "validada_em": null
+        }
+      ]
+    },
+    "valido": false
+  },
+  {
+    "nome": "campo habilidade desconhecido",
+    "valor": {
+      "versao": 1,
+      "habilidades": [
+        {
+          "id": "rotina-bom-dia",
+          "nome": "Começar o dia",
+          "quando": [
+            "bom dia, vamos começar o dia"
+          ],
+          "instrucoes": "1. Consultar a agenda.\n2. Resumir os compromissos.",
+          "ligada": true,
+          "situacao": "treinada",
+          "criada_em": "2026-10-17T12:00:00Z",
+          "validada_em": null,
+          "extra": "texto"
+        }
+      ]
+    },
+    "valido": false
+  },
+  {
+    "nome": "campo ausente id",
+    "valor": {
+      "versao": 1,
+      "habilidades": [
+        {
+          "nome": "Começar o dia",
+          "quando": [
+            "bom dia, vamos começar o dia"
+          ],
+          "instrucoes": "1. Consultar a agenda.\n2. Resumir os compromissos.",
+          "ligada": true,
+          "situacao": "treinada",
+          "criada_em": "2026-10-17T12:00:00Z",
+          "validada_em": null
+        }
+      ]
+    },
+    "valido": false
+  },
+  {
+    "nome": "campo ausente nome",
+    "valor": {
+      "versao": 1,
+      "habilidades": [
+        {
+          "id": "rotina-bom-dia",
+          "quando": [
+            "bom dia, vamos começar o dia"
+          ],
+          "instrucoes": "1. Consultar a agenda.\n2. Resumir os compromissos.",
+          "ligada": true,
+          "situacao": "treinada",
+          "criada_em": "2026-10-17T12:00:00Z",
+          "validada_em": null
+        }
+      ]
+    },
+    "valido": false
+  },
+  {
+    "nome": "campo ausente quando",
+    "valor": {
+      "versao": 1,
+      "habilidades": [
+        {
+          "id": "rotina-bom-dia",
+          "nome": "Começar o dia",
+          "instrucoes": "1. Consultar a agenda.\n2. Resumir os compromissos.",
+          "ligada": true,
+          "situacao": "treinada",
+          "criada_em": "2026-10-17T12:00:00Z",
+          "validada_em": null
+        }
+      ]
+    },
+    "valido": false
+  },
+  {
+    "nome": "campo ausente instrucoes",
+    "valor": {
+      "versao": 1,
+      "habilidades": [
+        {
+          "id": "rotina-bom-dia",
+          "nome": "Começar o dia",
+          "quando": [
+            "bom dia, vamos começar o dia"
+          ],
+          "ligada": true,
+          "situacao": "treinada",
+          "criada_em": "2026-10-17T12:00:00Z",
+          "validada_em": null
+        }
+      ]
+    },
+    "valido": false
+  },
+  {
+    "nome": "campo ausente ligada",
+    "valor": {
+      "versao": 1,
+      "habilidades": [
+        {
+          "id": "rotina-bom-dia",
+          "nome": "Começar o dia",
+          "quando": [
+            "bom dia, vamos começar o dia"
+          ],
+          "instrucoes": "1. Consultar a agenda.\n2. Resumir os compromissos.",
+          "situacao": "treinada",
+          "criada_em": "2026-10-17T12:00:00Z",
+          "validada_em": null
+        }
+      ]
+    },
+    "valido": false
+  },
+  {
+    "nome": "campo ausente situacao",
+    "valor": {
+      "versao": 1,
+      "habilidades": [
+        {
+          "id": "rotina-bom-dia",
+          "nome": "Começar o dia",
+          "quando": [
+            "bom dia, vamos começar o dia"
+          ],
+          "instrucoes": "1. Consultar a agenda.\n2. Resumir os compromissos.",
+          "ligada": true,
+          "criada_em": "2026-10-17T12:00:00Z",
+          "validada_em": null
+        }
+      ]
+    },
+    "valido": false
+  },
+  {
+    "nome": "campo ausente criada_em",
+    "valor": {
+      "versao": 1,
+      "habilidades": [
+        {
+          "id": "rotina-bom-dia",
+          "nome": "Começar o dia",
+          "quando": [
+            "bom dia, vamos começar o dia"
+          ],
+          "instrucoes": "1. Consultar a agenda.\n2. Resumir os compromissos.",
+          "ligada": true,
+          "situacao": "treinada",
+          "validada_em": null
+        }
+      ]
+    },
+    "valido": false
+  },
+  {
+    "nome": "campo ausente validada_em",
+    "valor": {
+      "versao": 1,
+      "habilidades": [
+        {
+          "id": "rotina-bom-dia",
+          "nome": "Começar o dia",
+          "quando": [
+            "bom dia, vamos começar o dia"
+          ],
+          "instrucoes": "1. Consultar a agenda.\n2. Resumir os compromissos.",
+          "ligada": true,
+          "situacao": "treinada",
+          "criada_em": "2026-10-17T12:00:00Z"
+        }
+      ]
+    },
+    "valido": false
+  },
+  {
+    "nome": "id com quebra final",
+    "valor": {
+      "versao": 1,
+      "habilidades": [
+        {
+          "id": "rotina-dia\n",
+          "nome": "Começar o dia",
+          "quando": [
+            "bom dia, vamos começar o dia"
+          ],
+          "instrucoes": "1. Consultar a agenda.\n2. Resumir os compromissos.",
+          "ligada": true,
+          "situacao": "treinada",
+          "criada_em": "2026-10-17T12:00:00Z",
+          "validada_em": null
+        }
+      ]
+    },
+    "valido": false
+  },
+  {
+    "nome": "nome so BOM",
+    "valor": {
+      "versao": 1,
+      "habilidades": [
+        {
+          "id": "rotina-bom-dia",
+          "nome": "﻿",
+          "quando": [
+            "bom dia, vamos começar o dia"
+          ],
+          "instrucoes": "1. Consultar a agenda.\n2. Resumir os compromissos.",
+          "ligada": true,
+          "situacao": "treinada",
+          "criada_em": "2026-10-17T12:00:00Z",
+          "validada_em": null
+        }
+      ]
+    },
+    "valido": false
+  },
+  {
+    "nome": "nome so NEL",
+    "valor": {
+      "versao": 1,
+      "habilidades": [
+        {
+          "id": "rotina-bom-dia",
+          "nome": "",
+          "quando": [
+            "bom dia, vamos começar o dia"
+          ],
+          "instrucoes": "1. Consultar a agenda.\n2. Resumir os compromissos.",
+          "ligada": true,
+          "situacao": "treinada",
+          "criada_em": "2026-10-17T12:00:00Z",
+          "validada_em": null
+        }
+      ]
+    },
+    "valido": false
+  },
+  {
+    "nome": "frase so separador",
+    "valor": {
+      "versao": 1,
+      "habilidades": [
+        {
+          "id": "rotina-bom-dia",
+          "nome": "Começar o dia",
+          "quando": [
+            "\u001c"
+          ],
+          "instrucoes": "1. Consultar a agenda.\n2. Resumir os compromissos.",
+          "ligada": true,
+          "situacao": "treinada",
+          "criada_em": "2026-10-17T12:00:00Z",
+          "validada_em": null
+        }
+      ]
+    },
+    "valido": false
+  },
+  {
+    "nome": "instrucoes so espacos unicode",
+    "valor": {
+      "versao": 1,
+      "habilidades": [
+        {
+          "id": "rotina-bom-dia",
+          "nome": "Começar o dia",
+          "quando": [
+            "bom dia, vamos começar o dia"
+          ],
+          "instrucoes": "﻿ ﻿",
+          "ligada": true,
+          "situacao": "treinada",
+          "criada_em": "2026-10-17T12:00:00Z",
+          "validada_em": null
+        }
+      ]
+    },
+    "valido": false
+  }
+]

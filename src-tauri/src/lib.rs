@@ -1,6 +1,7 @@
 mod bandeja;
 mod cofre;
 mod comandos;
+mod habilidades;
 mod diagnostico;
 mod janelas;
 pub mod supervisor;
@@ -390,6 +391,8 @@ pub fn run() {
             comandos::gravar_config,
             comandos::ler_paineis,
             comandos::gravar_paineis,
+            comandos::ler_habilidades,
+            comandos::gravar_habilidades,
             comandos::ler_perfil,
             comandos::gravar_perfil,
             comandos::definir_sempre_no_topo,
