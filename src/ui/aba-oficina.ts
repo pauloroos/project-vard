@@ -1,6 +1,6 @@
 import type { StatusPonte } from "../conectores/ponte/cliente";
-import { habilidadesFabrica } from "../config/habilidades-fabrica";
-import { lerHabilidades, gravarHabilidades, HABILIDADES_PADRAO, LIMITES_HABILIDADES, validarHabilidades, type Habilidade, type HabilidadesConfig } from "../config/habilidades";
+import { habilidadesFabrica, padraoFabrica, type HabilidadeFabrica } from "../config/habilidades-fabrica";
+import { lerHabilidades, gravarHabilidades, HABILIDADES_PADRAO, LIMITES_HABILIDADES, validarHabilidades, type AjusteFabrica, type Habilidade, type HabilidadesConfig } from "../config/habilidades";
 import { abrirModal, campoModal, desenharCards, type Card } from "./componentes";
 
 export interface DepsAbaOficina {
@@ -11,10 +11,17 @@ export interface DepsAbaOficina {
   abrirAba?: (aba: "modelos") => void;
 }
 const ROTULOS = { capaz: "Capaz", treinada: "Treinada", validada: "Validada" };
+type Item = HabilidadeFabrica | Habilidade;
+const deFabrica = (h: Item): h is HabilidadeFabrica => h.situacao === "capaz";
 
-/** Receitas do usuário e capacidades de fábrica. Salva cada ação sem depender do botão Geral. */
+/**
+ * Receitas do usuário e capacidades de fábrica. Salva cada ação sem depender do botão Geral.
+ * Receitas: editar, ligar/desligar, validar e excluir. Fábrica: editar (ajuste em "fabrica"), ligar/desligar
+ * e restaurar o padrão; não se exclui, porque mora no código.
+ */
 export class AbaOficina {
   private cfg = structuredClone(HABILIDADES_PADRAO);
+  private itens: Item[] = [];
   private lista!: HTMLElement;
   private aviso!: HTMLElement;
   private busca!: HTMLInputElement;
@@ -83,27 +90,31 @@ export class AbaOficina {
     alterar(h); await this.salvar(proximo);
   }
   private desenhar() {
-    const fabrica = habilidadesFabrica(this.deps.nome(), this.ponteNoAr, this.cfg.desligadas, this.temProvedorProprio);
-    const cards: Card[] = [...fabrica, ...this.cfg.habilidades].map((h) => ({
-      id: h.id, titulo: h.nome, etiqueta: h.situacao === "capaz" ? h.etiqueta ?? undefined : undefined,
-      selos: [{ texto: ROTULOS[h.situacao], tom: h.situacao === "validada" ? "ok" : "neutro" }, { texto: h.ligada ? "Ligada" : "Desligada", tom: h.ligada ? "ativo" : "neutro" }],
+    const fabrica = habilidadesFabrica(this.deps.nome(), this.ponteNoAr, this.cfg.desligadas, this.temProvedorProprio, this.cfg.fabrica);
+    this.itens = [...fabrica, ...this.cfg.habilidades];
+    const cards: Card[] = this.itens.map((h) => ({
+      id: h.id, titulo: h.nome, etiqueta: deFabrica(h) ? h.etiqueta ?? undefined : undefined,
+      selos: [{ texto: ROTULOS[h.situacao], tom: h.situacao === "validada" ? "ok" : "neutro" }, { texto: h.ligada ? "Ligada" : "Desligada", tom: h.ligada ? "ativo" : "neutro" },
+        ...(deFabrica(h) && h.personalizada ? [{ texto: "Personalizada", tom: "neutro" as const }] : [])],
       detalhes: h.quando,
       acoes: [
-        ...(h.situacao === "capaz" && h.etiqueta === "precisa de um agente configurado" && this.deps.abrirAba
+        ...(deFabrica(h) && h.etiqueta === "precisa de um agente configurado" && this.deps.abrirAba
           ? [{ rotulo: "Configurar", primaria: true, aoClicar: () => this.deps.abrirAba!("modelos") }]
           : []),
         { rotulo: h.ligada ? "Desligar" : "Ligar", aoClicar: () => this.executar(async () => {
-          if (h.situacao === "capaz") {
+          if (deFabrica(h)) {
             const proximo = structuredClone(this.cfg);
             proximo.desligadas = h.ligada ? [...proximo.desligadas, h.id] : proximo.desligadas.filter((id) => id !== h.id);
             await this.salvar(proximo);
           } else await this.alterar(h.id, (item) => { item.ligada = !item.ligada; });
         }) },
-        ...(h.situacao === "capaz" ? [] : [
-          { rotulo: "Editar", aoClicar: () => this.editar(h) },
-          ...(h.situacao === "validada" ? [] : [{ rotulo: "Marcar como validada", aoClicar: () => this.executar(() => this.alterar(h.id, (item) => { item.situacao = "validada"; item.validada_em = new Date().toISOString(); })) }]),
-          { rotulo: "Excluir", perigo: true, aoClicar: () => this.excluir(h) },
-        ]),
+        { rotulo: "Editar", aoClicar: () => deFabrica(h) ? this.editarFabrica(h) : this.editar(h) },
+        ...(deFabrica(h)
+          ? (h.personalizada ? [{ rotulo: "Restaurar padrão", aoClicar: () => this.restaurar(h) }] : [])
+          : [
+            ...(h.situacao === "validada" ? [] : [{ rotulo: "Marcar como validada", aoClicar: () => this.executar(() => this.alterar(h.id, (item) => { item.situacao = "validada"; item.validada_em = new Date().toISOString(); })) }]),
+            { rotulo: "Excluir", perigo: true, aoClicar: () => this.excluir(h) },
+          ]),
       ],
     }));
     desenharCards(this.lista, cards, { vazio: "Nenhuma habilidade cadastrada.", buscaAPartirDe: Infinity });
@@ -112,41 +123,88 @@ export class AbaOficina {
   private desabilitar() { for (const b of this.raiz.querySelectorAll<HTMLButtonElement>("button")) b.disabled = this.bloqueada(); }
   private filtrar() {
     const busca = this.busca.value.trim().toLocaleLowerCase("pt-BR");
-    const habilidades = [...habilidadesFabrica(this.deps.nome(), this.ponteNoAr, this.cfg.desligadas), ...this.cfg.habilidades];
     for (const el of this.lista.querySelectorAll<HTMLElement>("article")) {
-      const h = habilidades.find((h) => h.id === el.dataset.id)!;
-      const texto = `${h.nome} ${h.quando.join(" ")} ${"instrucoes" in h ? h.instrucoes : ""}`.toLocaleLowerCase("pt-BR");
+      const h = this.itens.find((h) => h.id === el.dataset.id)!;
+      const texto = `${h.nome} ${h.quando.join(" ")} ${h.instrucoes}`.toLocaleLowerCase("pt-BR");
       el.hidden = (!!busca && !texto.includes(busca)) || (!!this.filtro.value && h.situacao !== this.filtro.value);
     }
   }
-  private editar(h?: Habilidade) {
-    if (this.bloqueada()) return;
+  /** Mesmo formulário para receitas e fábrica; fábrica não escolhe situação e tem "O que fazer" opcional. */
+  private formulario(valores: { nome: string; frases: string[]; instrucoes: string; ligada: boolean }, fabrica: boolean) {
     const corpo = document.createElement("div"); corpo.className = "oficina-formulario";
-    const nome = document.createElement("input"); nome.value = h?.nome ?? "";
-    const quando = document.createElement("textarea"); quando.rows = 3; quando.value = h?.quando.join("\n") ?? "";
-    const instrucoes = document.createElement("textarea"); instrucoes.rows = 6; instrucoes.value = h?.instrucoes ?? "";
+    const nome = document.createElement("input"); nome.value = valores.nome;
+    const quando = document.createElement("textarea"); quando.rows = 3; quando.value = valores.frases.join("\n");
+    const instrucoes = document.createElement("textarea"); instrucoes.rows = 6; instrucoes.value = valores.instrucoes;
     nome.maxLength = LIMITES_HABILIDADES.nome;
     quando.maxLength = LIMITES_HABILIDADES.frases * LIMITES_HABILIDADES.frase + LIMITES_HABILIDADES.frases - 1;
     instrucoes.maxLength = LIMITES_HABILIDADES.instrucoes;
     const contador = document.createElement("p"); contador.setAttribute("role", "status");
     const contar = () => { contador.textContent = `${instrucoes.value.length}/${LIMITES_HABILIDADES.instrucoes} caracteres`; };
     instrucoes.addEventListener("input", contar); contar();
-    const ligada = document.createElement("input"); ligada.type = "checkbox"; ligada.checked = h?.ligada ?? true;
+    const ligada = document.createElement("input"); ligada.type = "checkbox"; ligada.checked = valores.ligada;
+    corpo.append(campoModal("Nome", nome, "Até 80 caracteres."),
+      campoModal("Quando usar (uma frase por linha)", quando, fabrica ? "Até 10 frases de até 200 caracteres cada, sem o nome do assistente: ele entra sozinho." : "Até 10 frases de até 200 caracteres cada."),
+      campoModal("O que fazer", instrucoes, fabrica ? "Opcional: orientações extras para esta capacidade de fábrica. Até 4000 caracteres." : "Instruções em português, passo a passo. Até 4000 caracteres."),
+      contador, campoModal("Ligada", ligada));
+    const frases = () => quando.value.split("\n").map((v) => v.trim()).filter(Boolean);
+    return { corpo, nome, instrucoes, ligada, frases };
+  }
+  private editar(h?: Habilidade) {
+    if (this.bloqueada()) return;
+    const { corpo, nome, instrucoes, ligada, frases } = this.formulario({ nome: h?.nome ?? "", frases: h?.quando ?? [], instrucoes: h?.instrucoes ?? "", ligada: h?.ligada ?? true }, false);
     const situacao = document.createElement("select");
     for (const [valor, rotulo] of [["treinada", "Treinada"], ["validada", "Validada"]]) {
       const op = document.createElement("option"); op.value = valor; op.textContent = rotulo; situacao.append(op);
     }
     situacao.value = h?.situacao ?? "treinada";
-    corpo.append(campoModal("Nome", nome, "Até 80 caracteres."), campoModal("Quando usar (uma frase por linha)", quando, "Até 10 frases de até 200 caracteres cada."), campoModal("O que fazer", instrucoes, "Instruções em português, passo a passo. Até 4000 caracteres."), contador, campoModal("Ligada", ligada), campoModal("Situação", situacao));
+    corpo.append(campoModal("Situação", situacao));
     const modal = abrirModal({ titulo: h ? "Editar habilidade" : "Nova habilidade", corpo, aoFechar: () => { this.fecharModal = null; }, acoes: [
       { rotulo: "Cancelar" },
       { rotulo: "Salvar", primaria: true, aoClicar: async () => {
         const data = new Date().toISOString();
-        const item: Habilidade = { ...h, id: h?.id ?? `habilidade-${crypto.randomUUID()}`, nome: nome.value.trim(), quando: quando.value.split("\n").map((v) => v.trim()).filter(Boolean), instrucoes: instrucoes.value.trim(), ligada: ligada.checked, situacao: situacao.value as Habilidade["situacao"], criada_em: h?.criada_em ?? data, validada_em: situacao.value === "validada" ? h?.validada_em ?? data : null };
+        const item: Habilidade = { ...h, id: h?.id ?? `habilidade-${crypto.randomUUID()}`, nome: nome.value.trim(), quando: frases(), instrucoes: instrucoes.value.trim(), ligada: ligada.checked, situacao: situacao.value as Habilidade["situacao"], criada_em: h?.criada_em ?? data, validada_em: situacao.value === "validada" ? h?.validada_em ?? data : null };
         const proximo = structuredClone(this.cfg);
         if (h) proximo.habilidades = proximo.habilidades.map((atual) => atual.id === h.id ? item : atual);
         else proximo.habilidades.push(item);
         await this.salvar(proximo);
+      } },
+    ] });
+    this.fecharModal = modal.fechar;
+  }
+  /** Grava só o que difere da fábrica (campos desconhecidos do ajuste ficam); sem diferença, a entrada sai. */
+  private editarFabrica(h: HabilidadeFabrica) {
+    if (this.bloqueada()) return;
+    const { corpo, nome, instrucoes, ligada, frases } = this.formulario(h, true);
+    const modal = abrirModal({ titulo: "Editar habilidade", corpo, aoFechar: () => { this.fecharModal = null; }, acoes: [
+      { rotulo: "Cancelar" },
+      { rotulo: "Salvar", primaria: true, aoClicar: async () => {
+        const padrao = padraoFabrica(h.id);
+        const proximo = structuredClone(this.cfg);
+        const ajuste: AjusteFabrica = { ...proximo.fabrica?.[h.id] };
+        const n = nome.value.trim(), q = frases(), i = instrucoes.value.trim();
+        if (n === padrao.nome) delete ajuste.nome; else ajuste.nome = n;
+        if (q.join("\n") === padrao.frases.join("\n")) delete ajuste.quando; else ajuste.quando = q;
+        if (i) ajuste.instrucoes = i; else delete ajuste.instrucoes;
+        this.trocarAjuste(proximo, h.id, Object.keys(ajuste).length ? ajuste : null);
+        proximo.desligadas = proximo.desligadas.filter((id) => id !== h.id);
+        if (!ligada.checked) proximo.desligadas.push(h.id);
+        await this.salvar(proximo);
+      } },
+    ] });
+    this.fecharModal = modal.fechar;
+  }
+  /** Põe ou tira o ajuste de uma capacidade; sem nenhum ajuste, "fabrica" some do arquivo. */
+  private trocarAjuste(cfg: HabilidadesConfig, id: string, ajuste: AjusteFabrica | null) {
+    const fabrica = { ...cfg.fabrica };
+    if (ajuste) fabrica[id] = ajuste; else delete fabrica[id];
+    if (Object.keys(fabrica).length) cfg.fabrica = fabrica; else delete cfg.fabrica;
+  }
+  private restaurar(h: HabilidadeFabrica) {
+    if (this.bloqueada()) return;
+    const corpo = document.createElement("p"); corpo.textContent = `Restaurar o padrão de “${h.nome}”? Nome, frases e orientações voltam aos de fábrica; ligada ou desligada continua como está.`;
+    const modal = abrirModal({ titulo: "Restaurar padrão", corpo, aoFechar: () => { this.fecharModal = null; }, acoes: [
+      { rotulo: "Cancelar" }, { rotulo: "Restaurar padrão", primaria: true, aoClicar: async () => {
+        const proximo = structuredClone(this.cfg); this.trocarAjuste(proximo, h.id, null); await this.salvar(proximo);
       } },
     ] });
     this.fecharModal = modal.fechar;

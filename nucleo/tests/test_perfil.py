@@ -84,6 +84,15 @@ def test_persona_so_orienta_com_habilidade_do_usuario_ligada(monkeypatch, ligada
         assert "se a ferramenta estiver disponível" in texto
 
 
+@pytest.mark.parametrize("desligada", [False, True])
+def test_persona_orienta_com_fabrica_personalizada_ligada(monkeypatch, desligada):
+    monkeypatch.setattr(perfil, "_bloco_produto", lambda: "")
+    habilidades.gravar_habilidades({"versao": 1, "habilidades": [], "desligadas": ["conversa"] if desligada else [],
+        "fabrica": {"conversa": {"instrucoes": "Responda curto."}}})
+    texto = perfil.montar_persona(perfil.Perfil(), "Aurora", "")
+    assert ("listar_habilidades" in texto) is (not desligada)
+
+
 def test_persona_com_habilidades_invalidas_preserva_perfil(monkeypatch):
     monkeypatch.setattr(perfil, "_bloco_produto", lambda: "")
     arq = habilidades.caminho()

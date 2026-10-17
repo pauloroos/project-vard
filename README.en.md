@@ -62,7 +62,8 @@ Only one instance runs at a time: opening Vard again brings the window to the fr
 - **Meeting:** a "Meeting" tab (start, stop, make minutes, last meeting); while a meeting runs the widget stays quiet and shows "meeting".
 - **Panel:** recognition language as a list and the **Oficina** (Workshop) tab.
 
-In **Oficina**, built-in skills are labeled **Capaz** (Capable) and can be switched off. Choose **Nova habilidade**
+In **Oficina**, built-in skills are labeled **Capaz** (Capable) and can be switched off or edited (name, phrases and
+extra guidance, in the same modal); **Restaurar padrão** (Restore default) undoes the edit, since they cannot be deleted. Choose **Nova habilidade**
 (New skill) to teach a recipe with example phrases and instructions; it starts as **Treinada** (Trained) and can
 be marked **Validada** (Validated) after it works. Creation and editing use a modal; deletion requires confirmation.
 Search and status filters help find recipes. `habilidades.json` lives beside `paineis.json` in the user's configuration

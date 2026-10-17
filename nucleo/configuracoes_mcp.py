@@ -6,7 +6,7 @@ import json
 from urllib.parse import quote
 
 from mcp.server.mcpserver import MCPServer
-from vard import ajustes
+from vard import ajustes, habilidades
 
 mcp = MCPServer("configuracoes")
 
@@ -164,7 +164,8 @@ def cadastrar_habilidade(habilidade: dict) -> str:
 @mcp.tool()
 @_seguro
 def editar_habilidade(id: str, campos: dict) -> str:
-    """Edita nome, exemplos, instruções ou ligada de uma receita; volta à situação treinada."""
+    """Edita nome, exemplos, instruções ou ligada; receita volta a treinada. Também vale para as de fábrica:
+    conversa, computador, oficina, consultas, memoria, reuniao, sistema, resumo-manha, pesquisa, agente-remoto."""
     ajustes.editar_habilidade(id, campos)
     return "Habilidade atualizada."
 
@@ -172,11 +173,19 @@ def editar_habilidade(id: str, campos: dict) -> str:
 @mcp.tool()
 @_seguro
 def excluir_habilidade(id: str, confirmado: bool = False) -> str:
-    """Exclui definitivamente uma receita do usuário, após confirmação."""
-    if confirmado is not True:
+    """Exclui definitivamente uma receita do usuário, após confirmação. Fábrica não se exclui: restaure ou desligue."""
+    if confirmado is not True and id not in habilidades.IDS_FABRICA:
         return _confirmar(f"Vou excluir a receita {id}; suas instruções deixarão de estar disponíveis")
     ajustes.excluir_habilidade(id)
     return "Habilidade excluída."
+
+
+@mcp.tool()
+@_seguro
+def restaurar_habilidade(id: str) -> str:
+    """Volta uma habilidade de fábrica ao nome, exemplos e instruções de fábrica; ligada/desligada não muda."""
+    ajustes.restaurar_habilidade(id)
+    return "Habilidade de fábrica restaurada ao padrão."
 
 
 @mcp.tool()
