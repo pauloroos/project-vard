@@ -103,11 +103,11 @@ export class Configuracoes {
         },
       });
       const pronto = instalador.montar().then(() => this.abaVoz.definirPacoteXttsInstalado(instalador.estaInstalado("xtts-v2")));
-      this.abaVoz.definirInstalador(async (id) => {
+      this.abaVoz.definirInstalador(async (id, op) => {
         await pronto;
         raizInstalador.scrollIntoView?.({ block: "nearest" });
-        await instalador.instalar(id);
-      });
+        return instalador.instalar(id, op);
+      }, async (id) => { await pronto; return instalador.pacote(id); });
     }
     this.marcarUrl("voz_url");
     this.modelos = new AbaModelos(this.raiz.querySelector<HTMLElement>("#cfg-modelos")!, {
