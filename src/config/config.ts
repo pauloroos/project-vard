@@ -34,6 +34,10 @@ export interface Config {
   voz_propria: string;
   elevenlabs_chave: string; elevenlabs_voz: string;
   gemini_chave: string; gemini_voz: string;
+  /** Voz de reserva: usada automaticamente quando a principal falhar. Mesma estrutura da principal (provedor+motor+id). */
+  voz_reserva_provedor?: ProvedorVoz | "nenhuma";
+  voz_reserva_motor?: string;
+  voz_reserva_id?: string;
   /** Consulta a release mais nova ao abrir a aba Atualização do painel (só então; nunca em segundo plano). */
   atualizacao_ao_abrir: boolean;
   /** Não ouvir: microfone desligado (o mesmo que o botão Mudo do HUD). */
@@ -75,6 +79,7 @@ export const CONFIG_PADRAO: Config = {
   sala_monitor: "",
   conversa_ms: 20000,
   voz_provedor: "propria", voz_motor: "", voz_propria: "", elevenlabs_chave: "", elevenlabs_voz: "", gemini_chave: "", gemini_voz: "Kore",
+  voz_reserva_provedor: "nenhuma", voz_reserva_motor: "", voz_reserva_id: "",
   atualizacao_ao_abrir: false,
   nao_ouvir: false, nao_falar: false, falar_avisos: false,
   cerebro: CEREBRO_PADRAO,
@@ -112,6 +117,11 @@ function mesclar(salvo: unknown): Config {
       if (v === "energia" || v === "silero") saida[k] = v;
     } else if (k === "voz_provedor") {
       if (typeof v === "string" && (PROVEDORES_VOZ as readonly string[]).includes(v)) saida[k] = v;
+    } else if (k === "voz_reserva_provedor") {
+      const validos = [...PROVEDORES_VOZ, "nenhuma"] as readonly string[];
+      if (typeof v === "string" && validos.includes(v)) saida[k] = v;
+    } else if (k === "voz_reserva_motor" || k === "voz_reserva_id") {
+      if (typeof v === "string") saida[k] = v;
     } else if (k === "voz_motor") {
       if (typeof v === "string") saida[k] = v;
     } else if (k === "cor_elementos") {

@@ -1,6 +1,4 @@
-/* Frente VOZ (0.9.3): aviso de serviço fora e a lista de vozes em blocos por motor.
-   Os cards e o modal vêm de src/ui/componentes.ts (configuracoes.css); aqui só o que é da Voz. */
-
+/* Frente VOZ (0.9.4): listas de seleção principal/reserva, blocos de serviço e aviso. */
 .voz-aviso {
   border: 1px solid var(--aviso, #ffb347);
   background: rgba(255, 179, 71, 0.12);
@@ -9,24 +7,49 @@
   padding: 8px 10px;
   margin: 0 0 10px;
 }
-
 .voz-aviso p {
   margin: 4px 0 0;
   opacity: 0.85;
 }
-
-.voz-lista-topo {
+.voz-select-linha {
   display: flex;
-  justify-content: flex-end;
-  margin: 0 0 6px;
+  gap: 8px;
+  align-items: center;
 }
-
-.grupo-motor {
-  margin: 0 0 14px;
+.voz-select-linha select {
+  flex: 1;
+  min-width: 0;
 }
-
-.grupo-motor h3 {
-  margin: 0 0 6px;
-  font-size: 1rem;
-  letter-spacing: 0.02em;
+.voz-btn-amostra {
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.voz-bloco-servico {
+  border: 1px solid var(--borda, rgba(255, 255, 255, 0.12));
+  border-radius: 6px;
+  padding: 10px 12px;
+  margin: 0 0 10px;
+}
+.voz-bloco-servico h4 {
+  margin: 0 0 4px;
+  font-size: 0.95rem;
+}
+.voz-servico-desc {
+  margin: 0 0 8px;
+  font-size: 0.85rem;
+  opacity: 0.8;
+}
+.voz-btn-secundario {
+  margin-top: 6px;
+}
+.voz-cadastrada-linha {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--borda, rgba(255, 255, 255, 0.08));
+}
+.voz-cadastrada-linha:last-child {
+  border-bottom: none;
 }

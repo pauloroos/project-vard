@@ -501,6 +501,67 @@ describe("voz própria frase a frase", () => {
   });
 });
 
+describe("reserva configurada (0.9.4 rodada 2)", () => {
+  const WAV = new ArrayBuffer(8);
+  const F1 = "Primeira frase.";
+  const F2 = "Segunda frase.";
+
+  function montarComReserva(resposta: string, reservaFalha = false) {
+    const tocados: string[] = [];
+    const boca = {
+      falando: false,
+      tocar: vi.fn(async (_w: ArrayBuffer) => { tocados.push("tocou"); }),
+      parar: vi.fn(),
+    };
+    const oj = { perguntar: vi.fn().mockResolvedValue(resposta), sintetizar: vi.fn().mockResolvedValue(WAV) };
+    const voz = {
+      falar: vi.fn().mockRejectedValue(new ErroVoz("sem conexão com a voz", true)),
+      falarWav: vi.fn().mockRejectedValue(new ErroVoz("sem conexão com a voz", true)),
+    };
+    const vozReserva = {
+      falarWav: reservaFalha
+        ? vi.fn().mockRejectedValue(new Error("reserva falhou"))
+        : vi.fn().mockResolvedValue(WAV),
+    };
+    const estados: string[] = [];
+    const c = new Conversa({ oj, boca, voz, vozReserva, config: CONFIG_PADRAO, falas: async () => WAV, aoEstado: (e) => estados.push(e) });
+    return { c, oj, boca, voz, vozReserva, tocados, estados };
+  }
+
+  beforeEach(() => {
+    vi.spyOn(console, "info").mockImplementation(() => {});
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+  });
+
+  it("principal falha → fala pela reserva configurada", async () => {
+    const m = montarComReserva(F1 + " " + F2);
+    await m.c.aoTextoTranscrito("me conta algo", true);
+    expect(m.voz.falar).toHaveBeenCalledTimes(1);
+    expect(m.vozReserva.falarWav).toHaveBeenCalled();
+    expect(m.oj.sintetizar).not.toHaveBeenCalled();
+    expect(m.tocados.length).toBeGreaterThan(0);
+  });
+
+  it("reserva também falha → cai para OpenJarvis", async () => {
+    const m = montarComReserva(F1 + " " + F2, true);
+    await m.c.aoTextoTranscrito("me conta algo", true);
+    expect(m.vozReserva.falarWav).toHaveBeenCalled();
+    expect(m.oj.sintetizar).toHaveBeenCalled();
+    expect(m.tocados.length).toBeGreaterThan(0);
+  });
+
+  it("reserva nenhuma (sem vozReserva) → OpenJarvis direto", async () => {
+    const tocados: string[] = [];
+    const boca = { falando: false, tocar: vi.fn(async () => { tocados.push("tocou"); }), parar: vi.fn() };
+    const oj = { perguntar: vi.fn().mockResolvedValue(F1), sintetizar: vi.fn().mockResolvedValue(WAV) };
+    const voz = { falar: vi.fn().mockRejectedValue(new ErroVoz("falha", true)) };
+    const c = new Conversa({ oj, boca, voz, config: CONFIG_PADRAO, falas: async () => WAV });
+    await c.aoTextoTranscrito("oi", true);
+    expect(oj.sintetizar).toHaveBeenCalled();
+    expect(tocados.length).toBeGreaterThan(0);
+  });
+});
+
 describe("modo conversa", () => {
   let oj: { perguntar: Mock<(m: Mensagem[], s?: AbortSignal) => Promise<string>>; sintetizar: Mock<(t: string, v: string, x: number) => Promise<ArrayBuffer>> };
   let boca: { falando: boolean; tocar: Mock<(w: ArrayBuffer) => Promise<void>>; parar: Mock<() => void> };
