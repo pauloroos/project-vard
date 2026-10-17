@@ -196,6 +196,7 @@ export class Configuracoes {
       tituloEl.textContent = mapaRotulo.get(aba) ?? aba;
     }
     if (aba === "paineis-mcps") void this.paineisMcps?.montar();
+    if (aba === "modelos") void this.modelos?.carregar(); // reconsulta o núcleo: o aviso e as instalações refletem o estado atual
     if (aba === "voz") {
       void this.abaVoz.atualizar();
     }

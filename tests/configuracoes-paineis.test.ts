@@ -209,4 +209,21 @@ describe("configuracoes-paineis (T8)", () => {
     expect(container.innerHTML.length).toBeGreaterThan(0);
     expect(container.textContent).toContain("OpenJarvis");
   });
+
+  it("reabrir a aba Quem responde pelo menu reconsulta o núcleo e tira o aviso velho", async () => {
+    document.body.innerHTML = "";
+    vi.mocked(invoke).mockImplementation((cmd: string) => Promise.resolve(cmd === "falhas_de_atalho" ? [] : null));
+    const raiz = criarRaiz();
+    let noAr = false;
+    const deps = { ...criarDeps(), statusPonte: async () => (noAr ? { ok: true, modo: "ligado" } : null) };
+    const painel = new Configuracoes({ ...CONFIG_PADRAO } as Config, raiz, deps as ReturnType<typeof criarDeps>);
+    await painel.montar();
+    const aviso = () => raiz.querySelector("#cfg-modelos .qr-aviso-ponte");
+    painel.abrirAba("modelos" as Aba);
+    await vi.waitFor(() => expect(aviso()).toBeTruthy(), { timeout: 3000 });
+    noAr = true;
+    painel.abrirAba("geral" as Aba);
+    painel.abrirAba("modelos" as Aba);
+    await vi.waitFor(() => expect(aviso()).toBeNull(), { timeout: 3000 });
+  });
 });
