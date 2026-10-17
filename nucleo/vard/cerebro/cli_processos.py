@@ -165,6 +165,11 @@ async def _ferramentas_iniciais(
 _LIMITE_LINHA = 16 * 1024 * 1024
 
 
+def _id_do_modelo(modelo: str) -> str:
+    """Só o id do modelo: cadastros antigos gravaram ``id<TAB>Nome de exibição`` vindo do ``agy models``."""
+    return modelo.split("\t", 1)[0].strip()
+
+
 def argv_cli(provedor: ProvedorCli, pasta: Path) -> List[str]:
     """Monta o argv da CLI conforme docs/cli.md da T13 e spec C4/C6."""
     dialeto = _dialeto_do_tipo(provedor.tipo)
@@ -180,7 +185,7 @@ def argv_cli(provedor: ProvedorCli, pasta: Path) -> List[str]:
             "--verbose",
         ]
         if provedor.modelo:
-            cmd.extend(["--model", provedor.modelo])
+            cmd.extend(["--model", _id_do_modelo(provedor.modelo)])
         if perfil_md.exists():
             cmd.extend(["--append-system-prompt-file", str(perfil_md)])
         if mcp_json.exists():
@@ -195,7 +200,7 @@ def argv_cli(provedor: ProvedorCli, pasta: Path) -> List[str]:
     # O --print precisa do valor junto (vazio); --stream-json não existe e fazia o agy sair na hora.
     cmd = ["agy", "--input-format", "stream-json", "--output-format", "stream-json"]
     if provedor.modelo:
-        cmd.extend(["--model", provedor.modelo])
+        cmd.extend(["--model", _id_do_modelo(provedor.modelo)])
     if provedor.yolo:
         cmd.append("--dangerously-skip-permissions")
     cmd.append("--print=")

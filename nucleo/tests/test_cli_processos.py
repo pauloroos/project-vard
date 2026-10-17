@@ -148,6 +148,11 @@ class TestArgvEMontagemDePasta:
         cmd_off = argv_cli(_provedor(yolo=False), pasta)
         assert "--dangerously-skip-permissions" not in cmd_off
 
+    def test_modelo_gravado_com_nome_de_exibicao_vira_so_o_id(self, base_dados: Path) -> None:
+        pasta = _preparar_pasta_sessao(_provedor("cli-agy"), "s1", base_dados=base_dados)
+        cmd = argv_cli(_provedor("cli-agy", modelo="gemini-3.8-flash-low\tGemini 3.8 Flash (Low)"), pasta)
+        assert cmd[cmd.index("--model") + 1] == "gemini-3.8-flash-low"
+
     def test_argv_claude_tem_modelo_e_perfil(self, base_dados: Path) -> None:
         pasta = _preparar_pasta_sessao(_provedor("cli-claude"), "s1", base_dados=base_dados)
         cmd = argv_cli(_provedor("cli-claude", modelo="claude-haiku-5-5"), pasta)

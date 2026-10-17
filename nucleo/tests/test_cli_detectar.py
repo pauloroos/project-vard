@@ -73,7 +73,29 @@ def _falso_agy(bin_dir: Path, registro: Path) -> None:
     )
 
 
+def _falso_agy_real(bin_dir: Path, registro: Path) -> None:
+    """agy.cmd falso no formato real do `agy models`: cabeçalho e linhas `id<TAB>Nome`."""
+    (bin_dir / "agy.cmd").write_text(
+        "@echo off\r\n"
+        f'echo %*>>"{registro}"\r\n'
+        'if not "%1"=="models" goto versao\r\n'
+        "echo Fetching available models...\r\n"
+        "echo gemini-3.8-flash-low\tGemini 3.8 Flash (Low)\r\n"
+        "echo claude-opus-5-5-high\tClaude Opus 5.5 (High)\r\n"
+        "exit /b 0\r\n"
+        ":versao\r\n"
+        "echo 1.4.0-falso\r\n",
+        encoding="ascii",
+    )
+
+
 class TestDetectar:
+    def test_modelos_do_agy_guardam_so_o_id(self, pasta_bin):
+        bin_dir, registro = pasta_bin
+        _falso_agy_real(bin_dir, registro)
+        itens = {i["tipo"]: i for i in cli_deteccao.detectar()}
+        assert itens["cli-agy"]["modelos"] == ["gemini-3.8-flash-low", "claude-opus-5-5-high"]
+
     def test_detectar_sem_cli_instalada(self, pasta_bin):
         itens = cli_deteccao.detectar()
         assert [i["tipo"] for i in itens] == ["cli-claude", "cli-agy", "cli-codex", "cli-opencode"]

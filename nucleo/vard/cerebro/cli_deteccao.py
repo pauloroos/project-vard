@@ -62,11 +62,12 @@ def _primeira_linha(saida: str) -> str:
 
 
 def _modelos_agy(exe: str) -> List[str]:
+    # `agy models` imprime um cabeçalho e linhas `id<TAB>Nome de exibição`; o --model aceita só o id.
     saida = _rodar([exe, "models"])
     modelos: List[str] = []
     for linha in saida.splitlines():
-        nome = linha.strip()[:_TAMANHO_MAX]
-        if nome and nome not in modelos:
+        nome = linha.split("\t", 1)[0].strip()[:_TAMANHO_MAX]
+        if nome and not any(c.isspace() for c in nome) and nome not in modelos:
             modelos.append(nome)
     return modelos[:_MODELOS_MAX]
 
