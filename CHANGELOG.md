@@ -27,6 +27,7 @@ Os instaladores de cada versão ficam na página de [releases](https://github.co
 - O número da versão volta a acompanhar o código.
 - "Quem responde" reconsulta os serviços ao ser aberta, sem precisar recarregar a janela.
 - Barra de rolagem dos modais no tema escuro.
+- Antigravity como quem responde: o modelo era gravado com o nome de exibição junto e a ferramenta recusava o pedido.
 
 ## [0.9.4] — 2026-10-16
 
