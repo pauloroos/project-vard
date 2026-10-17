@@ -168,6 +168,10 @@ describe("aba-perfil (0.9.4)", () => {
     const { raiz } = await criarAba({ previa: () => previaPersona("http://127.0.0.1:4700", "Aurora", "Fulano") });
     (raiz.querySelector("#perfil-previa") as HTMLButtonElement).click();
     await vi.waitFor(() => expect(raiz.querySelector("#perfil-texto")!.textContent).toContain("Nome: Aurora"));
+    const url = String(buscar.mock.calls[0][0]);
+    expect(url).toContain("/perfil/persona");
+    expect(url).toContain("nome=Aurora");
+    expect(url).toContain("usuario=Fulano");
   });
 
   it("prévia com a ponte fora mostra aviso", async () => {

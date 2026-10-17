@@ -254,6 +254,44 @@ async function main() {
       console.log(`[${scale}x] Capturada seção: ${aba} (${medida.nosComTextoVisiveis} nós com texto)`);
     }
 
+    // Rodada 2 — Perfil: lista inteira com scroll, modal de confirmação aberto, campos preenchidos
+    const btnPerfilR2 = await page.$('nav button[data-aba="perfil"]');
+    if (btnPerfilR2) {
+      await btnPerfilR2.click();
+      await page.waitForTimeout(500);
+      // 1. Lista inteira de perfis prontos (scroll até o fim para mostrar os bem-humorados)
+      const gradePerfis = await page.$('.perfil-prontos-grade');
+      if (gradePerfis) {
+        await page.evaluate((el) => { el.scrollTop = el.scrollHeight; }, gradePerfis);
+        await page.waitForTimeout(300);
+      }
+      await page.screenshot({ path: path.join(CAPTURAS_DIR, `perfil-lista-inteira-escala${scale}.png`), fullPage: false });
+      resultados.push(await medirPagina(page, `perfil-lista-inteira@${scale}x`));
+      // 2. Preencher campos com texto existente para forçar modal de confirmação
+      await page.fill('#perfil-tom', 'tom existente');
+      await page.fill('#perfil-personalidade', 'personalidade existente');
+      await page.fill('#perfil-instrucoes', 'instruções existentes');
+      await page.waitForTimeout(200);
+      // Clicar no primeiro card para abrir o modal de confirmação
+      const btnUsarPerfil = await page.$('#cfg-perfil .card button.primaria');
+      if (btnUsarPerfil) {
+        await btnUsarPerfil.click();
+        await page.waitForSelector('.modal', { timeout: 5000 }).catch(() => null);
+        await page.waitForTimeout(400);
+        await page.screenshot({ path: path.join(CAPTURAS_DIR, `perfil-modal-confirmacao-escala${scale}.png`), fullPage: false });
+        resultados.push(await medirPagina(page, `perfil-modal-confirmacao@${scale}x`));
+        // Confirmar substituição
+        const btnSubstituir = await page.$('.modal button.primaria');
+        if (btnSubstituir) {
+          await btnSubstituir.click();
+          await page.waitForTimeout(400);
+        }
+      }
+      // 3. Campos do perfil preenchidos após escolher um perfil pronto
+      await page.screenshot({ path: path.join(CAPTURAS_DIR, `perfil-campos-preenchidos-escala${scale}.png`), fullPage: false });
+      resultados.push(await medirPagina(page, `perfil-campos-preenchidos@${scale}x`));
+    }
+
     // Estados extras da seção "Quem responde" (brief 0.9.3 + rodada 2)
     // Cada estado recarrega a página com o mock adequado e espera o botão ficar visível antes de interagir.
     const btnModelos = await page.$('nav button[data-aba="modelos"]');
