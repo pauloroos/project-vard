@@ -16,6 +16,7 @@ from dataclasses import asdict, dataclass, fields
 from pathlib import Path
 
 from . import config as modulo_config
+from .habilidades import ler_habilidades
 
 log = logging.getLogger(__name__)
 
@@ -96,7 +97,12 @@ def montar_persona(perfil: Perfil, nome: str, usuario: str) -> str:
         produto = produto.replace(IDENTIDADE_EXEMPLO, quem, 1)
     if produto:
         partes.append(produto)
-    partes.append("Há habilidades cadastradas pelo usuário; antes de agir num pedido, consulte listar_habilidades do MCP de configurações, se a ferramenta estiver disponível.")
+    try:
+        ligadas = any(h["ligada"] for h in ler_habilidades()["habilidades"])
+    except (OSError, ValueError):
+        ligadas = False
+    if ligadas:
+        partes.append("Há habilidades cadastradas pelo usuário; antes de agir num pedido, consulte listar_habilidades do MCP de configurações, se a ferramenta estiver disponível.")
     return "\n\n".join(partes)
 
 

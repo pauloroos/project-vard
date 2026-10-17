@@ -18,10 +18,16 @@ def test_contrato_compartilhado(caso):
             habilidades.validar_habilidades(caso["valor"])
 
 
-def test_ausente_padrao_independente():
+def test_le_arquivo_ausente_real_sem_compartilhar_retorno(tmp_path, monkeypatch):
+    monkeypatch.setenv("VARD_CONFIG", str(tmp_path))
+    destino = tmp_path / "habilidades.json"
+    assert habilidades.caminho() == destino
+    assert not destino.exists()
     cfg = habilidades.ler_habilidades()
     cfg["desligadas"].append("computador")
-    assert habilidades.ler_habilidades() == habilidades.HABILIDADES_PADRAO
+    cfg["habilidades"].append({"id": "mutacao"})
+    assert habilidades.ler_habilidades() == {"versao": 1, "habilidades": [], "desligadas": []}
+    assert not destino.exists()
 
 
 def test_grava_le_e_substitui_atomicamente(monkeypatch):

@@ -1,5 +1,5 @@
 import { gatilhos, type Config } from "../config/config";
-import { INSTRUCAO_HABILIDADES } from "../config/habilidades";
+import { INSTRUCAO_HABILIDADES, lerHabilidades } from "../config/habilidades";
 import { fluxoParaWav } from "../audio/wav";
 import { FALAS, saudacaoPara } from "./falas";
 import { cortarEmFrases } from "./frases";
@@ -392,8 +392,14 @@ export class Conversa {
         }
         if (!resposta) throw new Error("resposta vazia");
       } else {
+        let instrucao = this.d.config.instrucao_formato;
+        try {
+          const cfg = await lerHabilidades();
+          if (cfg.habilidades.some((h) => h.ligada)) instrucao += `\n${INSTRUCAO_HABILIDADES}`;
+        } catch { /* Arquivo ilegível não impede conversar nem afirma receitas inexistentes. */ }
+        if (ac.signal.aborted || this.emJogo()) return;
         resposta = (await this.d.oj.perguntar([
-          { role: "system", content: `${this.d.config.instrucao_formato}\n${INSTRUCAO_HABILIDADES}` },
+          { role: "system", content: instrucao },
           ...this.historico,
           { role: "user", content: comando },
         ], ac.signal)).trim();
