@@ -2,6 +2,16 @@
 //! Em release usa o Python embutido em build/nucleo/python; em dev usa uv no repo.
 
 use std::path::{Path, PathBuf};
+use std::sync::OnceLock;
+
+static PASTA_HUD: OnceLock<PathBuf> = OnceLock::new();
+
+pub fn definir_pasta_hud(pasta: PathBuf) { let _ = PASTA_HUD.set(pasta); }
+pub fn pasta_hud() -> Option<&'static Path> { PASTA_HUD.get().map(PathBuf::as_path) }
+
+pub fn resolver_pasta_config(dados: &Path, configurada: Option<&str>) -> PathBuf {
+    configurada.filter(|c| !c.trim().is_empty()).map(PathBuf::from).unwrap_or_else(|| dados.join("config"))
+}
 
 use crate::servicos::DescritorServico;
 
@@ -50,13 +60,18 @@ pub fn ambiente(
     config: &Path,
     versao: &str,
 ) -> Vec<(String, String)> {
-    vec![
+    let mut variaveis = vec![
         ("VARD_TOKEN".into(), token.into()),
         ("VARD_PORTA".into(), porta.to_string()),
         ("VARD_DADOS".into(), dados.to_string_lossy().into_owned()),
         ("VARD_CONFIG".into(), config.to_string_lossy().into_owned()),
         ("VARD_VERSAO_APP".into(), versao.into()),
-    ]
+        ("VARD_NUCLEO_URL".into(), format!("http://127.0.0.1:{porta}")),
+    ];
+    if let Some(pasta) = PASTA_HUD.get() {
+        variaveis.push(("VARD_HUD_CONFIG_DIR".into(), pasta.to_string_lossy().into_owned()));
+    }
+    variaveis
 }
 
 /// Constrói um DescritorServico completo para o núcleo.
@@ -85,6 +100,13 @@ pub fn descritor_nucleo(
 #[cfg(test)]
 mod testes {
     use super::*;
+
+    #[test]
+    fn pasta_config_respeita_sobrescrita_e_vazio_usa_pasta_dados() {
+        assert_eq!(resolver_pasta_config(Path::new("dados"), Some("config-ficticia")), PathBuf::from("config-ficticia"));
+        assert_eq!(resolver_pasta_config(Path::new("dados"), Some(" ")), Path::new("dados").join("config"));
+        assert_eq!(resolver_pasta_config(Path::new("dados"), None), Path::new("dados").join("config"));
+    }
 
     #[test]
     fn comando_release_usa_python_embutido() {

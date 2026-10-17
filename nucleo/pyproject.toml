@@ -45,5 +45,7 @@ packages = ["vard"]
 "mesa_mcp.py" = "vard/mesa_mcp.py"
 "oficina_mcp.py" = "vard/oficina_mcp.py"
 "reuniao_mcp.py" = "vard/reuniao_mcp.py"
+"configuracoes_mcp.py" = "vard/configuracoes_mcp.py"
+"../config/vozes.json" = "vard/vozes.json"
 "preflight.py" = "vard/preflight.py"
 "viewer" = "vard/viewer"

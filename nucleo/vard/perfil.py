@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 from dataclasses import asdict, dataclass, fields
 from pathlib import Path
 
@@ -65,11 +64,9 @@ def ler() -> Perfil:
 
 def gravar(perfil: Perfil) -> None:
     """Grava o perfil de forma atômica, sem deixar arquivo temporário no fim."""
-    arq = caminho()
-    arq.parent.mkdir(parents=True, exist_ok=True)
-    tmp = arq.parent / f"{arq.name}.tmp"
-    tmp.write_text(json.dumps(asdict(perfil), ensure_ascii=False, indent=2), encoding="utf-8")
-    os.replace(tmp, arq)
+    from . import ajustes
+    atual = ajustes.ler_documento("perfil")
+    ajustes.gravar_documento("perfil", {**atual, **asdict(perfil)})
 
 
 def montar_persona(perfil: Perfil, nome: str, usuario: str) -> str:

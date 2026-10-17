@@ -1,3 +1,4 @@
+import catalogo from "../../../config/vozes.json";
 // Gemini TTS: só é chamado quando o usuário escolheu o provedor e informou a chave (nunca por padrão).
 import type { FalaEmFluxo } from "../../fala/conversa";
 import { fluxoParaWav } from "../../audio/wav";
@@ -8,7 +9,7 @@ const URL_TTS = "https://generativelanguage.googleapis.com/v1beta/models/gemini-
 const TAXA_PADRAO = 24000;
 const PRAZO_MS = 20000;
 
-export const VOZES_GEMINI = ["Zephyr", "Puck", "Charon", "Kore", "Fenrir", "Leda", "Orus", "Aoede", "Callirrhoe", "Autonoe", "Enceladus", "Iapetus", "Umbriel", "Algieba", "Despina", "Erinome", "Algenib", "Rasalgethi", "Laomedeia", "Achernar", "Alnilam", "Schedar", "Gacrux", "Pulcherrima", "Achird", "Zubenelgenubi", "Vindemiatrix", "Sadachbia", "Sadaltager", "Sulafat"] as const;
+export const VOZES_GEMINI = catalogo.gemini;
 
 interface RespostaGemini { candidates?: { content?: { parts?: { inlineData?: { data?: string; mimeType?: string } }[] } }[] }
 

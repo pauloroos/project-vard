@@ -22,7 +22,7 @@ def test_carregar_sem_arquivo_explica(tmp_path: Path):
 def test_escrever_mcp_json_tem_os_servidores_locais(tmp_path: Path):
     """Rodada 2: MCPs usam sys.executable direto (sem uv run) para reduzir processos."""
     import sys
-    repo = Path("X:/vard/nucleo")
+    repo = Path("nucleo-ficticio")
     destino = tmp_path / "mcp.json"
     segredos.escrever_mcp_json({"omniroute": {"chave": "x"}}, repo, destino)
     lista = json.loads(destino.read_text(encoding="utf-8"))
@@ -34,10 +34,10 @@ def test_escrever_mcp_json_tem_os_servidores_locais(tmp_path: Path):
 
 def test_mcp_json_nunca_leva_o_token(tmp_path: Path):
     destino = tmp_path / "mcp.json"
-    segredos.escrever_mcp_json({"ai_memory": {"url": "http://h/mcp", "token": "SEGREDO123"}}, Path("X:/vard/nucleo"), destino)
+    segredos.escrever_mcp_json({"ai_memory": {"url": "http://h/mcp", "token": "SEGREDO123"}}, Path("nucleo-ficticio"), destino)
     texto = destino.read_text(encoding="utf-8")
     assert "SEGREDO123" not in texto
-    assert [s["name"] for s in json.loads(texto)] == ["mesa", "oficina", "consulta", "memoria", "reuniao"]
+    assert [s["name"] for s in json.loads(texto)] == ["mesa", "oficina", "consulta", "memoria", "reuniao", "configuracoes"]
 
 
 def test_chave_lmstudio_le_a_secao():

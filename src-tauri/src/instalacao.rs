@@ -185,7 +185,9 @@ pub fn descritor_nucleo(
     } else {
         PORTA_NUCLEO_PADRAO
     };
-    let desc_nucleo = crate::nucleo::descritor_nucleo(dev, recursos, repo, porta, dados, &dados.join("config"), versao);
+    let configurada = std::env::var("VARD_CONFIG").ok();
+    let pasta_config = crate::nucleo::resolver_pasta_config(dados, configurada.as_deref());
+    let desc_nucleo = crate::nucleo::descritor_nucleo(dev, recursos, repo, porta, dados, &pasta_config, versao);
     desc_nucleo
 }
 
@@ -311,12 +313,15 @@ pub fn descritor_openjarvis(
         "--home".into(),
         home.to_string_lossy().into_owned(),
     ];
-    let envs = vec![
+    let mut envs = vec![
         ("OPENJARVIS_HOME".into(), home.to_string_lossy().into_owned()),
         ("VARD_DADOS".into(), dados.to_string_lossy().into_owned()),
         ("VARD_CONFIG".into(), dados.join("config").to_string_lossy().into_owned()),
         ("VARD_INSTALACAO".into(), dados.to_string_lossy().into_owned()),
     ];
+    if let Some(pasta) = crate::nucleo::pasta_hud() {
+        envs.push(("VARD_HUD_CONFIG_DIR".into(), pasta.to_string_lossy().into_owned()));
+    }
     Some(DescritorServico {
         id: "openjarvis".into(),
         porta: 0,

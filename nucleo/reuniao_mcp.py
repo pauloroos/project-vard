@@ -57,4 +57,6 @@ def reuniao_guardar(qual: str = "ultima") -> str:
 
 
 if __name__ == "__main__":
+    from vard.instalaveis import limpar_ambiente_mcp
+    limpar_ambiente_mcp()
     mcp.run()

@@ -2,6 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { PROVEDORES_VOZ, type ProvedorVoz } from "../conectores/voz/escolher";
 import { migrarAtalhosWin, normalizarAtalho, type AcaoAtalho } from "./atalhos";
 import { CEREBRO_PADRAO, ehCerebro, type Cerebro } from "./cerebro";
+import { validarDocumento } from "./ajustes";
 
 export const TAMANHOS = ["pequeno", "medio", "grande", "personalizado"] as const;
 
@@ -88,10 +89,10 @@ export const CONFIG_PADRAO: Config = {
 };
 
 /** Mescla o salvo com o padrão descartando o que tem tipo errado (arquivo editado à mão). */
-function mesclar(salvo: unknown): Config {
+export function normalizarConfig(salvo: unknown): Config {
   if (typeof salvo !== "object" || salvo === null || Array.isArray(salvo)) return { ...CONFIG_PADRAO, atalhos: { ...CONFIG_PADRAO.atalhos } };
   const s = salvo as Record<string, unknown>;
-  const saida: Record<string, unknown> = { ...CONFIG_PADRAO, atalhos: { ...CONFIG_PADRAO.atalhos } };
+  const saida: Record<string, unknown> = { ...s, ...CONFIG_PADRAO, atalhos: { ...CONFIG_PADRAO.atalhos } };
   for (const [k, padrao] of Object.entries(CONFIG_PADRAO)) {
     const v = s[k];
     if (k === "atalhos") {
@@ -141,10 +142,10 @@ function mesclar(salvo: unknown): Config {
 export async function carregarConfig(): Promise<Config> {
   try {
     const salvo = await invoke<unknown>("ler_config");
-    return mesclar(salvo ?? {});
+    return normalizarConfig(salvo ?? {});
   } catch (erro) {
     console.warn("config ilegível, usando o padrão", erro);
-    return mesclar({});
+    return normalizarConfig({});
   }
 }
 
@@ -155,11 +156,14 @@ export function gatilhos(c: Pick<Config, "nome" | "variantes">): string[] {
   const todos = [nome, ...extras.map((v) => v.trim().toLowerCase())].filter(Boolean);
   return [...new Set(todos)];
 }
-export async function salvarConfig(c: Config): Promise<void> { await invoke("gravar_config", { config: c }); }
+export async function salvarConfig(c: Config): Promise<void> {
+  validarDocumento("hud", c);
+  await invoke("gravar_config", { config: c });
+}
 
 /** Lê o que está no disco, troca só as chaves de `parcial` e grava: quem tem uma cópia velha (o widget) não desfaz o que o painel salvou. */
 export async function atualizarConfig(parcial: Partial<Config>): Promise<void> {
-  const atual = mesclar((await invoke<unknown>("ler_config")) ?? {});
+  const atual = normalizarConfig((await invoke<unknown>("ler_config")) ?? {});
   await salvarConfig({ ...atual, ...parcial });
 }
 
@@ -201,13 +205,25 @@ const REINICIO: [keyof Config, string][] = [
   ["finish_ms", "ouvido"], ["limiar_vad", "ouvido"], ["atalhos", "atalhos"],
 ];
 
+const CAMPOS_VOZ_AO_VIVO = ["voz_provedor", "voz_motor", "voz_propria", "voz", "elevenlabs_voz", "gemini_voz", "voz_reserva_provedor", "voz_reserva_motor", "voz_reserva_id", "velocidade"] as const;
+
+/** Troca só a seleção de voz; credenciais e endereços continuam com seu contrato próprio. */
+export function aplicarVozAoVivo(vivo: Config, novo: Config): boolean {
+  validarDocumento("hud", novo);
+  let mudou = false;
+  for (const chave of CAMPOS_VOZ_AO_VIVO) {
+    if (vivo[chave] !== novo[chave]) { Object.assign(vivo, { [chave]: novo[chave] }); mudou = true; }
+  }
+  return mudou;
+}
+
 /** O que mudou e só vale depois de reiniciar o Vard, em palavras do painel e sem repetição. */
 export function mudancasQueExigemReinicio(antes: Config, depois: Config): string[] {
   const r = new Set<string>();
   const igual = (k: keyof Config) => k === "atalhos"
     ? (Object.keys(depois.atalhos) as AcaoAtalho[]).every((a) => (normalizarAtalho(antes.atalhos[a]) ?? antes.atalhos[a]) === (normalizarAtalho(depois.atalhos[a]) ?? depois.atalhos[a]))
     : JSON.stringify(antes[k]) === JSON.stringify(depois[k]);
-  for (const [k, rotulo] of REINICIO) if (!igual(k)) r.add(rotulo);
+  for (const [k, rotulo] of REINICIO) if (!(CAMPOS_VOZ_AO_VIVO as readonly string[]).includes(k) && !igual(k)) r.add(rotulo);
   return [...r];
 }
 

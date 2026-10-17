@@ -53,6 +53,14 @@ def ambiente_limpo(original: Mapping[str, str] | None = None) -> dict[str, str]:
             if not k.upper().startswith(("CLAUDE", "ANTHROPIC", "ORCA_AGENT"))}
 
 
+def limpar_ambiente_mcp() -> None:
+    """Também protege MCPs iniciados por hospedeiros externos, como o OpenJarvis."""
+    permitido = ambiente_limpo()
+    for chave in tuple(os.environ):
+        if chave not in permitido:
+            os.environ.pop(chave, None)
+
+
 def _comando_nativo(comando: Sequence[str]) -> list[str]:
     """npm.cmd não é executável nativo: chama seu npm-cli.js pelo Node, sem shell."""
     if comando[0] != "npm" or os.name != "nt":

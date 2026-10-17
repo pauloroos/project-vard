@@ -136,7 +136,7 @@ export class AbaOficina {
       { rotulo: "Cancelar" },
       { rotulo: "Salvar", primaria: true, aoClicar: async () => {
         const data = new Date().toISOString();
-        const item: Habilidade = { id: h?.id ?? `habilidade-${crypto.randomUUID()}`, nome: nome.value.trim(), quando: quando.value.split("\n").map((v) => v.trim()).filter(Boolean), instrucoes: instrucoes.value.trim(), ligada: ligada.checked, situacao: situacao.value as Habilidade["situacao"], criada_em: h?.criada_em ?? data, validada_em: situacao.value === "validada" ? h?.validada_em ?? data : null };
+        const item: Habilidade = { ...h, id: h?.id ?? `habilidade-${crypto.randomUUID()}`, nome: nome.value.trim(), quando: quando.value.split("\n").map((v) => v.trim()).filter(Boolean), instrucoes: instrucoes.value.trim(), ligada: ligada.checked, situacao: situacao.value as Habilidade["situacao"], criada_em: h?.criada_em ?? data, validada_em: situacao.value === "validada" ? h?.validada_em ?? data : null };
         const proximo = structuredClone(this.cfg);
         if (h) proximo.habilidades = proximo.habilidades.map((atual) => atual.id === h.id ? item : atual);
         else proximo.habilidades.push(item);

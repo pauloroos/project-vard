@@ -18,6 +18,7 @@ import asyncio
 import inspect
 import json
 import logging
+from collections import Counter
 from typing import Any, Callable, Awaitable
 
 from .contratos import (
@@ -122,11 +123,17 @@ async def executar_pedido(
                 try:
                     # Repassa ferramentas ao adaptador se disponíveis (bug da revisão)
                     ferramentas_schema = None
+                    destinos_ferramentas = {}
                     if gerenciador_ferramentas is not None:
                         todas = await gerenciador_ferramentas.listar_todas()
+                        contagem = Counter(f["nome"] for f in todas)
+                        for f in todas:
+                            identificador = f.get("identificador", "interno")
+                            exposto = f["nome"] if contagem[f["nome"]] == 1 else f"{identificador}__{f['nome']}"
+                            destinos_ferramentas[exposto] = (identificador, f["nome"])
                         ferramentas_schema = [
                             {
-                                "name": f["nome"],
+                                "name": f["nome"] if contagem[f["nome"]] == 1 else f"{f.get('identificador', 'interno')}__{f['nome']}",
                                 "description": f.get("descricao", f.get("description", "")),
                                 "parameters": f.get("schema", f.get("inputSchema", {"type": "object", "properties": {}})),
                             }
@@ -177,6 +184,11 @@ async def executar_pedido(
 
             # --- Chamadas de ferramenta com diário ---
             if chamadas_coletadas:
+                mensagens.append({"role": "assistant", "content": "".join(texto_acumulado) or None,
+                    "tool_calls": [{"id": c.get("id", ""), "type": "function", "function": {
+                        "name": c.get("nome") or c.get("name", ""),
+                        "arguments": json.dumps(c.get("argumentos") or c.get("arguments", {}), ensure_ascii=False),
+                    }} for c in chamadas_coletadas]})
                 for chamada in chamadas_coletadas:
                     nome = chamada.get("nome") or chamada.get("name", "")
                     argumentos = chamada.get("argumentos") or chamada.get("arguments", {})
@@ -223,9 +235,10 @@ async def executar_pedido(
                     res_ferramenta: dict[str, Any] | None = None
                     try:
                         if gerenciador_ferramentas is not None:
-                            identificador = chamada.get("identificador", "interno")
+                            destino, nome_real = destinos_ferramentas.get(nome, ("interno", nome))
+                            identificador = chamada.get("identificador", destino)
                             texto_resultado = await gerenciador_ferramentas.chamar(
-                                identificador, nome, argumentos
+                                identificador, nome_real, argumentos
                             )
                             res_ferramenta = {"resultado": texto_resultado}
                         else:
