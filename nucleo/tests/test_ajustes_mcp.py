@@ -20,6 +20,19 @@ def test_aparencia_usa_hud_e_preserva_campos(monkeypatch, tmp_path):
     assert not list(alvo.parent.glob("*.tmp"))
 
 
+def test_aparencia_muda_so_a_cor_ou_so_a_opacidade(tmp_path):
+    from vard import ajustes
+    import configuracoes_mcp as mcp
+    alvo = tmp_path / "hud" / "hud.config.json"
+    alvo.parent.mkdir()
+    alvo.write_text(json.dumps({"cor_elementos": "#ff00aa", "opacidade_elementos": 0.6}), encoding="utf-8")
+    assert mcp.mudar_aparencia(cor="#22c55e") == "Aparência atualizada."
+    assert json.loads(alvo.read_text(encoding="utf-8")) == {"cor_elementos": "#22c55e", "opacidade_elementos": 0.6}
+    ajustes.mudar_aparencia(opacidade=0.4)
+    assert json.loads(alvo.read_text(encoding="utf-8")) == {"cor_elementos": "#22c55e", "opacidade_elementos": 0.4}
+    assert "cor ou a opacidade" in mcp.mudar_aparencia()
+
+
 def test_contrato_compartilhado():
     from vard.ajustes import validar_documento
     casos = json.loads((Path(__file__).parents[2] / "tests/fixtures/ajustes/contrato.json").read_text(encoding="utf-8"))

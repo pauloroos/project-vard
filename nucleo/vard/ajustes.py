@@ -157,9 +157,15 @@ def gravar_documento(arquivo: str, valor: dict) -> None:
             tmp.unlink(missing_ok=True)
 
 
-def mudar_aparencia(cor: str, opacidade: float) -> None:
+def mudar_aparencia(cor: str | None = None, opacidade: float | None = None) -> None:
+    """Muda a cor, a opacidade ou as duas; o que não vier fica como está."""
+    if cor is None and opacidade is None:
+        raise ValueError("Diga a cor ou a opacidade a mudar.")
     cfg = ler_documento("hud")
-    cfg.update(cor_elementos=cor, opacidade_elementos=opacidade)
+    if cor is not None:
+        cfg["cor_elementos"] = cor
+    if opacidade is not None:
+        cfg["opacidade_elementos"] = opacidade
     gravar_documento("hud", cfg)
 
 
