@@ -144,9 +144,19 @@ def test_vozes_lista_e_atual():
     assert r.status_code == 200 and r.json() == {"vozes": ["Suad Qasim", "Ana Florence"], "atual": "Suad Qasim"}
 
 
-def test_vozes_aquecendo_503():
-    # Sem nenhum motor opcional e XTTS não pronto → 503; com qualquer motor ativo retorna 200.
-    assert cliente(MotorFalso(pronta=False), motor_kokoro=None, motor_edge=None, motor_piper=None).get("/vozes").status_code == 503
+def test_vozes_xtts_instalado_mas_nao_pronto_retorna_200():
+    """Rodada 2: XTTS instalado mas descarregado ainda lista vozes (não dá 503)."""
+    r = cliente(MotorFalso(pronta=False), motor_kokoro=None, motor_edge=None, motor_piper=None).get("/vozes")
+    assert r.status_code == 200
+    dados = r.json()
+    assert "Suad Qasim" in dados["vozes"]
+
+
+def test_vozes_sem_nenhum_motor_retorna_503():
+    """Sem XTTS e sem motores opcionais → 503."""
+    from vard_voz.servidor import _MotorAusente
+    r = cliente(_MotorAusente(), motor_kokoro=None, motor_edge=None, motor_piper=None).get("/vozes")
+    assert r.status_code == 503
 
 
 def test_falar_com_voz_passa_ao_motor():

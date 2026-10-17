@@ -20,14 +20,16 @@ def test_carregar_sem_arquivo_explica(tmp_path: Path):
 
 
 def test_escrever_mcp_json_tem_os_servidores_locais(tmp_path: Path):
+    """Rodada 2: MCPs usam sys.executable direto (sem uv run) para reduzir processos."""
+    import sys
     repo = Path("X:/vard/nucleo")
     destino = tmp_path / "mcp.json"
     segredos.escrever_mcp_json({"omniroute": {"chave": "x"}}, repo, destino)
     lista = json.loads(destino.read_text(encoding="utf-8"))
     assert [s["name"] for s in lista] == list(segredos.SERVIDORES_LOCAIS)
     oficina = [s for s in lista if s["name"] == "oficina"][0]
-    assert oficina["command"] == "uv"
-    assert oficina["args"] == ["run", "--project", str(repo), "python", str(repo / "oficina_mcp.py")]
+    assert oficina["command"] == sys.executable
+    assert oficina["args"] == [str(repo / "oficina_mcp.py")]
 
 
 def test_mcp_json_nunca_leva_o_token(tmp_path: Path):
