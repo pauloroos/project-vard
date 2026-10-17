@@ -28,6 +28,7 @@ export interface DepsQuemResponde {
   ponteUrl: string;
   config: Config;
   aoMudarCerebro?: (cerebro: Cerebro) => void;
+  aoMudarUsoOpenJarvis?: (usar: boolean) => void;
 }
 
 const TIPOS_PROVEDOR: [string, string][] = [
@@ -103,6 +104,27 @@ export class AbaModelos {
       vazio: "Nenhum provedor cadastrado.",
       adicionar: { rotulo: "Adicionar provedor", aoClicar: () => this.abrirModal() },
     });
+    const cardOj = container.querySelector<HTMLElement>('[data-id="__oj__"]')!;
+    const rotulo = document.createElement("label");
+    const usarOj = document.createElement("input");
+    usarOj.type = "checkbox";
+    usarOj.checked = this.deps.config.usar_openjarvis;
+    rotulo.append(usarOj, " Manter o OpenJarvis ligado mesmo quando ele não responde");
+    const avisoOj = document.createElement("p");
+    avisoOj.setAttribute("role", "status");
+    usarOj.addEventListener("change", async () => {
+      usarOj.disabled = true;
+      try {
+        await atualizarConfig({ usar_openjarvis: usarOj.checked });
+        this.deps.config.usar_openjarvis = usarOj.checked;
+        this.deps.aoMudarUsoOpenJarvis?.(usarOj.checked);
+        avisoOj.textContent = "Alteração salva. Vale após reiniciar os serviços em Sistema.";
+      } catch {
+        usarOj.checked = this.deps.config.usar_openjarvis;
+        avisoOj.textContent = "Não consegui salvar. Tente novamente.";
+      } finally { usarOj.disabled = false; }
+    });
+    cardOj.append(rotulo, avisoOj);
     if (this.ponteOk) {
       const instalacoes = document.createElement("section");
       instalacoes.setAttribute("aria-label", "Instalar provedores");

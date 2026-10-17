@@ -55,6 +55,8 @@ def validar_documento(arquivo: str, valor) -> dict:
     if arquivo == "habilidades":
         return habilidades.validar_habilidades(obj)
     if arquivo == "hud":
+        if "usar_openjarvis" in obj and not isinstance(obj["usar_openjarvis"], bool):
+            raise ValueError("Usar OpenJarvis deve ser booleano")
         for chave in ("cor_elementos", "voz_motor", "voz_propria", "voz", "elevenlabs_voz", "gemini_voz", "voz_reserva_motor", "voz_reserva_id", "cerebro"):
             if chave in obj and not isinstance(obj[chave], str):
                 raise ValueError("O ajuste deve ser texto")

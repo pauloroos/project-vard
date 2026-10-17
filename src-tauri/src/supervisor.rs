@@ -288,7 +288,26 @@ pub fn precisa_girar(tamanho: u64) -> bool {
 
 /// Variáveis de ambiente Python que devem ser removidas ao lançar filhos.
 pub fn variaveis_tiradas() -> &'static [&'static str] {
-    &["PYTHONHOME", "PYTHONPATH", "VIRTUAL_ENV", "PYTHONSTARTUP"]
+    &[
+        "PYTHONHOME",
+        "PYTHONPATH",
+        "VIRTUAL_ENV",
+        "PYTHONSTARTUP",
+        // Variáveis de agentes/LLMs que não devem vazar para serviços filhos
+        "CLAUDE_API_KEY",
+        "CLAUDE_CODE_ENTRYPOINT",
+        "CLAUDE_CONFIG_DIR",
+        "CLAUDE_PROJECT_DIR",
+        "CLAUDE_SESSION_ID",
+        "CLAUDE_CODE_SESSION_ID",
+        "ANTHROPIC_API_KEY",
+        "ANTHROPIC_AUTH_TOKEN",
+        "ANTHROPIC_BASE_URL",
+        "ORCA_AGENT_ID",
+        "ORCA_AGENT_NAME",
+        "ORCA_AGENT_SECRET",
+        "ORCA_WORKSPACE",
+    ]
 }
 
 /// `{"ok":true,"versao":"...","pid":N}` com N == pid do filho ou N em `pids_do_job`.

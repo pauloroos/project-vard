@@ -56,6 +56,27 @@ impl Default for InstalacaoConfig {
     }
 }
 
+/// Decide se o serviço OpenJarvis deve subir.
+///
+/// Regra: sobe apenas quando `servicos.openjarvis` é true E
+/// (`cerebro == "openjarvis"` OU `usar_openjarvis == true`) no hud.config.json.
+/// A pasta registrada no setup vem de app_config_dir (identifier deste build).
+/// Sem HUD/campo, conserva o cérebro histórico: OpenJarvis; opção extra desligada.
+pub fn deve_subir_openjarvis(config: &InstalacaoConfig) -> bool {
+    if !config.servicos.openjarvis {
+        return false;
+    }
+    let pasta = crate::nucleo::pasta_hud().map(Path::to_path_buf).or_else(|| {
+        std::env::var_os("VARD_HUD_CONFIG_DIR").filter(|p| !p.is_empty()).map(PathBuf::from)
+    });
+    let hud = pasta
+        .and_then(|p| std::fs::read_to_string(crate::comandos::caminho_em(&p)).ok())
+        .and_then(|texto| serde_json::from_str::<serde_json::Value>(&texto).ok())
+        .unwrap_or_default();
+    let cerebro = hud.get("cerebro").and_then(|v| v.as_str()).unwrap_or("openjarvis");
+    cerebro == "openjarvis" || hud.get("usar_openjarvis").and_then(|v| v.as_bool()) == Some(true)
+}
+
 /// Resolve o caminho do arquivo `instalacao.json` seguindo o contrato do Python:
 /// 1. Se `VARD_INSTALACAO` estiver definida, é o caminho direto do arquivo.
 /// 2. Senão, usa `<pasta_dados()>/instalacao.json` (VARD_DADOS ou %LOCALAPPDATA%/rdl-vard).
@@ -285,7 +306,7 @@ pub fn descritor_openjarvis(
     config: &InstalacaoConfig,
     dados: &Path,
 ) -> Option<DescritorServico> {
-    if !config.servicos.openjarvis {
+    if !deve_subir_openjarvis(config) {
         return None;
     }
     let src = Path::new(&config.openjarvis_src);
@@ -392,7 +413,7 @@ pub fn iniciar_servicos(
             Ok(()) => iniciados.push("openjarvis".into()),
             Err(e) => avisos.push(format!("openjarvis: {e}")),
         },
-        None if config.servicos.openjarvis => {
+        None if deve_subir_openjarvis(config) => {
             avisos.push("openjarvis: fonte ou executável ausente".into());
         }
         _ => {}
@@ -697,6 +718,47 @@ mod testes {
         unsafe { std::env::remove_var("VARD_INSTALACAO") };
         unsafe { std::env::remove_var("VARD_DADOS") };
         assert_eq!(resultado, dados.join("instalacao.json"));
+    }
+
+    // ----------------------------------------------------------------------------------------------
+    // deve_subir_openjarvis: OpenJarvis só sobe quando cerebro=openjarvis ou usar_openjarvis=true
+    // ----------------------------------------------------------------------------------------------
+
+    #[test]
+    fn deve_subir_openjarvis_le_hud_config_e_ignora_campos_da_instalacao() {
+        let _ambiente = crate::ciclo::testes::ambiente_isolado();
+        let dir = tempfile::tempdir().unwrap();
+        unsafe { std::env::set_var("VARD_HUD_CONFIG_DIR", dir.path()) };
+        let caminho = dir.path().join("hud.config.json");
+        let config: InstalacaoConfig = serde_json::from_str(
+            r#"{"servicos":{"openjarvis":true},"cerebro":"proprio","usar_openjarvis":false}"#,
+        ).unwrap();
+        for (hud, esperado) in [
+            (None, true),
+            (Some("{}"), true),
+            (Some(r#"{"cerebro":"openjarvis"}"#), true),
+            (Some(r#"{"cerebro":"proprio"}"#), false),
+            (Some(r#"{"cerebro":"proprio","usar_openjarvis":false}"#), false),
+            (Some(r#"{"cerebro":"proprio","usar_openjarvis":true}"#), true),
+            (Some(r#"{"cerebro":"proprio","usar_openjarvis":"true"}"#), false),
+            (Some("{invalido"), true),
+        ] {
+            if let Some(texto) = hud { std::fs::write(&caminho, texto).unwrap(); }
+            else { let _ = std::fs::remove_file(&caminho); }
+            assert_eq!(deve_subir_openjarvis(&config), esperado, "hud: {hud:?}");
+        }
+        let config: InstalacaoConfig = serde_json::from_str(
+            r#"{"servicos":{"openjarvis":true},"cerebro":"openjarvis","usar_openjarvis":true}"#,
+        ).unwrap();
+        std::fs::write(&caminho, r#"{"cerebro":"proprio"}"#).unwrap();
+        assert!(!deve_subir_openjarvis(&config));
+    }
+
+    #[test]
+    fn deve_subir_openjarvis_falso_quando_servico_desabilitado() {
+        let mut c = InstalacaoConfig::default();
+        c.servicos.openjarvis = false;
+        assert!(!super::deve_subir_openjarvis(&c));
     }
 
     /// Prova de que o valor de CARGO_MANIFEST_DIR não vazou para o binário de release.

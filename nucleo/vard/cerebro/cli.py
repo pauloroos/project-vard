@@ -63,6 +63,16 @@ class CanalCli(Protocol):
     async def interromper(self) -> None:
         ...
 
+    async def drenar_fila(self, prazo: float = 2.0) -> int:
+        """Consome e descarta linhas pendentes na fila interna após turno abortado.
+
+        Retorna o número de linhas descartadas. Usado por _drenar_residuos para
+        evitar que resíduos de um turno timeout/cancelado vazem para o próximo
+        pedido (defeito 0.9.6 item 2). Implementações que não têm fila interna
+        podem retornar 0 imediatamente.
+        """
+        ...
+
 
 def _parsear(linha: str) -> Optional[dict]:
     """Linha NDJSON → dict; vazio/banner/não-JSON viram None e são ignorados."""
@@ -265,8 +275,9 @@ class AdaptadorCli(AdaptadorProvedor):
         texto = _ultimo_texto_usuario(mensagens)
         self._ja_interrompido = False
         await self._canal.enviar(self._dialeto.linha_usuario(texto))
+        aiter_linhas = await self._abrir_linhas()
         try:
-            async for evento in self._ler_turno(cancelamento):
+            async for evento in self._ler_turno(aiter_linhas, cancelamento):
                 yield evento
         except asyncio.CancelledError:
             # Pedido cancelado (D10): a CLI ainda está respondendo; encerra a árvore para a resposta
@@ -274,9 +285,26 @@ class AdaptadorCli(AdaptadorProvedor):
             if not self._ja_interrompido:
                 await asyncio.shield(self._canal.interromper())
             raise
+        except ErroProvedor:
+            # Turno abandonado por timeout/erro: drena linhas residuais do MESMO iterador
+            # para que não vazem para o próximo pedido (defeito 0.9.6 item 2).
+            await self._drenar_residuos(aiter_linhas)
+            raise
 
-    async def _ler_turno(self, cancelamento: Optional[asyncio.Event]) -> AsyncIterator[EventoInferencia]:
-        aiter_linhas = await self._abrir_linhas()
+    async def _drenar_residuos(self, _aiter_linhas: AsyncIterator[str]) -> None:
+        """Drena linhas pendentes na fila do canal após turno abortado (defeito 0.9.6 item 2).
+
+        Delega ao canal via drenar_fila(), que consome diretamente a fila interna sem
+        depender do iterador async generator (que pode ter tarefa __anext__ cancelada
+        segurando uma linha). O parâmetro _aiter_linhas é mantido por compatibilidade
+        de assinatura mas não é usado.
+        """
+        try:
+            await self._canal.drenar_fila(prazo=2.0)
+        except Exception:  # noqa: BLE001
+            pass
+
+    async def _ler_turno(self, aiter_linhas: AsyncIterator[str], cancelamento: Optional[asyncio.Event]) -> AsyncIterator[EventoInferencia]:
         inicio = time.monotonic()
         ultimo_util = inicio
         while True:

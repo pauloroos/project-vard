@@ -46,7 +46,13 @@ export async function ouvirTesteVoz(c: Config, saidaId: string, sinal: AbortSign
     conferir();
     let wav: ArrayBuffer;
     if (c.voz_provedor === "openjarvis") {
-      wav = await new OpenJarvis(c.openjarvis_url).sintetizar(frase, c.voz, c.velocidade, sinal);
+      // Com cerebro=proprio e toggle desligado, o OpenJarvis pode não estar no ar;
+      // a tentativa de sintetizar falha com erro claro em vez de timeout silencioso.
+      try {
+        wav = await new OpenJarvis(c.openjarvis_url).sintetizar(frase, c.voz, c.velocidade, sinal);
+      } catch (e) {
+        throw new Error("OpenJarvis indisponível como fonte de voz. Configure outra voz ou ative o OpenJarvis.");
+      }
     } else {
       const voz = criarFonteDeVoz(c);
       if (!voz) throw new Error("Voz indisponível");

@@ -5,6 +5,23 @@ from pathlib import Path
 import pytest
 
 
+@pytest.mark.parametrize("opcao", [False, True])
+def test_ver_configuracoes_mostra_usar_openjarvis_sem_mudar_quem_responde(opcao):
+    import configuracoes_mcp as mcp
+    from vard import ajustes
+    ajustes.gravar_documento("hud", {"cerebro": "proprio", "usar_openjarvis": opcao})
+    resposta = json.loads(mcp.ver_configuracoes().split(":\n", 1)[1])
+    assert resposta["widget"]["usar_openjarvis"] is opcao
+    mcp.escolher_quem_responde("openjarvis", confirmado=True)
+    assert ajustes.ler_documento("hud")["usar_openjarvis"] is opcao
+
+
+def test_ver_configuracoes_opcao_extra_desligada_em_hud_antigo():
+    import configuracoes_mcp as mcp
+    resposta = json.loads(mcp.ver_configuracoes().split(":\n", 1)[1])
+    assert resposta["widget"]["usar_openjarvis"] is False
+
+
 def test_aparencia_usa_hud_e_preserva_campos(monkeypatch, tmp_path):
     from vard import ajustes
     alvo = tmp_path / "hud" / "hud.config.json"
@@ -119,7 +136,7 @@ async def test_servidor_mcp_real_expoe_todas_as_ferramentas_e_grava_aparencia():
     try:
         await gerente.adicionar_stdio("configuracoes", sys.executable, [str(Path(__file__).parents[1] / "configuracoes_mcp.py")])
         nomes = {f["nome"] for f in await gerente.listar_todas()}
-        assert nomes == {"ver_configuracoes", "mudar_aparencia", "listar_vozes", "escolher_voz", "listar_provedores", "cadastrar_provedor", "editar_provedor", "remover_provedor", "escolher_quem_responde", "testar_provedor", "listar_instalaveis", "instalar", "andamento_instalacao", "listar_habilidades", "cadastrar_habilidade", "editar_habilidade", "excluir_habilidade", "marcar_habilidade_validada", "listar_programas", "cadastrar_programa", "remover_programa"}
+        assert nomes == {"ver_configuracoes", "mudar_aparencia", "listar_vozes", "escolher_voz", "listar_provedores", "cadastrar_provedor", "editar_provedor", "remover_provedor", "escolher_quem_responde", "testar_provedor", "listar_instalaveis", "instalar", "andamento_instalacao", "listar_habilidades", "cadastrar_habilidade", "editar_habilidade", "excluir_habilidade", "marcar_habilidade_validada", "listar_programas", "cadastrar_programa", "remover_programa", "ver_telegram", "configurar_telegram"}
         assert await gerente.chamar("configuracoes", "mudar_aparencia", {"cor": "#112233", "opacidade": 0.5}) == "Aparência atualizada."
         assert ajustes.ler_documento("hud")["cor_elementos"] == "#112233"
         assert "confirmação" in await gerente.chamar("configuracoes", "remover_programa", {"nome": "editor"})

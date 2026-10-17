@@ -1,5 +1,5 @@
 // Cliente da ponte opcional do Vard (127.0.0.1:4700). Sem ponte o HUD funciona igual: tudo aqui falha em silêncio.
-export interface StatusPonte { ok: boolean; modo: string; detalhe?: string; reserva?: string; tarefas_abertas?: number; modelos_lmstudio?: string[]; reuniao?: "ativa" | "inativa" | "ausente" }
+export interface StatusPonte { ok: boolean; modo: string; detalhe?: string; reserva?: string; tarefas_abertas?: number; modelos_lmstudio?: string[]; reuniao?: "ativa" | "inativa" | "ausente"; cerebro_proprio?: boolean }
 
 /** Estado da reunião segundo o /reuniao/status da ponte. */
 export interface StatusReuniao { ativa: boolean; pasta?: string; inicio?: string; duracao_s?: number; falas?: number }

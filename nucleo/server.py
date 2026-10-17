@@ -1177,4 +1177,62 @@ def recursos():
     return mod_recursos.coletar_recursos()
 
 
+# --------------------------------------------------------------------------- TELEGRAM (T9 tela)
+# Endpoints para a seção Telegram da aba Sistema. Token nunca passa por aqui;
+# só a tela grava o token via invoke Rust ou gravação direta no telegram.toml.
+
+@app.get("/telegram/descobrir_chat")
+async def telegram_descobrir_chat():
+    """Lê o último update pendente do bot e retorna o chat_id do /start mais recente."""
+    cfg = telegram_mod._ler_config_telegram()
+    token = telegram_mod._token_seguro(cfg)
+    if not token:
+        return {"ok": False, "detalhe": "Token não configurado."}
+    base_url = str(cfg.get("base_url", "https://api.telegram.org")).rstrip("/")
+    try:
+        async with httpx.AsyncClient(timeout=10, trust_env=False) as client:
+            r = await client.get(f"{base_url}/bot{token}/getUpdates", params={"limit": 5})
+            if r.status_code != 200 or not r.json().get("ok"):
+                return {"ok": False, "detalhe": "Falha ao consultar updates."}
+            results = r.json().get("result", [])
+            # Busca o último update com /start
+            for update in reversed(results):
+                msg = update.get("message")
+                if not isinstance(msg, dict):
+                    continue
+                texto = str(msg.get("text", "")).strip()
+                if texto.startswith("/start"):
+                    chat = msg.get("chat")
+                    if isinstance(chat, dict):
+                        return {"ok": True, "chat_id": str(chat.get("id", ""))}
+            return {"ok": False, "detalhe": "Nenhum /start pendente."}
+    except httpx.HTTPError:
+        return {"ok": False, "detalhe": "Erro de rede."}
+
+
+@app.post("/telegram/testar")
+async def telegram_testar():
+    """Envia mensagem de teste ao primeiro chat permitido configurado."""
+    cfg = telegram_mod._ler_config_telegram()
+    token = telegram_mod._token_seguro(cfg)
+    chats = telegram_mod._chats_permitidos(cfg)
+    if not token:
+        return {"ok": False, "detalhe": "Token não configurado."}
+    if not chats:
+        return {"ok": False, "detalhe": "Nenhum chat permitido configurado."}
+    chat_id = next(iter(chats))
+    base_url = str(cfg.get("base_url", "https://api.telegram.org")).rstrip("/")
+    try:
+        async with httpx.AsyncClient(timeout=10, trust_env=False) as client:
+            r = await client.post(
+                f"{base_url}/bot{token}/sendMessage",
+                json={"chat_id": chat_id, "text": "Teste do Vard: conexão OK."},
+            )
+            if r.status_code == 200 and r.json().get("ok"):
+                return {"ok": True}
+            return {"ok": False, "detalhe": f"Falha ao enviar: HTTP {r.status_code}"}
+    except httpx.HTTPError:
+        return {"ok": False, "detalhe": "Erro de rede."}
+
+
 app.mount("/viewer", StaticFiles(directory=VIEWER), name="viewer")

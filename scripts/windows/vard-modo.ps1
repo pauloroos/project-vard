@@ -68,6 +68,20 @@ $env:VARD_MARCA_TELEGRAM = $Vars["VARD_MARCA_TELEGRAM"]
 $VariaveisOk = (($Obrigatorias | Where-Object { -not $Vars[$_] }).Count -eq 0)
 $Hud = if ($Vars["VARD_HUD_EXE"]) { $Vars["VARD_HUD_EXE"] } else { Join-Path $env:LOCALAPPDATA "Vard\vard.exe" }
 
+# Quem responde e a opção extra pertencem ao HUD, nunca ao instalacao.json.
+# O núcleo repassa VARD_HUD_CONFIG_DIR com o app_config_dir do build (inclui dev).
+function DeveSubirOpenJarvis() {
+  if (-not $Inst -or -not $Inst.servicos.openjarvis) { return $false }
+  $pastaHud = if ($env:VARD_HUD_CONFIG_DIR) { $env:VARD_HUD_CONFIG_DIR } else { Join-Path $env:APPDATA "io.github.pauloroos.vard" }
+  $hudArq = Join-Path $pastaHud "hud.config.json"
+  $hudConfig = $null
+  if (Test-Path -LiteralPath $hudArq) {
+    try { $hudConfig = Get-Content -LiteralPath $hudArq -Raw -Encoding UTF8 | ConvertFrom-Json } catch {}
+  }
+  # Mesmo padrão histórico de src/config/cerebro.ts para arquivo/campo ausente.
+  $cerebro = if ($hudConfig.cerebro -is [string]) { $hudConfig.cerebro } else { "openjarvis" }
+  return ($cerebro -ceq "openjarvis" -or ($hudConfig.usar_openjarvis -is [bool] -and $hudConfig.usar_openjarvis))
+}
 function GravarEstado($modo, $detalhe) {
   $obj = @{ modo = $modo; desde = (Get-Date).ToString("s"); detalhe = $detalhe }
   [IO.File]::WriteAllText($Estado, ($obj | ConvertTo-Json -Compress), (New-Object Text.UTF8Encoding $false))
@@ -282,9 +296,13 @@ function Iniciar() {
   # Contexto de 16k: com 256k o cache enche a GPU e o modelo cai para ~10 tok/s (achado de 12/10).
   GarantirModelo
   if (-not (Esperar "http://127.0.0.1:1234/v1/models" 60 (LmHeaders))) { Falhar "LM Studio não respondeu" }
-  if (-not $OjSrc) { Falhar "instalacao.json sem openjarvis_src (veja config\examples\instalacao.example.json)" }
-  Subir "openjarvis" "uv" "run --no-sync jarvis serve --agent orchestrator" $OjSrc
-  if (-not (Esperar "http://127.0.0.1:8000/health" 120)) { Falhar "OpenJarvis não respondeu em 120 s (ver logs\openjarvis.log.err)" }
+  if (DeveSubirOpenJarvis) {
+    if (-not $OjSrc) { Falhar "instalacao.json sem openjarvis_src (veja config\examples\instalacao.example.json)" }
+    Subir "openjarvis" "uv" "run --no-sync jarvis serve --agent orchestrator" $OjSrc
+    if (-not (Esperar "http://127.0.0.1:8000/health" 120)) { Falhar "OpenJarvis não respondeu em 120 s (ver logs\openjarvis.log.err)" }
+  } else {
+    Log "OpenJarvis desligado (cerebro proprio sem toggle usar_openjarvis)"
+  }
   Subir "ponte" "uv" "run --no-sync uvicorn server:app --host 127.0.0.1 --port 4700 --timeout-graceful-shutdown 2" $Nucleo
   if (-not (Esperar "http://127.0.0.1:4700/status" 30)) { Falhar "ponte não respondeu" }
   # Voz (XTTS, Suad): não é crítica. Só precisa responder HTTP (o modelo pode ainda estar carregando);
@@ -304,10 +322,13 @@ function Iniciar() {
     Subir "reuniao" $ReuniaoExe "-m vard_reuniao" $ReuniaoDir
     if (-not (Esperar "http://127.0.0.1:4720/status" 60)) { Log "AVISO: reunião (4720) não respondeu em 60 s (ver logs\reuniao.log.err)" }
   }
-  # Interface de texto do OpenJarvis (botão Texto do HUD). Serve o frontend Vite na 5173; não é crítica:
-  # na primeira vez o jarvis gui roda npm install (demora), e se ela não subir o resto do Vard segue.
-  Subir "gui" "uv" $ArgsGui $OjSrc
-  if (-not (Esperar "http://127.0.0.1:5173/" 90)) { Log "AVISO: interface de texto (5173) não respondeu em 90 s (ver logs\gui.log.err)" }
+  # Interface de texto do OpenJarvis (botão Texto do HUD). Só sobe quando o OpenJarvis está ativo.
+  if (DeveSubirOpenJarvis) {
+    Subir "gui" "uv" $ArgsGui $OjSrc
+    if (-not (Esperar "http://127.0.0.1:5173/" 90)) { Log "AVISO: interface de texto (5173) não respondeu em 90 s (ver logs\gui.log.err)" }
+  } else {
+    Log "GUI desligada (OpenJarvis não ativo)"
+  }
   AbrirAba
   GravarEstado "ligado" "LM Studio, OpenJarvis, ponte, voz e bandeja no ar"
   Log "Vard ligado"
@@ -317,6 +338,7 @@ function Jogo() {
   EncerrarReuniao   # antes de tudo: a ata e a diarização precisam da GPU
   InvocarLms unload --all   # primeiro a GPU
   if ($LASTEXITCODE -ne 0) { Log "AVISO: lms unload --all retornou $LASTEXITCODE" }
+  # A escolha pode ter mudado desde o arranque: encerra também os processos já ativos.
   Matar "openjarvis"
   Matar "gui"
   AdotarVoz     # uma subida à mão também precisa cair
@@ -341,11 +363,16 @@ function Recarregar() {
   # Recarregar derruba o OpenJarvis (whisper) por 15 s a 2 min: no meio de uma reunião isso perde a transcrição.
   if ((EstadoReuniao) -eq "ativa") { Recusar "encerre a reunião antes de recarregar (o OpenJarvis cai e a transcrição do trecho se perde)" }
   Matar "openjarvis"
-  # O long-poll do Telegram do processo antigo ainda vale por alguns segundos: subir já devolve 409 e o canal
-  # fica em erro. Pausa de 15 s entre parar e subir.
-  Start-Sleep -Seconds 15
-  Subir "openjarvis" "uv" "run --no-sync jarvis serve --agent orchestrator" $OjSrc
-  if (-not (Esperar "http://127.0.0.1:8000/health" 120)) { Falhar "OpenJarvis não voltou" }
+  if (DeveSubirOpenJarvis) {
+    # O long-poll do Telegram do processo antigo ainda vale por alguns segundos: subir já devolve 409 e o canal
+    # fica em erro. Pausa de 15 s entre parar e subir.
+    Start-Sleep -Seconds 15
+    Subir "openjarvis" "uv" "run --no-sync jarvis serve --agent orchestrator" $OjSrc
+    if (-not (Esperar "http://127.0.0.1:8000/health" 120)) { Falhar "OpenJarvis não voltou" }
+  } else {
+    Matar "gui"
+    Log "Recarregar: OpenJarvis desligado pela configuração"
+  }
   # A ponte também reinicia, para carregar rotas novas (este script é órfão da ponte, ver o topo).
   Matar "ponte"
   Start-Sleep -Seconds 2

@@ -21,10 +21,11 @@ function descartar(som: Som | null | undefined): void {
 }
 
 export interface DepsConversa {
+  /** null quando cerebro=proprio e toggle usar_openjarvis está desligado (sem-openjarvis.md). */
   oj: {
     perguntar(mensagens: Mensagem[], sinal?: AbortSignal): Promise<string>;
     sintetizar(texto: string, voz: string, velocidade: number): Promise<ArrayBuffer>;
-  };
+  } | null;
   boca: {
     falando: boolean;
     tocar(wav: ArrayBuffer): Promise<void>;
@@ -82,6 +83,8 @@ export interface DepsConversa {
   aoDesligarConversaAberta?: () => void;
   /** Liga a máquina ConversaAberta sem duplicar: chamado por "fica me ouvindo". */
   aoLigarConversaAberta?: () => void;
+  /** Chamado quando a resposta foi entregue (fim da fala): a conversa aberta volta a ouvir. */
+  aoProcessamentoConcluido?: () => void;
   /** Reunião em andamento (a ponte avisa): o widget não fala nada enquanto durar. */
   reuniaoAtiva?: () => boolean;
 }
@@ -196,6 +199,8 @@ export class Conversa {
           console.warn("reserva pela voz própria falhou", erro);
         }
       }
+      // Com cerebro=proprio e toggle desligado, d.oj pode ser null: não há OpenJarvis como reserva.
+      if (!d.oj) throw new Error("Sem voz disponível (OpenJarvis desligado e nenhuma voz própria/reserva configurada)");
       return d.oj.sintetizar(frase, d.config.voz, d.config.velocidade);
     };
     let caiuNoMeio = false; // a voz caiu no meio de uma frase: o resto da resposta nem tenta a voz
@@ -398,6 +403,8 @@ export class Conversa {
           if (cfg.habilidades.some((h) => h.ligada)) instrucao += `\n${INSTRUCAO_HABILIDADES}`;
         } catch { /* Arquivo ilegível não impede conversar nem afirma receitas inexistentes. */ }
         if (ac.signal.aborted || this.emJogo()) return;
+        // Com cerebro=proprio e toggle desligado, d.oj é null: não há OpenJarvis para perguntar.
+        if (!this.d.oj) throw new Error("OpenJarvis desligado e nenhum provedor próprio configurado para responder.");
         resposta = (await this.d.oj.perguntar([
           { role: "system", content: instrucao },
           ...this.historico,
@@ -425,7 +432,7 @@ export class Conversa {
     if (this.emJogo()) return;
     await this.falarEmFrases(resposta, ac.signal);
     if (this.pergunta === ac) this.pergunta = null;
-    if (!ac.signal.aborted && !this.emJogo()) { this.abrirCanal(); this.mudar("repouso"); }
+    if (!ac.signal.aborted && !this.emJogo()) { this.abrirCanal(); this.d.aoProcessamentoConcluido?.(); this.mudar("repouso"); }
   }
 
   private async ativarJogo(): Promise<void> {

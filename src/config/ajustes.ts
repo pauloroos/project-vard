@@ -15,6 +15,7 @@ export function validarDocumento(arquivo: string, valor: unknown): unknown {
       if (!secao || typeof secao !== "object" || Array.isArray(secao) || Object.values(secao).some((v) => typeof v !== "string")) throw new Error("Destinos devem ser texto");
     }
   } else if (arquivo === "hud") {
+    if ("usar_openjarvis" in obj && typeof obj.usar_openjarvis !== "boolean") throw new Error("Usar OpenJarvis deve ser booleano");
     for (const campo of ["cor_elementos", "voz_motor", "voz_propria", "voz", "elevenlabs_voz", "gemini_voz", "voz_reserva_motor", "voz_reserva_id", "cerebro"]) {
       if (campo in obj && typeof obj[campo] !== "string") throw new Error("O ajuste deve ser texto");
     }

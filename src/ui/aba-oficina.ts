@@ -8,6 +8,7 @@ export interface DepsAbaOficina {
   nome: () => string;
   ler?: () => Promise<HabilidadesConfig>;
   gravar?: (valor: HabilidadesConfig) => Promise<void>;
+  abrirAba?: (aba: "modelos") => void;
 }
 const ROTULOS = { capaz: "Capaz", treinada: "Treinada", validada: "Validada" };
 
@@ -22,6 +23,7 @@ export class AbaOficina {
   private carregada = false;
   private ocupada = false;
   private ponteNoAr = false;
+  private temProvedorProprio = false;
   private revisao = 0;
   private fecharModal: (() => void) | null = null;
 
@@ -52,6 +54,7 @@ export class AbaOficina {
       const [cfg, st] = await Promise.all([(this.deps.ler ?? lerHabilidades)(), this.deps.statusPonte().catch(() => null)]);
       if (revisao !== this.revisao) return;
       this.cfg = validarHabilidades(cfg); this.carregada = true; this.ponteNoAr = st !== null;
+      this.temProvedorProprio = st?.cerebro_proprio === true;
       this.aviso.textContent = "";
     } catch (e) {
       if (revisao !== this.revisao) return;
@@ -80,12 +83,15 @@ export class AbaOficina {
     alterar(h); await this.salvar(proximo);
   }
   private desenhar() {
-    const fabrica = habilidadesFabrica(this.deps.nome(), this.ponteNoAr, this.cfg.desligadas);
+    const fabrica = habilidadesFabrica(this.deps.nome(), this.ponteNoAr, this.cfg.desligadas, this.temProvedorProprio);
     const cards: Card[] = [...fabrica, ...this.cfg.habilidades].map((h) => ({
       id: h.id, titulo: h.nome, etiqueta: h.situacao === "capaz" ? h.etiqueta ?? undefined : undefined,
       selos: [{ texto: ROTULOS[h.situacao], tom: h.situacao === "validada" ? "ok" : "neutro" }, { texto: h.ligada ? "Ligada" : "Desligada", tom: h.ligada ? "ativo" : "neutro" }],
       detalhes: h.quando,
       acoes: [
+        ...(h.situacao === "capaz" && h.etiqueta === "precisa de um agente configurado" && this.deps.abrirAba
+          ? [{ rotulo: "Configurar", primaria: true, aoClicar: () => this.deps.abrirAba!("modelos") }]
+          : []),
         { rotulo: h.ligada ? "Desligar" : "Ligar", aoClicar: () => this.executar(async () => {
           if (h.situacao === "capaz") {
             const proximo = structuredClone(this.cfg);

@@ -65,6 +65,25 @@ function criarDeps(overrides: Partial<DepsQuemResponde> = {}): DepsQuemResponde 
 }
 
 describe("AbaModelos (Quem responde 0.9.3)", () => {
+  it("caixa do OpenJarvis persiste a opção extra e avisa sobre reiniciar serviços", async () => {
+    configEmMemoria = { ...CONFIG_PADRAO, cerebro: "proprio" };
+    const aoMudarUsoOpenJarvis = vi.fn();
+    const deps = criarDeps({ aoMudarUsoOpenJarvis });
+    const raiz = criarRaiz();
+    await new AbaModelos(raiz, deps).carregar();
+    const card = raiz.querySelector<HTMLElement>('[data-id="__oj__"]')!;
+    const caixa = card.querySelector<HTMLInputElement>('input[type="checkbox"]');
+    expect(caixa?.checked).toBe(false);
+    expect(caixa?.closest("label")?.textContent).toContain("Manter o OpenJarvis ligado mesmo quando ele não responde");
+    caixa!.click();
+    await vi.waitFor(() => expect(configEmMemoria.usar_openjarvis).toBe(true));
+    expect(configEmMemoria.cerebro).toBe("proprio");
+    expect(deps.config.usar_openjarvis).toBe(true);
+    expect(aoMudarUsoOpenJarvis).toHaveBeenCalledWith(true);
+    expect(card.querySelector('[role="status"]')?.textContent).toContain("reiniciar os serviços");
+    caixa!.click();
+    await vi.waitFor(() => expect(configEmMemoria.usar_openjarvis).toBe(false));
+  });
   it("CLI localizada pelo instalador é reconhecida no cadastro mesmo fora do PATH antigo", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ itens: [{
       id: "claude", nome: "Claude Code", descricao: "CLI", comando: [],

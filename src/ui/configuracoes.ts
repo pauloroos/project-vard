@@ -116,6 +116,7 @@ export class Configuracoes {
       ponteUrl: this.cfg.ponte_url,
       config: this.cfg,
       aoMudarCerebro: (cerebro) => { this.cfg.cerebro = cerebro; void salvarConfig(this.cfg); },
+      aoMudarUsoOpenJarvis: () => { this.deps.aoSalvar?.(this.cfg); },
     });
     void this.modelos.carregar();
     this.paineisMcps = new AbaPaineisMcps(this.raiz.querySelector<HTMLElement>("#cfg-paineis-mcps")!);
@@ -160,6 +161,7 @@ export class Configuracoes {
     this.oficina = new AbaOficina(this.raiz.querySelector<HTMLElement>("#cfg-oficina")!, {
       statusPonte: () => this.deps.statusPonte(urlPonte()),
       nome: () => this.cfg.nome,
+      abrirAba: (aba) => this.abrirAba(aba),
     });
     this.oficina.montar();
     // Atualização embutida na aba Geral (sem aba própria no menu).

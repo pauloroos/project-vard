@@ -200,6 +200,13 @@ async def test_texto_em_chat_permitido(bot_falso: BotAPIFalsa, telegram_config: 
     """Mensagem de texto em chat permitido gera pedido no cérebro."""
     from vard import telegram as tg_mod
 
+    # Registra executor falso para que o laço de processamento não falhe com
+    # "executor_nao_configurado" ao admitir o pedido.
+    async def _executor_falso(_pedido, _emitir):
+        pass
+
+    pedidos.configurar_executor(_executor_falso)
+
     bot_falso.adicionar_update({
         "update_id": 100,
         "message": {

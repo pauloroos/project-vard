@@ -76,14 +76,48 @@ describe("Oficina", () => {
     expect(cfg.habilidades).toHaveLength(200);
   });
   it("sete capacidades com frases personalizadas e ações restritas", () => {
-    expect(habilidadesFabrica("aurora", false).map((h) => h.nome)).toEqual(["Conversa", "Computador", "Oficina", "Consultas", "Memória", "Reunião", "Sistema"]);
-    expect(raiz.querySelectorAll("article")).toHaveLength(7);
+    expect(habilidadesFabrica("aurora", false).map((h) => h.nome)).toEqual(["Conversa", "Computador", "Oficina", "Consultas", "Memória", "Reunião", "Sistema", "Resumo da manhã", "Pesquisa", "Agente remoto"]);
+    expect(raiz.querySelectorAll("article")).toHaveLength(10);
     expect(card("conversa").textContent).toContain("Aurora, que horas são?");
     expect(card("computador").textContent).toContain("precisa da instalação");
     for (const c of raiz.querySelectorAll("article")) {
       expect(c.textContent).toContain("Capaz");
-      expect([...c.querySelectorAll("button")].map((b) => b.textContent)).toEqual(["Desligar"]);
     }
+  });
+  it("três novas habilidades de fábrica aparecem como capazes com etiqueta quando falta configuração", () => {
+    const lista = habilidadesFabrica("aurora", false);
+    const manha = lista.find((h) => h.id === "resumo-manha");
+    const pesquisa = lista.find((h) => h.id === "pesquisa");
+    const remoto = lista.find((h) => h.id === "agente-remoto");
+    expect(manha).toBeDefined();
+    expect(pesquisa).toBeDefined();
+    expect(remoto).toBeDefined();
+    expect(manha!.situacao).toBe("capaz");
+    expect(pesquisa!.situacao).toBe("capaz");
+    expect(remoto!.situacao).toBe("capaz");
+    expect(manha!.etiqueta).toBe("precisa de um agente configurado");
+    expect(pesquisa!.etiqueta).toBe("precisa de um agente configurado");
+    expect(remoto!.etiqueta).toBe("precisa de um agente configurado");
+  });
+  it("novas habilidades mostram botão Configurar que chama abrirAba com modelos", async () => {
+    const abrirAba = vi.fn();
+    aba.desativar(); raiz.innerHTML = "";
+    aba = new AbaOficina(raiz, { nome: () => "aurora", statusPonte: async () => null, ler: async () => structuredClone(cfg), gravar, abrirAba });
+    aba.montar(); await aba.ativar();
+    const btnManha = botao("Configurar", card("resumo-manha"));
+    const btnPesquisa = botao("Configurar", card("pesquisa"));
+    const btnRemoto = botao("Configurar", card("agente-remoto"));
+    expect(btnManha).toBeDefined();
+    expect(btnPesquisa).toBeDefined();
+    expect(btnRemoto).toBeDefined();
+    btnManha.click();
+    expect(abrirAba).toHaveBeenCalledWith("modelos");
+    abrirAba.mockClear();
+    btnPesquisa.click();
+    expect(abrirAba).toHaveBeenCalledWith("modelos");
+    abrirAba.mockClear();
+    btnRemoto.click();
+    expect(abrirAba).toHaveBeenCalledWith("modelos");
   });
   it("fábrica só liga/desliga e não entra na lista persistida", async () => {
     botao("Desligar", card("computador")).click(); await assentar();

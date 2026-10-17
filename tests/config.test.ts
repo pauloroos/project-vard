@@ -3,10 +3,23 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 const invoke = vi.fn();
 vi.mock("@tauri-apps/api/core", () => ({ invoke: (...a: unknown[]) => invoke(...a) }));
 
-import { lerConfigAoVivo, lerTopoCompacto, lerNaoOuvirFalar, aplicarAoVivo, carregarConfig, CONFIG_PADRAO, CHAVES_AO_VIVO, mudancasQueExigemReinicio, atualizarConfig, limitarLado, urlLocal, avisosDeUrl, gatilhos } from "../src/config/config";
+import { normalizarConfig, lerConfigAoVivo, lerTopoCompacto, lerNaoOuvirFalar, aplicarAoVivo, carregarConfig, CONFIG_PADRAO, CHAVES_AO_VIVO, mudancasQueExigemReinicio, atualizarConfig, limitarLado, urlLocal, avisosDeUrl, gatilhos } from "../src/config/config";
 
 describe("carregarConfig", () => {
   beforeEach(() => invoke.mockReset());
+
+  it("usar_openjarvis é booleano, desligado por padrão e aplicado ao vivo", () => {
+    expect(CONFIG_PADRAO.usar_openjarvis).toBe(false);
+    for (const valor of [undefined, null, "true", 1]) {
+      expect(normalizarConfig({ usar_openjarvis: valor }).usar_openjarvis).toBe(false);
+    }
+    const vivo = normalizarConfig({ cerebro: "proprio" });
+    const novo = normalizarConfig({ cerebro: "proprio", usar_openjarvis: true });
+    expect(lerConfigAoVivo(novo)?.usar_openjarvis).toBe(true);
+    expect(lerConfigAoVivo({ ...novo, usar_openjarvis: "true" })).toBeNull();
+    expect(aplicarAoVivo(vivo, novo)).toEqual(["usar_openjarvis"]);
+    expect(vivo.usar_openjarvis).toBe(true);
+  });
 
   it("sem config salva devolve o padrao", async () => {
     invoke.mockResolvedValue(null);
@@ -247,7 +260,7 @@ describe("não ouvir, não falar e falar avisos", () => {
 });
 
 describe("payloads entre janelas", () => {
-  const ok = { tamanho: "grande", tamanho_px: 480, compacto: false, sempre_no_topo: true, click_through: false, invisivel: false, usuario: "Ana", modelo: "", conversa_ms: 20000, nao_ouvir: false, nao_falar: false, falar_avisos: false, cerebro: "openjarvis" as const, cor_elementos: "", opacidade_elementos: 1 };
+  const ok = { tamanho: "grande", tamanho_px: 480, compacto: false, sempre_no_topo: true, click_through: false, invisivel: false, usuario: "Ana", modelo: "", conversa_ms: 20000, nao_ouvir: false, nao_falar: false, falar_avisos: false, cerebro: "openjarvis" as const, usar_openjarvis: false, cor_elementos: "", opacidade_elementos: 1 };
   it("lado fora de 160..800 é limitado, não recusado", () => {
     expect(lerConfigAoVivo({ ...ok, tamanho_px: 1000 })).toEqual({ ...ok, tamanho_px: 800 });
     expect(lerConfigAoVivo({ ...ok, tamanho_px: 100 })).toEqual({ ...ok, tamanho_px: 160 });
@@ -335,7 +348,7 @@ describe("aparência (cor_elementos e opacidade_elementos)", () => {
   });
 
   it("lerConfigAoVivo valida cor e opacidade", () => {
-    const ok = { tamanho: "grande", tamanho_px: 480, compacto: false, sempre_no_topo: true, click_through: false, invisivel: false, usuario: "Ana", modelo: "", conversa_ms: 20000, nao_ouvir: false, nao_falar: false, falar_avisos: false, cerebro: "openjarvis" as const, cor_elementos: "#aabbcc", opacidade_elementos: 0.8 };
+    const ok = { tamanho: "grande", tamanho_px: 480, compacto: false, sempre_no_topo: true, click_through: false, invisivel: false, usuario: "Ana", modelo: "", conversa_ms: 20000, nao_ouvir: false, nao_falar: false, falar_avisos: false, cerebro: "openjarvis" as const, usar_openjarvis: false, cor_elementos: "#aabbcc", opacidade_elementos: 0.8 };
     expect(lerConfigAoVivo(ok)).toEqual(ok);
     expect(lerConfigAoVivo({ ...ok, cor_elementos: "ruim" })).toEqual({ ...ok, cor_elementos: "" });
     expect(lerConfigAoVivo({ ...ok, opacidade_elementos: 0.1 })).toEqual({ ...ok, opacidade_elementos: 1 });

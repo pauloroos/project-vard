@@ -83,12 +83,14 @@ pub fn dica(foto: &FotoCiclo, tarefas: u32) -> String {
 
 /// Constrói os itens do menu baseado no estado do ciclo.
 /// `nao_ouvir`/`nao_falar`/`topo`/`invisivel` são estados atuais dos checks.
+/// `reuniao_ativa` indica se há gravação de reunião em andamento.
 pub fn itens_menu(
     foto: &FotoCiclo,
     nao_ouvir: bool,
     nao_falar: bool,
     topo: bool,
     invisivel: bool,
+    reuniao_ativa: bool,
 ) -> Vec<ItemMenu> {
     let em_jogo = foto.modo == "jogo";
     let mut itens = Vec::new();
@@ -120,6 +122,17 @@ pub fn itens_menu(
 
     itens.push(ItemMenu::separador());
 
+    // Reunião: Gravar ou Encerrar conforme estado (desabilitado em jogo)
+    let mut reuniao_item = if reuniao_ativa {
+        ItemMenu::novo("reuniao_encerrar", "Encerrar reunião")
+    } else {
+        ItemMenu::novo("reuniao_gravar", "Gravar reunião")
+    };
+    if em_jogo { reuniao_item = reuniao_item.desativado(); }
+    itens.push(reuniao_item);
+
+    itens.push(ItemMenu::separador());
+
     // Dinâmicos baseados no estado
     if foto.modo == "ligado" {
         itens.push(ItemMenu::novo("jogo", "Modo jogo"));
@@ -132,8 +145,10 @@ pub fn itens_menu(
     }
     if foto.modo == "erro" {
         itens.push(ItemMenu::novo("tentar", "Tentar de novo"));
-        itens.push(ItemMenu::novo("log", "Abrir log"));
     }
+
+    // Abrir log sempre disponível (não só em erro)
+    itens.push(ItemMenu::novo("log", "Abrir log"));
 
     itens.push(ItemMenu::separador());
     itens.push(ItemMenu::novo("sair", "Sair"));
@@ -230,6 +245,8 @@ mod testes {
             detalhe: None,
             servicos_ligados: vec![],
             supervisor_ativo: true,
+            reuniao_ativa: false,
+            reuniao_pasta: None,
         }
     }
 
@@ -279,13 +296,13 @@ mod testes {
 
     #[test]
     fn menu_ligado_tem_jogo() {
-        let itens = itens_menu(&foto("ligado"), false, false, true, false);
+        let itens = itens_menu(&foto("ligado"), false, false, true, false, false);
         assert!(itens.iter().any(|i| i.id == "jogo" && i.ativo));
     }
 
     #[test]
     fn menu_jogo_desabilita_config_sala() {
-        let itens = itens_menu(&foto("jogo"), false, false, true, false);
+        let itens = itens_menu(&foto("jogo"), false, false, true, false, false);
         let config = itens.iter().find(|i| i.id == "config").unwrap();
         let sala = itens.iter().find(|i| i.id == "sala").unwrap();
         assert!(!config.ativo);
@@ -297,7 +314,7 @@ mod testes {
 
     #[test]
     fn menu_erro_tem_tentar_e_log() {
-        let itens = itens_menu(&foto("erro"), false, false, true, false);
+        let itens = itens_menu(&foto("erro"), false, false, true, false, false);
         assert!(itens.iter().any(|i| i.id == "tentar"));
         assert!(itens.iter().any(|i| i.id == "log"));
     }
@@ -305,9 +322,41 @@ mod testes {
     #[test]
     fn menu_sempre_tem_sair() {
         for modo in &["ligado", "jogo", "parado", "erro", "liberando"] {
-            let itens = itens_menu(&foto(modo), false, false, true, false);
+            let itens = itens_menu(&foto(modo), false, false, true, false, false);
             assert!(itens.iter().any(|i| i.id == "sair" && i.ativo));
         }
+    }
+
+    #[test]
+    fn menu_log_presente_em_todos_os_modos() {
+        for modo in &["ligado", "jogo", "parado", "erro", "liberando"] {
+            let itens = itens_menu(&foto(modo), false, false, true, false, false);
+            assert!(
+                itens.iter().any(|i| i.id == "log" && i.ativo),
+                "log deveria estar presente e ativo no modo {modo}"
+            );
+        }
+    }
+
+    #[test]
+    fn menu_reuniao_inativa_mostra_gravar() {
+        let itens = itens_menu(&foto("ligado"), false, false, true, false, false);
+        assert!(itens.iter().any(|i| i.id == "reuniao_gravar" && i.ativo));
+        assert!(!itens.iter().any(|i| i.id == "reuniao_encerrar"));
+    }
+
+    #[test]
+    fn menu_reuniao_ativa_mostra_encerrar() {
+        let itens = itens_menu(&foto("ligado"), false, false, true, false, true);
+        assert!(itens.iter().any(|i| i.id == "reuniao_encerrar" && i.ativo));
+        assert!(!itens.iter().any(|i| i.id == "reuniao_gravar"));
+    }
+
+    #[test]
+    fn menu_jogo_desabilita_reuniao() {
+        let itens = itens_menu(&foto("jogo"), false, false, true, false, false);
+        let reuniao = itens.iter().find(|i| i.id == "reuniao_gravar").unwrap();
+        assert!(!reuniao.ativo, "reunião deveria estar desabilitada em jogo");
     }
 
     #[test]

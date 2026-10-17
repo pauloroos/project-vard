@@ -129,3 +129,154 @@ export class AbaSistema {
     this.rotular();
   }
 }
+
+/** Dependências da seção Telegram na aba Sistema. */
+export interface DepsAbaSistemaTelegram {
+  verTelegram: () => Promise<{ ligado: boolean; chat_permitido: string }>;
+  configurarTelegram: (ligado: boolean, chat: string) => Promise<{ ok: boolean }>;
+  descobrirChat: () => Promise<{ ok: boolean; chat_id?: string; detalhe?: string }>;
+  enviarTeste: () => Promise<{ ok: boolean; detalhe?: string }>;
+  gravarToken: (token: string) => Promise<{ ok: boolean }>;
+}
+
+/** Seção Telegram dentro da aba Sistema: toggle, token (cofre), chat, descobrir e testar. */
+export class AbaSistemaTelegram {
+  private toggle!: HTMLInputElement;
+  private tokenInput!: HTMLInputElement;
+  private chatInput!: HTMLInputElement;
+  private msg!: HTMLElement;
+
+  constructor(private raiz: HTMLElement, private deps: DepsAbaSistemaTelegram) {}
+
+  async montar() {
+    const secao = document.createElement("div");
+    secao.className = "secao-telegram";
+
+    const titulo = document.createElement("h3");
+    titulo.textContent = "Telegram";
+    secao.append(titulo);
+
+    // Toggle ligado/desligado
+    const lblToggle = document.createElement("label");
+    lblToggle.className = "campo";
+    this.toggle = document.createElement("input");
+    this.toggle.type = "checkbox";
+    this.toggle.id = "tg-ligado";
+    lblToggle.append(this.toggle, document.createTextNode(" Ligado"));
+    secao.append(lblToggle);
+
+    // Token (senha, nunca exibido)
+    const lblToken = document.createElement("label");
+    lblToken.className = "campo";
+    lblToken.textContent = "Token do bot: ";
+    this.tokenInput = document.createElement("input");
+    this.tokenInput.type = "password";
+    this.tokenInput.id = "tg-token";
+    this.tokenInput.placeholder = "Cole o token aqui (salvo no cofre)";
+    lblToken.append(this.tokenInput);
+    secao.append(lblToken);
+
+    // Chat permitido
+    const lblChat = document.createElement("label");
+    lblChat.className = "campo";
+    lblChat.textContent = "Chat permitido: ";
+    this.chatInput = document.createElement("input");
+    this.chatInput.type = "text";
+    this.chatInput.id = "tg-chat";
+    this.chatInput.placeholder = "ID do chat (ex: 123456789)";
+    lblChat.append(this.chatInput);
+    secao.append(lblChat);
+
+    // Botões
+    const acoes = document.createElement("div");
+    acoes.className = "acoes";
+
+    const btnDescobrir = document.createElement("button");
+    btnDescobrir.type = "button";
+    btnDescobrir.id = "tg-descobrir";
+    btnDescobrir.textContent = "Descobrir meu chat";
+    btnDescobrir.addEventListener("click", () => { void this.descobrir(); });
+    acoes.append(btnDescobrir);
+
+    const btnTestar = document.createElement("button");
+    btnTestar.type = "button";
+    btnTestar.id = "tg-testar";
+    btnTestar.textContent = "Enviar teste";
+    btnTestar.addEventListener("click", () => { void this.testar(); });
+    acoes.append(btnTestar);
+
+    secao.append(acoes);
+
+    this.msg = document.createElement("div");
+    this.msg.id = "tg-msg";
+    secao.append(this.msg);
+
+    this.raiz.append(secao);
+
+    // Carrega estado atual
+    await this.carregar();
+
+    // Listeners
+    this.toggle.addEventListener("change", () => { void this.salvarEstado(); });
+    this.tokenInput.addEventListener("change", () => { void this.salvarToken(); });
+  }
+
+  private async carregar() {
+    try {
+      const estado = await this.deps.verTelegram();
+      this.toggle.checked = estado.ligado;
+      this.chatInput.value = estado.chat_permitido || "";
+    } catch {
+      this.msg.textContent = "Erro ao carregar configuração do Telegram.";
+    }
+  }
+
+  private async salvarEstado() {
+    this.msg.textContent = "Salvando...";
+    try {
+      await this.deps.configurarTelegram(this.toggle.checked, this.chatInput.value.trim());
+      this.msg.textContent = "Configuração salva.";
+    } catch {
+      this.msg.textContent = "Erro ao salvar.";
+    }
+  }
+
+  private async salvarToken() {
+    const token = this.tokenInput.value.trim();
+    if (!token) return;
+    this.msg.textContent = "Salvando token...";
+    try {
+      await this.deps.gravarToken(token);
+      this.msg.textContent = "Token salvo.";
+      this.tokenInput.value = "";
+    } catch {
+      this.msg.textContent = "Erro ao salvar token.";
+    }
+  }
+
+  private async descobrir() {
+    this.msg.textContent = "Buscando chat...";
+    try {
+      const res = await this.deps.descobrirChat();
+      if (res.ok && res.chat_id) {
+        this.chatInput.value = res.chat_id;
+        this.msg.textContent = `Chat encontrado: ${res.chat_id}`;
+        await this.salvarEstado();
+      } else {
+        this.msg.textContent = res.detalhe || "Nenhum /start pendente.";
+      }
+    } catch {
+      this.msg.textContent = "Erro ao buscar chat.";
+    }
+  }
+
+  private async testar() {
+    this.msg.textContent = "Enviando teste...";
+    try {
+      const res = await this.deps.enviarTeste();
+      this.msg.textContent = res.ok ? "Mensagem de teste enviada." : (res.detalhe || "Falha ao enviar.");
+    } catch {
+      this.msg.textContent = "Erro ao enviar teste.";
+    }
+  }
+}

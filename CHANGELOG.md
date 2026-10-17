@@ -3,6 +3,25 @@
 Este arquivo segue o [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) em português do Brasil.
 Os instaladores de cada versão ficam na página de [releases](https://github.com/pauloroos/project-vard/releases).
 
+## [0.9.6] — 2026-10-17
+
+### Adicionado/Feito
+
+- Um único aplicativo: o Vard cuida dos serviços sozinho e a bandeja do Windows tem tudo — modo jogo, voltar,
+  gravar/encerrar reunião, ouvir/falar, sala, configurações e log. A instalação existente migra sozinha, com
+  backup e volta possível.
+- O OpenJarvis deixa de ser necessário: só sobe se for quem responde ou se a opção "Manter o OpenJarvis ligado"
+  estiver marcada. A transcrição da voz passa a ser feita pelo serviço de voz do Vard.
+- Telegram em uma tela simples (Sistema): ligar, token guardado no cofre, "Descobrir meu chat" e "Enviar teste";
+  também configurável pelo assistente, sem o token passar por ele.
+- Oficina: Resumo da manhã, Pesquisa e Agente remoto como habilidades de fábrica, com o que falta para funcionar.
+- Conversa aberta volta a ouvir sozinha depois de cada resposta.
+
+### Corrigido
+
+- Um pedido cancelado deixava a resposta na fila da ferramenta de linha de comando e ela saía no pedido seguinte.
+- O encerramento da bandeja antiga confere PID e horário de início antes de agir.
+
 ## [0.9.5] — 2026-10-17
 
 ### Adicionado/Feito

@@ -36,7 +36,8 @@ def _confirmar(efeito):
 def ver_configuracoes() -> str:
     """Mostra aparência, voz, perfil e quem responde; nunca mostra chaves ou credenciais."""
     hud = ajustes.ler_documento("hud")
-    campos = ("nome", "cor_elementos", "opacidade_elementos", "voz_provedor", "voz_motor", "voz_propria", "voz_reserva_provedor", "voz_reserva_id", "cerebro")
+    hud.setdefault("usar_openjarvis", False)
+    campos = ("nome", "cor_elementos", "opacidade_elementos", "voz_provedor", "voz_motor", "voz_propria", "voz_reserva_provedor", "voz_reserva_id", "cerebro", "usar_openjarvis")
     return _texto("Configurações atuais", {"widget": {k: hud[k] for k in campos if k in hud},
         "perfil": ajustes.ler_documento("perfil"), "quem_responde": ajustes.ler_documento("paineis").get("ativo")})
 
@@ -209,6 +210,57 @@ def remover_programa(nome: str, site: bool = False, confirmado: bool = False) ->
         return _confirmar(f"Vou remover o apelido {nome}; o programa continuará instalado")
     ajustes.remover_programa(nome, site)
     return "Apelido removido."
+
+
+@mcp.tool()
+@_seguro
+def ver_telegram() -> str:
+    """Mostra se o Telegram está ligado e qual chat é permitido; nunca mostra o token."""
+    from vard import telegram as tg_mod
+    cfg = tg_mod._ler_config_telegram()
+    ligado = bool(cfg.get("habilitado"))
+    chats = cfg.get("chats_permitidos", [])
+    chat_txt = ", ".join(str(c) for c in chats) if isinstance(chats, list) else ""
+    return _texto("Telegram", {"ligado": ligado, "chat_permitido": chat_txt})
+
+
+@mcp.tool()
+@_seguro
+def configurar_telegram(ligado: bool, chat: str = "") -> str:
+    """Liga ou desliga o Telegram e define o chat permitido; o token só é gravado pela tela."""
+    from vard import config as cfg_mod
+    import tomllib
+    import tomli_w
+
+    alvo = cfg_mod.arquivo_config("telegram.toml")
+    dados: dict = {}
+    if alvo.exists():
+        try:
+            dados = tomllib.loads(alvo.read_text(encoding="utf-8"))
+        except Exception:  # noqa: BLE001
+            dados = {}
+    if not isinstance(dados, dict):
+        dados = {}
+    dados["habilitado"] = bool(ligado)
+    chat_limpo = str(chat).strip()
+    if chat_limpo:
+        existentes = dados.get("chats_permitidos", [])
+        if not isinstance(existentes, list):
+            existentes = []
+        if chat_limpo not in [str(c) for c in existentes]:
+            existentes.append(chat_limpo)
+        dados["chats_permitidos"] = existentes
+    else:
+        dados.setdefault("chats_permitidos", [])
+    # Preserva token existente; nunca grava token vazio sobre um existente
+    if "token" not in dados:
+        dados["token"] = ""
+    alvo.parent.mkdir(parents=True, exist_ok=True)
+    tmp = alvo.with_suffix(".tmp")
+    tmp.write_text(tomli_w.dumps(dados), encoding="utf-8")
+    import os as _os
+    _os.replace(tmp, alvo)
+    return "Telegram atualizado."
 
 
 if __name__ == "__main__":

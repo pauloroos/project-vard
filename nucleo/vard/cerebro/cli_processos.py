@@ -118,6 +118,21 @@ class _CanalProcesso(CanalCli):
             except asyncio.TimeoutError:
                 log.warning("CLI pid=%s não saiu 5 s depois do encerramento", pid)
 
+    async def drenar_fila(self, prazo: float = 2.0) -> int:
+        """Consome e descarta linhas pendentes na fila interna (defeito 0.9.6 item 2)."""
+        import time as _time
+        inicio = _time.monotonic()
+        descartadas = 0
+        while _time.monotonic() - inicio < prazo:
+            try:
+                item = await asyncio.wait_for(self._fila.get(), timeout=0.05)
+            except asyncio.TimeoutError:
+                break
+            if item is None:
+                break
+            descartadas += 1
+        return descartadas
+
 
 def _dialeto_do_tipo(tipo: str) -> str:
     if tipo == "cli-claude":

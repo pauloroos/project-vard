@@ -13,7 +13,7 @@
  */
 import { invoke } from "@tauri-apps/api/core";
 
-export const IDS_FABRICA = ["conversa", "computador", "oficina", "consultas", "memoria", "reuniao", "sistema"] as const;
+export const IDS_FABRICA = ["conversa", "computador", "oficina", "consultas", "memoria", "reuniao", "sistema", "resumo-manha", "pesquisa", "agente-remoto"] as const;
 export type SituacaoHabilidade = "treinada" | "validada";
 export interface Habilidade {
   id: string;

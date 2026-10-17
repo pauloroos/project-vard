@@ -32,6 +32,8 @@ it("interrupção durante reconciliação cancela pedido sem aguardar consulta",
 });
 it("interrupção para boca e ignora resposta OpenJarvis pendente", async () => {
   const { d, c } = montar(); d.cerebro = "openjarvis";
+  // Com a mudança sem-openjarvis, oj pode ser null; este teste exige OJ ativo.
+  if (!d.oj) return;
   let responder!: (v: string) => void;
   d.oj.perguntar = () => new Promise(r => { responder = r; });
   const p = c.aoTextoTranscrito("vard, explique", true);

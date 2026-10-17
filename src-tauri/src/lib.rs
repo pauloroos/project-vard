@@ -10,6 +10,7 @@ pub mod servicos;
 pub mod nucleo;
 pub mod instalacao;
 pub mod ciclo;
+mod migracao;
 
 use serde_json::Value;
 #[cfg(not(test))]
@@ -199,7 +200,8 @@ fn criar_bandeja(app: &AppHandle, no_topo: bool, invisivel_ligado: bool, nao_ouv
 #[cfg(not(test))]
 fn criar_bandeja_supervisor(app: &AppHandle, no_topo: bool, invisivel_ligado: bool, nao_ouvir_ligado: bool, nao_falar_ligado: bool) -> tauri::Result<()> {
     let foto_inicial = ciclo::ciclo_info(true);
-    let itens = bandeja::itens_menu(&foto_inicial, nao_ouvir_ligado, nao_falar_ligado, no_topo, invisivel_ligado);
+    let reuniao_ativa = foto_inicial.reuniao_ativa;
+    let itens = bandeja::itens_menu(&foto_inicial, nao_ouvir_ligado, nao_falar_ligado, no_topo, invisivel_ligado, reuniao_ativa);
     let menu = montar_menu_supervisor(app, &itens)?;
 
     // Guarda referências dos checks para sincronização externa (busca por ID via get + downcast)
@@ -316,6 +318,23 @@ fn dispatch_menu_supervisor(app: &AppHandle, id: &str) {
             let _ = app.emit_to(JANELA, "invisivel", ligado);
             let _ = app.emit_to(janelas::CONFIG, "invisivel", ligado);
         }
+        "reuniao_gravar" | "reuniao_encerrar" => {
+            // Dispara gravação ou encerramento de reunião via ponte (mesmo caminho do widget).
+            let rota = if id == "reuniao_gravar" { "iniciar" } else { "encerrar" };
+            let url = format!("http://127.0.0.1:{}/reuniao/{}", crate::instalacao::PORTA_NUCLEO_PADRAO, rota);
+            std::thread::spawn(move || {
+                if let Ok(client) = reqwest::blocking::Client::builder().timeout(std::time::Duration::from_secs(10)).build() {
+                    match client.post(&url).send() {
+                        Ok(resp) => {
+                            if !resp.status().is_success() {
+                                eprintln!("bandeja: reuniao {}: HTTP {}", rota, resp.status());
+                            }
+                        }
+                        Err(e) => eprintln!("bandeja: reuniao {}: {}", rota, e),
+                    }
+                }
+            });
+        }
         "log" => {
             // Abre log do serviço com falha ou ciclo.log como fallback
             let dados = ciclo::pasta_dados();
@@ -350,7 +369,8 @@ pub fn reconstruir_menu_bandeja(app: &AppHandle, foto: &ciclo::FotoCiclo) {
     let topo = cfg.get("sempre_no_topo").and_then(|v| v.as_bool()).unwrap_or(true);
     let invisivel = cfg.get("invisivel").and_then(|v| v.as_bool()).unwrap_or(false);
 
-    let itens = bandeja::itens_menu(foto, nao_ouvir, nao_falar, topo, invisivel);
+    let reuniao_ativa = foto.reuniao_ativa;
+    let itens = bandeja::itens_menu(foto, nao_ouvir, nao_falar, topo, invisivel, reuniao_ativa);
     if let Ok(menu) = montar_menu_supervisor(app, &itens) {
         let _ = icone.set_menu(Some(menu));
     }
@@ -439,7 +459,19 @@ pub fn run() {
             let raiz = instalacao::resolver_raiz(&recursos);
             let dados = ciclo::pasta_dados();
             let arquivo = instalacao::arquivo_instalacao();
-            let config_instalacao = instalacao::ler_instalacao(&arquivo).unwrap_or_default();
+            let mut config_instalacao = instalacao::ler_instalacao(&arquivo).unwrap_or_default();
+            // Migração automática: supervisor false → true (backup + encerra bandeja Python + ajusta atalho)
+            if !config_instalacao.supervisor {
+                let exe_atual = std::env::current_exe().unwrap_or_default();
+                match migracao::migrar_se_necessario(&arquivo, &dados, &exe_atual) {
+                    Ok(true) => {
+                        eprintln!("setup: migração supervisor concluída (supervisor agora é true)");
+                        config_instalacao.supervisor = true;
+                    }
+                    Ok(false) => {} // já era supervisor ou não aplicável
+                    Err(e) => eprintln!("setup: migração supervisor falhou: {e}"),
+                }
+            }
             {
                 let (_iniciados, avisos) = instalacao::iniciar_servicos(
                     &config_instalacao,
