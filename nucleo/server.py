@@ -27,6 +27,9 @@ from vard.cerebro import cli_capacidade, cli_deteccao, contratos as cerebro_cont
 from vard.primeiro_uso import deteccao as primeiro_uso_deteccao, estado as primeiro_uso_estado
 from vard.seguro import Frase
 from vard import telegram as telegram_mod
+from vard.instalaveis import GerenciadorInstalaveis
+
+_instalaveis = GerenciadorInstalaveis()
 
 # ----------------------------------------------------------------------------- PERSONA
 # Único lugar da personalidade: config/persona.md do usuário (a ponte e o OpenJarvis/Telegram
@@ -255,6 +258,7 @@ async def lifespan(app):
     else:
         log.info("telegram desabilitado; poller nao iniciado")
     yield
+    await asyncio.to_thread(_instalaveis.encerrar)
     # T16: encerra todos os processos vivos de CLI na saída
     if _supervisor_cli is not None:
         try:
@@ -300,6 +304,44 @@ async def so_localhost(request: Request, call_next):
 
 # Por último = camada de fora: responde o preflight e põe o ACAO até na 403, para o webview ler a resposta.
 app.add_middleware(CORSMiddleware, allow_origins=sorted(ORIGENS_OK), allow_methods=["GET", "POST"], allow_headers=["*"])
+
+
+def _acao_instalavel(acao, ident, **opcoes):
+    try:
+        return acao(ident, **opcoes)
+    except KeyError:
+        raise HTTPException(404, "Instalável não encontrado.") from None
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from None
+    except RuntimeError as exc:
+        raise HTTPException(409, str(exc)) from None
+    except OSError:
+        raise HTTPException(503, "Não foi possível abrir o terminal de login.") from None
+
+
+@app.get("/instalaveis")
+def instalaveis_listar():
+    return {"itens": _instalaveis.listar()}
+
+
+@app.post("/instalaveis/{ident}/instalar")
+def instalaveis_instalar(ident: str, corpo: dict):
+    return _acao_instalavel(_instalaveis.instalar, ident, confirmado=corpo.get("confirmado") is True)
+
+
+@app.get("/instalaveis/{ident}/andamento")
+def instalaveis_andamento(ident: str):
+    return _acao_instalavel(_instalaveis.andamento, ident)
+
+
+@app.post("/instalaveis/{ident}/cancelar")
+def instalaveis_cancelar(ident: str):
+    return _acao_instalavel(_instalaveis.cancelar, ident)
+
+
+@app.post("/instalaveis/{ident}/login")
+def instalaveis_login(ident: str):
+    return _acao_instalavel(_instalaveis.login, ident)
 
 
 @app.get("/")
