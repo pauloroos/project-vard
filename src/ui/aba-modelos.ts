@@ -246,10 +246,12 @@ export class AbaModelos {
       const ehCli = EH_CLI.has(p.tipo);
       const soDelegada = SO_DELEGADA.has(p.tipo);
       const selos: { texto: string; tom: TomSelo }[] = [];
-      if (this.deps.config.cerebro === "proprio" && this.cfg.ativo === p.id) selos.push({ texto: "Responde agora", tom: "ativo" });
+      const respondeAgora = this.deps.config.cerebro === "proprio" && this.cfg.ativo === p.id;
+      if (respondeAgora) selos.push({ texto: "Responde agora", tom: "ativo" });
       if (this.cfg.reserva === p.id) selos.push({ texto: "Reserva", tom: "reserva" });
       const acoes: Card["acoes"] = [];
-      if (!soDelegada) {
+      // Quem já responde não precisa de "Usar este" nem pode ser a própria reserva (Reserva clicada de novo desmarca).
+      if (!soDelegada && !respondeAgora) {
         acoes.push({ rotulo: "Usar este", primaria: true, aoClicar: () => this.usarProvedor(p.id) });
         acoes.push({ rotulo: "Reserva", aoClicar: () => this.definirReserva(p.id) });
       }

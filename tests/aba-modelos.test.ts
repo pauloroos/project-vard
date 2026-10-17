@@ -222,6 +222,24 @@ describe("AbaModelos (Núcleo)", () => {
     expect(cfgEmMemoria!.ativo).toBe("lm");
   });
 
+  it("o provedor que já responde não mostra Usar este nem Reserva", async () => {
+    configEmMemoria = { ...CONFIG_PADRAO, cerebro: "proprio" };
+    cfgEmMemoria = {
+      ...PAINEIS_PADRAO,
+      ativo: "a",
+      provedores: [
+        { id: "a", nome: "A", tipo: "lmstudio", url_base: "http://a", modelo: "m" },
+        { id: "b", nome: "B", tipo: "lmstudio", url_base: "http://b", modelo: "m" },
+      ],
+    };
+    const raiz = criarRaiz();
+    await new AbaModelos(raiz, criarDeps()).carregar();
+    const rotulos = (id: string) => Array.from(raiz.querySelectorAll<HTMLButtonElement>(`[data-id="${id}"] button`)).map((b) => b.textContent);
+    expect(rotulos("a")).not.toContain("Usar este");
+    expect(rotulos("a")).not.toContain("Reserva");
+    expect(rotulos("b")).toContain("Usar este");
+  });
+
   it("Reserva alterna entre provedores", async () => {
     cfgEmMemoria = {
       ...PAINEIS_PADRAO,
