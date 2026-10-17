@@ -1,10 +1,13 @@
 /**
- * Seção "Quem responde" (0.9.3 U1–U4, U8) — Rodada 2.
+ * Aba "Núcleo" (antes "Quem responde"; 0.9.3 U1–U4, U8; disposição 0.9.7).
  *
- * Cards de provedores (OpenJarvis fixo + cadastrados) com ações Usar este / Reserva / Testar / Editar / Remover.
- * Modal de adicionar/editar com tipo, nome, endpoint, chave de API (cofre), buscar modelos, modelo padrão (select)
- * e botões Testar / Cancelar / Salvar. CLIs detectadas aparecem sugeridas; agentes gravados pelo card da CLI.
- * Ponte fora ⇒ aviso claro no topo (U8). Card do OpenJarvis compacto (modelo em uso + "+N modelos").
+ * Blocos, de cima para baixo:
+ *  1. Em uso agora — o cérebro que responde (OpenJarvis ou provedor ativo), modelo, estado e reserva.
+ *  2. Provedores cadastrados — cards com Usar este / Reserva / Testar / Editar / Remover; cadastro em modal
+ *     (tipo, nome, endpoint, chave no cofre, buscar modelos, modelo padrão; CLIs detectadas sugeridas).
+ *  3. Instalar ou conectar — só o que ainda não está instalado ou cadastrado.
+ *  4. Opções avançadas (recolhidas) — OpenJarvis opcional: card compacto e "manter ligado".
+ * Ponte fora ⇒ aviso claro no topo (U8).
  */
 import "./estilos/quem-responde.css";
 import type { OpenJarvis } from "../conectores/openjarvis/cliente";
@@ -44,6 +47,8 @@ const TIPOS_PROVEDOR: [string, string][] = [
   ["cli-opencode", "OpenCode CLI"],
 ];
 
+const NOMES_TIPO = new Map(TIPOS_PROVEDOR);
+
 const EH_CLI = new Set(["cli-claude", "cli-agy", "cli-codex", "cli-opencode"]);
 const SO_DELEGADA = new Set(["cli-codex", "cli-opencode"]);
 
@@ -67,6 +72,8 @@ export class AbaModelos {
   private ponteOk = true;
   private ojModelos: string[] = [];
   private ojFora = false;
+  /** Lembra se o usuário abriu as opções avançadas: ações redesenham a aba. */
+  private avancadoAberto = false;
 
   constructor(
     private raiz: HTMLElement,
@@ -96,15 +103,29 @@ export class AbaModelos {
       aviso.textContent = "Os serviços do Vard estão desligados — abra pelo atalho do Vard ou ligue em Sistema.";
       this.raiz.append(aviso);
     }
-    const container = document.createElement("div");
-    container.className = "qr-cards-container";
-    this.raiz.append(container);
-    const cards = this.montarCards();
-    desenharCards(container, cards, {
-      vazio: "Nenhum provedor cadastrado.",
+    // 1. Em uso agora
+    const agora = this.bloco("Em uso agora", "nucleo-agora");
+    desenharCards(agora, [this.cardEmUso()], { vazio: "" });
+    // 2. Provedores cadastrados
+    const cadastrados = this.bloco("Provedores cadastrados", "nucleo-provedores");
+    desenharCards(cadastrados, this.montarCards(), {
+      vazio: "Nenhum provedor cadastrado. Adicione um ou instale um dos sugeridos abaixo.",
       adicionar: { rotulo: "Adicionar provedor", aoClicar: () => this.abrirModal() },
     });
-    const cardOj = container.querySelector<HTMLElement>('[data-id="__oj__"]')!;
+    // 3. Instalar ou conectar (só com os serviços ligados: a lista vem do núcleo)
+    const instalacoes = this.ponteOk ? this.bloco("Instalar ou conectar", "nucleo-instalar") : null;
+    // 4. Opções avançadas, recolhidas
+    const avancado = document.createElement("details");
+    avancado.className = "nucleo-avancado";
+    avancado.open = this.avancadoAberto;
+    avancado.addEventListener("toggle", () => { this.avancadoAberto = avancado.open; });
+    const resumo = document.createElement("summary");
+    resumo.textContent = "Opções avançadas: OpenJarvis (opcional)";
+    const containerOj = document.createElement("div");
+    avancado.append(resumo, containerOj);
+    this.raiz.append(avancado);
+    desenharCards(containerOj, [this.cardOpenJarvis()], { vazio: "" });
+    const cardOj = containerOj.querySelector<HTMLElement>('[data-id="__oj__"]')!;
     const rotulo = document.createElement("label");
     const usarOj = document.createElement("input");
     usarOj.type = "checkbox";
@@ -125,10 +146,7 @@ export class AbaModelos {
       } finally { usarOj.disabled = false; }
     });
     cardOj.append(rotulo, avisoOj);
-    if (this.ponteOk) {
-      const instalacoes = document.createElement("section");
-      instalacoes.setAttribute("aria-label", "Instalar provedores");
-      this.raiz.append(instalacoes);
+    if (instalacoes) {
       return new InstalaveisProvedores(instalacoes, this.deps.ponteUrl, async (item) => {
         if (item.id === "openjarvis") { this.abrirModalOpenJarvis(); return; }
         this.clis = await detectarClis(this.deps.ponteUrl).catch(() => []);
@@ -137,23 +155,77 @@ export class AbaModelos {
           this.clis.push({ tipo: item.tipo_provedor, instalada: true, versao: "", modelos: [] });
         }
         this.abrirModal(undefined, { tipo: item.tipo_provedor, nome: item.nome, url_base: item.url_base });
-      }, () => this.cfg.provedores.map(p => p.id)).carregar();
+      }, () => this.cfg.provedores).carregar();
     }
     return Promise.resolve();
   }
 
-  private montarCards(): Card[] {
-    const lista: Card[] = [];
-    // OpenJarvis fixo — card compacto (modelo em uso ou "automático" + "+N modelos")
+  /** Bloco com título, no estilo dos demais da janela (fieldset + legenda). */
+  private bloco(titulo: string, classe: string): HTMLElement {
+    const f = document.createElement("fieldset");
+    f.className = `nucleo-bloco ${classe}`;
+    const l = document.createElement("legend");
+    l.textContent = titulo;
+    const miolo = document.createElement("div");
+    f.append(l, miolo);
+    this.raiz.append(f);
+    return miolo;
+  }
+
+  private ojSelos(): { texto: string; tom: TomSelo }[] {
+    return this.ojFora ? [{ texto: "Fora do ar", tom: "aviso" }] : [{ texto: "No ar", tom: "ok" }];
+  }
+
+  /** Card do topo: quem responde agora, com o estado e a reserva. */
+  private cardEmUso(): Card {
+    if (this.deps.config.cerebro === "openjarvis") {
+      return {
+        id: "__agora__",
+        titulo: "OpenJarvis",
+        etiqueta: "openjarvis",
+        selos: [{ texto: "Responde agora", tom: "ativo" }, ...this.ojSelos()],
+        detalhes: [`modelo: ${this.deps.config.modelo || "automático"}`, this.deps.config.openjarvis_url],
+        acoes: [
+          { rotulo: "Testar", aoClicar: () => this.testarOpenJarvis() },
+          { rotulo: "Editar", aoClicar: () => this.abrirModalOpenJarvis() },
+        ],
+      };
+    }
+    const p = this.cfg.provedores.find((x) => x.id === this.cfg.ativo);
+    if (!p) {
+      return {
+        id: "__agora__",
+        titulo: "Nenhum provedor escolhido",
+        selos: [{ texto: "Sem cérebro", tom: "aviso" }],
+        detalhes: ["Escolha um provedor cadastrado com “Usar este” ou adicione um novo."],
+      };
+    }
+    const reserva = this.cfg.provedores.find((x) => x.id === this.cfg.reserva);
+    const selos: { texto: string; tom: TomSelo }[] = [{ texto: "Responde agora", tom: "ativo" }];
+    if (!this.ponteOk) selos.push({ texto: "Serviços desligados", tom: "aviso" });
+    return {
+      id: "__agora__",
+      titulo: p.nome,
+      etiqueta: NOMES_TIPO.get(p.tipo) ?? p.tipo,
+      selos,
+      detalhes: [`modelo: ${p.modelo}`, ...(p.url_base ? [p.url_base] : []), reserva ? `Reserva: ${reserva.nome}` : "Sem reserva"],
+      acoes: [
+        { rotulo: "Testar", aoClicar: () => this.testarProvedor(p) },
+        { rotulo: "Editar", aoClicar: () => this.abrirModal(p) },
+      ],
+    };
+  }
+
+  /** OpenJarvis fixo — card compacto (modelo em uso ou "automático" + "+N modelos"). */
+  private cardOpenJarvis(): Card {
     const ojSelos: { texto: string; tom: TomSelo }[] = [];
     if (this.deps.config.cerebro === "openjarvis") ojSelos.push({ texto: "Responde agora", tom: "ativo" });
     if (this.ojFora) ojSelos.push({ texto: "Fora do ar", tom: "aviso" });
-    const ojModeloEmUso = this.deps.config.modelo || "automático";
-    const ojFichasCompactas = [ojModeloEmUso];
+    const ojFichasCompactas = [this.deps.config.modelo || "automático"];
     if (this.ojModelos.length > 1) {
       ojFichasCompactas.push(`+${this.ojModelos.length - 1} modelos`);
     }
-    lista.push({
+    return {
       id: "__oj__",
       titulo: "OpenJarvis (servidor atual)",
       etiqueta: "openjarvis",
@@ -165,8 +237,11 @@ export class AbaModelos {
         { rotulo: "Testar", aoClicar: () => this.testarOpenJarvis() },
         { rotulo: "Editar", aoClicar: () => this.abrirModalOpenJarvis() },
       ],
-    });
-    // Provedores cadastrados
+    };
+  }
+
+  private montarCards(): Card[] {
+    const lista: Card[] = [];
     for (const p of this.cfg.provedores) {
       const ehCli = EH_CLI.has(p.tipo);
       const soDelegada = SO_DELEGADA.has(p.tipo);
@@ -181,11 +256,12 @@ export class AbaModelos {
       acoes.push({ rotulo: "Testar", aoClicar: () => this.testarProvedor(p) });
       acoes.push({ rotulo: "Editar", aoClicar: () => this.abrirModal(p) });
       acoes.push({ rotulo: "Remover", perigo: true, aoClicar: () => this.remover(p.id) });
-      const detalhes = ehCli ? [`tipo: ${p.tipo}`, p.modelo] : [p.url_base, p.modelo];
+      const detalhes = ehCli ? [`modelo: ${p.modelo}`] : [p.url_base, `modelo: ${p.modelo}`];
+      if (soDelegada) detalhes.push("Só para tarefas longas (delegadas)");
       lista.push({
         id: p.id,
         titulo: p.nome,
-        etiqueta: p.tipo,
+        etiqueta: NOMES_TIPO.get(p.tipo) ?? p.tipo,
         selos,
         detalhes,
         acoes,
