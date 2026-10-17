@@ -14,6 +14,7 @@ from fastapi.responses import JSONResponse, StreamingResponse
 
 from .motor import VOZ
 from .normalizar import normalizar
+from .modelos_stt import COMPUTE_POR_DISPOSITIVO, DISPOSITIVOS, GerenciadorModelos, configuracao_stt, ler_escolha_hud
 from .transcricao import MotorSTT, LIMITE_BYTES
 
 log = logging.getLogger("vard_voz")
@@ -66,6 +67,7 @@ def criar_app(
     motor_piper=_NAO_FORNECIDO,
     stt=None,
     carregar_em_thread: bool = True,
+    modelos_stt: GerenciadorModelos | None = None,
 ) -> FastAPI:
     if motor is None:
         # XTTS só é instanciado se estiver disponível; sem ele, um motor vazio (não pronto)
@@ -103,17 +105,21 @@ def criar_app(
         except Exception:
             log.warning("piper-tts indisponivel")
             motor_piper = None
+    # Escolha da aba Transcrição (hud.config.json) com prioridade; VARD_STT_* ficam de reserva.
+    escolha = configuracao_stt(ler_escolha_hud(), os.environ)
     if stt is None:
         # STT é opcional: só instancia se o extra estiver instalado. Sem ele, /transcribe devolve 503.
         try:
-            stt = MotorSTT(
-                modelo=os.environ.get("VARD_STT_MODEL", "base"),
-                device=os.environ.get("VARD_STT_DEVICE", "cpu"),
-                compute_type=os.environ.get("VARD_STT_COMPUTE", "int8"),
-            )
+            stt = MotorSTT(modelo=escolha["modelo"], device=escolha["device"], compute_type=escolha["compute"])
         except Exception:
             log.warning("MotorSTT indisponível; /transcribe retornará 503 até instalação do extra stt")
             stt = None
+    else:
+        escolha["dispositivo"] = getattr(stt, "device", "")
+    if modelos_stt is None:
+        modelos_stt = GerenciadorModelos()
+    # Estado da troca de modelo pedida pela tela (a carga roda em segundo plano).
+    troca_stt = {"dispositivo": escolha["dispositivo"], "carregando": False, "erro": None}
 
     # Lista de motores opcionais na ordem de prioridade de reserva.
     motores_opcionais = [
@@ -306,6 +312,91 @@ def criar_app(
             log.warning("transcrever falhou: %s", exc)
             return JSONResponse({"erro": "stt_falhou"}, status_code=503)
         return {"text": texto, "confidence": confianca}
+
+    def _stt_ativo() -> str:
+        return modelos_stt.normalizar(getattr(stt, "modelo_nome", "")) if stt is not None else ""
+
+    @app.get("/v1/stt/modelos")
+    def stt_modelos():
+        """Catálogo da aba Transcrição: estado no cache, o ativo e a troca em andamento."""
+        ativo = _stt_ativo()
+        return {
+            "modelos": [{**m, "ativo": m["id"] == ativo} for m in modelos_stt.listar()],
+            "ativo": ativo,
+            "dispositivo": troca_stt["dispositivo"],
+            "device": getattr(stt, "device", "") if stt is not None else "",
+            "pronta": bool(stt is not None and stt.pronta),
+            "carregando": troca_stt["carregando"],
+            "erro": troca_stt["erro"],
+        }
+
+    @app.post("/v1/stt/modelos/{modelo}/baixar")
+    def stt_baixar(modelo: str):
+        try:
+            return JSONResponse(modelos_stt.baixar(modelo), status_code=202)
+        except KeyError:
+            return JSONResponse({"erro": "modelo_desconhecido"}, status_code=404)
+
+    @app.get("/v1/stt/modelos/{modelo}/progresso")
+    def stt_progresso(modelo: str):
+        try:
+            return modelos_stt.progresso(modelo)
+        except KeyError:
+            return JSONResponse({"erro": "modelo_desconhecido"}, status_code=404)
+
+    @app.post("/v1/stt/modelos/{modelo}/apagar")
+    def stt_apagar(modelo: str):
+        try:
+            if modelos_stt.normalizar(modelo) == _stt_ativo():
+                return JSONResponse({"erro": "modelo_em_uso"}, status_code=409)
+            modelos_stt.apagar(modelo)
+        except KeyError:
+            return JSONResponse({"erro": "modelo_desconhecido"}, status_code=404)
+        except RuntimeError:
+            return JSONResponse({"erro": "modelo_baixando"}, status_code=409)
+        return {"ok": True}
+
+    @app.post("/v1/stt/ativar")
+    def stt_ativar(corpo: dict):
+        """Troca o modelo e/ou o dispositivo em segundo plano; o serviço segue no ar durante a carga."""
+        if stt is None:
+            return JSONResponse({"erro": "stt_indisponivel"}, status_code=503)
+        if troca_stt["carregando"]:
+            return JSONResponse({"erro": "trocando"}, status_code=409)
+        nome = str(corpo.get("modelo") or "").strip()
+        if nome:
+            try:
+                nome = modelos_stt.normalizar(nome)
+                if not modelos_stt.baixado(nome):
+                    return JSONResponse({"erro": "modelo_nao_baixado"}, status_code=409)
+            except KeyError:
+                return JSONResponse({"erro": "modelo_desconhecido"}, status_code=404)
+        else:
+            nome = stt.modelo_nome
+        disp = corpo.get("dispositivo")
+        if disp is None or disp == "":
+            disp, device, compute = troca_stt["dispositivo"], stt.device, stt.compute_type
+        elif disp in DISPOSITIVOS:
+            device, compute = disp, COMPUTE_POR_DISPOSITIVO[disp]
+        else:
+            return JSONResponse({"erro": "dispositivo_invalido"}, status_code=400)
+        troca_stt.update(carregando=True, erro=None)
+
+        def _trocar():
+            try:
+                stt.trocar(nome, device, compute)
+                troca_stt["dispositivo"] = disp
+            except Exception as exc:
+                log.warning("troca do modelo de transcrição falhou: %s", exc)
+                troca_stt["erro"] = str(exc) or type(exc).__name__
+            finally:
+                troca_stt["carregando"] = False
+
+        if carregar_em_thread:
+            threading.Thread(target=_trocar, daemon=True, name="troca-stt").start()
+        else:
+            _trocar()
+        return JSONResponse({"ok": True, "carregando": troca_stt["carregando"]}, status_code=202)
 
     @app.post("/falar")
     async def falar(corpo: dict, request: Request, fluxo: int = 0):

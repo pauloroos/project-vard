@@ -1,7 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { emitTo } from "@tauri-apps/api/event";
 import type { Config } from "../config/config";
-import { avisosDeUrl, limitarLado, mudancasQueExigemReinicio, salvarConfig, urlLocal } from "../config/config";
+import { atualizarConfig, avisosDeUrl, limitarLado, mudancasQueExigemReinicio, salvarConfig, urlLocal } from "../config/config";
 import { ACOES_ATALHO, ROTULOS_ATALHO, avisoAltGr, validarAtalhos, type AcaoAtalho, type FalhaAtalho } from "../config/atalhos";
 import { campoIdioma } from "../config/idiomas";
 import { gravarPerfil, lerPerfil, previaPersona } from "../config/perfil";
@@ -19,6 +19,7 @@ import { AbaPaineisMcps } from "./paineis-mcps";
 import { AbaReuniao, type PonteReuniao } from "./aba-reuniao";
 import { AbaOficina } from "./aba-oficina";
 import { AbaSistema } from "./aba-sistema";
+import { AbaTranscricao } from "./aba-transcricao";
 import { AbaVoz } from "./aba-voz";
 import { InstaladorVozes } from "./instalador-vozes";
 import { MonitorRecursos } from "./monitor-recursos";
@@ -44,9 +45,9 @@ export interface DepsConfiguracoes {
 /** Monitor como o comando listar_monitores devolve (pixels físicos). */
 export interface MonitorInfo { nome: string; x: number; y: number; largura: number; altura: number; escala: number; principal: boolean }
 
-export type Aba = "geral" | "perfil" | "voz" | "atalhos" | "oficina" | "modelos" | "paineis-mcps" | "sistema" | "reuniao" | "avisos" | "diagnostico";
+export type Aba = "geral" | "perfil" | "voz" | "transcricao" | "atalhos" | "oficina" | "modelos" | "paineis-mcps" | "sistema" | "reuniao" | "avisos" | "diagnostico";
 const ABAS: [Aba, string][] = [
-  ["geral", "Geral"], ["perfil", "Perfil"], ["voz", "Voz"], ["atalhos", "Atalhos"], ["oficina", "Oficina"], ["modelos", "Quem responde"],
+  ["geral", "Geral"], ["perfil", "Perfil"], ["voz", "Voz"], ["transcricao", "Transcrição"], ["atalhos", "Atalhos"], ["oficina", "Oficina"], ["modelos", "Núcleo"],
   ["paineis-mcps", "Ferramentas (MCP)"],
   ["sistema", "Sistema"], ["reuniao", "Reunião"], ["avisos", "Avisos"], ["diagnostico", "Diagnóstico"],
 ];
@@ -68,6 +69,7 @@ export class Configuracoes {
   private reuniao: AbaReuniao | null = null;
   private avisos: AbaAvisos | null = null;
   private oficina: AbaOficina | null = null;
+  private transcricao: AbaTranscricao | null = null;
   private atualizacao: AbaAtualizacao | null = null;
   private diagnostico: AbaDiagnostico | null = null;
   private monitorRecursos: MonitorRecursos | null = null;
@@ -103,13 +105,20 @@ export class Configuracoes {
         },
       });
       const pronto = instalador.montar().then(() => this.abaVoz.definirPacoteXttsInstalado(instalador.estaInstalado("xtts-v2")));
-      this.abaVoz.definirInstalador(async (id) => {
+      this.abaVoz.definirInstalador(async (id, op) => {
         await pronto;
         raizInstalador.scrollIntoView?.({ block: "nearest" });
-        await instalador.instalar(id);
-      });
+        return instalador.instalar(id, op);
+      }, async (id) => { await pronto; return instalador.pacote(id); });
     }
     this.marcarUrl("voz_url");
+    this.transcricao = new AbaTranscricao(this.raiz.querySelector<HTMLElement>("#cfg-transcricao")!, {
+      vozUrl: () => this.cfg.voz_url,
+      config: this.cfg,
+      salvar: (parcial) => atualizarConfig(parcial),
+      dizer: (t, ruim) => this.dizer(t, ruim),
+    });
+    this.transcricao.montar();
     this.modelos = new AbaModelos(this.raiz.querySelector<HTMLElement>("#cfg-modelos")!, {
       criarOj: (modelo) => this.deps.criarOj(this.cfg.openjarvis_url, modelo),
       statusPonte: () => this.deps.statusPonte(this.cfg.ponte_url),
@@ -212,6 +221,7 @@ export class Configuracoes {
     if (aba === "reuniao") this.reuniao?.ativar(); else this.reuniao?.desativar();
     if (aba === "avisos") this.avisos?.ativar(); else this.avisos?.desativar();
     if (aba === "oficina") void this.oficina?.ativar(); else this.oficina?.desativar();
+    if (aba === "transcricao") this.transcricao?.ativar(); else this.transcricao?.desativar();
     if (aba === "geral" && this.cfg.atualizacao_ao_abrir) this.atualizacao?.aoAbrir();
   }
 
@@ -289,9 +299,9 @@ export class Configuracoes {
     // Grupos do menu lateral (ordem visual)
     const GRUPOS: [string, Aba[]][] = [
       ["Conversa", ["geral", "perfil"]],
-      ["Voz e áudio", ["voz", "atalhos"]],
-      ["Cérebro", ["oficina", "modelos", "paineis-mcps"]],
-            ["Sistema", ["sistema", "reuniao", "avisos", "diagnostico"]],
+      ["Voz e áudio", ["voz", "transcricao"]],
+      ["Configurações", ["modelos", "oficina", "paineis-mcps", "atalhos"]],
+      ["Sistema", ["sistema", "reuniao", "avisos", "diagnostico"]],
     ];
     const mapaRotulo = new Map(ABAS);
     const navHtml = GRUPOS.map(([titulo, ids]) =>
@@ -369,6 +379,7 @@ export class Configuracoes {
           </div>
           <div id="cfg-instalador-vozes"></div>
         </section>
+        <section data-aba="transcricao"><div id="cfg-transcricao"></div></section>
         <section data-aba="atalhos">
           <p class="nota">Clique num atalho e pressione a nova combinação (Ctrl, Alt ou Win mais uma tecla). Esc cancela. Valem depois de reiniciar o Vard.</p>
           <div id="cfg-atalhos"></div>

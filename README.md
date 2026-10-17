@@ -60,7 +60,8 @@ Só uma instância roda por vez: abrir o Vard de novo traz a janela para a frent
 - **Reunião:** aba "Reunião" (iniciar, encerrar, gerar ata, última reunião); com a reunião ativa o widget fica mudo e mostra "reunião".
 - **Painel:** idioma do reconhecimento em lista e aba **Oficina**.
 
-Na **Oficina**, as habilidades de fábrica aparecem como **Capaz** e podem ser desligadas. Use **Nova habilidade**
+Na **Oficina**, as habilidades de fábrica aparecem como **Capaz** e podem ser desligadas ou editadas (nome, frases
+e orientações extras, no mesmo modal); **Restaurar padrão** desfaz a edição, já que elas não se excluem. Use **Nova habilidade**
 para ensinar uma receita com frases de exemplo e instruções; ela começa como **Treinada** e pode ser marcada como
 **Validada** depois de funcionar. Cadastro e edição abrem em modal; excluir pede confirmação. Busca e filtro por
 situação ajudam a encontrar as receitas. O arquivo `habilidades.json` fica junto de `paineis.json`, na pasta de

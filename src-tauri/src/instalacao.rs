@@ -263,6 +263,11 @@ pub fn descritor_nucleo(
     desc
 }
 
+/// Pasta do hud.config.json (VARD_HUD_CONFIG_DIR) para um serviço filho; sem pasta registrada, nada.
+fn variavel_pasta_hud(pasta: Option<&Path>) -> Option<(String, String)> {
+    pasta.map(|p| ("VARD_HUD_CONFIG_DIR".into(), p.to_string_lossy().into_owned()))
+}
+
 /// Constrói o descritor de serviço para a voz (opcional).
 /// Retorna None se desabilitada ou se a venv não existe.
 pub fn descritor_voz(
@@ -295,6 +300,8 @@ pub fn descritor_voz(
         ("VARD_VOZ_PORT".into(), porta.to_string()),
         ("VARD_DADOS".into(), dados.to_string_lossy().into_owned()),
     ];
+    // A voz lê a escolha da aba Transcrição (stt_modelo, stt_dispositivo) no hud.config.json desta pasta.
+    envs.extend(variavel_pasta_hud(crate::nucleo::pasta_hud()));
     envs.extend(ambiente_instalacao(dados));
     Some(DescritorServico {
         id: "voz".into(),
@@ -635,6 +642,16 @@ mod testes {
         assert_eq!(desc.porta, PORTA_REUNIAO_PADRAO);
         // Verifica que HF_HUB_OFFLINE está no ambiente
         assert!(desc.envs.iter().any(|(k, _)| k == "HF_HUB_OFFLINE"));
+    }
+
+    #[test]
+    fn variavel_pasta_hud_so_com_pasta_registrada() {
+        let pasta = Path::new("pasta-ficticia");
+        assert_eq!(
+            variavel_pasta_hud(Some(pasta)),
+            Some(("VARD_HUD_CONFIG_DIR".to_string(), "pasta-ficticia".to_string()))
+        );
+        assert_eq!(variavel_pasta_hud(None), None);
     }
 
     #[test]

@@ -231,7 +231,10 @@ def localizar_instalaveis(ambiente: Ambiente | None = None) -> dict[str, str]:
 def detectar_instalaveis(ambiente: Ambiente | None = None) -> dict[str, bool]:
     """Presença dos provedores, sem GPU/versão/login nem abertura de programas."""
     encontrados = localizar_instalaveis(ambiente)
-    return {ident: ident in encontrados for ident in (*IDS, "ollama", "gemini", "openjarvis")}
+    presenca = {ident: ident in encontrados for ident in (*IDS, "ollama", "gemini", "openjarvis")}
+    # O LM Studio pode morar em qualquer pasta; a CLI lms que ele instala no perfil também o denuncia.
+    presenca["lmstudio"] = presenca["lmstudio"] or presenca["lms"]
+    return presenca
 
 
 @dataclass(frozen=True)

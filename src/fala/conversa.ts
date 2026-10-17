@@ -1,5 +1,5 @@
 import { gatilhos, type Config } from "../config/config";
-import { INSTRUCAO_HABILIDADES, lerHabilidades } from "../config/habilidades";
+import { INSTRUCAO_HABILIDADES, lerHabilidades, temHabilidadesLigadas } from "../config/habilidades";
 import { fluxoParaWav } from "../audio/wav";
 import { FALAS, saudacaoPara } from "./falas";
 import { cortarEmFrases } from "./frases";
@@ -400,7 +400,7 @@ export class Conversa {
         let instrucao = this.d.config.instrucao_formato;
         try {
           const cfg = await lerHabilidades();
-          if (cfg.habilidades.some((h) => h.ligada)) instrucao += `\n${INSTRUCAO_HABILIDADES}`;
+          if (temHabilidadesLigadas(cfg)) instrucao += `\n${INSTRUCAO_HABILIDADES}`;
         } catch { /* Arquivo ilegível não impede conversar nem afirma receitas inexistentes. */ }
         if (ac.signal.aborted || this.emJogo()) return;
         // Com cerebro=proprio e toggle desligado, d.oj é null: não há OpenJarvis para perguntar.

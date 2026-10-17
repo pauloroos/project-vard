@@ -102,6 +102,37 @@ def test_editar_habilidade_preserva_dados_futuros():
     assert ajustes.listar_habilidades()[0]["futuro"] == 3
 
 
+def test_edita_e_restaura_habilidade_de_fabrica():
+    from vard import ajustes, habilidades
+    ajustes.editar_habilidade("pesquisa", {"nome": "Pesquisar", "instrucoes": "Cite as fontes.", "ligada": False})
+    cfg = habilidades.ler_habilidades()
+    assert cfg["fabrica"] == {"pesquisa": {"nome": "Pesquisar", "instrucoes": "Cite as fontes."}}
+    assert cfg["desligadas"] == ["pesquisa"] and cfg["habilidades"] == []
+    assert ajustes.listar_habilidades() == []
+    ajustes.editar_habilidade("pesquisa", {"ligada": True, "quando": ["procura sobre ..."]})
+    assert ajustes.listar_habilidades() == [{"id": "pesquisa", "nome": "Pesquisar", "quando": ["procura sobre ..."],
+        "instrucoes": "Cite as fontes.", "ligada": True, "situacao": "capaz"}]
+    ajustes.restaurar_habilidade("pesquisa")
+    cfg = habilidades.ler_habilidades()
+    assert "fabrica" not in cfg and cfg["desligadas"] == []
+    assert ajustes.listar_habilidades() == []
+    with pytest.raises(ValueError, match="fábrica"):
+        ajustes.restaurar_habilidade("rotina")
+    with pytest.raises(ValueError):
+        ajustes.editar_habilidade("pesquisa", {"situacao": "validada"})
+
+
+def test_fabrica_nao_se_exclui_e_receita_inexistente_avisa():
+    import configuracoes_mcp as mcp
+    from vard import ajustes
+    assert "restaurar_habilidade" in mcp.excluir_habilidade("conversa", confirmado=True)
+    assert "não encontrada" in mcp.editar_habilidade("inexistente", {"nome": "Outra"})
+    assert "não encontrada" in mcp.marcar_habilidade_validada("inexistente")
+    ajustes.editar_habilidade("conversa", {"instrucoes": "Responda curto."})
+    assert mcp.restaurar_habilidade("conversa") == "Habilidade de fábrica restaurada ao padrão."
+    assert "fabrica" not in ajustes.ler_documento("habilidades")
+
+
 def test_mcp_instala_por_http_so_apos_confirmacao(monkeypatch):
     import configuracoes_mcp as mcp
     from vard import ajustes
@@ -136,7 +167,7 @@ async def test_servidor_mcp_real_expoe_todas_as_ferramentas_e_grava_aparencia():
     try:
         await gerente.adicionar_stdio("configuracoes", sys.executable, [str(Path(__file__).parents[1] / "configuracoes_mcp.py")])
         nomes = {f["nome"] for f in await gerente.listar_todas()}
-        assert nomes == {"ver_configuracoes", "mudar_aparencia", "listar_vozes", "escolher_voz", "listar_provedores", "cadastrar_provedor", "editar_provedor", "remover_provedor", "escolher_quem_responde", "testar_provedor", "listar_instalaveis", "instalar", "andamento_instalacao", "listar_habilidades", "cadastrar_habilidade", "editar_habilidade", "excluir_habilidade", "marcar_habilidade_validada", "listar_programas", "cadastrar_programa", "remover_programa", "ver_telegram", "configurar_telegram"}
+        assert nomes == {"ver_configuracoes", "mudar_aparencia", "listar_vozes", "escolher_voz", "listar_provedores", "cadastrar_provedor", "editar_provedor", "remover_provedor", "escolher_quem_responde", "testar_provedor", "listar_instalaveis", "instalar", "andamento_instalacao", "listar_habilidades", "cadastrar_habilidade", "editar_habilidade", "excluir_habilidade", "restaurar_habilidade", "marcar_habilidade_validada", "listar_programas", "cadastrar_programa", "remover_programa", "ver_telegram", "configurar_telegram"}
         assert await gerente.chamar("configuracoes", "mudar_aparencia", {"cor": "#112233", "opacidade": 0.5}) == "Aparência atualizada."
         assert ajustes.ler_documento("hud")["cor_elementos"] == "#112233"
         assert "confirmação" in await gerente.chamar("configuracoes", "remover_programa", {"nome": "editor"})

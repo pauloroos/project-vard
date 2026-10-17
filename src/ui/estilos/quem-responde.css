@@ -1,4 +1,23 @@
-/* Frente "Quem responde" (0.9.3) — cards de provedores + modal de cadastro/edição. */
+/* Aba "Núcleo" (antes "Quem responde", 0.9.3; blocos 0.9.7) — cards de provedores + modal de cadastro/edição. */
+
+/* Blocos: em uso agora, cadastrados, instalar ou conectar, avançado recolhido */
+.nucleo-agora .cards-grade { grid-template-columns: 1fr; }
+.nucleo-agora .card { border-color: rgba(0, 240, 255, 0.55); background: rgba(0, 240, 255, 0.06); }
+.nucleo-agora .card-cabeca h3 { font-size: 15px; }
+.nucleo-ferramentas { display: flex; align-items: center; gap: 10px; margin: 0 0 12px; }
+.nucleo-ferramentas button { margin: 0 0 0 auto; }
+.nucleo-ajuda { margin: 0; font-size: 12px; opacity: 0.8; }
+.nucleo-avancado { margin: 0 0 14px; border: 1px solid var(--borda); border-radius: 6px; }
+.nucleo-avancado > summary {
+  padding: 10px 12px;
+  cursor: pointer;
+  font: 11px/1.2 var(--mono);
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  opacity: 0.8;
+}
+.nucleo-avancado[open] > summary { border-bottom: 1px solid var(--borda); }
+.nucleo-avancado > div { padding: 12px; }
 
 .qr-aviso-ponte {
   margin: 0 0 12px;

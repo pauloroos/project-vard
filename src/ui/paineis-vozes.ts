@@ -3,7 +3,7 @@
  *
  * O conteúdo do antigo "Painéis: Vozes" agora mora na seção Voz: este arquivo virou
  * o módulo das vozes cadastradas — tipos, validação, persistência em paineis.json e
- * o modal de adicionar/editar usado pela aba-voz. Credencial por referência ao cofre
+ * o modal de adicionar/editar usado pela aba-voz (e, na 0.9.7, o modal da chave de nuvem). Credencial por referência ao cofre
  * (tipo:id); "Testar credencial" verifica existência sem expor valor.
  * Tipos válidos: suad, kokoro, elevenlabs, gemini, fish.
  */
@@ -153,6 +153,48 @@ export function abrirModalVoz(op: OpcoesModalVoz): ModalAberto {
   acoes.push({ rotulo: "Cancelar" });
   modal = abrirModal({ titulo: atual ? "Editar voz" : "Adicionar voz", corpo, acoes }, op.raiz);
   return modal;
+}
+
+export interface OpcoesModalChave {
+  /** Nome do serviço de nuvem (ElevenLabs, Gemini…). */
+  servico: string;
+  /** Já existe chave: o modal troca, e cancelar mantém a atual. */
+  trocar?: boolean;
+  raiz?: HTMLElement;
+}
+
+/** Modal da chave de um serviço de voz em nuvem. Resolve com a chave digitada ou null se cancelar.
+ * O campo é de senha e nunca vem preenchido: a chave não volta para a tela. */
+export function pedirChaveDeVoz(op: OpcoesModalChave): Promise<string | null> {
+  const corpo = document.createElement("div");
+  corpo.className = "modal-chave-voz";
+  const campo = document.createElement("input");
+  campo.type = "password";
+  campo.autocomplete = "off";
+  campo.spellcheck = false;
+  corpo.append(campoModal(`Chave da API ${op.servico}`, campo,
+    op.trocar ? "A chave atual continua até você salvar outra." : `Esta voz fala pela sua conta ${op.servico}. Salve as Configurações para gravar.`));
+  return new Promise((resolver) => {
+    let chave: string | null = null;
+    let modal!: ModalAberto;
+    modal = abrirModal({
+      titulo: op.trocar ? `Trocar chave do ${op.servico}` : `Chave do ${op.servico}`,
+      corpo,
+      acoes: [
+        {
+          rotulo: "Salvar",
+          primaria: true,
+          aoClicar: () => {
+            const valor = campo.value.trim();
+            if (!valor) { modal.avisar(`Informe a chave do ${op.servico}.`, true); return false; }
+            chave = valor;
+          },
+        },
+        { rotulo: "Cancelar" },
+      ],
+      aoFechar: () => resolver(chave),
+    }, op.raiz);
+  });
 }
 
 /** Credencial padrão do modal: pergunta ao cofre pela referência tipo:id, sem expor o valor. */

@@ -180,6 +180,24 @@ def test_deteccao_pos_instalacao_sem_atualizar_path(tmp_path):
     assert resultado["codex"] and resultado["gemini"]
 
 
+def test_lm_studio_em_pasta_propria_detectado_pela_cli_lms(tmp_path):
+    """LM Studio instalado fora das pastas padrão ainda deixa a CLI lms no perfil."""
+    from vard.primeiro_uso import deteccao
+    perfil = tmp_path / "perfil"
+    lms = perfil / ".lmstudio" / "bin" / "lms.exe"
+    amb = deteccao.Ambiente(env={"USERPROFILE": str(perfil), "LOCALAPPDATA": str(tmp_path / "local")},
+        which=lambda nome: None, existe=lambda p: p == lms,
+        rodar=lambda *args: pytest.fail("Não executar sonda"), http_json=lambda *args: pytest.fail("Sem rede"))
+    assert deteccao.detectar_instalaveis(amb)["lmstudio"]
+
+
+def test_lm_studio_ausente_sem_programa_nem_cli(tmp_path):
+    from vard.primeiro_uso import deteccao
+    amb = deteccao.Ambiente(env={"USERPROFILE": str(tmp_path)}, which=lambda nome: None, existe=lambda p: False,
+        rodar=lambda *args: pytest.fail("Não executar sonda"), http_json=lambda *args: pytest.fail("Sem rede"))
+    assert not deteccao.detectar_instalaveis(amb)["lmstudio"]
+
+
 def test_openjarvis_detectado_na_instalacao_existente(tmp_path):
     import json
     from vard.primeiro_uso import deteccao

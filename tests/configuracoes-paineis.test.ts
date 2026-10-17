@@ -106,7 +106,12 @@ describe("configuracoes-paineis (T8)", () => {
       await vi.waitFor(() => expect(buscar).toHaveBeenCalledWith(expect.stringContaining("/saude"), expect.anything()));
       await vi.waitFor(() => expect(raiz.querySelector('[data-motor="xtts"]')?.textContent).toContain("Instalar"));
       raiz.querySelector<HTMLButtonElement>('[data-motor="xtts"]')!.click();
-      await vi.waitFor(() => expect(confirmar).toHaveBeenCalledOnce());
+      // A pergunta de instalar já mostra a licença do pacote que o instalador do núcleo listou.
+      await vi.waitFor(() => expect(document.querySelector(".modal")?.textContent).toContain("Licença fictícia"));
+      const pergunta = document.querySelector<HTMLElement>(".modal")!;
+      [...pergunta.querySelectorAll<HTMLButtonElement>(".modal-acoes button")].find((b) => b.textContent === "Agora não")!.click();
+      await new Promise((r) => setTimeout(r, 0));
+      expect(confirmar).not.toHaveBeenCalled();
       expect(buscar).toHaveBeenCalledWith("http://127.0.0.1:4876/pacotes");
       expect(buscar.mock.calls.some(([, init]) => init?.method === "POST")).toBe(false);
     } finally { buscar.mockRestore(); confirmar.mockRestore(); }
@@ -165,8 +170,9 @@ describe("configuracoes-paineis (T8)", () => {
     expect(oficina?.textContent).toBe("Oficina");
     oficina!.click();
     expect(raiz.querySelector("#cfg-titulo-secao")?.textContent).toBe("Oficina");
-    // "Quem responde" absorveu provedores e agentes
+    // "Núcleo" (antes "Quem responde") absorveu provedores e agentes
     expect(botoes).toContain("modelos");
+    expect(raiz.querySelector('nav button[data-aba="modelos"]')?.textContent).toBe("Núcleo");
     expect(botoes).toContain("paineis-mcps");
     // Abas removidas não devem mais existir
     expect(botoes).not.toContain("paineis-provedores");
@@ -192,25 +198,28 @@ describe("configuracoes-paineis (T8)", () => {
     expect(container.textContent).toContain("MCP");
   });
 
-  it("container cfg-modelos existe (seção Quem responde)", async () => {
+  it("container cfg-modelos existe (seção Núcleo)", async () => {
     const raiz = criarRaiz();
     const painel = new Configuracoes({ ...CONFIG_PADRAO } as Config, raiz, criarDeps());
     await painel.montar();
     expect(raiz.querySelector("#cfg-modelos")).toBeTruthy();
   });
 
-  it("abrir aba modelos renderiza conteúdo da seção Quem responde", async () => {
+  it("abrir aba modelos renderiza conteúdo da seção Núcleo", async () => {
     const raiz = criarRaiz();
     const painel = new Configuracoes({ ...CONFIG_PADRAO } as Config, raiz, criarDeps());
     await painel.montar();
     painel.abrirAba("modelos" as Aba);
     await new Promise((r) => setTimeout(r, 100));
+    expect(raiz.querySelector("#cfg-titulo-secao")?.textContent).toBe("Núcleo");
     const container = raiz.querySelector("#cfg-modelos") as HTMLElement;
     expect(container.innerHTML.length).toBeGreaterThan(0);
     expect(container.textContent).toContain("OpenJarvis");
+    expect(container.textContent).toContain("Em uso agora");
+    expect(container.textContent).not.toContain("Quem responde");
   });
 
-  it("reabrir a aba Quem responde pelo menu reconsulta o núcleo e tira o aviso velho", async () => {
+  it("reabrir a aba Núcleo pelo menu reconsulta o núcleo e tira o aviso velho", async () => {
     document.body.innerHTML = "";
     vi.mocked(invoke).mockImplementation((cmd: string) => Promise.resolve(cmd === "falhas_de_atalho" ? [] : null));
     const raiz = criarRaiz();
