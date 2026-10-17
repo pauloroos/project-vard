@@ -37,6 +37,20 @@ describe("rotas", () => {
     expect(classificar("módo jogo")).toBe("modo");
     expect(classificar("abre o youtube")).toBe("ask");
   });
+  it("pedido de ver a tela em qualquer forma natural vai para a visão", () => {
+    expect(classificar("consegue ver minha tela?")).toBe("see");
+    expect(classificar("vê minha tela")).toBe("see");
+    expect(classificar("veja a minha tela e me diz o que tem")).toBe("see");
+    expect(classificar("dá uma olhada na tela")).toBe("see");
+    expect(classificar("você consegue ler o que está na tela")).toBe("see");
+    expect(classificar("o que tá na minha tela")).toBe("see");
+    expect(classificar("o que você tá vendo")).toBe("see");
+  });
+  it("tela sem pedido de ver não muda a rota", () => {
+    expect(classificar("abre o telegram")).toBe("ask");
+    expect(classificar("quanto custa uma tela nova")).toBe("ask");
+    expect(classificar("me ajuda a ver o horário do voo")).toBe("ask");
+  });
   it("interrupções", () => {
     expect(ehInterrupcao("para")).toBe(true);
     expect(ehInterrupcao("Espera!")).toBe(true);
