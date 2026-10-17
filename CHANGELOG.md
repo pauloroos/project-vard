@@ -71,19 +71,6 @@ Em andamento.
 
 ### Adicionado/Feito
 
-- Nada nesta versão: só a preparação do número da versão seguinte.
-
-### Corrigido
-
-- Nada nesta versão.
-
-## [0.8.0] — 2026-10-16
-
-### Adicionado/Feito
-
-- Escolha do cérebro que responde (conector, modelos locais ou uma ferramenta de linha de comando instalada).
-- Supervisor dos processos das ferramentas: cancelar, encerrar e reabrir quando o programa fica enxuto.
-- Telegram próprio do cérebro, desligado por padrão.
 - Voz própria com mais motores: Kokoro, Edge e Piper, com reserva local quando o OpenJarvis não está no ar.
 - Escolha do motor de fala na aba Voz.
 - Transcrição (STT) própria no serviço de voz, com reserva no OpenJarvis.
@@ -92,6 +79,18 @@ Em andamento.
 - Importação de uma instalação anterior, com prévia, aplicar e reverter.
 - Instalador de pacotes opcionais (vozes e reunião) com progresso e ativação quando o serviço responde.
 - Reunião como pacote opcional, com tela de instalação e remoção.
+
+### Corrigido
+
+- Nada registrado nesta versão.
+
+## [0.8.0] — 2026-10-16
+
+### Adicionado/Feito
+
+- Escolha do cérebro que responde (conector, modelos locais ou uma ferramenta de linha de comando instalada).
+- Supervisor dos processos das ferramentas: cancelar, encerrar e reabrir quando o programa fica enxuto.
+- Telegram próprio do cérebro, desligado por padrão.
 - Cadastro das ferramentas de linha de comando detectadas no painel de provedores.
 - Provedores de API (modelos locais, OpenAI-compatíveis, Anthropic e Google) podem ser usados como cérebro, com a credencial vinda do cofre.
 - Resumo da manhã, pesquisa e agente remoto sem depender do OpenJarvis (caminho opcional).
