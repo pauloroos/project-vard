@@ -136,6 +136,12 @@ def criar_app(
                             m.carregar()
                         except Exception:
                             log.exception("falha ao carregar o motor %s", nome)
+                # Transcrição também já na abertura: a primeira fala não espera a carga do modelo (~15 s na GPU).
+                if stt is not None and not stt.pronta:
+                    try:
+                        stt.carregar()
+                    except Exception:
+                        log.exception("falha ao carregar o STT; a rota tenta de novo no primeiro pedido")
             threading.Thread(target=_carga, daemon=True, name="carga-motor").start()
         yield
 

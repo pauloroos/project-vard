@@ -205,6 +205,24 @@ def test_transcribe_carrega_o_modelo_no_primeiro_pedido():
     assert stt.cargas == 1
 
 
+def test_stt_carrega_na_abertura_em_segundo_plano():
+    import time
+    class STTContador(STTFalso):
+        def __init__(self):
+            super().__init__(pronta=False)
+            self.cargas = 0
+        def carregar(self):
+            self.cargas += 1
+            self.pronta = True
+    stt = STTContador()
+    app = criar_app(MotorFalso(), stt=stt, carregar_em_thread=True)
+    with TestClient(app, base_url="http://127.0.0.1:4710"):
+        fim = time.time() + 3
+        while stt.cargas == 0 and time.time() < fim:
+            time.sleep(0.02)
+    assert stt.cargas == 1
+
+
 def test_transcribe_carga_que_falha_503():
     """Se carregar o modelo falhar (pacote ausente, GPU), responde 503 stt_indisponivel."""
     class STTSemPacote(STTFalso):
