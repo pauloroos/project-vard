@@ -32,6 +32,7 @@ def _ambiente_isolado(tmp_path: Path, monkeypatch, request):
         return
     monkeypatch.setenv("VARD_CONFIG", str(tmp_path / "config"))
     monkeypatch.setenv("VARD_DADOS", str(tmp_path / "dados"))
+    monkeypatch.setenv("VARD_HUD_CONFIG_DIR", str(tmp_path / "hud"))   # nunca a config real do widget
     monkeypatch.delenv("OPENJARVIS_HOME", raising=False)   # a instalação real do PC nunca entra nos testes
     monkeypatch.delenv("VARD_INSTALACAO", raising=False)
 

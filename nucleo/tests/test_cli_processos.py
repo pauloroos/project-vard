@@ -496,3 +496,15 @@ async def test_cancelar_turno_encerra_a_cli_e_a_proxima_pergunta_funciona(base_d
         mod.argv_cli = original_argv  # type: ignore[assignment]
         mod._encerrar_arvore = original_encerrar  # type: ignore[assignment]
         await sup.encerrar_tudo()
+
+
+class TestNomeDoWidgetNoPerfil:
+    def test_nome_e_usuario_vem_do_hud_config_do_widget(self, base_dados: Path, tmp_path: Path, monkeypatch) -> None:
+        hud = tmp_path / "hud"
+        hud.mkdir()
+        (hud / "hud.config.json").write_text('{"nome": "Aurora", "usuario": "Beltrano"}', encoding="utf-8")
+        monkeypatch.setenv("VARD_HUD_CONFIG_DIR", str(hud))
+        pasta = _preparar_pasta_sessao(_provedor("cli-claude"), "sess-nome", base_dados=base_dados)
+        texto = (pasta / "perfil.md").read_text(encoding="utf-8")
+        assert "Nome do assistente: Aurora" in texto
+        assert "Como chamar a pessoa: Beltrano" in texto
