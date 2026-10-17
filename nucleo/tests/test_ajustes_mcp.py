@@ -20,6 +20,19 @@ def test_aparencia_usa_hud_e_preserva_campos(monkeypatch, tmp_path):
     assert not list(alvo.parent.glob("*.tmp"))
 
 
+def test_aparencia_muda_so_a_cor_ou_so_a_opacidade(tmp_path):
+    from vard import ajustes
+    import configuracoes_mcp as mcp
+    alvo = tmp_path / "hud" / "hud.config.json"
+    alvo.parent.mkdir()
+    alvo.write_text(json.dumps({"cor_elementos": "#ff00aa", "opacidade_elementos": 0.6}), encoding="utf-8")
+    assert mcp.mudar_aparencia(cor="#22c55e") == "Aparência atualizada."
+    assert json.loads(alvo.read_text(encoding="utf-8")) == {"cor_elementos": "#22c55e", "opacidade_elementos": 0.6}
+    ajustes.mudar_aparencia(opacidade=0.4)
+    assert json.loads(alvo.read_text(encoding="utf-8")) == {"cor_elementos": "#22c55e", "opacidade_elementos": 0.4}
+    assert "cor ou a opacidade" in mcp.mudar_aparencia()
+
+
 def test_contrato_compartilhado():
     from vard.ajustes import validar_documento
     casos = json.loads((Path(__file__).parents[2] / "tests/fixtures/ajustes/contrato.json").read_text(encoding="utf-8"))
@@ -115,11 +128,34 @@ async def test_servidor_mcp_real_expoe_todas_as_ferramentas_e_grava_aparencia():
 
 
 def test_vozes_de_fabrica_disponiveis_sem_cadastro():
+    from vard import ajustes
+    dados = ajustes.listar_vozes()
+    # Estrutura: dict com "catalogo" (dict por provedor) e "cadastradas" (lista)
+    assert isinstance(dados, dict)
+    assert "catalogo" in dados and "cadastradas" in dados
+    assert isinstance(dados["catalogo"], dict)
+    assert isinstance(dados["cadastradas"], list)
+    # Catálogo agrupa vozes por provedor; cada valor é lista de dicts ou strings
+    todos_ids: set[str] = set()
+    todos_nomes: set[str] = set()
+    for grupo in dados["catalogo"].values():
+        for v in grupo:
+            if isinstance(v, dict):
+                if "id" in v: todos_ids.add(str(v["id"]))
+                if "rotulo" in v: todos_nomes.add(str(v["rotulo"]))
+            else:
+                todos_ids.add(str(v))
+                todos_nomes.add(str(v))
+    assert "pf_dora" in todos_ids or any("dora" in n.lower() for n in todos_nomes)
+    assert "pt-BR-FranciscaNeural" in todos_ids or any("Francisca" in n for n in todos_nomes)
+    assert "Kore" in todos_ids or any("Kore" in n for n in todos_nomes)
+
+
+def test_remover_programa_inexistente_retorna_mensagem_clara_sem_excecao():
     import configuracoes_mcp as mcp
-    resposta = mcp.listar_vozes()
-    assert "pf_dora" in resposta
-    assert "pt-BR-FranciscaNeural" in resposta
-    assert "Kore" in resposta
+    resposta = mcp.remover_programa("programa-que-nao-existe", confirmado=True)
+    assert "Não achei o programa" in resposta or "não encontrado" in resposta.lower()
+    # Não deve levantar exceção; o decorador @_seguro captura, mas a mensagem deve ser específica
 
 
 def test_programa_cadastrado_chega_a_mesa_sem_reiniciar(monkeypatch):
