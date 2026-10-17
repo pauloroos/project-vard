@@ -474,4 +474,25 @@ describe("AbaModelos (Quem responde 0.9.3)", () => {
 
     expect(modal.textContent).toContain("não encontrada neste PC");
   });
+
+  it("reabrir a aba reconsulta o status da ponte e atualiza o aviso sem recarregar a janela", async () => {
+    let ponteOk = true;
+    const raiz = criarRaiz();
+    const deps = criarDeps({ statusPonte: async () => (ponteOk ? ({ ok: true, modo: "ligado" } as any) : null) });
+    const aba = new AbaModelos(raiz, deps);
+
+    // Primeira carga: ponte OK → sem aviso
+    await aba.carregar();
+    expect(raiz.querySelector(".qr-aviso-ponte")).toBeNull();
+
+    // Ponte cai e aba é reaberta (carregar novamente)
+    ponteOk = false;
+    await aba.carregar();
+    expect(raiz.querySelector(".qr-aviso-ponte")?.textContent).toContain("Os serviços do Vard estão desligados");
+
+    // Ponte volta e aba é reaberta novamente
+    ponteOk = true;
+    await aba.carregar();
+    expect(raiz.querySelector(".qr-aviso-ponte")).toBeNull();
+  });
 });
