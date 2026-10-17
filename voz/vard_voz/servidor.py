@@ -72,7 +72,10 @@ def criar_app(
         if _xtts_disponivel():
             try:
                 from .motor import Motor
-                ocioso_s = float(os.environ.get("VARD_VOZ_OCIOSO_S", "600"))
+                # Descarga por ociosidade DESLIGADA por padrão (0): medido em 16/10/2026, a RAM do modelo não volta
+                # ao Windows ao descarregar dentro do mesmo processo e a recarga soma outros ~3 GB. Liga com
+                # VARD_VOZ_OCIOSO_S quando o XTTS rodar num processo próprio que possa ser encerrado.
+                ocioso_s = float(os.environ.get("VARD_VOZ_OCIOSO_S", "0"))
                 motor = Motor(os.environ.get("VARD_VOZ_DEVICE", "cuda"), ocioso_s=ocioso_s)
             except Exception:
                 log.warning("xtts-v2 instalado mas motor falhou ao iniciar")
@@ -220,6 +223,12 @@ def criar_app(
             atual = ""
         return {"vozes": lista, "atual": atual}
 
+    def _xtts_utilizavel() -> bool:
+        """XTTS carregado agora, ou descarregado por ociosidade (já carregou antes): falar() recarrega sozinho."""
+        if motor.pronta and motor.aquecida:
+            return True
+        return not isinstance(motor, _MotorAusente) and bool(getattr(motor, "_nomes", None))
+
     def _motor_para_voz(voz: str | None):
         """Escolhe o motor adequado para a voz pedida; fallback segue ordem XTTS→Kokoro→Edge→Piper."""
         if voz:
@@ -238,11 +247,11 @@ def criar_app(
                     return motor_piper if motor_piper.pronta and motor_piper.aquecida else None
             # Voz do XTTS: retorna o motor mesmo que não reconheça a voz,
             # para que /falar valide e devolva 400 (voz_desconhecida) em vez de 503.
-            if motor.pronta and motor.aquecida:
+            if _xtts_utilizavel():
                 return motor
             return None  # Voz pedida mas nenhum motor pronto
         # Sem voz específica: primeiro motor disponível
-        if motor.pronta and motor.aquecida:
+        if _xtts_utilizavel():
             return motor
         for _, m in motores_opcionais:
             if m is not None and m.pronta and m.aquecida:

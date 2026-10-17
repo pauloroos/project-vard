@@ -191,3 +191,13 @@ def test_recarga_nao_trava_com_rlock():
         assert m.pronta
     finally:
         Motor.carregar = original
+
+def test_vozes_continuam_listadas_depois_da_descarga(motor_descarga):
+    """A tela de Voz e /vozes não podem perder as vozes do XTTS só porque o modelo saiu da memória."""
+    motor, _, _ = motor_descarga
+    motor.carregar()
+    antes = motor.vozes()
+    motor.descarregar()
+    assert motor._modelo is None
+    assert motor.vozes() == antes
+    assert motor.tem_voz("Suad Qasim")

@@ -37,13 +37,18 @@ class Motor:
         self._ocioso_s = max(0.0, float(ocioso_s))
         self._ultimo_uso: float = 0.0
         self._timer_descarga: threading.Timer | None = None
+        self._nomes: list[str] = []  # vozes da última carga: continuam listadas depois da descarga
 
     def vozes(self) -> list[str]:
-        nomes = sorted(self._modelo.speaker_manager.speakers) if self._modelo is not None else [VOZ]
+        if self._modelo is not None:
+            self._nomes = sorted(self._modelo.speaker_manager.speakers)
+        nomes = self._nomes or [VOZ]
         return [VOZ, *[n for n in nomes if n != VOZ]]
 
     def tem_voz(self, nome: str) -> bool:
-        return self._modelo is not None and nome in self._modelo.speaker_manager.speakers
+        if self._modelo is not None:
+            return nome in self._modelo.speaker_manager.speakers
+        return nome in self._nomes  # descarregado: só as vozes que ele já conhecia; nunca carregado: nenhuma
 
     def _latentes(self, voz: str | None):
         nome = voz or VOZ
@@ -73,6 +78,8 @@ class Motor:
             self._cache.clear()
             self.pronta = False
             self.aquecida = False
+            import gc
+            gc.collect()  # sem isto o modelo continua preso em ciclos de referência e a RAM não volta
             try:
                 import torch
                 if torch.cuda.is_available():
@@ -104,6 +111,7 @@ class Motor:
         t0 = time.time()
         tts = TTS(MODELO).to(self.device)
         self._modelo = tts.synthesizer.tts_model
+        self._nomes = sorted(self._modelo.speaker_manager.speakers)
         self._latentes(VOZ)
         self.pronta = True
         self.falar("Pronta.", 1.0)
