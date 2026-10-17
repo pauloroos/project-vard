@@ -1,6 +1,7 @@
 """API do vard-voz. Só 127.0.0.1; guardas de Host/Origin iguais às da ponte (server.py)."""
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 import threading
@@ -138,6 +139,7 @@ def criar_app(
             threading.Thread(target=_carga, daemon=True, name="carga-motor").start()
         yield
 
+    trava_stt = asyncio.Lock()
     app = FastAPI(title="vard-voz", lifespan=vida)
 
     @app.middleware("http")
@@ -261,8 +263,18 @@ def criar_app(
     @app.post("/v1/speech/transcribe")
     async def transcrever(request: Request):
         """Transcrição STT própria (compatível com OpenJarvis). Requer extra 'stt' instalado."""
-        if stt is None or not stt.pronta:
+        if stt is None:
             return JSONResponse({"erro": "stt_indisponivel"}, status_code=503)
+        if not stt.pronta:
+            # O modelo de transcrição não entra na carga da abertura: carrega no primeiro pedido (uma vez só).
+            async with trava_stt:
+                if not stt.pronta:
+                    try:
+                        await run_in_threadpool(stt.carregar)
+                    except Exception:
+                        log.exception("falha ao carregar o STT")
+                        return JSONResponse({"erro": "stt_indisponivel"}, status_code=503)
+        idioma = None
         ct = request.headers.get("content-type", "")
         if "multipart/form-data" in ct:
             form = await request.form()
@@ -270,6 +282,7 @@ def criar_app(
             if arquivo is None or not hasattr(arquivo, "read"):
                 return JSONResponse({"erro": "arquivo_ausente"}, status_code=400)
             audio = await arquivo.read()
+            idioma = str(form.get("language") or "").strip() or None
         else:
             audio = await request.body()
         if not audio:
@@ -277,7 +290,7 @@ def criar_app(
         if len(audio) > LIMITE_UPLOAD_STT:
             return JSONResponse({"erro": "audio_grande_demais"}, status_code=413)
         try:
-            texto, confianca = await run_in_threadpool(stt.transcrever_bytes, audio)
+            texto, confianca = await run_in_threadpool(stt.transcrever_bytes, audio, idioma)
         except ValueError as exc:
             return JSONResponse({"erro": str(exc)}, status_code=400)
         except RuntimeError as exc:
