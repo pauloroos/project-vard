@@ -11,7 +11,7 @@ export type ProvedorVoz = (typeof PROVEDORES_VOZ)[number];
 export const FRASE_AMOSTRA = "Olá, eu sou a Vard. Esta é a minha voz.";
 
 type Fetch = (url: string, init: RequestInit) => Promise<Response>;
-type ConfigVoz = Pick<Config, "voz_provedor" | "voz_url" | "voz_propria" | "elevenlabs_chave" | "elevenlabs_voz" | "gemini_chave" | "gemini_voz">;
+type ConfigVoz = Pick<Config, "voz_provedor" | "voz_url" | "voz_motor" | "voz_propria" | "elevenlabs_chave" | "elevenlabs_voz" | "gemini_chave" | "gemini_voz">;
 
 /** A fonte de voz da config; null = só a voz do OpenJarvis (Kokoro). Nuvem sem chave vira null com aviso. Nunca faz rede. */
 export function criarFonteDeVoz(c: ConfigVoz, buscar?: Fetch): FonteDeVoz | null {

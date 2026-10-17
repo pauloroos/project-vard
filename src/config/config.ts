@@ -34,6 +34,10 @@ export interface Config {
   voz_propria: string;
   elevenlabs_chave: string; elevenlabs_voz: string;
   gemini_chave: string; gemini_voz: string;
+  /** Voz de reserva: usada automaticamente quando a principal falhar. Mesma estrutura da principal (provedor+motor+id). */
+  voz_reserva_provedor?: ProvedorVoz | "nenhuma";
+  voz_reserva_motor?: string;
+  voz_reserva_id?: string;
   /** Consulta a release mais nova ao abrir a aba Atualização do painel (só então; nunca em segundo plano). */
   atualizacao_ao_abrir: boolean;
   /** Não ouvir: microfone desligado (o mesmo que o botão Mudo do HUD). */
@@ -52,6 +56,10 @@ export interface Config {
   falar_avisos: boolean;
   /** Cérebro ativo: 'openjarvis' (padrão, nada muda) ou 'proprio' (usa rotas /pedidos do núcleo). */
   cerebro: Cerebro;
+  /** Cor dos elementos do widget (hex com #); vazio = ciano padrão. */
+  cor_elementos: string;
+  /** Opacidade dos elementos do widget (0.2 a 1); 1 = opaco. */
+  opacidade_elementos: number;
 }
 
 export const CONFIG_PADRAO: Config = {
@@ -71,10 +79,12 @@ export const CONFIG_PADRAO: Config = {
   sala_monitor: "",
   conversa_ms: 20000,
   voz_provedor: "propria", voz_motor: "", voz_propria: "", elevenlabs_chave: "", elevenlabs_voz: "", gemini_chave: "", gemini_voz: "Kore",
+  voz_reserva_provedor: "nenhuma", voz_reserva_motor: "", voz_reserva_id: "",
   atualizacao_ao_abrir: false,
   nao_ouvir: false, nao_falar: false, falar_avisos: false,
   cerebro: CEREBRO_PADRAO,
   microfone_id: "", microfone_rotulo: "", saida_id: "", saida_rotulo: "",
+  cor_elementos: "", opacidade_elementos: 1,
 };
 
 /** Mescla o salvo com o padrão descartando o que tem tipo errado (arquivo editado à mão). */
@@ -107,8 +117,17 @@ function mesclar(salvo: unknown): Config {
       if (v === "energia" || v === "silero") saida[k] = v;
     } else if (k === "voz_provedor") {
       if (typeof v === "string" && (PROVEDORES_VOZ as readonly string[]).includes(v)) saida[k] = v;
+    } else if (k === "voz_reserva_provedor") {
+      const validos = [...PROVEDORES_VOZ, "nenhuma"] as readonly string[];
+      if (typeof v === "string" && validos.includes(v)) saida[k] = v;
+    } else if (k === "voz_reserva_motor" || k === "voz_reserva_id") {
+      if (typeof v === "string") saida[k] = v;
     } else if (k === "voz_motor") {
       if (typeof v === "string") saida[k] = v;
+    } else if (k === "cor_elementos") {
+      if (typeof v === "string" && (/^#[0-9a-fA-F]{6}$/.test(v) || v === "")) saida[k] = v;
+    } else if (k === "opacidade_elementos") {
+      if (typeof v === "number" && Number.isFinite(v) && v >= 0.2 && v <= 1) saida[k] = v;
     } else if (k === "conversa_ms") {
       if (typeof v === "number" && Number.isFinite(v) && v >= 0) saida[k] = Math.round(v);
     } else if (typeof v === typeof padrao) {
@@ -161,7 +180,7 @@ export function avisosDeUrl(c: Pick<Config, "openjarvis_url" | "gui_url" | "pont
 }
 
 /** Chaves que o widget aplica na hora (evento config-salva). O resto só vale depois de reiniciar. */
-export const CHAVES_AO_VIVO = ["tamanho", "tamanho_px", "compacto", "sempre_no_topo", "click_through", "invisivel", "usuario", "modelo", "conversa_ms", "nao_ouvir", "nao_falar", "falar_avisos", "cerebro"] as const satisfies readonly (keyof Config)[];
+export const CHAVES_AO_VIVO = ["tamanho", "tamanho_px", "compacto", "sempre_no_topo", "click_through", "invisivel", "usuario", "modelo", "conversa_ms", "nao_ouvir", "nao_falar", "falar_avisos", "cerebro", "cor_elementos", "opacidade_elementos"] as const satisfies readonly (keyof Config)[];
 export type ChaveAoVivo = (typeof CHAVES_AO_VIVO)[number];
 
 /** Copia para a config viva do widget só as chaves ao vivo; devolve as que mudaram. */
@@ -207,7 +226,9 @@ export function lerConfigAoVivo(x: unknown): Pick<Config, ChaveAoVivo> | null {
   if (typeof o.conversa_ms !== "number" || !Number.isFinite(o.conversa_ms) || o.conversa_ms < 0) return null;
   if (typeof o.nao_ouvir !== "boolean" || typeof o.nao_falar !== "boolean" || typeof o.falar_avisos !== "boolean") return null;
   const cerebro = ehCerebro(o.cerebro) ? o.cerebro : CEREBRO_PADRAO;
-  return { tamanho: o.tamanho as Config["tamanho"], tamanho_px: limitarLado(px), compacto: o.compacto, sempre_no_topo: o.sempre_no_topo, click_through: o.click_through, invisivel: o.invisivel, usuario: o.usuario, modelo: o.modelo, conversa_ms: Math.round(o.conversa_ms), nao_ouvir: o.nao_ouvir, nao_falar: o.nao_falar, falar_avisos: o.falar_avisos, cerebro };
+  const cor = typeof o.cor_elementos === "string" && (/^#[0-9a-fA-F]{6}$/.test(o.cor_elementos) || o.cor_elementos === "") ? o.cor_elementos : "";
+  const opacidade = typeof o.opacidade_elementos === "number" && Number.isFinite(o.opacidade_elementos) && o.opacidade_elementos >= 0.2 && o.opacidade_elementos <= 1 ? o.opacidade_elementos : 1;
+  return { tamanho: o.tamanho as Config["tamanho"], tamanho_px: limitarLado(px), compacto: o.compacto, sempre_no_topo: o.sempre_no_topo, click_through: o.click_through, invisivel: o.invisivel, usuario: o.usuario, modelo: o.modelo, conversa_ms: Math.round(o.conversa_ms), nao_ouvir: o.nao_ouvir, nao_falar: o.nao_falar, falar_avisos: o.falar_avisos, cerebro, cor_elementos: cor, opacidade_elementos: opacidade };
 }
 
 /** Valida o payload de config-mudou-no-widget (topo e compacto); inválido devolve null. */

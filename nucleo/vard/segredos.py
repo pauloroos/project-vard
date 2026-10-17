@@ -164,10 +164,16 @@ def escrever_mcp_json(segredos: dict, repo: Path, destino: Path) -> Path:
 
     Só os servidores locais; o mcp.json nunca leva token (o memoria_mcp lê o ai-memory do segredos.toml).
     Caminhos são absolutos porque o stdio do OpenJarvis não define pasta de trabalho.
+    0.9.4 leve: usa o Python do ambiente do núcleo direto (sys.executable) em vez de
+    `uv run`, eliminando o overhead de ~15 processos extras (uv + lançador + Python por MCP).
+    O usuário precisa reaplicar a configuração após atualizar o Vard para que o novo
+    comando seja escrito no openjarvis.toml/mcp.json.
     """
+    import sys
     repo = Path(repo)
+    python = sys.executable
     servidores: list[dict] = [
-        {"name": nome, "command": "uv", "args": ["run", "--project", str(repo), "python", str(repo / f"{nome}_mcp.py")]}
+        {"name": nome, "command": python, "args": [str(repo / f"{nome}_mcp.py")]}
         for nome in SERVIDORES_LOCAIS
     ]
     destino.parent.mkdir(parents=True, exist_ok=True)

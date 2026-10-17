@@ -1,0 +1,37 @@
+/* Monitor de recursos (0.9.4 leve) — tabela compacta na aba Geral */
+.recursos-tabela {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9em;
+  margin-top: 0.5em;
+}
+.recursos-tabela th,
+.recursos-tabela td {
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--borda, #ccc);
+  text-align: left;
+}
+.recursos-tabela th {
+  font-weight: 600;
+  background: var(--fundo-secao, #f5f5f5);
+}
+.recursos-tabela .num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.recursos-tabela .detalhe {
+  color: var(--texto-secundario, #666);
+  font-size: 0.85em;
+}
+.recursos-tabela tfoot td {
+  border-top: 2px solid var(--borda, #ccc);
+  font-weight: 600;
+}
+.externos {
+  margin-top: 0.5em;
+  font-size: 0.85em;
+  color: var(--texto-secundario, #666);
+}
+#cfg-recursos-campo p.aviso {
+  color: var(--aviso-cor, #b35900);
+}
