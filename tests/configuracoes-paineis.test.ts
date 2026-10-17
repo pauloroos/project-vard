@@ -67,6 +67,22 @@ describe("configuracoes-paineis (T8)", () => {
     };
   }
 
+  it("aparência identifica a cor personalizada e acompanha bolinhas e prévia", async () => {
+    const raiz = criarRaiz();
+    const painel = new Configuracoes({ ...CONFIG_PADRAO, cor_elementos: "#a855f7" }, raiz, criarDeps());
+    await painel.montar();
+    expect(raiz.querySelector('label[for="cfg-cor-elementos"]')?.textContent).toBe("Personalizada");
+    const input = raiz.querySelector<HTMLInputElement>("#cfg-cor-elementos")!;
+    expect(raiz.querySelector<HTMLElement>(".aparencia-cor.ativa")?.dataset.cor).toBe("#a855f7");
+    raiz.querySelector<HTMLButtonElement>('[data-cor="#22c55e"]')!.click();
+    expect(input.value).toBe("#22c55e");
+    expect(raiz.querySelector<HTMLElement>("#cfg-aparencia-preview")!.style.color).toBe("rgb(34, 197, 94)");
+    input.value = "#123456";
+    input.dispatchEvent(new Event("input"));
+    expect(raiz.querySelector(".aparencia-cor.ativa")).toBeNull();
+    expect(raiz.querySelector<HTMLElement>("#cfg-aparencia-preview")!.style.color).toBe("rgb(18, 52, 86)");
+  });
+
   it("abas do menu U7 aparecem na navegação (sem provedores/agentes separados)", async () => {
     const raiz = criarRaiz();
     const painel = new Configuracoes({ ...CONFIG_PADRAO } as Config, raiz, criarDeps());

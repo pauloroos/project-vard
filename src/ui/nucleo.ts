@@ -58,6 +58,7 @@ export class Nucleo {
   private iniciado = false;
   private ctx: CanvasRenderingContext2D;
   private aneis = new Aneis();
+  private corEscolhida: { c: [number, number, number]; g: [number, number, number] } | null = null;
 
   // parâmetros suavizados
   private p: Alvo = { ...ALVOS.repouso };
@@ -115,6 +116,21 @@ export class Nucleo {
 
   setAnalisadores(entrada: FonteDeEspectro | null, saida: FonteDeEspectro | null) { this.entrada = entrada; this.saida = saida; }
 
+  /** Vazio restaura a paleta original. Estados de alerta conservam sua própria cor. */
+  definirCor(hex: string | null) {
+    if (hex && /^#[\da-f]{6}$/i.test(hex)) {
+      const c: [number, number, number] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16)) as [number, number, number];
+      this.corEscolhida = { c, g: c.map((v) => Math.floor(v * 0.65)) as [number, number, number] };
+    } else this.corEscolhida = null;
+    if (!this.iniciado) this.fixarCor(this.estado);
+  }
+
+  private paleta(e: Estado) {
+    const pal = PALETA[e];
+    return this.corEscolhida && ["repouso", "ouvindo", "falando", "fora"].includes(e)
+      ? { ...this.corEscolhida, alfa: pal.alfa } : pal;
+  }
+
   iniciar() {
     this.iniciado = true;
     if (this.rodando) return;
@@ -132,7 +148,7 @@ export class Nucleo {
   parar() { this.rodando = false; cancelAnimationFrame(this.raf); this.raf = 0; }
 
   private fixarCor(e: Estado) {
-    const pal = PALETA[e];
+    const pal = this.paleta(e);
     this.cor.set(pal.c, 0); this.cor.set(pal.g, 3); this.cor[6] = pal.alfa;
   }
 
@@ -207,7 +223,7 @@ export class Nucleo {
       q.pulso += (alvo.pulso - q.pulso) * kp;
       q.respira += (alvo.respira - q.respira) * kp; q.agita += (alvo.agita - q.agita) * kp;
       const kc = 1 - Math.exp(-dt / 0.1);
-      const pal = PALETA[e];
+      const pal = this.paleta(e);
       for (let i = 0; i < 3; i++) {
         this.cor[i] += (pal.c[i] - this.cor[i]) * kc;
         this.cor[3 + i] += (pal.g[i] - this.cor[3 + i]) * kc;

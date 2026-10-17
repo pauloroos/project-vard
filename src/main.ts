@@ -29,6 +29,7 @@ import { Adiador } from "./ui/dock";
 import { Hud } from "./ui/hud";
 import { Invisibilidade } from "./ui/invisivel";
 import { Nucleo } from "./ui/nucleo";
+import { aplicarAparencia } from "./ui/aparencia";
 import { restaurarPreferencia, onDeviceChange, obterPreferencia } from "./audio/dispositivos";
 import { ladoDoTamanho, ladoMudou, medidasDoWidget } from "./ui/tamanho";
 import { ESPELHO_INICIAL, reduzir, salaExiste, type Espelho, type EventoEspelho } from "./sala/espelho";
@@ -45,6 +46,7 @@ window.addEventListener("DOMContentLoaded", async () => {
   const canvas = document.getElementById("nucleo") as HTMLCanvasElement;
   const app = document.getElementById("app") as HTMLElement;
   const nucleo = new Nucleo(canvas, ladoDoTamanho(cfg));
+  aplicarAparencia(cfg, nucleo);
   // Dock: a barra de botões abre do lado oposto à borda do monitor em que o widget está. Decidido pelo Rust 200 ms depois de parar de arrastar.
   const aplicarDock = async () => {
     try { app.classList.toggle("dock-cima", await invoke<boolean>("dock_em_cima")); } catch { /* fora do Tauri */ }
@@ -809,9 +811,7 @@ window.addEventListener("DOMContentLoaded", async () => {
     if (mudou.includes("nao_ouvir")) await aplicarNaoOuvir(cfg.nao_ouvir, false); // o painel já gravou
     if (mudou.includes("nao_falar")) await aplicarNaoFalar(cfg.nao_falar, false);
     if (mudou.includes("cor_elementos") || mudou.includes("opacidade_elementos")) {
-      const raiz = document.documentElement;
-      raiz.style.setProperty("--cor-elementos", cfg.cor_elementos || "var(--ciano)");
-      raiz.style.setProperty("--opacidade-elementos", String(cfg.opacidade_elementos));
+      aplicarAparencia(cfg, nucleo);
     }
   };
   await listen<unknown>("config-salva", (ev) => { void aplicarConfigSalva(ev.payload); });

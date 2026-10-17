@@ -267,6 +267,7 @@ export class Configuracoes {
             <div class="aparencia-linha">
               <div class="aparencia-cores" id="cfg-aparencia-cores"></div>
               <div class="aparencia-personalizada">
+                <label for="cfg-cor-elementos">Personalizada</label>
                 <input id="cfg-cor-elementos" type="color" value="${esc(c.cor_elementos || "#00f0ff")}" title="Cor personalizada">
               </div>
               <div class="aparencia-preview" id="cfg-aparencia-preview">Prévia</div>
