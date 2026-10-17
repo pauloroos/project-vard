@@ -76,7 +76,7 @@ export class InstalaveisProvedores {
         const jaCadastrado = this.idsCadastrados().some(id => id === item.id || id === item.tipo_provedor);
         if (item.tipo_provedor || item.id === "openjarvis") {
           if (jaCadastrado) {
-            acoes.push({ rotulo: "Já cadastrado" });
+            acoes.push({ rotulo: "Já cadastrado", aoClicar: () => {} });
           } else {
             acoes.push({ rotulo: "Cadastrar provedor", aoClicar: () => { void this.cadastrar(item); } });
           }
