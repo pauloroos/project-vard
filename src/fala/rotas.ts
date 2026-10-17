@@ -20,10 +20,18 @@ export function extrairComando(texto: string, variantes: string[]): string | nul
 
 const GATILHOS_SEE = ["o que voce esta vendo", "o que esta na tela", "olha a tela", "le isso", "leia isso", "o que e isso na tela", "ve a tela"];
 
+// Fala natural ("consegue ver minha tela?", "dá uma olhada na tela"): cita a tela e pede para ver ou ler.
+const VERBO_VER = /\b(ve|ver|veja|olha|olhe|olhar|olhada|enxerga|enxergar|le|ler|leia)\b/;
+const O_QUE_TEM = /\bo que (tem|ta|esta|aparece)\b/;
+const VENDO = /\bo que (voce )?(esta|ta) vendo\b/;
+const TELA = /\btela\b/;
+
 export function classificar(comando: string): Rota {
   const c = simples(comando);
   if (c.startsWith("modo jogo")) return "modo";
   if (GATILHOS_SEE.some((g) => c.startsWith(g))) return "see";
+  if (VENDO.test(c)) return "see";
+  if (TELA.test(c) &&(VERBO_VER.test(c) || O_QUE_TEM.test(c))) return "see";
   return "ask";
 }
 
