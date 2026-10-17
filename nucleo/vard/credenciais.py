@@ -60,17 +60,59 @@ def _invocar_comando(comando: str, *args: str) -> str:
     return resultado.stdout.strip()
 
 
+def _decodificar(blob: bytes) -> str:
+    """O keyring do app grava o segredo em UTF-16; aceita UTF-8 também (gravado por outra ferramenta)."""
+    if len(blob) % 2 == 0 and blob[1:2] == b"\x00":
+        try:
+            return blob.decode("utf-16-le")
+        except UnicodeDecodeError:
+            pass
+    return blob.decode("utf-8", errors="strict")
+
+
+def _ler_windows(alvo: str) -> str | None:
+    """Lê uma credencial genérica do Gerenciador de Credenciais (o mesmo alvo que o app grava)."""
+    if sys.platform != "win32":
+        return None
+    import ctypes
+    from ctypes import wintypes
+
+    class _Credencial(ctypes.Structure):
+        _fields_ = [
+            ("Flags", wintypes.DWORD), ("Type", wintypes.DWORD), ("TargetName", wintypes.LPWSTR),
+            ("Comment", wintypes.LPWSTR), ("LastWritten", wintypes.FILETIME),
+            ("CredentialBlobSize", wintypes.DWORD), ("CredentialBlob", ctypes.POINTER(ctypes.c_ubyte)),
+            ("Persist", wintypes.DWORD), ("AttributeCount", wintypes.DWORD), ("Attributes", ctypes.c_void_p),
+            ("TargetAlias", wintypes.LPWSTR), ("UserName", wintypes.LPWSTR),
+        ]
+
+    advapi = ctypes.WinDLL("advapi32", use_last_error=True)
+    ponteiro = ctypes.POINTER(_Credencial)()
+    if not advapi.CredReadW(alvo, 1, 0, ctypes.byref(ponteiro)):   # 1 = CRED_TYPE_GENERIC
+        return None
+    try:
+        cred = ponteiro.contents
+        blob = ctypes.string_at(cred.CredentialBlob, cred.CredentialBlobSize)
+        return _decodificar(blob) or None
+    except UnicodeDecodeError:
+        return None
+    finally:
+        advapi.CredFree(ponteiro)
+
+
+def separar_referencia(ref: str, tipo_padrao: str) -> tuple[str, str]:
+    """`provedor:lm1` (como a tela grava em credencial_ref) ou só `lm1` → (tipo, id)."""
+    tipo, sep, id_ = ref.strip().partition(":")
+    return (tipo, id_) if sep and tipo in _TIPOS_VALIDOS else (tipo_padrao, ref.strip())
+
+
 def existe(tipo: str, id_: str) -> bool:
     """Verifica se uma credencial existe no cofre sem ler o valor."""
     try:
         alvo = _validar_alvo(tipo, id_)
     except ValueError:
         return False
-    try:
-        saida = _invocar_comando("existe", alvo)
-        return saida.lower() == "true"
-    except (FileNotFoundError, RuntimeError):
-        return False
+    return _ler_windows(alvo) is not None
 
 
 def gravar(tipo: str, id_: str, valor: str) -> None:
@@ -91,9 +133,4 @@ def apagar(tipo: str, id_: str) -> None:
 
 def ler_para_uso_interno(tipo: str, id_: str) -> str | None:
     """Lê uma credencial para uso interno do núcleo. NUNCA imprima o retorno."""
-    alvo = _validar_alvo(tipo, id_)
-    try:
-        saida = _invocar_comando("ler", alvo)
-        return saida if saida else None
-    except (FileNotFoundError, RuntimeError):
-        return None
+    return _ler_windows(_validar_alvo(tipo, id_))
