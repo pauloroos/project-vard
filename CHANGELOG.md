@@ -3,6 +3,25 @@
 Este arquivo segue o [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) em português do Brasil.
 Os instaladores de cada versão ficam na página de [releases](https://github.com/pauloroos/project-vard/releases).
 
+## [0.9.7] — 2026-10-17
+
+### Adicionado/Feito
+
+- Configurações reorganizadas: "Voz e áudio" (Voz, Transcrição), "Configurações" (Núcleo, Oficina, Ferramentas,
+  Atalhos) e "Sistema". "Quem responde" passa a se chamar Núcleo.
+- Aba Transcrição: modelos de transcrição em cards (tamanho, idioma, velocidade e precisão), com baixar, usar e
+  excluir, e escolha do dispositivo. A troca acontece em segundo plano, sem derrubar o serviço de voz.
+- Núcleo em blocos: quem responde agora, provedores cadastrados, o que falta instalar e opções avançadas recolhidas.
+- Voz: escolher uma voz que precisa de chave abre o cadastro da chave na hora; escolher uma voz não instalada
+  pergunta se quer instalar e já deixa a voz em uso ao terminar.
+- Oficina: as habilidades de fábrica podem ser editadas e restauradas ao padrão.
+
+### Corrigido
+
+- Sem o OpenJarvis, o widget mostrava "sem conexão com o núcleo" com o núcleo no ar.
+- O LM Studio cadastrado como provedor ainda aparecia como sugestão de instalação.
+- Desligar Resumo da manhã, Pesquisa ou Agente remoto gravava um arquivo de habilidades que não era aceito.
+
 ## [0.9.6] — 2026-10-17
 
 ### Adicionado/Feito
