@@ -285,7 +285,11 @@ def cadastrar_programa(nome: str, destino: str, site: bool = False) -> None:
 
 def remover_programa(nome: str, site: bool = False) -> None:
     cfg = ler_documento("programas")
-    del cfg.setdefault("sites" if site else "apelidos", {})[programas._simples(nome)]
+    chave = programas._simples(nome)
+    secao = cfg.setdefault("sites" if site else "apelidos", {})
+    if chave not in secao:
+        raise ValueError(f"Não achei o programa {nome}")
+    del secao[chave]
     gravar_documento("programas", cfg)
 
 

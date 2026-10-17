@@ -16,6 +16,8 @@ def _seguro(fn):
     def executar(*args, **kwargs):
         try:
             return fn(*args, **kwargs)
+        except ValueError as e:
+            return str(e)
         except Exception:
             return "Não consegui concluir o ajuste. Confira os dados na tela de Configurações e tente novamente."
     return executar

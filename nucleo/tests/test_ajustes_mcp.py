@@ -122,6 +122,13 @@ def test_vozes_de_fabrica_disponiveis_sem_cadastro():
     assert "Kore" in resposta
 
 
+def test_remover_programa_inexistente_retorna_mensagem_clara_sem_excecao():
+    import configuracoes_mcp as mcp
+    resposta = mcp.remover_programa("programa-que-nao-existe", confirmado=True)
+    assert "Não achei o programa" in resposta or "não encontrado" in resposta.lower()
+    # Não deve levantar exceção; o decorador @_seguro captura, mas a mensagem deve ser específica
+
+
 def test_programa_cadastrado_chega_a_mesa_sem_reiniciar(monkeypatch):
     import mesa_mcp
     from vard import ajustes
