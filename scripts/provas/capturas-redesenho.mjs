@@ -19,7 +19,7 @@ fs.mkdirSync(CAPTURAS_DIR, { recursive: true });
 const ABAS = [
   "geral", "perfil", "voz", "atalhos", "saber", "modelos",
   "paineis-mcps",
-  "sistema", "reuniao", "avisos", "atualizacao", "diagnostico"
+  "sistema", "reuniao", "avisos", "diagnostico"
 ];
 const ETAPAS_PU = ["importar", "detectar", "nome", "cerebro", "voz", "audio", "resumo"];
 
@@ -183,6 +183,7 @@ async function main() {
               conversa_ms: 5000, atualizacao_ao_abrir: true, modelo: "claude-sonnet-5-5",
               microfone_id: "microfone_usb_hd_pro", saida_id: "saidas_hdmi_monitor_principal",
               caminho_instalacao: caminhoLongo,
+              cor_elementos: "#22c55e", opacidade_elementos: 0.6, cerebro: "openjarvis",
             };
             if (cmd === "ler_paineis") {
               if (args?.arquivo === "estado") return { revisao: 3, estado: "aplicado", ativo_efetivo: "anthropic-claude", reserva_efetiva: "ollama-local" };
