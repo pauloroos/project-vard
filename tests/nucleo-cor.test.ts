@@ -30,7 +30,7 @@ describe("cor do holograma", () => {
     quadro(100);
     const estilo = aneis.mock.calls.slice(-1)[0][1];
     expect(estilo.cor).toBe("rgba(236,72,153,1)");
-    expect(estilo.brilho).toBe("rgba(153,46,99,0.9)");
+    expect(estilo.brilho).toBe("rgba(236,72,153,0.9)");
     nucleo.parar();
   });
 
@@ -42,6 +42,20 @@ describe("cor do holograma", () => {
     nucleo.iniciar();
     vi.mocked(requestAnimationFrame).mock.calls.slice(-1)[0][0](100);
     expect(aneis.mock.calls.slice(-1)[0][1]).toMatchObject({ cor: "rgba(0,240,255,1)", brilho: "rgba(0,162,255,0.9)" });
+  });
+
+  it.each([
+    ["#1e3a5f", "rgba(81,132,200,0.9)"],
+    ["#f0f0f0", "rgba(166,166,166,0.9)"],
+    ["#00f0ff", "rgba(26,242,255,0.9)"],
+  ])("deriva brilho visível preservando matiz e saturação de %s", (cor, brilho) => {
+    const nucleo = desenho();
+    const aneis = vi.spyOn(Aneis.prototype, "desenhar");
+    nucleo.definirCor(cor);
+    nucleo.iniciar();
+    vi.mocked(requestAnimationFrame).mock.calls.slice(-1)[0][0](100);
+    expect(aneis.mock.calls.slice(-1)[0][1].brilho).toBe(brilho);
+    nucleo.parar();
   });
 
   it.each(["pensando", "erro", "jogo"] as const)("preserva a cor de estado em %s", (estado) => {

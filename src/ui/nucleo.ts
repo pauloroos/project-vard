@@ -120,7 +120,7 @@ export class Nucleo {
   definirCor(hex: string | null) {
     if (hex && /^#[\da-f]{6}$/i.test(hex)) {
       const c: [number, number, number] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16)) as [number, number, number];
-      this.corEscolhida = { c, g: c.map((v) => Math.floor(v * 0.65)) as [number, number, number] };
+      this.corEscolhida = { c, g: derivarBrilho(c) };
     } else this.corEscolhida = null;
     if (!this.iniciado) this.fixarCor(this.estado);
   }
@@ -351,6 +351,20 @@ export class Nucleo {
     }
     ctx.restore();
   }
+}
+
+/** Preserva matiz/saturação HSL e limita a luminosidade a 55–65% para o fundo escuro. */
+function derivarBrilho(cor: [number, number, number]): [number, number, number] {
+  const menor = Math.min(...cor) / 255;
+  const maior = Math.max(...cor) / 255;
+  const faixa = maior - menor;
+  const luminosidade = (maior + menor) / 2;
+  const alvo = Math.max(0.55, Math.min(0.65, luminosidade));
+  if (faixa === 0) return [1, 1, 1].map(() => Math.round(alvo * 255)) as [number, number, number];
+  const saturacao = faixa / (1 - Math.abs(2 * luminosidade - 1));
+  const novaFaixa = (1 - Math.abs(2 * alvo - 1)) * saturacao;
+  const base = alvo - novaFaixa / 2;
+  return cor.map((v) => Math.round((base + (v / 255 - menor) / faixa * novaFaixa) * 255)) as [number, number, number];
 }
 
 function rms(buf: Float32Array): number {
