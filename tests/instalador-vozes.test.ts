@@ -68,6 +68,7 @@ describe("InstaladorVozes", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mockFetch.mockReset();
     notificarSpy = vi.fn() as unknown as (msg: string, erro?: boolean) => void;
     deps = { baseUrl: "http://127.0.0.1:4700", notificar: notificarSpy };
     mockConfirm.mockReturnValue(true);
@@ -75,6 +76,39 @@ describe("InstaladorVozes", () => {
 
   afterEach(() => {
     vi.restoreAllMocks();
+  });
+
+  it("reconhece instalado no contrato atual do núcleo sem oferecer novo download", async () => {
+    const { raiz } = criarDom();
+    mockFetch.mockResolvedValueOnce({ ok: true, json: async () => ({ pacotes: [{ ...PACOTE_XTTS, instalado: true, instalavel: true }] }) });
+    const tela = new InstaladorVozes(raiz, deps);
+    await tela.montar();
+    expect(tela.estaInstalado("xtts-v2")).toBe(true);
+    expect(raiz.querySelector('button[data-acao="remover"]')).toBeTruthy();
+    expect(raiz.querySelector('button[data-acao="instalar"]')).toBeNull();
+  });
+
+  it("entrada do card confirma licença e notifica conclusão sem instalar no PC", async () => {
+    const { raiz } = criarDom();
+    mockPacotesResponse([PACOTE_XTTS]);
+    const aoMudar = vi.fn();
+    const tela = new InstaladorVozes(raiz, { ...deps, aoMudar });
+    await tela.montar();
+    mockFetch.mockResolvedValueOnce(new Response('data: {"estado":"concluido","bytes_baixados":1,"bytes_total":1}\n'));
+    await tela.instalar("xtts-v2");
+    expect(mockConfirm).toHaveBeenCalledOnce();
+    expect(mockFetch).toHaveBeenLastCalledWith("http://127.0.0.1:4700/pacotes/xtts-v2/instalar", expect.objectContaining({ method: "POST" }));
+    expect(aoMudar).toHaveBeenCalledOnce();
+    expect(raiz.textContent).toContain("Instalado");
+  });
+
+  it("entrada do card não contorna pacote indisponível", async () => {
+    const { raiz } = criarDom();
+    mockPacotesResponse([PACOTE_INDISPONIVEL]);
+    const tela = new InstaladorVozes(raiz, deps);
+    await tela.montar();
+    await tela.instalar("voz-ana");
+    expect(mockFetch).toHaveBeenCalledTimes(1);
   });
 
   it("renderiza lista de pacotes disponíveis", async () => {

@@ -67,6 +67,35 @@ describe("configuracoes-paineis (T8)", () => {
     };
   }
 
+  it("salvar sem escolher cor preserva a paleta padrão vazia", async () => {
+    const raiz = criarRaiz();
+    const painel = new Configuracoes({ ...CONFIG_PADRAO, cor_elementos: "" }, raiz, criarDeps());
+    await painel.montar();
+    expect(painel.lerFormulario().cor_elementos).toBe("");
+  });
+
+  it("abrir Voz consulta o serviço e liga o card XTTS ao núcleo configurado", async () => {
+    const buscar = vi.spyOn(globalThis, "fetch").mockImplementation(async (url) => {
+      const u = String(url);
+      return new Response(JSON.stringify(u.endsWith("/saude") ? { xtts: false, edge: true }
+        : u.endsWith("/pacotes") ? { pacotes: [{ id: "xtts-v2", nome: "XTTS", versao: "1", tipo: "motor", descricao: "Motor", bytes_download: 1, licenca_url: "https://example.com/licenca", licenca_nome: "Licença fictícia" }] }
+        : { vozes: [] }));
+    });
+    const confirmar = vi.spyOn(window, "confirm").mockReturnValue(false);
+    try {
+      const raiz = criarRaiz();
+      const painel = new Configuracoes({ ...CONFIG_PADRAO, ponte_url: "http://127.0.0.1:4876", voz_provedor: "openjarvis" }, raiz, criarDeps());
+      await painel.montar();
+      painel.abrirAba("voz");
+      await vi.waitFor(() => expect(buscar).toHaveBeenCalledWith(expect.stringContaining("/saude"), expect.anything()));
+      await vi.waitFor(() => expect(raiz.querySelector('[data-motor="xtts"]')?.textContent).toContain("Instalar"));
+      raiz.querySelector<HTMLButtonElement>('[data-motor="xtts"]')!.click();
+      await vi.waitFor(() => expect(confirmar).toHaveBeenCalledOnce());
+      expect(buscar).toHaveBeenCalledWith("http://127.0.0.1:4876/pacotes");
+      expect(buscar.mock.calls.some(([, init]) => init?.method === "POST")).toBe(false);
+    } finally { buscar.mockRestore(); confirmar.mockRestore(); }
+  });
+
   it("aparência identifica a cor personalizada e acompanha bolinhas e prévia", async () => {
     const raiz = criarRaiz();
     const painel = new Configuracoes({ ...CONFIG_PADRAO, cor_elementos: "#a855f7" }, raiz, criarDeps());
@@ -81,6 +110,8 @@ describe("configuracoes-paineis (T8)", () => {
     input.dispatchEvent(new Event("input"));
     expect(raiz.querySelector(".aparencia-cor.ativa")).toBeNull();
     expect(raiz.querySelector<HTMLElement>("#cfg-aparencia-preview")!.style.color).toBe("rgb(18, 52, 86)");
+    raiz.querySelector<HTMLInputElement>("#cfg-opacidade-elementos")!.value = "0.6";
+    expect(painel.lerFormulario()).toMatchObject({ cor_elementos: "#123456", opacidade_elementos: 0.6 });
   });
 
   it("abas do menu U7 aparecem na navegação (sem provedores/agentes separados)", async () => {

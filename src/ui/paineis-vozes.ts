@@ -65,6 +65,7 @@ export interface OpcoesModalVoz {
   cfg: PaineisConfig;
   /** Informado = editar; omitido = adicionar. */
   atual?: VozCadastrada;
+  tipoInicial?: TipoVoz;
   aoSalvar: (campos: CamposVozCadastrada, idOriginal: string | null) => void | Promise<void>;
   aoRemover?: (id: string) => void | Promise<void>;
   testarCredencial?: (ref: string) => Promise<boolean>;
@@ -84,7 +85,7 @@ export function abrirModalVoz(op: OpcoesModalVoz): ModalAberto {
   nome.type = "text";
   nome.value = atual?.nome ?? "";
   const tipo = document.createElement("select");
-  for (const t of TIPOS_VOZ) tipo.append(new Option(MOTOR_DO_TIPO[t], t, false, t === (atual?.tipo ?? TIPOS_VOZ[0])));
+  for (const t of TIPOS_VOZ) tipo.append(new Option(MOTOR_DO_TIPO[t], t, false, t === (atual?.tipo ?? op.tipoInicial ?? TIPOS_VOZ[0])));
   const url = document.createElement("input");
   url.type = "text";
   url.value = atual?.url_base ?? "";
