@@ -94,4 +94,23 @@ describe("Instaláveis em Quem responde", () => {
     await vi.advanceTimersByTimeAsync(0);
     expect(raiz.textContent).toContain("Falhou"); expect(cadastrar).not.toHaveBeenCalled();
   });
+
+  it("CLI instalada e já cadastrada como provedor mostra 'Já cadastrado' em vez de 'Cadastrar provedor'", async () => {
+    item = { ...ollama, id: "claude", nome: "Claude Code", tipo_provedor: "cli-claude", instalado: true, login: "dispensado" };
+    const cadastrar = vi.fn();
+    // Simula que o provedor já está cadastrado passando seu ID na lista de cadastrados
+    await new InstalaveisProvedores(raiz, "http://127.0.0.1:4700", cadastrar, () => ["claude"]).carregar();
+    const botoes = [...raiz.querySelectorAll("button")].map(b => b.textContent?.trim());
+    expect(botoes).toContain("Já cadastrado");
+    expect(botoes).not.toContain("Cadastrar provedor");
+  });
+
+  it("CLI instalada mas não cadastrada ainda mostra 'Cadastrar provedor'", async () => {
+    item = { ...ollama, id: "claude", nome: "Claude Code", tipo_provedor: "cli-claude", instalado: true, login: "dispensado" };
+    const cadastrar = vi.fn();
+    await new InstalaveisProvedores(raiz, "http://127.0.0.1:4700", cadastrar, () => []).carregar();
+    const botoes = [...raiz.querySelectorAll("button")].map(b => b.textContent?.trim());
+    expect(botoes).toContain("Cadastrar provedor");
+    expect(botoes).not.toContain("Já cadastrado");
+  });
 });

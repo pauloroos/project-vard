@@ -26,7 +26,12 @@ const ESTADOS: Record<AndamentoInstalacao["estado"], string> = {
 
 export class InstalaveisProvedores {
   private itens: Instalavel[] = [];
-  constructor(private raiz: HTMLElement, private base: string, private cadastrar: (item: Instalavel) => void | Promise<void>) {}
+  constructor(
+    private raiz: HTMLElement,
+    private base: string,
+    private cadastrar: (item: Instalavel) => void | Promise<void>,
+    private idsCadastrados: () => string[] = () => [],
+  ) {}
 
   private async requisitar(caminho: string, corpo?: object): Promise<unknown> {
     const resposta = await fetch(`${this.base.replace(/\/+$/, "")}/instalaveis${caminho}`, {
@@ -68,8 +73,13 @@ export class InstalaveisProvedores {
         if (item.login !== "dispensado" && item.login !== "conectado") {
           acoes.push({ rotulo: "Entrar na conta", aoClicar: () => { void this.login(item); } });
         }
+        const jaCadastrado = this.idsCadastrados().some(id => id === item.id || id === item.tipo_provedor);
         if (item.tipo_provedor || item.id === "openjarvis") {
-          acoes.push({ rotulo: "Cadastrar provedor", aoClicar: () => { void this.cadastrar(item); } });
+          if (jaCadastrado) {
+            acoes.push({ rotulo: "Já cadastrado" });
+          } else {
+            acoes.push({ rotulo: "Cadastrar provedor", aoClicar: () => { void this.cadastrar(item); } });
+          }
         } else {
           acoes.push({ rotulo: "Instruções de conexão", aoClicar: () => this.confirmar(item, true) });
         }

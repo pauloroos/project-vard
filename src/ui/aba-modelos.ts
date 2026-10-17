@@ -115,7 +115,7 @@ export class AbaModelos {
           this.clis.push({ tipo: item.tipo_provedor, instalada: true, versao: "", modelos: [] });
         }
         this.abrirModal(undefined, { tipo: item.tipo_provedor, nome: item.nome, url_base: item.url_base });
-      }).carregar();
+      }, () => this.cfg.provedores.map(p => p.id)).carregar();
     }
     return Promise.resolve();
   }
