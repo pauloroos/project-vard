@@ -20,6 +20,8 @@ import { AbaSaber } from "./aba-saber";
 import { AbaSistema } from "./aba-sistema";
 import { AbaVoz } from "./aba-voz";
 import { InstaladorVozes } from "./instalador-vozes";
+import { MonitorRecursos } from "./monitor-recursos";
+import "./estilos/monitor-recursos.css";
 
 export interface DepsConfiguracoes {
   /** Cliente do OpenJarvis para o endereço dado (o main decide se passa pelo proxy do dev). */
@@ -67,6 +69,7 @@ export class Configuracoes {
   private saber: AbaSaber | null = null;
   private atualizacao: AbaAtualizacao | null = null;
   private diagnostico: AbaDiagnostico | null = null;
+  private monitorRecursos: MonitorRecursos | null = null;
   private abaVoz!: AbaVoz;
   private abaPerfil!: AbaPerfil;
     private paineisMcps!: AbaPaineisMcps;
@@ -147,6 +150,11 @@ export class Configuracoes {
     this.atualizacao.montar();
     this.diagnostico = new AbaDiagnostico(this.raiz.querySelector<HTMLElement>("#cfg-diagnostico")!);
     this.diagnostico.montar();
+    const recursosRaiz = this.raiz.querySelector<HTMLElement>("#cfg-recursos");
+    if (recursosRaiz) {
+      this.monitorRecursos = new MonitorRecursos(recursosRaiz, { urlNucleo: () => urlPonte() });
+      this.monitorRecursos.montar();
+    }
     this.abrirAba("geral");
     try { this.logonGuardado = await invoke<boolean>("inicio_no_logon_ativo"); } catch { this.logonGuardado = false; }
     this.logon.checked = this.logonGuardado;
@@ -170,6 +178,7 @@ export class Configuracoes {
       this.abaPerfil.definir("nome", this.el("nome").value);
       this.abaPerfil.definir("usuario", this.el("usuario").value);
     }
+    if (aba === "geral") this.monitorRecursos?.ativar(); else this.monitorRecursos?.desativar();
     if (aba === "sistema") this.sistema?.ativar(); else this.sistema?.desativar();
     if (aba === "reuniao") this.reuniao?.ativar(); else this.reuniao?.desativar();
     if (aba === "avisos") this.avisos?.ativar(); else this.avisos?.desativar();
@@ -262,6 +271,7 @@ export class Configuracoes {
           <fieldset><legend>Assistente</legend>
             <button id="cfg-primeiro-uso" type="button">Configurar primeiro uso</button>
           </fieldset>
+          <div id="cfg-recursos"></div>
         </section>
         <section data-aba="perfil"><div id="cfg-perfil"></div></section>
         <section data-aba="paineis-mcps"><div id="cfg-paineis-mcps"></div></section>

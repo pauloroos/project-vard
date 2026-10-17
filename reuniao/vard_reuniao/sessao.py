@@ -107,6 +107,13 @@ class Sessao:
         self._nao_transcritos = 0
         self._ids: tuple = ()
 
+    def liberar_modelos(self) -> None:
+        """Libera modelos VAD/transcrição após o fim da reunião (0.9.4 leve)."""
+        self._par_probs = None
+        self._prob = None
+        self.transcritor = None
+        log.info("modelos de reunião liberados")
+
     # ---------- ciclo de vida ----------
     def _transcrever(self, seg):
         if self.transcritor is None:
@@ -243,6 +250,7 @@ class Sessao:
                 log.info("reunião encerrada (%s): %s", motivo, res)
                 self._ativa = self._encerrando = False
                 self._reset_estado()
+                self.liberar_modelos()
         resumo = f"Reunião encerrada: {mmss(duracao)} de duração, {res['falas']} falas."
         if nao_transcritos > 0:
             resumo += f" {nao_transcritos} trecho não transcrito." if nao_transcritos == 1 else f" {nao_transcritos} trechos não transcritos."

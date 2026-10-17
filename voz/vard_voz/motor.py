@@ -27,13 +27,16 @@ def para_wav(onda, taxa: int = TAXA) -> bytes:
 
 
 class Motor:
-    def __init__(self, device: str = "cuda") -> None:
+    def __init__(self, device: str = "cuda", ocioso_s: float = 600.0) -> None:
         self.device = device
         self.pronta = False
         self.aquecida = False
         self._lock = threading.Lock()
         self._modelo = None
         self._cache: dict[str, tuple] = {}
+        self._ocioso_s = max(0.0, float(ocioso_s))
+        self._ultimo_uso: float = 0.0
+        self._timer_descarga: threading.Timer | None = None
 
     def vozes(self) -> list[str]:
         nomes = sorted(self._modelo.speaker_manager.speakers) if self._modelo is not None else [VOZ]
@@ -49,6 +52,50 @@ class Motor:
             self._cache[nome] = (v["gpt_cond_latent"], v["speaker_embedding"])
         return self._cache[nome]
 
+    def _agendar_descarga(self) -> None:
+        """Reinicia o timer de descarga por inatividade; chamado após cada uso."""
+        if self._ocioso_s <= 0:
+            return
+        if self._timer_descarga is not None:
+            self._timer_descarga.cancel()
+        self._timer_descarga = threading.Timer(self._ocioso_s, self.descarregar)
+        self._timer_descarga.daemon = True
+        self._timer_descarga.name = "xtts-descarga"
+        self._timer_descarga.start()
+
+    def descarregar(self) -> None:
+        """Libera o modelo XTTS da memória (RAM e VRAM) após inatividade."""
+        with self._lock:
+            if self._modelo is None and not self.pronta:
+                return
+            log.info("descarregando XTTS após %.0fs ocioso", self._ocioso_s)
+            self._modelo = None
+            self._cache.clear()
+            self.pronta = False
+            self.aquecida = False
+            try:
+                import torch
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
+            except Exception:  # noqa: BLE001
+                pass
+            if self._timer_descarga is not None:
+                self._timer_descarga.cancel()
+                self._timer_descarga = None
+
+    def _garantir_carregado(self) -> None:
+        """Recarrega o XTTS se foi descarregado por inatividade; bloqueia até ficar pronto."""
+        if self.pronta and self._modelo is not None:
+            self._agendar_descarga()
+            return
+        with self._lock:
+            if self.pronta and self._modelo is not None:
+                self._agendar_descarga()
+                return
+            log.info("recarregando XTTS após descarga por inatividade")
+            self.carregar()
+            self._agendar_descarga()
+
     def carregar(self) -> None:
         os.environ["COQUI_TOS_AGREED"] = "1"
         from . import sfpatch  # noqa: F401  (antes do TTS)
@@ -61,9 +108,12 @@ class Motor:
         self.pronta = True
         self.falar("Pronta.", 1.0)
         self.aquecida = True
+        self._ultimo_uso = time.time()
+        self._agendar_descarga()
         log.info("motor carregado em %.1fs (device=%s)", time.time() - t0, self.device)
 
     def falar(self, texto: str, velocidade: float = 1.0, voz: str | None = None) -> bytes:
+        self._garantir_carregado()
         gpt, emb = self._latentes(voz)
         with self._lock:
             t0 = time.time()
@@ -79,6 +129,7 @@ class Motor:
         """Gera PCM16 mono 24 kHz em pedaços; segura o lock até o fim (ou até o gerador ser fechado).
 
         Os latentes são resolvidos já na chamada (voz inexistente = KeyError antes de qualquer fluxo)."""
+        self._garantir_carregado()
         gpt, emb = self._latentes(voz)
         return self._fluxo(texto, velocidade, voz, gpt, emb)
 

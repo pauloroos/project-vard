@@ -1083,4 +1083,11 @@ async def pacote_remover(pacote_id: str):
     return JSONResponse({"erro": erro}, status_code=500)
 
 
+@app.get("/recursos")
+def recursos():
+    """Monitor de recursos do Vard (0.9.4 leve): memória e CPU por componente."""
+    from vard import recursos as mod_recursos
+    return mod_recursos.coletar_recursos()
+
+
 app.mount("/viewer", StaticFiles(directory=VIEWER), name="viewer")

@@ -32,7 +32,10 @@ class CorpoFalante(BaseModel):
     nome: str = Field(min_length=1, max_length=60)
 
 
-def criar_app(sessao: Sessao | None = None, *, raiz: Path = arm.RAIZ, diarizacao_estado=None, carregar_vad: bool = True) -> FastAPI:
+def criar_app(sessao: Sessao | None = None, *, raiz: Path = arm.RAIZ, diarizacao_estado=None, carregar_vad: bool = False) -> FastAPI:
+    """Carga preguiçosa (0.9.4 leve): o modelo VAD só é carregado quando a primeira reunião
+    começa, não no arranque do serviço. `carregar_vad=True` mantém o comportamento antigo
+    para testes que dependem dele."""
     raiz = Path(raiz)
     if sessao is None:
         sessao = Sessao(config.carregar(), raiz=raiz)
