@@ -41,6 +41,17 @@ Fica em `%LOCALAPPDATA%\rdl-vard\instalacao.json` (ou em `VARD_INSTALACAO`). Cam
 ambientes já instalados). Exemplo em `config/examples/instalacao.example.json`. `scripts/windows/vard-modo.ps1` aceita
 `-Instalacao <arquivo>` e reconhece o formato novo da raiz (`nucleo\server.py`) e o antigo.
 
+O supervisor do aplicativo prefere o núcleo empacotado quando ele existe. Sem pacote, usa o Python de
+`raiz_codigo/nucleo/.venv` e inicia `uvicorn server:app` na pasta do núcleo; no layout antigo, usa a própria raiz.
+Os caminhos `servicos.voz_python` e `servicos.reuniao_python` habilitam os serviços mesmo sem booleanos;
+os booleanos continuam aceitos para venvs dentro da raiz. Cada serviço usa sua pasta de código como pasta de trabalho.
+O processo da reunião sobe com o app, mantendo os modelos sob demanda. OpenJarvis usa a venv de `openjarvis_src`,
+`openjarvis_home` e a decisão de cérebro já configurada no HUD.
+
+A migração para `supervisor: true` exige pré-checagem do núcleo e preserva a configuração e o atalho Startup.
+O núcleo deve confirmar saúde com seu PID em até 60 segundos. Sem confirmação, o aplicativo encerra seus filhos,
+restaura os backups e inicia `vard-modo.ps1 iniciar`. O registro fica em `logs/setup.log`; os serviços têm logs próprios.
+
 ## Troca da instalação, com retorno
 
 `scripts/windows/trocar-instalacao.ps1`:
