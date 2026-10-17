@@ -2,6 +2,8 @@
 
 [Leia em português](README.md) · [Repository](https://github.com/pauloroos/project-vard)
 
+Versions and changes: [CHANGELOG.md](CHANGELOG.md).
+
 Vard is a local voice interface (floating widget) for assistants; the first connector is [OpenJarvis](https://github.com/open-jarvis/OpenJarvis). Built with Tauri 2. A transparent, frameless, always-on-top window with a cyan core that reacts to your voice: you speak, it transcribes, OpenJarvis answers and the answer is spoken back.
 
 ![HUD idle](docs/captura-repouso.png) ![HUD speaking](docs/captura-falando.png)
