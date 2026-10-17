@@ -421,3 +421,49 @@ def _montar_item(d: Definicao, achado: _Achado, versoes: Mapping[str, tuple[str,
     if not d.versao_args:
         detalhe = detalhe or "versão não verificada"
     return Item(d.id, d.nome, "encontrado", versao, detalhe, achado.caminho)
+
+
+# --- Recomendação leve (0.9.4 rodada 2) -----------------------------------------
+
+@dataclass(frozen=True)
+class RecomendacaoLeve:
+    """Sugestão de configuração mais leve para o primeiro uso."""
+    voz: str           # "kokoro" | "piper" | "xtts" | "edge"
+    cerebro: str       # "openjarvis" | "lmstudio" | "api"
+    motivo: str        # frase curta explicando a escolha
+
+
+def recomendar_configuracao_leve(resultado: ResultadoDeteccao) -> RecomendacaoLeve:
+    """Recomenda a opção mais leve que funcione na máquina detectada.
+
+    Prioridade de voz: Kokoro/Piper (CPU, ~50 MB) > Edge (cloud, 0 MB local) > XTTS (GPU, ~2 GB).
+    Prioridade de cérebro: OpenJarvis/API (sem modelo local) > LM Studio pequeno > LM Studio grande.
+    """
+    gpu = resultado.gpu
+    tem_gpu = gpu.estado == "encontrado" and gpu.backend in ("nvidia", "amd")
+    vram = gpu.vram_mb or 0
+
+    # Voz: prefere as mais leves sempre; XTTS só se tiver GPU com VRAM suficiente
+    if tem_gpu and vram >= 4000:
+        voz = "xtts"
+        motivo_voz = "GPU com VRAM suficiente para voz natural local"
+    elif tem_gpu:
+        voz = "kokoro"
+        motivo_voz = "GPU com pouca VRAM; Kokoro usa menos memória"
+    else:
+        voz = "kokoro"
+        motivo_voz = "Sem GPU dedicada; Kokoro roda leve em CPU"
+
+    # Cérebro: verifica se LM Studio está acessível e se há modelos pequenos
+    lm_studio = next((i for i in resultado.itens if i.id == "lmstudio"), None)
+    lm_acessivel = lm_studio is not None and "servidor acessível" in (lm_studio.detalhe or "")
+
+    if lm_acessivel:
+        cerebro = "lmstudio"
+        motivo_cerebro = "LM Studio acessível; modelo local sem dependência de internet"
+    else:
+        cerebro = "openjarvis"
+        motivo_cerebro = "OpenJarvis já configurado; evita baixar modelos agora"
+
+    motivo = f"{motivo_voz}. {motivo_cerebro}."
+    return RecomendacaoLeve(voz=voz, cerebro=cerebro, motivo=motivo)

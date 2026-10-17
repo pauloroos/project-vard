@@ -31,7 +31,7 @@ class Motor:
         self.device = device
         self.pronta = False
         self.aquecida = False
-        self._lock = threading.Lock()
+        self._lock = threading.RLock()
         self._modelo = None
         self._cache: dict[str, tuple] = {}
         self._ocioso_s = max(0.0, float(ocioso_s))

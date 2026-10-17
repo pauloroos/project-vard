@@ -128,7 +128,8 @@ def test_recarga_na_fala_apos_descarga(motor_descarga):
     assert motor.pronta and motor.aquecida
 
 
-def test_saude_informa_estado_descarregado(motor_descarga):
+def test_saude_separa_instalado_de_carregado(motor_descarga):
+    """Rodada 2: /saude diz xtts=true (instalado) mesmo descarregado; xtts_carregado varia."""
     from fastapi.testclient import TestClient
     from vard_voz.servidor import criar_app
 
@@ -143,11 +144,50 @@ def test_saude_informa_estado_descarregado(motor_descarga):
     )
     with TestClient(app) as c:
         r = c.get("/saude", headers={"host": "127.0.0.1"})
-        assert r.status_code == 200
         d = r.json()
         assert d["xtts"] is True
+        assert d["xtts_carregado"] is True
 
         motor.descarregar()
         r2 = c.get("/saude", headers={"host": "127.0.0.1"})
         d2 = r2.json()
-        assert d2["xtts"] is False
+        # XTTS continua instalado (pode ser recarregado sob demanda)
+        assert d2["xtts"] is True
+        # Mas não está carregado agora
+        assert d2["xtts_carregado"] is False
+
+
+def test_recarga_nao_trava_com_rlock():
+    """Rodada 2: _garantir_carregado chama carregar dentro do lock; RLock evita deadlock."""
+    import threading
+    from vard_voz.motor import Motor
+
+    m = Motor(device="cpu", ocioso_s=0)
+    assert isinstance(m._lock, type(threading.RLock())), "lock deve ser reentrante"
+
+    # Simula estado descarregado
+    m.pronta = False
+    m._modelo = None
+
+    class ModeloFalso:
+        class SpeakerManager:
+            speakers = {"Suad Qasim": {"gpt_cond_latent": b"g", "speaker_embedding": b"e"}}
+        speaker_manager = SpeakerManager()
+        def inference(self, *_a, **_k):
+            return {"wav": [0.0] * 240}
+
+    def carregar_sem_tts(self):
+        self._modelo = ModeloFalso()
+        self.pronta = True
+        self.aquecida = True
+        self._ultimo_uso = time.time()
+
+    original = Motor.carregar
+    Motor.carregar = carregar_sem_tts
+    try:
+        # Se fosse Lock simples, isso travaria aqui
+        wav = m.falar("Teste.", 1.0)
+        assert isinstance(wav, bytes) and len(wav) > 0
+        assert m.pronta
+    finally:
+        Motor.carregar = original

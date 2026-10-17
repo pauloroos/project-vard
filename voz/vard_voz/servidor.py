@@ -72,7 +72,8 @@ def criar_app(
         if _xtts_disponivel():
             try:
                 from .motor import Motor
-                motor = Motor(os.environ.get("VARD_VOZ_DEVICE", "cuda"))
+                ocioso_s = float(os.environ.get("VARD_VOZ_OCIOSO_S", "600"))
+                motor = Motor(os.environ.get("VARD_VOZ_DEVICE", "cuda"), ocioso_s=ocioso_s)
             except Exception:
                 log.warning("xtts-v2 instalado mas motor falhou ao iniciar")
         if motor is None:
@@ -150,12 +151,16 @@ def criar_app(
 
     @app.get("/saude")
     def saude():
-        xtts_ok = motor.pronta and motor.aquecida
+        # 0.9.4 leve rodada 2: separa "instalado/disponível" de "carregado agora".
+        # xtts=true significa que o XTTS está instalado e pode ser carregado sob demanda,
+        # mesmo que esteja descarregado no momento. xtts_carregado diz se está na memória agora.
+        xtts_instalado = not isinstance(motor, _MotorAusente)
+        xtts_carregado = motor.pronta and motor.aquecida
         kokoro_ok = motor_kokoro is not None and motor_kokoro.pronta and motor_kokoro.aquecida
         edge_ok = motor_edge is not None and motor_edge.pronta and motor_edge.aquecida
         piper_ok = motor_piper is not None and motor_piper.pronta and motor_piper.aquecida
-        pronta = xtts_ok or kokoro_ok or edge_ok or piper_ok
-        if xtts_ok:
+        pronta = xtts_carregado or kokoro_ok or edge_ok or piper_ok
+        if xtts_carregado:
             voz_atual = VOZ
             device = motor.device
         elif kokoro_ok:
@@ -178,7 +183,8 @@ def criar_app(
             "voz": voz_atual,
             "device": device,
             "aquecida": pronta,
-            "xtts": xtts_ok,
+            "xtts": xtts_instalado,
+            "xtts_carregado": xtts_carregado,
             "kokoro": kokoro_ok,
             "edge": edge_ok,
             "piper": piper_ok,
@@ -186,9 +192,14 @@ def criar_app(
 
     @app.get("/vozes")
     def vozes():
-        if not motor.pronta and all(m is None for _, m in motores_opcionais):
+        # 0.9.4 leve rodada 2: lista vozes do XTTS mesmo descarregado (ele está instalado
+        # e pode ser recarregado sob demanda). Só devolve 503 se nenhum motor estiver disponível.
+        xtts_instalado = not isinstance(motor, _MotorAusente)
+        algum_motor_pronto = motor.pronta or any(m is not None and m.pronta for _, m in motores_opcionais)
+        if not xtts_instalado and not algum_motor_pronto:
             return JSONResponse({"erro": "aquecendo"}, status_code=503)
-        lista = list(motor.vozes()) if motor.pronta else []
+        # Lista vozes do XTTS (mesmo descarregado, motor.vozes() devolve pelo menos VOZ)
+        lista = list(motor.vozes()) if xtts_instalado else []
         for nome, m in motores_opcionais:
             if m is not None and m.pronta:
                 for v in m.vozes():

@@ -436,6 +436,14 @@ def primeiro_uso_deteccao_rota(item: str = "", caminho: str = ""):
     return primeiro_uso_deteccao.detectar(caminhos=caminhos).como_dict()
 
 
+@app.get("/primeiro-uso/recomendacao")
+def primeiro_uso_recomendacao_rota():
+    """Recomenda a configuração mais leve para o primeiro uso (0.9.4 rodada 2)."""
+    resultado = primeiro_uso_deteccao.detectar()
+    rec = primeiro_uso_deteccao.recomendar_configuracao_leve(resultado)
+    return {"voz": rec.voz, "cerebro": rec.cerebro, "motivo": rec.motivo}
+
+
 # ----------------------------------------------------------------------------- PEDIDOS (T6)
 # Rotas do cérebro próprio: admissão, consulta, cancelamento e listagem por sessão.
 # O cérebro só atende quando explicitamente escolhido; /ask continua via OpenJarvis.
