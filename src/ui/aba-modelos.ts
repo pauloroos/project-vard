@@ -15,6 +15,7 @@ import { lerPaineis, gravarPaineis, type PaineisConfig, type Provedor, type Agen
 import { detectarClis, type CliDetectada } from "../config/clis";
 import { cofreExiste, cofreGravar } from "../config/segredos";
 import { abrirModal, campoModal, desenharCards, type Card, type TomSelo } from "./componentes";
+import { InstalaveisProvedores } from "./instalaveis-provedores";
 
 /** Formata milissegundos como "1,8 s" (PT-BR). */
 export function formatarSegundos(ms: number): string {
@@ -83,7 +84,7 @@ export class AbaModelos {
       this.ojModelos = [];
       this.ojFora = true;
     }
-    this.desenhar();
+    await this.desenhar();
   }
 
   private desenhar() {
@@ -102,6 +103,21 @@ export class AbaModelos {
       vazio: "Nenhum provedor cadastrado.",
       adicionar: { rotulo: "Adicionar provedor", aoClicar: () => this.abrirModal() },
     });
+    if (this.ponteOk) {
+      const instalacoes = document.createElement("section");
+      instalacoes.setAttribute("aria-label", "Instalar provedores");
+      this.raiz.append(instalacoes);
+      return new InstalaveisProvedores(instalacoes, this.deps.ponteUrl, async (item) => {
+        if (item.id === "openjarvis") { this.abrirModalOpenJarvis(); return; }
+        this.clis = await detectarClis(this.deps.ponteUrl).catch(() => []);
+        if (item.instalado && EH_CLI.has(item.tipo_provedor) && !this.clis.some(c => c.tipo === item.tipo_provedor && c.instalada)) {
+          this.clis = this.clis.filter(c => c.tipo !== item.tipo_provedor);
+          this.clis.push({ tipo: item.tipo_provedor, instalada: true, versao: "", modelos: [] });
+        }
+        this.abrirModal(undefined, { tipo: item.tipo_provedor, nome: item.nome, url_base: item.url_base });
+      }).carregar();
+    }
+    return Promise.resolve();
   }
 
   private montarCards(): Card[] {
@@ -255,8 +271,9 @@ export class AbaModelos {
     }, this.raiz);
   }
 
-  private abrirModal(provedor?: Provedor) {
+  private abrirModal(provedor?: Provedor, sugestao?: Partial<Provedor>) {
     const editando = !!provedor;
+    const inicial = provedor ?? sugestao;
     const corpo = document.createElement("div");
     corpo.className = "qr-modal-campos";
     const tipoSel = document.createElement("select");
@@ -266,15 +283,15 @@ export class AbaModelos {
       o.textContent = t;
       tipoSel.append(o);
     }
-    tipoSel.value = provedor?.tipo ?? "lmstudio";
+    tipoSel.value = inicial?.tipo ?? "lmstudio";
     const nomeInp = document.createElement("input");
     nomeInp.type = "text";
     nomeInp.placeholder = "Nome do provedor";
-    nomeInp.value = provedor?.nome ?? "";
+    nomeInp.value = inicial?.nome ?? "";
     const urlInp = document.createElement("input");
     urlInp.type = "url";
     urlInp.placeholder = "http://localhost:1234/v1";
-    urlInp.value = provedor?.url_base ?? "";
+    urlInp.value = inicial?.url_base ?? "";
     // Chave de API (cofre) — nunca mostra o valor salvo
     const chaveInp = document.createElement("input");
     chaveInp.type = "password";
@@ -294,7 +311,7 @@ export class AbaModelos {
     const modeloPadraoInput = document.createElement("input");
     modeloPadraoInput.type = "text";
     modeloPadraoInput.placeholder = "Modelo padrão (ou digite outro)";
-    modeloPadraoInput.value = provedor?.modelo ?? "";
+    modeloPadraoInput.value = inicial?.modelo ?? "";
     // Container que alterna entre input e select após busca
     const modeloContainer = document.createElement("div");
     modeloContainer.className = "qr-modelo-container";

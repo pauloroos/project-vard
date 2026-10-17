@@ -65,7 +65,40 @@ function criarDeps(overrides: Partial<DepsQuemResponde> = {}): DepsQuemResponde 
 }
 
 describe("AbaModelos (Quem responde 0.9.3)", () => {
+  it("CLI localizada pelo instalador é reconhecida no cadastro mesmo fora do PATH antigo", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ itens: [{
+      id: "claude", nome: "Claude Code", descricao: "CLI", comando: [],
+      fonte: "https://code.claude.com/docs/en/setup", tipo_provedor: "cli-claude",
+      url_base: "", tamanho_mb: null, manual: false, instalado: true, login: "ausente",
+      estado: "aguardando", linhas: [],
+    }] }))));
+    const raiz = criarRaiz();
+    await new AbaModelos(raiz, criarDeps()).carregar();
+    [...raiz.querySelectorAll<HTMLButtonElement>("button")].find(b => b.textContent === "Cadastrar provedor")!.click();
+    await vi.waitFor(() => expect(raiz.querySelector(".modal")?.textContent).toContain("Encontrado no PC: Claude Code"));
+    expect(raiz.querySelector<HTMLElement>(".qr-cli-nao-encontrado")?.hidden).toBe(true);
+  });
+  it("oferece instalação e pré-preenche cadastro ao cadastrar item detectado", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => new Response(JSON.stringify(
+      String(url).endsWith("/instalaveis") ? { itens: [{
+        id: "ollama", nome: "Ollama", descricao: "Servidor local", comando: [],
+        fonte: "https://docs.ollama.com/windows", tipo_provedor: "ollama",
+        url_base: "http://127.0.0.1:11434/v1", tamanho_mb: null, manual: false,
+        instalado: true, login: "dispensado", estado: "aguardando", linhas: [],
+      }] } : []
+    ))));
+    const raiz = criarRaiz();
+    await new AbaModelos(raiz, criarDeps()).carregar();
+    const cadastrar = [...raiz.querySelectorAll<HTMLButtonElement>("button")].find(b => b.textContent === "Cadastrar provedor");
+    expect(cadastrar).toBeTruthy(); cadastrar!.click();
+    await vi.waitFor(() => expect(raiz.querySelector<HTMLInputElement>('input[placeholder="Nome do provedor"]')?.value).toBe("Ollama"));
+    expect(raiz.querySelector<HTMLInputElement>('input[type="url"]')?.value).toBe("http://127.0.0.1:11434/v1");
+    expect(raiz.querySelector<HTMLSelectElement>(".modal select")?.value).toBe("ollama");
+    expect(raiz.querySelector(".modal-titulo")?.textContent).toBe("Adicionar provedor");
+    vi.unstubAllGlobals();
+  });
   beforeEach(() => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("[]")));
     cfgEmMemoria = null;
     configEmMemoria = { ...CONFIG_PADRAO };
     mockDetectarClis.mockResolvedValue([]);
@@ -73,6 +106,7 @@ describe("AbaModelos (Quem responde 0.9.3)", () => {
 
   afterEach(() => {
     vi.restoreAllMocks();
+    vi.unstubAllGlobals();
   });
 
   it("renderiza card fixo do OpenJarvis e botão adicionar", async () => {
