@@ -106,7 +106,12 @@ describe("configuracoes-paineis (T8)", () => {
       await vi.waitFor(() => expect(buscar).toHaveBeenCalledWith(expect.stringContaining("/saude"), expect.anything()));
       await vi.waitFor(() => expect(raiz.querySelector('[data-motor="xtts"]')?.textContent).toContain("Instalar"));
       raiz.querySelector<HTMLButtonElement>('[data-motor="xtts"]')!.click();
-      await vi.waitFor(() => expect(confirmar).toHaveBeenCalledOnce());
+      // A pergunta de instalar já mostra a licença do pacote que o instalador do núcleo listou.
+      await vi.waitFor(() => expect(document.querySelector(".modal")?.textContent).toContain("Licença fictícia"));
+      const pergunta = document.querySelector<HTMLElement>(".modal")!;
+      [...pergunta.querySelectorAll<HTMLButtonElement>(".modal-acoes button")].find((b) => b.textContent === "Agora não")!.click();
+      await new Promise((r) => setTimeout(r, 0));
+      expect(confirmar).not.toHaveBeenCalled();
       expect(buscar).toHaveBeenCalledWith("http://127.0.0.1:4876/pacotes");
       expect(buscar.mock.calls.some(([, init]) => init?.method === "POST")).toBe(false);
     } finally { buscar.mockRestore(); confirmar.mockRestore(); }

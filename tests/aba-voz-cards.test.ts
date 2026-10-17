@@ -226,19 +226,22 @@ describe("blocos de serviço (0.9.4)", () => {
     expect(input.value).toBe("http://127.0.0.1:4710");
   });
 
-  it("bloco_elevenlabs_tem_chave_e_botao_carregar", async () => {
+  it("bloco_elevenlabs_cadastra_a_chave_em_modal_e_tem_botao_carregar", async () => {
     const { raiz } = await abrir();
     const bloco = raiz.querySelector<HTMLElement>("#cfg-voz-servicos")!;
     expect(bloco.textContent).toContain("ElevenLabs");
-    expect(bloco.querySelector("#cfg-elevenlabs_chave")).toBeTruthy();
+    expect(bloco.querySelector("#cfg-elevenlabs_chave")).toBeNull();
+    expect(bloco.querySelector("#cfg-voz-chave-elevenlabs")?.textContent).toContain("Cadastrar chave");
     expect(bloco.querySelector("#cfg-voz-carregar-elevenlabs")).toBeTruthy();
   });
 
-  it("bloco_gemini_tem_chave", async () => {
+  it("bloco_gemini_cadastra_a_chave_em_modal", async () => {
     const { raiz } = await abrir();
     const bloco = raiz.querySelector<HTMLElement>("#cfg-voz-servicos")!;
     expect(bloco.textContent).toContain("Gemini");
-    expect(bloco.querySelector("#cfg-gemini_chave")).toBeTruthy();
+    expect(bloco.querySelector("#cfg-gemini_chave")).toBeNull();
+    bloco.querySelector<HTMLButtonElement>("#cfg-voz-chave-gemini")!.click();
+    expect(document.querySelector('.modal input[type="password"]')).toBeTruthy();
   });
 
   it("servico_fora_mostra_aviso_no_topo", async () => {
