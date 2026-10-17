@@ -372,7 +372,11 @@ section .acoes { display: flex; gap: 8px; flex-wrap: wrap; }
 .modal-titulo {
   margin: 0; padding: 18px 22px 10px; font: 14px/1.3 var(--mono); letter-spacing: 0.12em; text-transform: uppercase;
 }
-.modal-miolo { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; padding: 4px 22px 14px; }
+.modal-miolo {
+  flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; padding: 4px 22px 14px;
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--cor-elementos) 30%, transparent) transparent;
+}
 .modal-rodape {
   display: flex; align-items: center; gap: 12px; padding: 12px 22px 16px; border-top: 1px solid var(--borda);
 }
