@@ -25,6 +25,7 @@ import { Conversa, type Estado } from "./fala/conversa";
 import { processarTextoOuvido } from "./fala/textoOuvido";
 import { criarMaquinaConversaAberta, processamentoConcluido } from "./conversa/aberta";
 import { FALAS, saudacaoPara } from "./fala/falas";
+import { sondarCerebro } from "./fala/saude-cerebro";
 import { Adiador } from "./ui/dock";
 import { Hud } from "./ui/hud";
 import { Invisibilidade } from "./ui/invisivel";
@@ -484,9 +485,8 @@ async function transcreverFala(wav: ArrayBuffer, sinal?: AbortSignal): Promise<s
     }
   };
   const checarSaude = async () => {
-    // Com cerebro=proprio e toggle desligado, oj é null: não há OpenJarvis para sondar.
-    const ok = oj ? await oj.saude() : false;
-    const falaOk = ok && oj ? await oj.fala() : false;
+    // Com cerebro=proprio e toggle desligado, oj é null: quem responde é o núcleo (o /status da ponte).
+    const { ok, falaOk } = await sondarCerebro(oj, ponte);
     await conversa.aoHealth(ok, falaOk);
     if (voz) {
       const pronta = await voz.saude();
