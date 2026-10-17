@@ -150,7 +150,7 @@ def _resolver_credencial_cofre(credencial_ref: str, tipo: str) -> str:
     if credencial_ref:
         try:
             from vard import credenciais
-            valor = credenciais.ler_para_uso_interno("provedor", credencial_ref)
+            valor = credenciais.ler_para_uso_interno(*credenciais.separar_referencia(credencial_ref, "provedor"))
         except Exception as exc:  # noqa: BLE001
             raise _ErroCerebro("cerebro_sem_credencial") from exc
         if not valor:

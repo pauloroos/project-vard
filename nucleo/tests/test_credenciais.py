@@ -114,3 +114,27 @@ class TestMigracaoFalhaPreservaOriginal:
         mock_invocar.side_effect = RuntimeError("falha no cofre")
         with pytest.raises(RuntimeError):
             credenciais.gravar("provedor", "x", "valor")
+
+class TestLeituraDiretaDoCofreWindows:
+    """O núcleo lê o cofre do Windows direto (CredReadW): o app não tem modo --cofre."""
+
+    @patch("vard.credenciais._ler_windows")
+    def test_ler_usa_o_alvo_do_app(self, mock_ler):
+        mock_ler.return_value = "valor-ficticio"
+        assert credenciais.ler_para_uso_interno("provedor", "lm1") == "valor-ficticio"
+        mock_ler.assert_called_once_with("vard:provedor:lm1")
+
+    @patch("vard.credenciais._ler_windows")
+    def test_existe_sem_expor_valor(self, mock_ler):
+        mock_ler.return_value = None
+        assert credenciais.existe("provedor", "lm1") is False
+        mock_ler.return_value = "x"
+        assert credenciais.existe("provedor", "lm1") is True
+
+    def test_segredo_do_keyring_em_utf16_e_utf8(self):
+        assert credenciais._decodificar("sk-ficticio".encode("utf-16-le")) == "sk-ficticio"
+        assert credenciais._decodificar("sk-ficticio".encode("utf-8")) == "sk-ficticio"
+
+    def test_referencia_com_tipo_e_id(self):
+        assert credenciais.separar_referencia("provedor:lm1", "provedor") == ("provedor", "lm1")
+        assert credenciais.separar_referencia("lm1", "provedor") == ("provedor", "lm1")
