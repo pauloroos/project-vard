@@ -36,8 +36,9 @@ def _ler_pids_registrados() -> dict[str, list[int]]:
         return resultado
     for arq in pasta.glob("*.pid"):
         try:
-            texto = arq.read_text(encoding="utf-8").strip()
-            pid = int(texto.splitlines()[0])
+            texto = arq.read_text(encoding="utf-8-sig").strip()
+            # O vard-modo grava "PID|início" (o início confere que o PID ainda é o mesmo processo).
+            pid = int(texto.splitlines()[0].split("|")[0].strip())
             nome = arq.stem
             resultado.setdefault(nome, []).append(pid)
         except (ValueError, OSError):

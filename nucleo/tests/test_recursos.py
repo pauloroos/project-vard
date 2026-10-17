@@ -105,3 +105,13 @@ def test_rota_recursos_no_servidor(pids_registrados, processos_falsos):
         dados = r.json()
         assert "componentes" in dados
         assert "total_memoria_mb" in dados
+
+def test_le_pid_no_formato_real_do_vard_modo(tmp_path, monkeypatch):
+    """vard-modo grava "PID|início" com BOM em ponte.pid, voz.pid etc."""
+    from vard import config, recursos
+    monkeypatch.setattr(config, "pasta_dados", lambda: tmp_path)
+    pasta = tmp_path / "pids"
+    pasta.mkdir()
+    (pasta / "ponte.pid").write_text("﻿33344|2026-10-16T23:27:20.7078358-04:00\n", encoding="utf-8")
+    (pasta / "voz.pid").write_text("73904|2026-10-16T23:31:52-04:00", encoding="utf-8")
+    assert recursos._ler_pids_registrados() == {"ponte": [33344], "voz": [73904]}
