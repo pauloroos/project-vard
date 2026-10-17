@@ -10,6 +10,7 @@ import type { OpenJarvis } from "../conectores/openjarvis/cliente";
 import type { StatusPonte } from "../conectores/ponte/cliente";
 import type { PonteAvisos } from "../avisos/central";
 import { AbaAtualizacao } from "./aba-atualizacao";
+import "./estilos/geral.css";
 import { AbaAvisos } from "./aba-avisos";
 import { AbaDiagnostico } from "./aba-diagnostico";
 import { AbaModelos } from "./aba-modelos";
@@ -41,11 +42,11 @@ export interface DepsConfiguracoes {
 /** Monitor como o comando listar_monitores devolve (pixels físicos). */
 export interface MonitorInfo { nome: string; x: number; y: number; largura: number; altura: number; escala: number; principal: boolean }
 
-export type Aba = "geral" | "perfil" | "voz" | "atalhos" | "saber" | "modelos" | "paineis-mcps" | "sistema" | "reuniao" | "avisos" | "atualizacao" | "diagnostico";
+export type Aba = "geral" | "perfil" | "voz" | "atalhos" | "saber" | "modelos" | "paineis-mcps" | "sistema" | "reuniao" | "avisos" | "diagnostico";
 const ABAS: [Aba, string][] = [
   ["geral", "Geral"], ["perfil", "Perfil"], ["voz", "Voz"], ["atalhos", "Atalhos"], ["saber", "O que eu sei fazer"], ["modelos", "Quem responde"],
   ["paineis-mcps", "Ferramentas (MCP)"],
-  ["sistema", "Sistema"], ["reuniao", "Reunião"], ["avisos", "Avisos"], ["atualizacao", "Atualização"], ["diagnostico", "Diagnóstico"],
+  ["sistema", "Sistema"], ["reuniao", "Reunião"], ["avisos", "Avisos"], ["diagnostico", "Diagnóstico"],
 ];
 const OPCOES_TAMANHO: [Config["tamanho"], string][] = [
   ["pequeno", "Pequeno (240 px)"], ["medio", "Médio (320 px)"], ["grande", "Grande (480 px)"], ["personalizado", "Personalizado"],
@@ -105,18 +106,14 @@ export class Configuracoes {
     void this.modelos.carregar();
     this.paineisMcps = new AbaPaineisMcps(this.raiz.querySelector<HTMLElement>("#cfg-paineis-mcps")!);
     this.abaPerfil = new AbaPerfil(this.raiz.querySelector<HTMLElement>("#cfg-perfil")!, {
-      nome: () => this.el("nome").value,
-      usuario: () => this.el("usuario").value,
+      nome: () => this.cfg.nome,
+      usuario: () => this.cfg.usuario,
       ler: () => lerPerfil(),
       gravar: (p) => gravarPerfil(p),
-      previa: () => previaPersona(this.el("ponte_url").value, this.el("nome").value.trim(), this.el("usuario").value.trim()),
-      aoMudar: (campo, valor) => { const alvo = this.el(campo); if (alvo.value !== valor) alvo.value = valor; },
+      previa: () => previaPersona(this.el("ponte_url").value, this.cfg.nome.trim(), this.cfg.usuario.trim()),
+      aoMudar: (campo, valor) => { this.cfg[campo] = valor; },
     });
     await this.abaPerfil.montar();
-    // Nome/usuário são os mesmos campos da aba Geral: os dois lados acompanham um ao outro.
-    for (const campo of ["nome", "usuario"] as const) {
-      this.el(campo).addEventListener("input", () => this.abaPerfil.definir(campo, this.el(campo).value));
-    }
     const urlPonte = () => this.el("ponte_url").value.trim(); // vazio = sem ponte (desliga), não "usar a salva"
     this.sistema = new AbaSistema(this.raiz.querySelector<HTMLElement>("#cfg-sistema")!, {
       statusPonte: () => this.deps.statusPonte(urlPonte()),
@@ -143,8 +140,14 @@ export class Configuracoes {
       nome: () => this.cfg.nome,
     });
     this.saber.montar();
-    this.atualizacao = new AbaAtualizacao(this.raiz.querySelector<HTMLElement>("#cfg-atualizacao")!, this.deps.atualizacao);
-    this.atualizacao.montar();
+    // Atualização embutida na aba Geral (sem aba própria no menu).
+    const blocoAtualizacao = this.raiz.querySelector<HTMLElement>("#cfg-atualizacao-bloco");
+    if (blocoAtualizacao) {
+      this.atualizacao = new AbaAtualizacao(blocoAtualizacao, this.deps.atualizacao);
+      this.atualizacao.montar();
+      if (this.cfg.atualizacao_ao_abrir) this.atualizacao.aoAbrir();
+    }
+    this.montarAparencia();
     this.diagnostico = new AbaDiagnostico(this.raiz.querySelector<HTMLElement>("#cfg-diagnostico")!);
     this.diagnostico.montar();
     this.abrirAba("geral");
@@ -174,7 +177,7 @@ export class Configuracoes {
     if (aba === "reuniao") this.reuniao?.ativar(); else this.reuniao?.desativar();
     if (aba === "avisos") this.avisos?.ativar(); else this.avisos?.desativar();
     if (aba === "saber") this.saber?.ativar(); else this.saber?.desativar();
-    if (aba === "atualizacao" && this.cfg.atualizacao_ao_abrir) this.atualizacao?.aoAbrir();
+    if (aba === "geral" && this.cfg.atualizacao_ao_abrir) this.atualizacao?.aoAbrir();
   }
 
   /** O widget gravou topo ou compacto pelos próprios botões: acompanha sem perder o resto do formulário. */
@@ -220,7 +223,7 @@ export class Configuracoes {
       ["Conversa", ["geral", "perfil"]],
       ["Voz e áudio", ["voz", "atalhos"]],
       ["Cérebro", ["saber", "modelos", "paineis-mcps"]],
-            ["Sistema", ["sistema", "reuniao", "avisos", "atualizacao", "diagnostico"]],
+            ["Sistema", ["sistema", "reuniao", "avisos", "diagnostico"]],
     ];
     const mapaRotulo = new Map(ABAS);
     const navHtml = GRUPOS.map(([titulo, ids]) =>
@@ -233,16 +236,28 @@ export class Configuracoes {
       <div class="conteudo">
         <div id="cfg-titulo-secao" class="conteudo-titulo"></div>
         <section data-aba="geral">
-          <fieldset><legend>Endereços</legend>
-            ${this.campo("openjarvis_url", "OpenJarvis", c.openjarvis_url)}
+          <fieldset><legend>OpenJarvis</legend>
+            ${this.campo("openjarvis_url", "Endereço", c.openjarvis_url)}
             ${this.campo("gui_url", "Interface de texto", c.gui_url)}
-            <button id="cfg-testar" type="button">Testar OpenJarvis</button>
+            <button id="cfg-testar" type="button">Testar</button>
           </fieldset>
-          <fieldset><legend>Chamada</legend>
-            ${this.campo("nome", "Nome para chamar", c.nome)}
-            ${this.campo("variantes", "Variantes (separadas por vírgula)", c.variantes.join(", "))}
-            ${this.campo("usuario", "Como te chamar (opcional)", c.usuario)}
+          <fieldset><legend>Idioma</legend>
             ${campoIdioma(c.idioma)}
+          </fieldset>
+          <fieldset><legend>Aparência</legend>
+            <label>Cor dos elementos</label>
+            <div class="aparencia-linha">
+              <div class="aparencia-cores" id="cfg-aparencia-cores"></div>
+              <div class="aparencia-personalizada">
+                <input id="cfg-cor-elementos" type="color" value="${esc(c.cor_elementos || "#00f0ff")}" title="Cor personalizada">
+              </div>
+              <div class="aparencia-preview" id="cfg-aparencia-preview">Prévia</div>
+            </div>
+            <label>Opacidade dos elementos</label>
+            <div class="aparencia-slider">
+              <input id="cfg-opacidade-elementos" type="range" min="0.2" max="1" step="0.05" value="${c.opacidade_elementos}">
+              <span id="cfg-opacidade-valor">${Math.round(c.opacidade_elementos * 100)}%</span>
+            </div>
           </fieldset>
           <fieldset id="cfg-janela"><legend>Janela</legend>
             <label>Tamanho do widget<select id="cfg-tamanho">${OPCOES_TAMANHO.map(([v, r]) => `<option value="${v}" ${v === c.tamanho ? "selected" : ""}>${r}</option>`).join("")}</select></label>
@@ -262,6 +277,7 @@ export class Configuracoes {
           <fieldset><legend>Assistente</legend>
             <button id="cfg-primeiro-uso" type="button">Configurar primeiro uso</button>
           </fieldset>
+          <div id="cfg-atualizacao-bloco"></div>
         </section>
         <section data-aba="perfil"><div id="cfg-perfil"></div></section>
         <section data-aba="paineis-mcps"><div id="cfg-paineis-mcps"></div></section>
@@ -291,12 +307,7 @@ export class Configuracoes {
         <section data-aba="reuniao"><div id="cfg-reuniao"></div></section>
         <section data-aba="saber"><div id="cfg-saber"></div></section>
         <section data-aba="avisos"><div id="cfg-avisos"></div></section>
-        <section data-aba="atualizacao">
-          <div id="cfg-atualizacao"></div>
-          ${this.marca("atualizacao_ao_abrir", "Verificar ao abrir a aba Atualização", c.atualizacao_ao_abrir)}
-          <p class="nota">A consulta vai ao GitHub (api.github.com) só quando você clica em Verificar ou marca esta caixa.</p>
-        </section>
-        <section data-aba="modelos" id="cfg-modelos"></section>
+                <section data-aba="modelos" id="cfg-modelos"></section>
         <section data-aba="diagnostico"><div id="cfg-diagnostico"></div></section>
       </div>
       <footer>
@@ -366,6 +377,53 @@ export class Configuracoes {
 
   private dizer(t: string, ruim = false) { this.msg.textContent = t; this.msg.classList.toggle("ruim", ruim); }
 
+  /** Cores prontas para a seção Aparência (bolinhas). */
+  private static CORES_PRONTAS: [string, string][] = [
+    ["#00f0ff", "Ciano"], ["#00a2ff", "Azul"], ["#a855f7", "Roxo"], ["#22c55e", "Verde"],
+    ["#f59e0b", "Âmbar"], ["#ef4444", "Vermelho"], ["#ec4899", "Rosa"], ["#ffffff", "Branco"],
+  ];
+
+  /** Monta as bolinhas de cor, o input personalizado, o slider de opacidade e a prévia; aplica ao vivo no preview. */
+  private montarAparencia() {
+    const caixaCores = this.raiz.querySelector<HTMLElement>("#cfg-aparencia-cores");
+    const inputCor = this.raiz.querySelector<HTMLInputElement>("#cfg-cor-elementos");
+    const sliderOpacidade = this.raiz.querySelector<HTMLInputElement>("#cfg-opacidade-elementos");
+    const labelOpacidade = this.raiz.querySelector<HTMLElement>("#cfg-opacidade-valor");
+    const preview = this.raiz.querySelector<HTMLElement>("#cfg-aparencia-preview");
+    if (!caixaCores || !inputCor || !sliderOpacidade || !labelOpacidade || !preview) return;
+
+    const aplicarPreview = () => {
+      const cor = inputCor.value || "#00f0ff";
+      const op = Number(sliderOpacidade.value) || 1;
+      preview.style.color = cor;
+      preview.style.borderColor = cor;
+      preview.style.opacity = String(op);
+      for (const btn of caixaCores.querySelectorAll<HTMLButtonElement>(".aparencia-cor")) {
+        btn.classList.toggle("ativa", btn.dataset.cor === cor);
+      }
+    };
+
+    caixaCores.replaceChildren();
+    for (const [hex, titulo] of Configuracoes.CORES_PRONTAS) {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "aparencia-cor";
+      btn.dataset.cor = hex;
+      btn.style.background = hex;
+      btn.title = titulo;
+      btn.setAttribute("aria-label", titulo);
+      btn.addEventListener("click", () => { inputCor.value = hex; aplicarPreview(); });
+      caixaCores.append(btn);
+    }
+
+    inputCor.addEventListener("input", aplicarPreview);
+    sliderOpacidade.addEventListener("input", () => {
+      labelOpacidade.textContent = `${Math.round(Number(sliderOpacidade.value) * 100)}%`;
+      aplicarPreview();
+    });
+    aplicarPreview();
+  }
+
   /** Lê o formulário; números inválidos e textos obrigatórios vazios mantêm o valor atual. */
   lerFormulario(): Config {
     const num = (id: string, atual: number) => {
@@ -396,6 +454,8 @@ export class Configuracoes {
       atalhos: { ...this.atalhos },
       modelo: c.modelo,
       sala_monitor: this.sel("sala_monitor").options.length ? this.sel("sala_monitor").value : c.sala_monitor, // lista ainda não chegou: mantém
+      cor_elementos: this.el("cfg-cor-elementos")?.value || c.cor_elementos,
+      opacidade_elementos: Number(this.el("cfg-opacidade-elementos")?.value) || c.opacidade_elementos,
     };
   }
 

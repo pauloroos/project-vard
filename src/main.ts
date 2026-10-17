@@ -794,6 +794,11 @@ window.addEventListener("DOMContentLoaded", async () => {
     if (mudou.includes("usuario")) void fixa(saudacaoPara(cfg.usuario), false).catch(() => {}); // aquece a saudação nova
     if (mudou.includes("nao_ouvir")) await aplicarNaoOuvir(cfg.nao_ouvir, false); // o painel já gravou
     if (mudou.includes("nao_falar")) await aplicarNaoFalar(cfg.nao_falar, false);
+    if (mudou.includes("cor_elementos") || mudou.includes("opacidade_elementos")) {
+      const raiz = document.documentElement;
+      raiz.style.setProperty("--cor-elementos", cfg.cor_elementos || "var(--ciano)");
+      raiz.style.setProperty("--opacidade-elementos", String(cfg.opacidade_elementos));
+    }
   };
   await listen<unknown>("config-salva", (ev) => { void aplicarConfigSalva(ev.payload); });
 

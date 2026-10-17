@@ -221,7 +221,7 @@ describe("não ouvir, não falar e falar avisos", () => {
 });
 
 describe("payloads entre janelas", () => {
-  const ok = { tamanho: "grande", tamanho_px: 480, compacto: false, sempre_no_topo: true, click_through: false, invisivel: false, usuario: "Ana", modelo: "", conversa_ms: 20000, nao_ouvir: false, nao_falar: false, falar_avisos: false, cerebro: "openjarvis" as const };
+  const ok = { tamanho: "grande", tamanho_px: 480, compacto: false, sempre_no_topo: true, click_through: false, invisivel: false, usuario: "Ana", modelo: "", conversa_ms: 20000, nao_ouvir: false, nao_falar: false, falar_avisos: false, cerebro: "openjarvis" as const, cor_elementos: "", opacidade_elementos: 1 };
   it("lado fora de 160..800 é limitado, não recusado", () => {
     expect(lerConfigAoVivo({ ...ok, tamanho_px: 1000 })).toEqual({ ...ok, tamanho_px: 800 });
     expect(lerConfigAoVivo({ ...ok, tamanho_px: 100 })).toEqual({ ...ok, tamanho_px: 160 });
