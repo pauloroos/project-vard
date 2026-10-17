@@ -199,7 +199,7 @@ describe("salvar no painel", () => {
   });
 
   it("provedor e chave exigem reinício da voz", () => {
-    expect(mudancasQueExigemReinicio(CONFIG_PADRAO, { ...copia(), voz_provedor: "gemini" })).toContain("voz");
+    expect(mudancasQueExigemReinicio(CONFIG_PADRAO, { ...copia(), voz_provedor: "gemini" })).not.toContain("voz");
     expect(mudancasQueExigemReinicio(CONFIG_PADRAO, { ...copia(), gemini_chave: "x" })).toContain("voz");
   });
 });

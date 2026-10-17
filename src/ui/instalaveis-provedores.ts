@@ -155,7 +155,7 @@ export class InstalaveisProvedores {
     const corpo = document.createElement("p"); corpo.textContent = "Abrindo terminal de login...";
     const modal = abrirModal({ titulo: `Entrar: ${item.nome}`, corpo }, this.raiz);
     try {
-      await this.requisitar(`/${encodeURIComponent(item.id)}/login`, {});
+      await this.requisitar(`/${encodeURIComponent(item.id)}/login`, { confirmado: true });
       corpo.textContent = "Terminal aberto. Entre na sua conta nele e clique em Atualizar instalações ao voltar.";
     } catch (erro) {
       modal.avisar(erro instanceof Error ? erro.message : "Não foi possível abrir o terminal.", true);

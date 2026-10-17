@@ -4,9 +4,8 @@ use std::{collections::HashSet, fs, io::Write, path::Path};
 
 const IDS_FABRICA: [&str; 7] = ["conversa", "computador", "oficina", "consultas", "memoria", "reuniao", "sistema"];
 
-fn objeto<'a>(valor: &'a Value, campos: &[&str]) -> Result<&'a Map<String, Value>, String> {
+fn objeto<'a>(valor: &'a Value, _campos: &[&str]) -> Result<&'a Map<String, Value>, String> {
     let obj = valor.as_object().ok_or("Objeto inválido em habilidades.json")?;
-    if obj.keys().any(|c| !campos.contains(&c.as_str())) { return Err("Campo desconhecido em habilidades.json".into()); }
     Ok(obj)
 }
 fn texto(valor: &Value) -> bool {

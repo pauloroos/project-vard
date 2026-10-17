@@ -7,7 +7,7 @@
  * Só receitas do usuário são persistidas; fábrica fica no código. desligadas é opcional na leitura.
  * IDs: letras minúsculas ASCII/números separados por hífen, únicos e distintos dos IDs de fábrica.
  * Datas: UTC ISO 8601, segundos ou milissegundos; treinada exige null, validada exige data.
- * Campos desconhecidos são recusados. Leitura inválida falha sem sobrescrever o arquivo.
+ * Campos desconhecidos são preservados. Leitura inválida falha sem sobrescrever o arquivo.
  * Limites: 200 receitas, nome 80, até 10 frases de 200 e instruções 4000.
  * Tamanhos de texto contam unidades UTF-16, como maxlength nos campos HTML.
  */
@@ -30,10 +30,9 @@ export const HABILIDADES_PADRAO: HabilidadesConfig = { versao: 1, habilidades: [
 export const LIMITES_HABILIDADES = { habilidades: 200, nome: 80, frases: 10, frase: 200, instrucoes: 4000 } as const;
 export const INSTRUCAO_HABILIDADES = "Há habilidades cadastradas pelo usuário; antes de agir num pedido, consulte listar_habilidades do MCP de configurações, se a ferramenta estiver disponível.";
 
-function objeto(raw: unknown, campos: string[]): Record<string, unknown> {
+function objeto(raw: unknown, _campos: string[]): Record<string, unknown> {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) throw new Error("habilidades.json deve conter objetos válidos");
   const obj = raw as Record<string, unknown>;
-  if (Object.keys(obj).some((c) => !campos.includes(c))) throw new Error("Campo desconhecido em habilidades.json");
   return obj;
 }
 // Mesmo conjunto de espaços do Python/Rust, incluindo BOM, NEL e separadores de controle.

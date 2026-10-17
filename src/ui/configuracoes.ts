@@ -75,9 +75,11 @@ export class Configuracoes {
   private abaPerfil!: AbaPerfil;
     private paineisMcps!: AbaPaineisMcps;
   private linhasAtalho = new Map<AcaoAtalho, { campo: HTMLButtonElement; motivo: HTMLElement }>();
+  private ultimaConfigDisco: Config;
 
   constructor(private cfg: Config, private raiz: HTMLElement, private deps: DepsConfiguracoes) {
     this.atalhos = { ...cfg.atalhos };
+    this.ultimaConfigDisco = structuredClone(cfg);
   }
 
   /** Desenha as abas e lê o que só o Rust sabe (início no logon, atalhos que não registraram). */
@@ -236,6 +238,39 @@ export class Configuracoes {
     this.cfg.invisivel = ligado;
     this.el("invisivel").checked = ligado;
   }
+
+  /** Aplica apenas valores que mudaram no disco, preservando os outros campos em edição. */
+  mudouExternamente(novo: Config) {
+    const mudou = Object.keys(novo).filter((k) => JSON.stringify(novo[k as keyof Config]) !== JSON.stringify(this.ultimaConfigDisco[k as keyof Config]));
+    for (const chave of mudou) Object.assign(this.cfg, { [chave]: novo[chave as keyof Config] });
+    this.ultimaConfigDisco = structuredClone(novo);
+    for (const chave of mudou) {
+      const id = chave === "cor_elementos" ? "cor-elementos" : chave === "opacidade_elementos" ? "opacidade-elementos" : chave;
+      const campo = this.raiz.querySelector<HTMLInputElement | HTMLSelectElement>(`#cfg-${id}`);
+      if (!campo) continue;
+      const valor = novo[chave as keyof Config];
+      if (campo instanceof HTMLInputElement && campo.type === "checkbox") campo.checked = valor === true;
+      else if (typeof valor === "string" || typeof valor === "number") campo.value = String(valor || (chave === "cor_elementos" ? "#00f0ff" : valor));
+    }
+    if (mudou.includes("cor_elementos") || mudou.includes("opacidade_elementos")) {
+      const preview = this.raiz.querySelector<HTMLElement>("#cfg-aparencia-preview");
+      if (preview) { preview.style.color = novo.cor_elementos || "#00f0ff"; preview.style.borderColor = preview.style.color; preview.style.opacity = String(novo.opacidade_elementos); }
+      const rotulo = this.raiz.querySelector<HTMLElement>("#cfg-opacidade-valor");
+      if (rotulo) rotulo.textContent = `${Math.round(novo.opacidade_elementos * 100)}%`;
+    }
+    if (mudou.some((k) => k.startsWith("voz") || k.endsWith("_voz"))) void this.abaVoz?.atualizar();
+    for (const campo of ["nome", "usuario", "variantes"] as const) if (mudou.includes(campo)) this.abaPerfil?.definir(campo, campo === "variantes" ? novo.variantes.join(", ") : novo[campo]);
+    if (mudou.includes("atalhos")) { this.atalhos = { ...novo.atalhos }; this.marcarAtalhos({}); }
+  }
+
+  async paineisMudaram() {
+    await this.modelos?.carregar();
+    await this.abaVoz?.atualizar();
+    await this.paineisMcps?.montar();
+  }
+
+  async habilidadesMudaram() { await this.oficina?.ativar(); }
+  async perfilMudou() { await this.abaPerfil?.recarregar(); }
 
   private campo(id: string, rotulo: string, valor: string | number, tipo = "text", extra = ""): string {
     return `<label>${rotulo}<input id="cfg-${id}" type="${tipo}" value="${esc(String(valor))}" ${extra}></label>`;
@@ -514,6 +549,7 @@ export class Configuracoes {
     try { await salvarConfig(novo); }
     catch (erro) { this.dizer(`Não consegui salvar: ${String(erro)}`, true); return; }
     Object.assign(this.cfg, novo);
+    this.ultimaConfigDisco = structuredClone(novo);
     // O perfil do agente é outro arquivo: falha aqui não desfaz o config.json salvo.
     let erroPerfil = "";
     try { await this.abaPerfil.gravar(); }

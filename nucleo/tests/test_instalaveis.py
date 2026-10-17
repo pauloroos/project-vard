@@ -266,3 +266,32 @@ def test_rotas_iniciam_consultam_cancelam_e_recusam_sem_confirmacao(monkeypatch)
     aguardar(g, "codex", "cancelado")
     assert cliente.get("/instalaveis/invalido/andamento").status_code == 404
     assert cliente.post("/instalaveis/agy/instalar", json={"confirmado": True}).status_code == 400
+
+
+def test_rota_login_exige_confirmacao_literal(monkeypatch):
+    import server
+    abertos = []
+    g = instalaveis.GerenciadorInstalaveis(detectar=lambda: {"claude": True},
+        abrir_terminal=lambda cmd: abertos.append(cmd))
+    monkeypatch.setattr(server, "_instalaveis", g)
+    cliente = TestClient(server.app, base_url="http://127.0.0.1:4700")
+    assert cliente.post("/instalaveis/claude/login").status_code == 400
+    for corpo in ({}, {"confirmado": "sim"}, {"confirmado": False}):
+        assert cliente.post("/instalaveis/claude/login", json=corpo).status_code == 400
+    assert abertos == []
+    assert cliente.post("/instalaveis/claude/login", json={"confirmado": True}).status_code == 200
+    assert abertos == [["claude", "auth", "login"]]
+
+
+def test_executor_cancelado_chama_encerrar_com_pids_proprios(monkeypatch):
+    import psutil
+    cancelamento = threading.Event()
+    cancelamento.set()
+    chamadas = []
+    processo = SimpleNamespace(pid=81, stdout=io.StringIO(""), poll=lambda: None, wait=lambda **kw: 0)
+    monkeypatch.setattr(instalaveis.subprocess, "Popen", lambda *a, **kw: processo)
+    monkeypatch.setattr(psutil, "Process", lambda pid: SimpleNamespace(pid=pid, create_time=lambda: 10,
+        children=lambda **kw: [SimpleNamespace(pid=82, create_time=lambda: 11)]))
+    monkeypatch.setattr(instalaveis, "_encerrar", lambda p, filhos: chamadas.append((p.pid, dict(filhos))))
+    assert instalaveis.executar_real(["instalador-falso"], lambda linha: None, cancelamento) == 0
+    assert chamadas and all(c == (81, {81: 10, 82: 11}) for c in chamadas)

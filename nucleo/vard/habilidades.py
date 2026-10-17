@@ -1,7 +1,7 @@
 """Oficina: contrato de habilidades.json compartilhado com a tela e o Rust.
 
 Fábrica fica no código; o arquivo contém receitas do usuário e IDs desligados.
-Datas UTC ISO 8601 com segundos ou milissegundos; campos desconhecidos são recusados.
+Datas UTC ISO 8601 com segundos ou milissegundos; campos desconhecidos são preservados.
 Leitura inválida levanta ValueError sem apagar ou substituir o arquivo.
 """
 from __future__ import annotations
@@ -33,8 +33,8 @@ HABILIDADES_FABRICA = [
 
 
 def _objeto(valor, campos):
-    if not isinstance(valor, dict) or set(valor) - set(campos):
-        raise ValueError("Objeto ou campo desconhecido em habilidades.json")
+    if not isinstance(valor, dict):
+        raise ValueError("Objeto inválido em habilidades.json")
     return valor
 
 

@@ -59,15 +59,19 @@ class _ClienteStdio:
         self._id = 0
         self._ferramentas: List[Dict[str, Any]] = []
         self._desabilitados: set[str] = set()
+        self._trava_rpc = asyncio.Lock()
+        self._dreno_stderr: asyncio.Task | None = None
 
     async def iniciar(self) -> None:
         """Lança subprocesso e faz handshake MCP."""
+        from vard.instalaveis import ambiente_limpo
         try:
             self._process = await asyncio.create_subprocess_exec(
                 self._comando, *self._args,
                 stdin=asyncio.subprocess.PIPE,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
+                env=ambiente_limpo(),
                 limit=16 * 1024 * 1024,  # tools/list de um MCP grande passa fácil de 64 KB (padrão do asyncio)
             )
         except (OSError, FileNotFoundError) as exc:
@@ -75,6 +79,8 @@ class _ClienteStdio:
                 f"não foi possível iniciar {self._comando}: {exc}"
             ) from exc
 
+        if getattr(self._process, "stderr", None) is not None:
+            self._dreno_stderr = asyncio.create_task(self._drenar_stderr())
         # initialize
         init_result = await self._rpc("initialize", {
             "protocolVersion": "2025-06-18",
@@ -93,6 +99,16 @@ class _ClienteStdio:
         log.debug("MCP stdio [%s] tools/list: %d ferramentas", self.identificador, len(self._ferramentas))
 
     async def _rpc(self, method: str, params: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        # Sessões diferentes compartilham o servidor, mas nunca o leitor do stdio.
+        async with self._trava_rpc:
+            return await asyncio.wait_for(self._rpc_serial(method, params), timeout=60)
+
+    async def _drenar_stderr(self) -> None:
+        """Descarta diagnóstico do subprocesso: evita bloqueio e não registra dados locais."""
+        while self._process is not None and await self._process.stderr.read(4096):
+            pass
+
+    async def _rpc_serial(self, method: str, params: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """Envia request JSON-RPC e aguarda response com mesmo id."""
         if self._process is None or self._process.stdin is None or self._process.stdout is None:
             raise ServidorIndisponivelError(f"processo {self.identificador} não está ativo")
@@ -158,15 +174,28 @@ class _ClienteStdio:
         """Encerra subprocesso."""
         if self._process is not None:
             try:
-                self._process.terminate()
+                if self._process.stdin is not None:
+                    self._process.stdin.close()
+                    try:
+                        await self._process.stdin.wait_closed()
+                    except (OSError, BrokenPipeError, ConnectionResetError):
+                        pass
                 try:
-                    await asyncio.wait_for(self._process.wait(), timeout=5.0)
+                    await asyncio.wait_for(self._process.wait(), timeout=2.0)
                 except asyncio.TimeoutError:
-                    self._process.kill()
-                    await self._process.wait()
+                    self._process.terminate()
+                    try:
+                        await asyncio.wait_for(self._process.wait(), timeout=3.0)
+                    except asyncio.TimeoutError:
+                        self._process.kill()
+                        await self._process.wait()
             except ProcessLookupError:
                 pass
             self._process = None
+            if self._dreno_stderr is not None:
+                self._dreno_stderr.cancel()
+                await asyncio.gather(self._dreno_stderr, return_exceptions=True)
+                self._dreno_stderr = None
             log.debug("MCP stdio [%s] processo encerrado", self.identificador)
 
 
@@ -273,7 +302,11 @@ class GerenciadorFerramentas:
     ) -> None:
         """Adiciona servidor MCP via stdio."""
         cliente = _ClienteStdio(identificador, comando, args)
-        await cliente.iniciar()
+        try:
+            await asyncio.wait_for(cliente.iniciar(), timeout=15)
+        except BaseException:
+            await cliente.fechar()
+            raise
         self._clientes[identificador] = cliente
         if cliente._process is not None:
             self._processos[identificador] = cliente._process

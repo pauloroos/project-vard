@@ -141,7 +141,7 @@
       "habilidades": [],
       "segredo": "ficticio"
     },
-    "valido": false
+    "valido": true
   },
   {
     "nome": "id duplicado",
@@ -601,7 +601,7 @@
         }
       ]
     },
-    "valido": false
+    "valido": true
   },
   {
     "nome": "campo ausente id",

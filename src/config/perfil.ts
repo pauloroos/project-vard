@@ -31,7 +31,7 @@ export function validarPerfil(raw: unknown): Perfil {
   }
   const obj = raw as Record<string, unknown>;
   if (obj.versao !== 1) throw new Error(`versão desconhecida: ${obj.versao}`);
-  const perfil: Perfil = { ...PERFIL_PADRAO };
+  const perfil = { ...obj, ...PERFIL_PADRAO } as Perfil;
   for (const campo of CAMPOS) {
     const bruto = obj[campo];
     if (bruto === undefined) continue;

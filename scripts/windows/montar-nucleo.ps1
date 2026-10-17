@@ -166,7 +166,7 @@ if (-not $SoVerificar) {
     if ($LASTEXITCODE -ne 0) { throw "vard --versao falhou (codigo $LASTEXITCODE)." }
     if ($saida -notmatch [regex]::Escape($versaoNucleo)) { throw "Versao do nucleo montado ('$saida') difere do pyproject ($versaoNucleo)." }
     Executar 'importar as dependencias' { & $py -I -c 'import fastapi, uvicorn, httpx, psutil' }
-    Executar 'importar server e MCPs' { & $py -I -c 'import vard.server, vard.consulta_mcp, vard.memoria_mcp, vard.mesa_mcp, vard.oficina_mcp, vard.reuniao_mcp, vard.preflight' }
+    Executar 'importar server e MCPs' { & $py -I -c 'import vard.server, vard.consulta_mcp, vard.memoria_mcp, vard.mesa_mcp, vard.oficina_mcp, vard.reuniao_mcp, vard.configuracoes_mcp, vard.preflight' }
 
     # 12. medidas
     $base = (Resolve-Path $destinoSeguro).Path.TrimEnd('\') + '\'

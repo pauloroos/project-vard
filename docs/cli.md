@@ -55,7 +55,7 @@ Ambos leem uma linha NDJSON por turno no modo `stream-json`. O `agy` exige o cam
 ## Perfil e MCP
 
 - **claude**: perfil vai em `CLAUDE.md`/`AGENTS.md` no cwd da sessão e opcionalmente via `--append-system-prompt-file`; MCPs via `--mcp-config <arquivo>`.
-- **agy**: perfil vai em `AGENTS.md` no cwd; `--agent <nome>` carrega instruções de agente definido; MCPs são gerenciados globalmente por `agy mcp` (list/add/remove). Para uso por execução, a T18 verificará se `--agent` ou arquivo na pasta de trabalho basta; caso contrário, o painel avisará que MCPs do Vard não estão disponíveis no agy.
+- **agy**: perfil vai em `AGENTS.md` no cwd; `--agent <nome>` escolhe um agente já definido. A ajuda da CLI não oferece `--mcp-config` nem opção equivalente por sessão: `agy mcp` gerencia os servidores globais do usuário. O Vard não altera essa configuração global, portanto os MCPs locais do Vard só são conectados automaticamente ao Claude Code e aos cérebros de API. O `mcp.json` da sessão fica disponível para inspeção, mas o agy não o consome automaticamente.
 
 ## Notas de implementação
 

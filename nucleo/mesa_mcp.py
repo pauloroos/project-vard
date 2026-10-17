@@ -43,7 +43,7 @@ def abrir_url(url: str) -> str:
     """Abre um site no navegador padrão. Aceita nome conhecido (youtube), domínio ou URL."""
     if not url.strip():
         return "Diga qual site abrir."
-    alvo = programas.normalizar_url(url, SITES_USUARIO)
+    alvo = programas.normalizar_url(url, programas.carregar_sites(config.arquivo_config("programas.toml")))
     try:
         os.startfile(alvo)
     except OSError as exc:
@@ -57,7 +57,7 @@ def abrir_programa(nome: str) -> str:
     """Abre um programa pelo nome falado (vscode, chrome, orca, terminal...)."""
     if not nome.strip():
         return "Diga qual programa abrir."
-    alvo = programas.resolver_programa(nome, APELIDOS)
+    alvo = programas.resolver_programa(nome, programas.carregar_apelidos(config.arquivo_config("programas.toml")))
     if not alvo:
         return f"Não encontrei o programa '{nome}' nos apelidos, no PATH nem no menu Iniciar."
     try:
@@ -146,4 +146,6 @@ def hora_atual() -> str:
 
 
 if __name__ == "__main__":
+    from vard.instalaveis import limpar_ambiente_mcp
+    limpar_ambiente_mcp()
     mcp.run()
