@@ -72,6 +72,11 @@ describe("configuracoes-paineis (T8)", () => {
     const painel = new Configuracoes({ ...CONFIG_PADRAO } as Config, raiz, criarDeps());
     await painel.montar();
     const botoes = Array.from(raiz.querySelectorAll<HTMLButtonElement>("nav button")).map((b) => b.dataset.aba);
+    expect(botoes).toContain("oficina");
+    const oficina = raiz.querySelector<HTMLButtonElement>('nav button[data-aba="oficina"]');
+    expect(oficina?.textContent).toBe("Oficina");
+    oficina!.click();
+    expect(raiz.querySelector("#cfg-titulo-secao")?.textContent).toBe("Oficina");
     // "Quem responde" absorveu provedores e agentes
     expect(botoes).toContain("modelos");
     expect(botoes).toContain("paineis-mcps");

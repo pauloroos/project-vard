@@ -11,7 +11,7 @@ import { Configuracoes, type Aba } from "./ui/configuracoes";
 import { montarImportacaoComPonte, resumirHudAtual } from "./ui/primeiro-uso-importacao";
 import { montarAssistentePrimeiroUso, type DepsPrimeiroUso } from "./ui/primeiro-uso";
 
-const ABAS: Aba[] = ["geral", "voz", "atalhos", "modelos", "paineis-mcps", "sistema", "reuniao", "avisos"];
+const ABAS: Aba[] = ["geral", "perfil", "voz", "atalhos", "oficina", "modelos", "paineis-mcps", "sistema", "reuniao", "avisos", "diagnostico"];
 
 window.addEventListener("DOMContentLoaded", async () => {
   const cfg = await carregarConfig();

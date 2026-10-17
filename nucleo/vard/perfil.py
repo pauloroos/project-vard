@@ -96,6 +96,7 @@ def montar_persona(perfil: Perfil, nome: str, usuario: str) -> str:
         produto = produto.replace(IDENTIDADE_EXEMPLO, quem, 1)
     if produto:
         partes.append(produto)
+    partes.append("Há habilidades cadastradas pelo usuário; antes de agir num pedido, consulte listar_habilidades do MCP de configurações, se a ferramenta estiver disponível.")
     return "\n\n".join(partes)
 
 

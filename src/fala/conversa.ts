@@ -1,4 +1,5 @@
 import { gatilhos, type Config } from "../config/config";
+import { INSTRUCAO_HABILIDADES } from "../config/habilidades";
 import { fluxoParaWav } from "../audio/wav";
 import { FALAS, saudacaoPara } from "./falas";
 import { cortarEmFrases } from "./frases";
@@ -392,7 +393,7 @@ export class Conversa {
         if (!resposta) throw new Error("resposta vazia");
       } else {
         resposta = (await this.d.oj.perguntar([
-          { role: "system", content: this.d.config.instrucao_formato },
+          { role: "system", content: `${this.d.config.instrucao_formato}\n${INSTRUCAO_HABILIDADES}` },
           ...this.historico,
           { role: "user", content: comando },
         ], ac.signal)).trim();

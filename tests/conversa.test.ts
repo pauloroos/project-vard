@@ -45,7 +45,10 @@ describe("conversa", () => {
   it("manda instrução de formato e o comando sem o nome", async () => {
     await c.aoTextoTranscrito("Vard, que horas são", false);
     const msgs = oj.perguntar.mock.calls[0][0];
-    expect(msgs[0]).toEqual({ role: "system", content: CONFIG_PADRAO.instrucao_formato });
+    expect(msgs[0].role).toBe("system");
+    expect(msgs[0].content).toContain(CONFIG_PADRAO.instrucao_formato);
+    expect(msgs[0].content).toContain("listar_habilidades");
+    expect(msgs[0].content).toContain("se a ferramenta estiver disponível");
     expect(msgs[msgs.length - 1]).toEqual({ role: "user", content: "que horas são" });
   });
   it("histórico guarda no máximo 10 trocas", async () => {

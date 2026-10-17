@@ -17,7 +17,7 @@ import { AbaModelos } from "./aba-modelos";
 import { AbaPerfil } from "./aba-perfil";
 import { AbaPaineisMcps } from "./paineis-mcps";
 import { AbaReuniao, type PonteReuniao } from "./aba-reuniao";
-import { AbaSaber } from "./aba-saber";
+import { AbaOficina } from "./aba-oficina";
 import { AbaSistema } from "./aba-sistema";
 import { AbaVoz } from "./aba-voz";
 import { InstaladorVozes } from "./instalador-vozes";
@@ -44,9 +44,9 @@ export interface DepsConfiguracoes {
 /** Monitor como o comando listar_monitores devolve (pixels físicos). */
 export interface MonitorInfo { nome: string; x: number; y: number; largura: number; altura: number; escala: number; principal: boolean }
 
-export type Aba = "geral" | "perfil" | "voz" | "atalhos" | "saber" | "modelos" | "paineis-mcps" | "sistema" | "reuniao" | "avisos" | "diagnostico";
+export type Aba = "geral" | "perfil" | "voz" | "atalhos" | "oficina" | "modelos" | "paineis-mcps" | "sistema" | "reuniao" | "avisos" | "diagnostico";
 const ABAS: [Aba, string][] = [
-  ["geral", "Geral"], ["perfil", "Perfil"], ["voz", "Voz"], ["atalhos", "Atalhos"], ["saber", "O que eu sei fazer"], ["modelos", "Quem responde"],
+  ["geral", "Geral"], ["perfil", "Perfil"], ["voz", "Voz"], ["atalhos", "Atalhos"], ["oficina", "Oficina"], ["modelos", "Quem responde"],
   ["paineis-mcps", "Ferramentas (MCP)"],
   ["sistema", "Sistema"], ["reuniao", "Reunião"], ["avisos", "Avisos"], ["diagnostico", "Diagnóstico"],
 ];
@@ -67,7 +67,7 @@ export class Configuracoes {
   private sistema: AbaSistema | null = null;
   private reuniao: AbaReuniao | null = null;
   private avisos: AbaAvisos | null = null;
-  private saber: AbaSaber | null = null;
+  private oficina: AbaOficina | null = null;
   private atualizacao: AbaAtualizacao | null = null;
   private diagnostico: AbaDiagnostico | null = null;
   private monitorRecursos: MonitorRecursos | null = null;
@@ -146,11 +146,11 @@ export class Configuracoes {
       eventos: (cb) => this.deps.ponte(urlPonte()).eventos(cb),
     });
     this.avisos.montar();
-    this.saber = new AbaSaber(this.raiz.querySelector<HTMLElement>("#cfg-saber")!, {
+    this.oficina = new AbaOficina(this.raiz.querySelector<HTMLElement>("#cfg-oficina")!, {
       statusPonte: () => this.deps.statusPonte(urlPonte()),
       nome: () => this.cfg.nome,
     });
-    this.saber.montar();
+    this.oficina.montar();
     // Atualização embutida na aba Geral (sem aba própria no menu).
     const blocoAtualizacao = this.raiz.querySelector<HTMLElement>("#cfg-atualizacao-bloco");
     if (blocoAtualizacao) {
@@ -194,7 +194,7 @@ export class Configuracoes {
     if (aba === "sistema") this.sistema?.ativar(); else this.sistema?.desativar();
     if (aba === "reuniao") this.reuniao?.ativar(); else this.reuniao?.desativar();
     if (aba === "avisos") this.avisos?.ativar(); else this.avisos?.desativar();
-    if (aba === "saber") this.saber?.ativar(); else this.saber?.desativar();
+    if (aba === "oficina") void this.oficina?.ativar(); else this.oficina?.desativar();
     if (aba === "geral" && this.cfg.atualizacao_ao_abrir) this.atualizacao?.aoAbrir();
   }
 
@@ -240,7 +240,7 @@ export class Configuracoes {
     const GRUPOS: [string, Aba[]][] = [
       ["Conversa", ["geral", "perfil"]],
       ["Voz e áudio", ["voz", "atalhos"]],
-      ["Cérebro", ["saber", "modelos", "paineis-mcps"]],
+      ["Cérebro", ["oficina", "modelos", "paineis-mcps"]],
             ["Sistema", ["sistema", "reuniao", "avisos", "diagnostico"]],
     ];
     const mapaRotulo = new Map(ABAS);
@@ -328,7 +328,7 @@ export class Configuracoes {
           <div id="cfg-importacao"></div>
         </section>
         <section data-aba="reuniao"><div id="cfg-reuniao"></div></section>
-        <section data-aba="saber"><div id="cfg-saber"></div></section>
+        <section data-aba="oficina"><div id="cfg-oficina"></div></section>
         <section data-aba="avisos"><div id="cfg-avisos"></div></section>
                 <section data-aba="modelos" id="cfg-modelos"></section>
         <section data-aba="diagnostico"><div id="cfg-diagnostico"></div></section>

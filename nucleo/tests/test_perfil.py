@@ -66,6 +66,14 @@ def test_montar_persona_sem_usuario_nao_quebra():
     assert isinstance(perfil.montar_persona(perfil.Perfil(), "", ""), str)
 
 
+def test_persona_orienta_consultar_habilidades_sem_exigir_ferramenta_instalada(monkeypatch):
+    monkeypatch.setattr(perfil, "_bloco_produto", lambda: "")
+    texto = perfil.montar_persona(perfil.Perfil(), "Aurora", "")
+    assert "listar_habilidades" in texto
+    assert "antes de agir" in texto
+    assert "se a ferramenta estiver disponível" in texto
+
+
 def test_perfil_json_invalido_cai_no_padrao_e_avisa(caplog):
     arq = vconfig.arquivo_config("perfil.json")
     arq.parent.mkdir(parents=True, exist_ok=True)

@@ -56,7 +56,13 @@ Só uma instância roda por vez: abrir o Vard de novo traz a janela para a frent
 - **Central de avisos (com a instalação privada):** contador discreto de avisos não lidos e aba "Avisos" no painel (ver resultado, marcar lidos). Nada é falado, a não ser que você ligue "Falar os avisos" (e nunca com "Não falar" ligado).
 - **Aguardando:** sinal discreto com o número de tarefas em andamento; passe o mouse para ver a lista.
 - **Reunião:** aba "Reunião" (iniciar, encerrar, gerar ata, última reunião); com a reunião ativa o widget fica mudo e mostra "reunião".
-- **Painel:** idioma do reconhecimento em lista e aba "O que eu sei fazer".
+- **Painel:** idioma do reconhecimento em lista e aba **Oficina**.
+
+Na **Oficina**, as habilidades de fábrica aparecem como **Capaz** e podem ser desligadas. Use **Nova habilidade**
+para ensinar uma receita com frases de exemplo e instruções; ela começa como **Treinada** e pode ser marcada como
+**Validada** depois de funcionar. Cadastro e edição abrem em modal; excluir pede confirmação. Busca e filtro por
+situação ajudam a encontrar as receitas. O arquivo `habilidades.json` fica junto de `paineis.json`, na pasta de
+configuração do usuário (`VARD_CONFIG` quando definida).
 
 ### Atalhos
 
