@@ -104,7 +104,11 @@ async def _testar_cerebro(
         return {"ok": False, "detalhe": exc.codigo, "primeiro_token_ms": None}
     except ValueError as exc:
         return {"ok": False, "detalhe": str(exc), "primeiro_token_ms": None}
+    return await consumir_teste(adaptador)
 
+
+async def consumir_teste(adaptador) -> dict[str, Any]:
+    """Manda o texto de teste a um adaptador já montado (HTTP ou CLI) e resume o que voltou."""
     mensagens = [{"role": "user", "content": TEXTO_TESTE}]
     t0 = time.monotonic()
     primeiro_token_ms: int | None = None
@@ -135,6 +139,7 @@ async def _testar_cerebro(
         return {"ok": False, "detalhe": "sem_resposta_do_modelo", "primeiro_token_ms": None}
 
     return {"ok": True, "detalhe": "resposta_recebida", "primeiro_token_ms": primeiro_token_ms}
+
 
 async def testar_cerebro(tipo: str, base_url: str, modelo: str, chave: str = ""):
     """Prazo total inclui espera da trava, sondagem e infer?ncia, sem troca impl?cita."""

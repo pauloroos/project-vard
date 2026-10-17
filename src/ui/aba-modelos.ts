@@ -45,6 +45,12 @@ const TIPOS_PROVEDOR: [string, string][] = [
 const EH_CLI = new Set(["cli-claude", "cli-agy", "cli-codex", "cli-opencode"]);
 const SO_DELEGADA = new Set(["cli-codex", "cli-opencode"]);
 
+/** Texto do resultado do Testar; Codex/OpenCode só confirmam a instalação (sem tempo de resposta). */
+export function resumoTeste(j: { ok?: boolean; detalhe?: string; primeiro_token_ms?: number | null }): string {
+  if (!j.ok) return j.detalhe === "cli_nao_encontrada" ? "CLI não encontrada neste PC." : `Falha: ${j.detalhe ?? "sem resposta"}`;
+  return j.primeiro_token_ms != null ? `Conexão OK (${j.primeiro_token_ms} ms)` : `OK: ${j.detalhe ?? ""}`.trim();
+}
+
 /** Normaliza endpoint: aceita com ou sem /v1 no final. */
 function normalizarEndpoint(url: string): string {
   const t = url.trim().replace(/\/+$/, "");
@@ -203,11 +209,12 @@ export class AbaModelos {
       const r = await fetch(`${this.deps.ponteUrl}/primeiro-uso/cerebro/testar`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ tipo: p.tipo, base_url: p.url_base, modelo: p.modelo, chave: "" }),
-        signal: AbortSignal.timeout(15000),
+        // A chave fica no cofre: o núcleo usa a do provedor salvo pelo id.
+        body: JSON.stringify({ tipo: p.tipo, base_url: p.url_base, modelo: p.modelo, chave: "", provedor_id: p.id }),
+        signal: AbortSignal.timeout(35000),
       });
       const j = await r.json().catch(() => ({ ok: false, detalhe: "sem resposta" }));
-      modal.avisar(j.ok ? `Conexão OK (${j.primeiro_token_ms ?? "?"} ms)` : `Falha: ${j.detalhe}`, !j.ok);
+      modal.avisar(resumoTeste(j), !j.ok);
     } catch (e) {
       modal.avisar(`Erro: ${String(e)}`, true);
     }
@@ -448,7 +455,7 @@ txt.textContent = `Encontrado no PC: ${ROTULOS_CLI[cli.tipo] ?? cli.tipo} ${cli.
         const r = await fetch(`${this.deps.ponteUrl}/primeiro-uso/cerebro/modelos`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ tipo: tipoSel.value, base_url: endpoint, chave: chaveInp.value.trim() }),
+          body: JSON.stringify({ tipo: tipoSel.value, base_url: endpoint, chave: chaveInp.value.trim(), provedor_id: provedor?.id }),
           signal: AbortSignal.timeout(15000),
         });
         const j = await r.json().catch(() => ({ ok: false, detalhe: "sem resposta" }));
@@ -496,7 +503,7 @@ txt.textContent = `Encontrado no PC: ${ROTULOS_CLI[cli.tipo] ?? cli.tipo} ${cli.
         modalRef?.avisar("Preencha o endpoint para testar.", true);
         return;
       }
-      if (!modelo) {
+      if (!modelo && !ehCli) {
         modalRef?.avisar("Preencha o modelo para testar.", true);
         return;
       }
@@ -505,11 +512,11 @@ txt.textContent = `Encontrado no PC: ${ROTULOS_CLI[cli.tipo] ?? cli.tipo} ${cli.
         const r = await fetch(`${this.deps.ponteUrl}/primeiro-uso/cerebro/testar`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ tipo, base_url: ehCli ? "" : url, modelo, chave: ehCli ? "" : chaveInp.value.trim() }),
-          signal: AbortSignal.timeout(15000),
+          body: JSON.stringify({ tipo, base_url: ehCli ? "" : url, modelo, chave: ehCli ? "" : chaveInp.value.trim(), provedor_id: provedor?.id }),
+          signal: AbortSignal.timeout(35000),
         });
         const j = await r.json().catch(() => ({ ok: false, detalhe: "sem resposta" }));
-        modalRef?.avisar(j.ok ? `Conexão OK (${j.primeiro_token_ms ?? "?"} ms)` : `Falha: ${j.detalhe}`, !j.ok);
+        modalRef?.avisar(resumoTeste(j), !j.ok);
       } catch (e) {
         modalRef?.avisar(`Erro: ${String(e)}`, true);
       }

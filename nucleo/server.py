@@ -885,10 +885,66 @@ async def _corpo_cerebro(request: Request, campos: tuple[str, ...]):
 async def primeiro_uso_cerebro_testar(request: Request):
     """Teste isolado da escolha expl?cita; n?o troca modelo nem persiste segredo."""
     from vard.primeiro_uso import cerebro
+    corpo = await _corpo_cerebro(request, ("tipo",))
+    tipo = corpo["tipo"].strip()
+    if tipo.startswith("cli-"):
+        return JSONResponse(await _testar_cli(tipo, str(corpo.get("modelo", "") or "").strip()))
     corpo = await _corpo_cerebro(request, ("tipo", "base_url", "modelo"))
     return JSONResponse(await cerebro.testar_cerebro(
-        tipo=corpo["tipo"].strip(), base_url=corpo["base_url"].strip(),
-        modelo=corpo["modelo"].strip(), chave=corpo.get("chave", "")))
+        tipo=tipo, base_url=corpo["base_url"].strip(),
+        modelo=corpo["modelo"].strip(), chave=_chave_do_teste(corpo)))
+
+
+def _sem_v1(url: str) -> str:
+    u = url.strip().rstrip("/")
+    return u[:-3] if u.endswith("/v1") else u
+
+
+def _chave_do_teste(corpo: dict) -> str:
+    """Chave digitada; sem ela, a do cofre do provedor salvo, só se tipo e endereço forem os mesmos dele.
+
+    Assim um endereço digitado no campo nunca recebe a chave de outro provedor.
+    """
+    chave = str(corpo.get("chave", "") or "").strip()
+    pid = corpo.get("provedor_id")
+    if chave or not isinstance(pid, str) or not pid.strip():
+        return chave
+    try:
+        dados = json.loads(config.arquivo_config("paineis.json").read_text(encoding="utf-8-sig"))
+        prov = next(p for p in dados.get("provedores", []) if isinstance(p, dict) and p.get("id") == pid.strip())
+    except (OSError, ValueError, StopIteration, AttributeError):
+        return ""
+    tipo = str(corpo.get("tipo", "")).strip()
+    if str(prov.get("tipo", "")) != tipo or _sem_v1(str(prov.get("url_base", ""))) != _sem_v1(str(corpo.get("base_url", ""))):
+        return ""
+    try:
+        return _resolver_credencial_cofre(str(prov.get("credencial_ref", "") or ""), tipo)
+    except _ErroCerebro:
+        return ""
+
+
+async def _testar_cli(tipo: str, modelo: str) -> dict:
+    """Testa uma CLI de verdade numa sessão descartável; Codex/OpenCode só servem a tarefas delegadas."""
+    import uuid
+    from vard.primeiro_uso import cerebro
+    from vard.cerebro import cli_deteccao
+    from vard.cerebro.cli import AdaptadorCli
+    from vard.cerebro.cli_processos import ProvedorCli
+    det =next((d for d in cli_deteccao.detectar() if d.get("tipo") == tipo), None)
+    if det is None or not det.get("instalada"):
+        return {"ok": False, "detalhe": "cli_nao_encontrada", "primeiro_token_ms": None}
+    if tipo not in ("cli-claude", "cli-agy"):
+        return {"ok": True, "detalhe": f"instalada {det.get('versao', '')}".strip(), "primeiro_token_ms": None}
+    supervisor = _obter_supervisor_cli()
+    sessao = f"teste-{uuid.uuid4().hex[:8]}"
+    provedor_cli = ProvedorCli(id=tipo.replace("-", "_"), tipo=tipo, modelo=modelo, yolo=False, enxuto=False)
+    try:
+        canal = await supervisor.canal(provedor_cli, sessao)
+        return await cerebro.consumir_teste(AdaptadorCli(canal, "claude" if tipo == "cli-claude" else "agy"))
+    except Exception as exc:  # noqa: BLE001
+        return {"ok": False, "detalhe": f"cli_falhou: {type(exc).__name__}", "primeiro_token_ms": None}
+    finally:
+        await supervisor.nova_conversa(sessao)   # encerra o processo do teste
 
 
 @app.post("/primeiro-uso/cerebro/modelos")
@@ -898,7 +954,7 @@ async def primeiro_uso_cerebro_modelos(request: Request):
     corpo = await _corpo_cerebro(request, ("tipo", "base_url"))
     try:
         async with asyncio.timeout(30):
-            modelos = await cerebro.listar_modelos(corpo["tipo"], corpo["base_url"], corpo.get("chave", ""))
+            modelos = await cerebro.listar_modelos(corpo["tipo"], corpo["base_url"], _chave_do_teste(corpo))
         return {"ok": True, "modelos": modelos}
     except ErroProvedor as exc:
         return {"ok": False, "detalhe": exc.codigo}

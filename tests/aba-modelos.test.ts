@@ -40,7 +40,7 @@ vi.mock("../src/config/config", async () => {
   };
 });
 
-import { AbaModelos, type DepsQuemResponde } from "../src/ui/aba-modelos";
+import { AbaModelos, resumoTeste, type DepsQuemResponde } from "../src/ui/aba-modelos";
 import { detectarClis } from "../src/config/clis";
 
 const mockDetectarClis = vi.mocked(detectarClis);
@@ -117,6 +117,35 @@ describe("AbaModelos (Quem responde 0.9.3)", () => {
     await new Promise((r) => setTimeout(r, 50));
 
     expect(configEmMemoria.cerebro).toBe("openjarvis");
+  });
+
+  it("Testar do card manda o id do provedor para o núcleo usar a chave do cofre", async () => {
+    const corpos: Record<string, unknown>[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+      if (String(url).includes("/primeiro-uso/cerebro/testar")) {
+        corpos.push(JSON.parse(String(init?.body)));
+        return new Response(JSON.stringify({ ok: true, detalhe: "resposta_recebida", primeiro_token_ms: 42 }));
+      }
+      return new Response("[]");
+    }));
+    cfgEmMemoria = {
+      ...PAINEIS_PADRAO,
+      provedores: [{ id: "lm", nome: "LM Studio", tipo: "lmstudio", url_base: "http://localhost:1234/v1", modelo: "llama-3", credencial_ref: "provedor:lm" }],
+    };
+    const raiz = criarRaiz();
+    const aba = new AbaModelos(raiz, criarDeps());
+    await aba.carregar();
+    const testar = Array.from(raiz.querySelectorAll<HTMLButtonElement>("button")).filter((b) => b.textContent === "Testar")[1];
+    testar!.click();
+    await new Promise((r) => setTimeout(r, 50));
+    expect(corpos[0]).toMatchObject({ tipo: "lmstudio", provedor_id: "lm" });
+    expect(raiz.textContent).toContain("Conexão OK (42 ms)");
+    vi.unstubAllGlobals();
+  });
+
+  it("resumo do Testar: Codex instalado mostra a versão, CLI ausente avisa", () => {
+    expect(resumoTeste({ ok: true, detalhe: "instalada codex-cli 0.1", primeiro_token_ms: null })).toBe("OK: instalada codex-cli 0.1");
+    expect(resumoTeste({ ok: false, detalhe: "cli_nao_encontrada" })).toBe("CLI não encontrada neste PC.");
   });
 
   it("Usar este em provedor grava cerebro=proprio e paineis.ativo", async () => {
