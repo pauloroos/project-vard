@@ -36,6 +36,10 @@ export interface DepsConversa {
     falar(texto: string, velocidade: number, sinal?: AbortSignal): Promise<FalaEmFluxo>;
     falarWav?(texto: string, velocidade: number, prazoMs?: number): Promise<ArrayBuffer>;
   };
+  /** Voz de reserva configurada pelo usuário; usada automaticamente quando a principal falhar. */
+  vozReserva?: {
+    falarWav(texto: string, velocidade: number, prazoMs?: number): Promise<ArrayBuffer>;
+  };
   /** Fala fixa já sintetizada (com cache). */
   falas: (texto: string) => Promise<ArrayBuffer>;
   /** false = "não falar": nenhuma síntese nem áudio; a resposta fica só em texto. */
@@ -174,9 +178,16 @@ export class Conversa {
       if (sinal.aborted) return null;
       return { wav: await reserva(frase) };
     };
-    // Reserva de fala: usa o serviço de voz próprio (Kokoro/Edge/Piper via backend) quando disponível;
-    // só aciona OpenJarvis se não houver voz própria configurada. Nunca liga OJ por queda do motor escolhido.
+    // Reserva de fala: usa a voz de reserva configurada quando disponível;
+    // cai para o OpenJarvis se a reserva também falhar ou não estiver configurada.
     const reserva = async (frase: string): Promise<ArrayBuffer> => {
+      if (d.vozReserva?.falarWav) {
+        try {
+          return await d.vozReserva.falarWav(frase, d.config.velocidade);
+        } catch (erro) {
+          console.warn("reserva configurada falhou", erro);
+        }
+      }
       if (d.voz?.falarWav) {
         try {
           return await d.voz.falarWav(frase, d.config.velocidade);

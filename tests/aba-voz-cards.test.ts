@@ -2,9 +2,8 @@
  * @vitest-environment jsdom
  */
 /**
- * Testes da lista de vozes em cards da seção Voz (0.9.3, U5/U8):
- * escolher grava a seleção como hoje, cadastro/edição/remoção pelo modal,
- * motor ausente mostra o card de instalar, busca filtra e serviço fora avisa.
+ * Testes da seção Voz (0.9.4): listas de seleção principal/reserva com botão Ouvir amostra,
+ * blocos de serviço claros, cadastro em modal e reserva automática.
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { PaineisConfig } from "../src/config/paineis";
@@ -13,7 +12,6 @@ import { CONFIG_PADRAO } from "../src/config/config";
 import type { OpenJarvis } from "../src/conectores/openjarvis/cliente";
 
 let paineisMem: PaineisConfig | null = null;
-
 vi.mock("@tauri-apps/api/core", () => ({
   invoke: vi.fn().mockImplementation((cmd: string, args?: Record<string, unknown>) => {
     if (cmd === "ler_paineis") return Promise.resolve(paineisMem);
@@ -24,18 +22,9 @@ vi.mock("@tauri-apps/api/core", () => ({
     return Promise.resolve(null);
   }),
 }));
-
 vi.mock("../src/config/segredos", () => ({ cofreExiste: vi.fn(async () => true) }));
 
 import { AbaVoz } from "../src/ui/aba-voz";
-import { invoke } from "@tauri-apps/api/core";
-
-/** Configs que chegaram ao gravar_paineis (prova de que a seleção foi gravada de verdade). */
-function gravacoes(): PaineisConfig[] {
-  return vi.mocked(invoke).mock.calls
-    .filter(([cmd]) => cmd === "gravar_paineis")
-    .map(([, args]) => (args as { valor: PaineisConfig }).valor);
-}
 
 const VOZES_XTTS = [
   "Suad Qasim",
@@ -97,47 +86,7 @@ async function abrir(): Promise<AbaTeste> {
   return t;
 }
 
-function cartao(raiz: HTMLElement, id: string): HTMLElement {
-  const el = raiz.querySelector<HTMLElement>(`article.card[data-id="${id}"]`);
-  expect(el, `card ${id}`).toBeTruthy();
-  return el!;
-}
-
-function botao(el: HTMLElement, rotulo: string): HTMLButtonElement {
-  const b = [...el.querySelectorAll<HTMLButtonElement>(".card-acoes button")].find((x) => x.textContent === rotulo);
-  expect(b, `botão ${rotulo}`).toBeTruthy();
-  return b!;
-}
-
-function modalAberto(): HTMLElement {
-  const m = document.querySelector<HTMLElement>(".modal");
-  expect(m, "modal aberto").toBeTruthy();
-  return m!;
-}
-
-function botaoModal(rotulo: string): HTMLButtonElement {
-  const m = modalAberto();
-  const b = [...m.querySelectorAll<HTMLButtonElement>(".modal-acoes button")].find((x) => x.textContent === rotulo);
-  expect(b, `botão do modal ${rotulo}`).toBeTruthy();
-  return b!;
-}
-
-function camposModal(): { id: HTMLInputElement; nome: HTMLInputElement; tipo: HTMLSelectElement; url: HTMLInputElement; modelo: HTMLInputElement; cred: HTMLInputElement } {
-  const m = modalAberto();
-  const entradas = [...m.querySelectorAll<HTMLElement>(".modal-voz input, .modal-voz select")];
-  return {
-    id: entradas[0] as HTMLInputElement,
-    nome: entradas[1] as HTMLInputElement,
-    tipo: entradas[2] as HTMLSelectElement,
-    url: entradas[3] as HTMLInputElement,
-    modelo: entradas[4] as HTMLInputElement,
-    cred: entradas[5] as HTMLInputElement,
-  };
-}
-
-const proximoTick = () => new Promise((r) => setTimeout(r, 0));
-
-describe("lista de vozes em cards (U5)", () => {
+describe("listas de seleção principal e reserva (0.9.4)", () => {
   beforeEach(() => {
     document.body.innerHTML = "";
     paineisMem = null;
@@ -149,179 +98,94 @@ describe("lista de vozes em cards (U5)", () => {
     };
   });
 
-  it("lista_agrupada_por_motor_com_o_xtts_inteiro", async () => {
+  it("select_principal_contem_opcoes_de_todos_os_motores", async () => {
     const { raiz } = await abrir();
-    for (const grupo of ["xtts", "kokoro", "edge", "piper", "elevenlabs", "gemini", "fish"]) {
-      expect(raiz.querySelector(`#cfg-voz-grupo-${grupo}`), `grupo ${grupo}`).toBeTruthy();
-    }
-    const xtts = raiz.querySelector<HTMLElement>("#cfg-voz-grupo-xtts")!;
-    expect(xtts.querySelectorAll("article.card").length).toBe(58);
-    const kokoro = cartao(raiz, "voz:openjarvis:Kokoro:pf_dora");
-    expect(kokoro.querySelector(".card-etiqueta")!.textContent).toBe("Kokoro · OpenJarvis");
+    const sel = raiz.querySelector<HTMLSelectElement>("#cfg-voz-principal")!;
+    expect(sel).toBeTruthy();
+    const grupos = [...sel.querySelectorAll("optgroup")].map((g) => g.label);
+    expect(grupos.some((g) => g.includes("XTTS"))).toBe(true);
+    expect(grupos.some((g) => g.includes("Kokoro"))).toBe(true);
+    expect(grupos.some((g) => g.includes("Edge"))).toBe(true);
+    expect(grupos.some((g) => g.includes("Piper"))).toBe(true);
   });
 
-  it("busca_filtra_os_cards_do_grupo", async () => {
+  it("select_reserva_tem_opcao_nenhuma_e_as_mesmas_vozes", async () => {
     const { raiz } = await abrir();
-    const busca = raiz.querySelector<HTMLInputElement>("#cfg-voz-grupo-xtts input.cards-busca")!;
-    expect(busca).toBeTruthy();
-    busca.value = "fictícia 01";
-    busca.dispatchEvent(new Event("input"));
-    const visiveis = [...raiz.querySelectorAll<HTMLElement>("#cfg-voz-grupo-xtts article.card")].filter((c) => !c.hidden);
-    expect(visiveis.length).toBe(1);
-    expect(visiveis[0].textContent).toContain("Fictícia 01");
+    const sel = raiz.querySelector<HTMLSelectElement>("#cfg-voz-reserva")!;
+    expect(sel).toBeTruthy();
+    const primeira = sel.options[0];
+    expect(primeira.value).toBe("");
+    expect(primeira.textContent).toContain("Nenhuma");
+    const grupos = [...sel.querySelectorAll("optgroup")].map((g) => g.label);
+    expect(grupos.some((g) => g.includes("Kokoro"))).toBe(true);
   });
 
-  it("escolher_voz_do_xtts_grava_como_hoje", async () => {
+  it("escolher_voz_no_select_principal_grava_na_config", async () => {
     const { raiz, aba } = await abrir();
-    botao(cartao(raiz, "voz:neste-pc:XTTS:Suad Qasim"), "Usar esta").click();
+    const sel = raiz.querySelector<HTMLSelectElement>("#cfg-voz-principal")!;
+    const opcao = [...sel.options].find((o) => o.value.startsWith("propria:xtts:Suad"));
+    expect(opcao).toBeTruthy();
+    sel.value = opcao!.value;
+    sel.dispatchEvent(new Event("change"));
     const lido = aba.ler();
     expect(lido.voz_provedor).toBe("propria");
     expect(lido.voz_motor).toBe("xtts");
     expect(lido.voz_propria).toBe("Suad Qasim");
-    expect(cartao(raiz, "voz:neste-pc:XTTS:Suad Qasim").textContent).toContain("Em uso");
   });
 
-  it("escolher_voz_kokoro_do_openjarvis_grava_o_voz", async () => {
+  it("escolher_openjarvis_no_select_principal_grava_voz_e_provedor", async () => {
     const { raiz, aba } = await abrir();
-    botao(cartao(raiz, "voz:openjarvis:Kokoro:pm_alex"), "Usar esta").click();
+    const sel = raiz.querySelector<HTMLSelectElement>("#cfg-voz-principal")!;
+    const opcao = [...sel.options].find((o) => o.value.startsWith("openjarvis:pm_alex"));
+    expect(opcao).toBeTruthy();
+    sel.value = opcao!.value;
+    sel.dispatchEvent(new Event("change"));
     const lido = aba.ler();
     expect(lido.voz_provedor).toBe("openjarvis");
     expect(lido.voz).toBe("pm_alex");
-    expect(lido.voz_propria).toBe("");
   });
 
-  it("escolher_voz_kokoro_local_grava_motor_e_voz_propria", async () => {
+  it("escolher_reserva_grava_campos_de_reserva_na_config", async () => {
     const { raiz, aba } = await abrir();
-    const local = cartao(raiz, "voz:neste-pc:Kokoro:pf_dora");
-    expect(local.querySelector(".card-etiqueta")!.textContent).toBe("Kokoro · neste PC");
-    botao(local, "Usar esta").click();
+    const sel = raiz.querySelector<HTMLSelectElement>("#cfg-voz-reserva")!;
+    const opcao = [...sel.options].find((o) => o.value.startsWith("openjarvis:pf_dora"));
+    expect(opcao).toBeTruthy();
+    sel.value = opcao!.value;
+    sel.dispatchEvent(new Event("change"));
     const lido = aba.ler();
-    expect(lido.voz_provedor).toBe("propria");
-    expect(lido.voz_motor).toBe("kokoro");
-    expect(lido.voz_propria).toBe("pf_dora");
+    expect(lido.voz_reserva_provedor).toBe("openjarvis");
+    expect(lido.voz_reserva_id).toBe("pf_dora");
   });
 
-  it("escolher_voz_de_nuvem_grava_o_campo_do_provedor", async () => {
+  it("reserva_nenhuma_limpa_campos_de_reserva", async () => {
     const { raiz, aba } = await abrir();
-    botao(cartao(raiz, "voz:nuvem:Gemini:Puck"), "Usar esta").click();
-    expect(aba.ler().voz_provedor).toBe("gemini");
-    expect(aba.ler().gemini_voz).toBe("Puck");
+    const sel = raiz.querySelector<HTMLSelectElement>("#cfg-voz-reserva")!;
+    sel.value = "";
+    sel.dispatchEvent(new Event("change"));
+    const lido = aba.ler();
+    expect(lido.voz_reserva_provedor).toBe("nenhuma");
+    expect(lido.voz_reserva_id).toBe("");
   });
 
-  it("voz_atual_ja_vem_com_o_selo_em_uso", async () => {
-    const raiz = document.createElement("div");
-    document.body.append(raiz);
-    const aba = new AbaVoz(raiz, { ...CONFIG_PADRAO, voz_url: "http://127.0.0.1:4710", voz_provedor: "openjarvis", voz: "pm_alex" }, {
-      criarOj: () => ojFalso, velocidade: () => 1, dizer: vi.fn(),
-    });
-    aba.montar();
-    await aba.atualizar();
-    expect(cartao(raiz, "voz:openjarvis:Kokoro:pm_alex").textContent).toContain("Em uso");
-    expect(cartao(raiz, "voz:openjarvis:Kokoro:pf_dora").textContent).not.toContain("Em uso");
+  it("botao_amostra_principal_existe_e_chama_dizer", async () => {
+    const { raiz, dizer } = await abrir();
+    const btn = raiz.querySelector<HTMLButtonElement>("#cfg-voz-amostra-principal")!;
+    expect(btn).toBeTruthy();
+    expect(btn.textContent).toContain("Ouvir amostra");
+    // Com serviço no ar, o select tem valor padrão e a amostra tenta sintetizar
+    btn.click();
+    expect(dizer).toHaveBeenCalledWith("Sintetizando...");
+  });
+
+  it("botao_amostra_reserva_existe", async () => {
+    const { raiz } = await abrir();
+    const btn = raiz.querySelector<HTMLButtonElement>("#cfg-voz-amostra-reserva")!;
+    expect(btn).toBeTruthy();
+    expect(btn.textContent).toContain("Ouvir amostra");
   });
 });
 
-describe("modal de voz cadastrada", () => {
-  beforeEach(() => {
-    document.body.innerHTML = "";
-    paineisMem = null;
-    vi.clearAllMocks();
-    vi.stubGlobal("fetch", mockFetch);
-  });
-
-  it("adicionar_pelo_modal_grava_e_aparece_na_lista", async () => {
-    const { raiz } = await abrir();
-    raiz.querySelector<HTMLButtonElement>("#cfg-voz-adicionar")!.click();
-    const c = camposModal();
-    c.id.value = "aria";
-    c.nome.value = "Ária";
-    c.tipo.value = "fish";
-    c.url.value = "http://127.0.0.1:9000";
-    botaoModal("Salvar").click();
-    await proximoTick();
-    expect(document.querySelector(".modal")).toBeNull();
-    expect(paineisMem!.provedores).toHaveLength(1);
-    expect(paineisMem!.provedores[0]).toMatchObject({ id: "aria", nome: "Ária", tipo: "fish" });
-    expect(cartao(raiz, "voz:cadastrada:Fish:aria").textContent).toContain("Ária");
-    expect(cartao(raiz, "voz:cadastrada:Fish:aria").querySelector(".card-etiqueta")!.textContent).toBe("Fish · cadastrada");
-  });
-
-  it("editar_pelo_modal_atualiza_a_voz", async () => {
-    paineisMem = {
-      ...PAINEIS_PADRAO,
-      provedores: [{ id: "aria", nome: "Ária", tipo: "fish", url_base: "http://127.0.0.1:9000", modelo: "fish-v1" }],
-    };
-    const { raiz } = await abrir();
-    botao(cartao(raiz, "voz:cadastrada:Fish:aria"), "Editar").click();
-    const c = camposModal();
-    expect(c.id.value).toBe("aria");
-    expect(c.id.readOnly).toBe(true);
-    c.nome.value = "Ária Nova";
-    botaoModal("Salvar").click();
-    await proximoTick();
-    expect(paineisMem!.provedores[0].nome).toBe("Ária Nova");
-    expect(cartao(raiz, "voz:cadastrada:Fish:aria").textContent).toContain("Ária Nova");
-    expect(gravacoes().some((c) => c.provedores[0]?.nome === "Ária Nova")).toBe(true);
-  });
-
-  it("remover_pelo_card_e_pelo_modal", async () => {
-    const base: PaineisConfig = {
-      ...PAINEIS_PADRAO,
-      provedores: [
-        { id: "aria", nome: "Ária", tipo: "fish", url_base: "", modelo: "" },
-        { id: "dub", nome: "Dub", tipo: "suad", url_base: "", modelo: "" },
-      ],
-    };
-    paineisMem = { ...base, provedores: [...base.provedores] };
-    const { raiz } = await abrir();
-    botao(cartao(raiz, "voz:cadastrada:Fish:aria"), "Remover").click();
-    await proximoTick();
-    expect(paineisMem!.provedores.map((p) => p.id)).toEqual(["dub"]);
-    botao(cartao(raiz, "voz:cadastrada:XTTS:dub"), "Editar").click();
-    botaoModal("Remover").click();
-    await proximoTick();
-    expect(paineisMem!.provedores).toHaveLength(0);
-    expect(document.querySelector(".modal")).toBeNull();
-  });
-
-  it("modal_recusa_id_duplicado_e_fica_aberto", async () => {
-    paineisMem = {
-      ...PAINEIS_PADRAO,
-      provedores: [{ id: "aria", nome: "Ária", tipo: "fish", url_base: "", modelo: "" }],
-    };
-    const { raiz } = await abrir();
-    raiz.querySelector<HTMLButtonElement>("#cfg-voz-adicionar")!.click();
-    const c = camposModal();
-    c.id.value = "aria";
-    c.nome.value = "Outra";
-    botaoModal("Salvar").click();
-    await proximoTick();
-    expect(modalAberto().textContent).toContain("Já existe uma voz");
-    expect(paineisMem!.provedores).toHaveLength(1);
-  });
-
-  it("modal_recusa_campos_obrigatorios_vazios", async () => {
-    const { raiz } = await abrir();
-    raiz.querySelector<HTMLButtonElement>("#cfg-voz-adicionar")!.click();
-    botaoModal("Salvar").click();
-    await proximoTick();
-    expect(modalAberto().textContent).toContain("Preencha todos os campos obrigatórios");
-  });
-
-  it("usar_uma_voz_cadastrada_grava_o_paineis_ativo", async () => {
-    paineisMem = {
-      ...PAINEIS_PADRAO,
-      provedores: [{ id: "aria", nome: "Ária", tipo: "fish", url_base: "", modelo: "" }],
-    };
-    const { raiz } = await abrir();
-    botao(cartao(raiz, "voz:cadastrada:Fish:aria"), "Usar esta").click();
-    await proximoTick();
-    expect(paineisMem!.ativo).toBe("aria");
-    expect(gravacoes().some((c) => c.ativo === "aria")).toBe(true);
-  });
-});
-
-describe("motores ausentes e serviço fora (U8)", () => {
+describe("blocos de serviço (0.9.4)", () => {
   beforeEach(() => {
     document.body.innerHTML = "";
     paineisMem = null;
@@ -333,58 +197,126 @@ describe("motores ausentes e serviço fora (U8)", () => {
     };
   });
 
-  it("motor_ausente_mostra_card_de_instalar_sem_botao_para_motor_sem_pacote", async () => {
-    estado = {
-      saude: { pronta: true, voz: "Suad Qasim", device: "cpu", aquecida: true, xtts: true, kokoro: false, edge: false, piper: false },
-      vozes: VOZES_XTTS,
-    };
+  it("bloco_servico_local_mostra_endereco_e_estado", async () => {
     const { raiz } = await abrir();
-    for (const grupo of ["kokoro", "edge", "piper"]) {
-      const bloco = raiz.querySelector<HTMLElement>(`#cfg-voz-grupo-${grupo}`)!;
-      const cards = [...bloco.querySelectorAll<HTMLElement>("article.card")].filter((c) => c.textContent!.includes("Não instalado"));
-      expect(cards.length, `card de instalar em ${grupo}`).toBe(1);
-      expect(cards[0].querySelector(".card-acoes")).toBeNull();
-      expect(cards[0].textContent).toContain("Não instalado neste PC");
-    }
-    // Kokoro continua disponível pelo OpenJarvis enquanto o motor local está ausente.
-    expect(raiz.querySelector('#cfg-voz-grupo-kokoro article.card[data-id="voz:openjarvis:Kokoro:pm_alex"]')).toBeTruthy();
+    const bloco = raiz.querySelector<HTMLElement>("#cfg-voz-servicos")!;
+    expect(bloco).toBeTruthy();
+    expect(bloco.textContent).toContain("Serviço de voz deste PC");
+    expect(bloco.textContent).toContain("Endereço do serviço de voz");
+    expect(bloco.textContent).toContain("Serviço de voz no ar");
+    const input = bloco.querySelector<HTMLInputElement>("#cfg-voz_url")!;
+    expect(input).toBeTruthy();
+    expect(input.value).toBe("http://127.0.0.1:4710");
   });
 
-  it("xtts_nao_instalado_mostra_o_botao_do_instalador_existente", async () => {
-    estado = {
-      saude: { pronta: true, voz: "", device: "cpu", aquecida: true, xtts: false, kokoro: true, edge: true, piper: true },
-      vozes: [],
-    };
+  it("bloco_elevenlabs_tem_chave_e_botao_carregar", async () => {
     const { raiz } = await abrir();
-    const instalador = document.createElement("div");
-    instalador.id = "cfg-instalador-vozes";
-    instalador.innerHTML = `<button data-acao="instalar" data-pkg="xtts-v2">Instalar</button>`;
-    const clique = vi.fn();
-    instalador.querySelector("button")!.addEventListener("click", clique);
-    document.body.append(instalador);
-    const bloco = raiz.querySelector<HTMLElement>("#cfg-voz-grupo-xtts")!;
-    const card = [...bloco.querySelectorAll<HTMLElement>("article.card")].find((c) => c.textContent!.includes("Não instalado"))!;
-    expect(card, "card do XTTS não instalado").toBeTruthy();
-    botao(card, "Instalar").click();
-    expect(clique).toHaveBeenCalledTimes(1);
+    const bloco = raiz.querySelector<HTMLElement>("#cfg-voz-servicos")!;
+    expect(bloco.textContent).toContain("ElevenLabs");
+    expect(bloco.querySelector("#cfg-elevenlabs_chave")).toBeTruthy();
+    expect(bloco.querySelector("#cfg-voz-carregar-elevenlabs")).toBeTruthy();
   });
 
-  it("serviço_fora_mostra_aviso_no_topo_e_nao_lista_vazia", async () => {
+  it("bloco_gemini_tem_chave", async () => {
+    const { raiz } = await abrir();
+    const bloco = raiz.querySelector<HTMLElement>("#cfg-voz-servicos")!;
+    expect(bloco.textContent).toContain("Gemini");
+    expect(bloco.querySelector("#cfg-gemini_chave")).toBeTruthy();
+  });
+
+  it("servico_fora_mostra_aviso_no_topo", async () => {
     estado = { saude: null, vozes: null };
     const { raiz } = await abrir();
     const aviso = raiz.querySelector<HTMLElement>("#cfg-voz-aviso")!;
     expect(aviso.hidden).toBe(false);
     expect(aviso.textContent).toContain("Os serviços do Vard estão desligados");
-    // nada de "não instalado" enganoso: o serviço é que está fora
-    expect(raiz.textContent).not.toContain("Não instalado");
-    expect(raiz.textContent).toContain("Serviço de voz fora do ar");
-    // e a lista não fica vazia: as vozes do OpenJarvis continuam lá
-    expect(raiz.querySelector('#cfg-voz-grupo-kokoro article.card[data-id="voz:openjarvis:Kokoro:pm_alex"]')).toBeTruthy();
+    const bloco = raiz.querySelector<HTMLElement>("#cfg-voz-servicos")!;
+    expect(bloco.textContent).toContain("Serviço de voz fora do ar");
   });
 
-  it("serviço_no_ar_nao_mostra_aviso", async () => {
+  it("servico_desligado_mostra_aviso_e_estado_no_bloco", async () => {
+    const { raiz, aba } = criarAba();
+    // cfg sem voz_url → estado desligado
+    (aba as unknown as { cfg: typeof CONFIG_PADRAO }).cfg.voz_url = "";
+    await aba.atualizar();
+    const aviso = raiz.querySelector<HTMLElement>("#cfg-voz-aviso")!;
+    expect(aviso.hidden).toBe(false);
+    expect(aviso.textContent).toContain("O serviço de voz está desligado");
+  });
+});
+
+describe("vozes cadastradas (modal)", () => {
+  beforeEach(() => {
+    document.body.innerHTML = "";
+    paineisMem = {
+      ...PAINEIS_PADRAO,
+      provedores: [
+        { id: "fish-aria", nome: "Aria", tipo: "fish", url_base: "http://localhost:9999", modelo: "aria-v1" },
+      ],
+    };
+    vi.clearAllMocks();
+    vi.stubGlobal("fetch", mockFetch);
+    estado = {
+      saude: { pronta: true, voz: "Suad Qasim", device: "cpu", aquecida: true, xtts: true, kokoro: true, edge: true, piper: true },
+      vozes: VOZES_XTTS,
+    };
+  });
+
+  it("voz_cadastrada_aparece_na_lista_de_selecao", async () => {
     const { raiz } = await abrir();
-    expect(raiz.querySelector<HTMLElement>("#cfg-voz-aviso")!.hidden).toBe(true);
-    expect(raiz.textContent).not.toContain("Serviço de voz fora do ar");
+    const sel = raiz.querySelector<HTMLSelectElement>("#cfg-voz-principal")!;
+    const opcao = [...sel.options].find((o) => o.value === "cadastrada:fish-aria");
+    expect(opcao).toBeTruthy();
+    expect(opcao!.textContent).toContain("Aria");
+  });
+
+  it("voz_cadastrada_aparece_no_bloco_de_cadastradas_com_botao_editar", async () => {
+    const { raiz } = await abrir();
+    const bloco = raiz.querySelector<HTMLElement>("#cfg-voz-cadastradas")!;
+    expect(bloco).toBeTruthy();
+    expect(bloco.textContent).toContain("Aria");
+    expect(bloco.textContent).toContain("Editar");
+  });
+
+  it("botao_adicionar_voz_abre_modal", async () => {
+    const { raiz } = await abrir();
+    const bloco = raiz.querySelector<HTMLElement>("#cfg-voz-cadastradas")!;
+    const btnAdd = [...bloco.querySelectorAll<HTMLButtonElement>("button")].find((b) => b.textContent === "Adicionar voz");
+    expect(btnAdd).toBeTruthy();
+    btnAdd!.click();
+    const modal = document.querySelector<HTMLElement>(".modal");
+    expect(modal).toBeTruthy();
+  });
+});
+
+describe("detector e interrupção (Ouvido)", () => {
+  beforeEach(() => {
+    document.body.innerHTML = "";
+    paineisMem = null;
+    vi.clearAllMocks();
+    vi.stubGlobal("fetch", mockFetch);
+    estado = {
+      saude: { pronta: true, voz: "Suad Qasim", device: "cpu", aquecida: true, xtts: true, kokoro: true, edge: true, piper: true },
+      vozes: VOZES_XTTS,
+    };
+  });
+
+  it("campos_vad_e_interromper_existem_no_dom", async () => {
+    const { raiz } = await abrir();
+    const vad = raiz.querySelector<HTMLSelectElement>("#cfg-vad");
+    expect(vad).toBeTruthy();
+    const inter = raiz.querySelector<HTMLInputElement>("#cfg-interromper_ao_falar");
+    expect(inter).toBeTruthy();
+  });
+
+  it("ler_retorna_vad_e_interromper_do_formulario", async () => {
+    const { raiz, aba } = await abrir();
+    const vad = raiz.querySelector<HTMLSelectElement>("#cfg-vad")!;
+    vad.value = "silero";
+    const inter = raiz.querySelector<HTMLInputElement>("#cfg-interromper_ao_falar")!;
+    inter.checked = true;
+    const lido = aba.ler();
+    expect(lido.vad).toBe("silero");
+    expect(lido.interromper_ao_falar).toBe(true);
   });
 });

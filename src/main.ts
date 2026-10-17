@@ -19,7 +19,7 @@ import { EmAndamento, textoDaDica as dicaDeAndamento } from "./avisos/andamento"
 import { deveFalarAviso, AvisoPorVez } from "./avisos/fala";
 import { criarFluxoChamada } from "./avisos/chamada";
 import { EstadoReuniao } from "./reuniao/estado";
-import { criarFonteDeVoz } from "./conectores/voz/escolher";
+import { criarFonteDeVoz, type ProvedorVoz } from "./conectores/voz/escolher";
 import type { FonteDeVoz } from "./conectores/voz/fonte";
 import { Conversa, type Estado } from "./fala/conversa";
 import { processarTextoOuvido } from "./fala/textoOuvido";
@@ -180,6 +180,18 @@ window.addEventListener("DOMContentLoaded", async () => {
   const oj = new OpenJarvis(base, cfg.modelo);
   // Voz própria opcional (docs/voz-propria.md). Vazio desliga: a voz fica sempre a do OpenJarvis.
   const voz: FonteDeVoz | null = criarFonteDeVoz(cfg);
+  // Voz de reserva configurada pelo usuário; usada automaticamente quando a principal falhar.
+  const vozReserva: FonteDeVoz | null = cfg.voz_reserva_provedor && cfg.voz_reserva_provedor !== "nenhuma"
+    ? criarFonteDeVoz({
+        voz_provedor: cfg.voz_reserva_provedor as ProvedorVoz,
+        voz_url: cfg.voz_url,
+        voz_propria: cfg.voz_reserva_id ?? "",
+        elevenlabs_chave: cfg.elevenlabs_chave,
+        elevenlabs_voz: cfg.voz_reserva_provedor === "elevenlabs" ? (cfg.voz_reserva_id ?? "") : "",
+        gemini_chave: cfg.gemini_chave,
+        gemini_voz: cfg.voz_reserva_provedor === "gemini" ? (cfg.voz_reserva_id ?? "") : "",
+      })
+    : null;
 
   // Painel de configurações: janela própria (engrenagem, bandeja ou atalho). Aqui só o clique atravessando a janela.
   const aplicarClickThrough = (ligado: boolean) => { void invoke("definir_click_through", { ligado }).catch(() => {}); };
@@ -322,6 +334,7 @@ window.addEventListener("DOMContentLoaded", async () => {
   const conversa = new Conversa({
     oj, boca, config: cfg,
     ...(voz ? { voz } : {}),
+    ...(vozReserva ? { vozReserva } : {}),
     falas: fixa,
     reuniaoAtiva: () => reuniaoAtiva,
     falarPermitida: () => !naoFalar,
