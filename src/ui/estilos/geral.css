@@ -1,0 +1,22 @@
+/* Frente Geral — Aparência e Atualização embutida */
+.aparencia-linha { display: flex; align-items: center; gap: 12px; margin-top: 8px; }
+.aparencia-cores { display: flex; gap: 6px; flex-wrap: wrap; }
+.aparencia-cor {
+  width: 24px; height: 24px; border-radius: 50%; border: 2px solid transparent; cursor: pointer; padding: 0;
+}
+.aparencia-cor.ativa { border-color: var(--ciano); box-shadow: 0 0 6px var(--brilho); }
+.aparencia-cor input { position: absolute; opacity: 0; pointer-events: none; }
+.aparencia-personalizada { display: flex; align-items: center; gap: 6px; }
+.aparencia-personalizada input[type="color"] {
+  width: 32px; height: 24px; padding: 0; border: 1px solid var(--borda); border-radius: 4px;
+  background: transparent; cursor: pointer;
+}
+.aparencia-slider { flex: 1; min-width: 120px; display: flex; align-items: center; gap: 8px; }
+.aparencia-slider input[type="range"] { flex: 1; accent-color: var(--ciano); }
+.aparencia-preview {
+  width: 64px; height: 40px; border-radius: 6px; border: 1px solid var(--borda);
+  display: flex; align-items: center; justify-content: center; font: 10px/1 var(--mono);
+  text-transform: uppercase; letter-spacing: 0.08em;
+}
+#cfg-atualizacao-bloco { margin-top: 14px; padding: 10px 12px; border: 1px solid var(--borda); border-radius: 6px; }
+#cfg-atualizacao-bloco p { margin: 0 0 6px; }

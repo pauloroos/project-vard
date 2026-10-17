@@ -108,7 +108,8 @@ section[hidden] { display: none; }
   font: 14px/1.3 var(--mono);
   text-transform: uppercase;
   letter-spacing: 0.1em;
-  opacity: 0.85;
+  /* Só o texto fica mais suave: opacity no elemento deixava o fundo transparente e o conteúdo aparecia por trás. */
+  color: color-mix(in srgb, currentColor 85%, transparent);
 }
 
 /* Rodapé compacto de uma linha (~44px) */

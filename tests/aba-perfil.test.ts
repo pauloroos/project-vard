@@ -202,6 +202,20 @@ describe("aba-perfil (0.9.4)", () => {
     expect(raiz.querySelector("#cfg-perfil")!.innerHTML.length).toBeGreaterThan(0);
   });
 
+  it("Geral: sem aba Atualização no menu, com o bloco e a caixa dentro do Geral, e Salvar funciona", async () => {
+    const raiz = criarRaiz();
+    const painel = new Configuracoes({ ...CONFIG_PADRAO, atualizacao_ao_abrir: true } as Config, raiz, criarDeps());
+    await painel.montar();
+    const botoes = Array.from(raiz.querySelectorAll<HTMLButtonElement>("nav button")).map((b) => b.dataset.aba);
+    expect(botoes).not.toContain("atualizacao");
+    const geral = raiz.querySelector('section[data-aba="geral"]')!;
+    expect(geral.querySelector("#cfg-atualizacao-bloco")).toBeTruthy();
+    expect((geral.querySelector("#cfg-atualizacao_ao_abrir") as HTMLInputElement).checked).toBe(true);
+    expect(geral.textContent).not.toContain("Nome para chamar");
+    (raiz.querySelector("#cfg-salvar") as HTMLButtonElement).click();
+    await vi.waitFor(() => expect(raiz.querySelector("#cfg-msg")!.textContent).toContain("Salvo"));
+  });
+
   it("salvar grava config.json e perfil.json com os valores certos", async () => {
     const raiz = criarRaiz();
     const cfg = { ...CONFIG_PADRAO, nome: "Aurora", usuario: "Fulano", variantes: ["Auri"] } as Config;

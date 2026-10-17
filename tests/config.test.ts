@@ -221,7 +221,7 @@ describe("não ouvir, não falar e falar avisos", () => {
 });
 
 describe("payloads entre janelas", () => {
-  const ok = { tamanho: "grande", tamanho_px: 480, compacto: false, sempre_no_topo: true, click_through: false, invisivel: false, usuario: "Ana", modelo: "", conversa_ms: 20000, nao_ouvir: false, nao_falar: false, falar_avisos: false, cerebro: "openjarvis" as const };
+  const ok = { tamanho: "grande", tamanho_px: 480, compacto: false, sempre_no_topo: true, click_through: false, invisivel: false, usuario: "Ana", modelo: "", conversa_ms: 20000, nao_ouvir: false, nao_falar: false, falar_avisos: false, cerebro: "openjarvis" as const, cor_elementos: "", opacidade_elementos: 1 };
   it("lado fora de 160..800 é limitado, não recusado", () => {
     expect(lerConfigAoVivo({ ...ok, tamanho_px: 1000 })).toEqual({ ...ok, tamanho_px: 800 });
     expect(lerConfigAoVivo({ ...ok, tamanho_px: 100 })).toEqual({ ...ok, tamanho_px: 160 });
@@ -261,6 +261,59 @@ describe("atualizarConfig", () => {
     expect(gravado).toEqual({ ...disco, compacto: true });
     await atualizarConfig({ sempre_no_topo: false });
     expect((gravado as typeof disco).atalhos.escuta).toBe("Ctrl+Shift+K");
+  });
+});
+
+describe("aparência (cor_elementos e opacidade_elementos)", () => {
+  const copia = () => ({ ...CONFIG_PADRAO, atalhos: { ...CONFIG_PADRAO.atalhos } });
+
+  it("padrão: cor vazia e opacidade 1", () => {
+    expect(CONFIG_PADRAO.cor_elementos).toBe("");
+    expect(CONFIG_PADRAO.opacidade_elementos).toBe(1);
+  });
+
+  it("mesclar aceita hex válido e opacidade no intervalo", async () => {
+    invoke.mockResolvedValue({ cor_elementos: "#ff00aa", opacidade_elementos: 0.5 });
+    const c = await carregarConfig();
+    expect(c.cor_elementos).toBe("#ff00aa");
+    expect(c.opacidade_elementos).toBe(0.5);
+  });
+
+  it("mesclar rejeita cor inválida e volta ao padrão", async () => {
+    invoke.mockResolvedValue({ cor_elementos: "azul" });
+    expect((await carregarConfig()).cor_elementos).toBe("");
+    invoke.mockResolvedValue({ cor_elementos: "#fff" }); // sem 6 dígitos
+    expect((await carregarConfig()).cor_elementos).toBe("");
+    invoke.mockResolvedValue({ cor_elementos: 123 });
+    expect((await carregarConfig()).cor_elementos).toBe("");
+  });
+
+  it("mesclar rejeita opacidade fora de 0.2–1 e volta ao padrão", async () => {
+    invoke.mockResolvedValue({ opacidade_elementos: 0.1 });
+    expect((await carregarConfig()).opacidade_elementos).toBe(1);
+    invoke.mockResolvedValue({ opacidade_elementos: 1.5 });
+    expect((await carregarConfig()).opacidade_elementos).toBe(1);
+    invoke.mockResolvedValue({ opacidade_elementos: "meio" });
+    expect((await carregarConfig()).opacidade_elementos).toBe(1);
+  });
+
+  it("são chaves ao vivo: mudam sem reiniciar", () => {
+    expect(CHAVES_AO_VIVO).toContain("cor_elementos");
+    expect(CHAVES_AO_VIVO).toContain("opacidade_elementos");
+    const vivo = copia();
+    const mudou = aplicarAoVivo(vivo, { ...copia(), cor_elementos: "#22c55e", opacidade_elementos: 0.7 });
+    expect(mudou).toEqual(["cor_elementos", "opacidade_elementos"]);
+    expect(vivo.cor_elementos).toBe("#22c55e");
+    expect(vivo.opacidade_elementos).toBe(0.7);
+    expect(mudancasQueExigemReinicio(copia(), { ...copia(), cor_elementos: "#ef4444" })).toEqual([]);
+  });
+
+  it("lerConfigAoVivo valida cor e opacidade", () => {
+    const ok = { tamanho: "grande", tamanho_px: 480, compacto: false, sempre_no_topo: true, click_through: false, invisivel: false, usuario: "Ana", modelo: "", conversa_ms: 20000, nao_ouvir: false, nao_falar: false, falar_avisos: false, cerebro: "openjarvis" as const, cor_elementos: "#aabbcc", opacidade_elementos: 0.8 };
+    expect(lerConfigAoVivo(ok)).toEqual(ok);
+    expect(lerConfigAoVivo({ ...ok, cor_elementos: "ruim" })).toEqual({ ...ok, cor_elementos: "" });
+    expect(lerConfigAoVivo({ ...ok, opacidade_elementos: 0.1 })).toEqual({ ...ok, opacidade_elementos: 1 });
+    expect(lerConfigAoVivo({ ...ok, opacidade_elementos: 2 })).toEqual({ ...ok, opacidade_elementos: 1 });
   });
 });
 
