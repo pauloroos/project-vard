@@ -6,8 +6,10 @@ Aceita WAV e OGG/Opus (Telegram), decodifica via PyAV para PCM mono 16 kHz.
 """
 from __future__ import annotations
 
+import gc
 import io
 import logging
+import threading
 import wave
 
 import numpy as np
@@ -37,6 +39,8 @@ class MotorSTT:
         self.idioma = idioma
         self.palavras_chamada = list(palavras_chamada or [])
         self._modelo = None
+        # Uma carga por vez: a carga da abertura, a do primeiro pedido e a troca pela tela não se sobrepõem.
+        self._trava = threading.RLock()
 
     @property
     def pronta(self) -> bool:
@@ -50,10 +54,34 @@ class MotorSTT:
             raise RuntimeError(
                 "faster-whisper não instalado; instale o extra 'stt': uv pip install vard-voz[stt]"
             ) from exc
-        log.info("carregando STT modelo=%s device=%s compute=%s", self.modelo_nome, self.device, self.compute_type)
-        self._modelo = WhisperModel(
-            self.modelo_nome, device=self.device, compute_type=self.compute_type
-        )
+        with self._trava:
+            if self._modelo is not None:
+                return
+            log.info("carregando STT modelo=%s device=%s compute=%s", self.modelo_nome, self.device, self.compute_type)
+            self._modelo = WhisperModel(
+                self.modelo_nome, device=self.device, compute_type=self.compute_type
+            )
+
+    def trocar(self, modelo: str, device: str, compute_type: str) -> None:
+        """Descarrega o modelo atual e carrega o novo (primeiro libera, para não somar dois na GPU).
+
+        Se o novo falhar, volta ao anterior e repassa o erro. Pedidos durante a troca esperam a carga.
+        """
+        with self._trava:
+            antes = (self.modelo_nome, self.device, self.compute_type)
+            self._modelo = None
+            gc.collect()
+            self.modelo_nome, self.device, self.compute_type = modelo, device, compute_type
+            try:
+                self.carregar()
+            except Exception:
+                self.modelo_nome, self.device, self.compute_type = antes
+                self._modelo = None
+                try:
+                    self.carregar()
+                except Exception:
+                    log.exception("falha ao voltar ao modelo anterior do STT")
+                raise
 
     def transcrever_bytes(self, audio: bytes, idioma: str | None = None) -> tuple[str, float]:
         """Transcreve áudio em bytes (WAV ou OGG/Opus). Devolve (texto, confiança).
