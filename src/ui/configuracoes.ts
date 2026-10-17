@@ -44,9 +44,9 @@ export interface DepsConfiguracoes {
 /** Monitor como o comando listar_monitores devolve (pixels físicos). */
 export interface MonitorInfo { nome: string; x: number; y: number; largura: number; altura: number; escala: number; principal: boolean }
 
-export type Aba = "geral" | "perfil" | "voz" | "atalhos" | "oficina" | "modelos" | "paineis-mcps" | "sistema" | "reuniao" | "avisos" | "diagnostico";
+export type Aba = "geral" | "perfil" | "voz" | "transcricao" | "atalhos" | "oficina" | "modelos" | "paineis-mcps" | "sistema" | "reuniao" | "avisos" | "diagnostico";
 const ABAS: [Aba, string][] = [
-  ["geral", "Geral"], ["perfil", "Perfil"], ["voz", "Voz"], ["atalhos", "Atalhos"], ["oficina", "Oficina"], ["modelos", "Quem responde"],
+  ["geral", "Geral"], ["perfil", "Perfil"], ["voz", "Voz"], ["transcricao", "Transcrição"], ["atalhos", "Atalhos"], ["oficina", "Oficina"], ["modelos", "Núcleo"],
   ["paineis-mcps", "Ferramentas (MCP)"],
   ["sistema", "Sistema"], ["reuniao", "Reunião"], ["avisos", "Avisos"], ["diagnostico", "Diagnóstico"],
 ];
@@ -289,9 +289,9 @@ export class Configuracoes {
     // Grupos do menu lateral (ordem visual)
     const GRUPOS: [string, Aba[]][] = [
       ["Conversa", ["geral", "perfil"]],
-      ["Voz e áudio", ["voz", "atalhos"]],
-      ["Cérebro", ["oficina", "modelos", "paineis-mcps"]],
-            ["Sistema", ["sistema", "reuniao", "avisos", "diagnostico"]],
+      ["Voz e áudio", ["voz", "transcricao"]],
+      ["Configurações", ["modelos", "oficina", "paineis-mcps", "atalhos"]],
+      ["Sistema", ["sistema", "reuniao", "avisos", "diagnostico"]],
     ];
     const mapaRotulo = new Map(ABAS);
     const navHtml = GRUPOS.map(([titulo, ids]) =>
@@ -369,6 +369,7 @@ export class Configuracoes {
           </div>
           <div id="cfg-instalador-vozes"></div>
         </section>
+        <section data-aba="transcricao"><div id="cfg-transcricao"></div></section>
         <section data-aba="atalhos">
           <p class="nota">Clique num atalho e pressione a nova combinação (Ctrl, Alt ou Win mais uma tecla). Esc cancela. Valem depois de reiniciar o Vard.</p>
           <div id="cfg-atalhos"></div>
