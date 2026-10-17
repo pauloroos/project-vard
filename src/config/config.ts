@@ -63,7 +63,14 @@ export interface Config {
   cor_elementos: string;
   /** Opacidade dos elementos do widget (0.2 a 1); 1 = opaco. */
   opacidade_elementos: number;
+  /** Modelo de transcrição escolhido na aba Transcrição; vazio = o do serviço de voz (VARD_STT_MODEL). */
+  stt_modelo: string;
+  /** Onde a transcrição roda; vazio = o do serviço de voz (VARD_STT_DEVICE). */
+  stt_dispositivo: DispositivoStt | "";
 }
+
+export const DISPOSITIVOS_STT = ["auto", "cuda", "cpu"] as const;
+export type DispositivoStt = (typeof DISPOSITIVOS_STT)[number];
 
 export const CONFIG_PADRAO: Config = {
   openjarvis_url: "http://127.0.0.1:8000", gui_url: "http://127.0.0.1:5173", ponte_url: "http://127.0.0.1:4700",
@@ -89,6 +96,7 @@ export const CONFIG_PADRAO: Config = {
   usar_openjarvis: false,
   microfone_id: "", microfone_rotulo: "", saida_id: "", saida_rotulo: "",
   cor_elementos: "", opacidade_elementos: 1,
+  stt_modelo: "", stt_dispositivo: "",
 };
 
 /** Mescla o salvo com o padrão descartando o que tem tipo errado (arquivo editado à mão). */
@@ -132,6 +140,8 @@ export function normalizarConfig(salvo: unknown): Config {
       if (typeof v === "string" && (/^#[0-9a-fA-F]{6}$/.test(v) || v === "")) saida[k] = v;
     } else if (k === "opacidade_elementos") {
       if (typeof v === "number" && Number.isFinite(v) && v >= 0.2 && v <= 1) saida[k] = v;
+    } else if (k === "stt_dispositivo") {
+      if (v === "" || (DISPOSITIVOS_STT as readonly unknown[]).includes(v)) saida[k] = v;
     } else if (k === "conversa_ms") {
       if (typeof v === "number" && Number.isFinite(v) && v >= 0) saida[k] = Math.round(v);
     } else if (typeof v === typeof padrao) {

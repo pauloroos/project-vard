@@ -417,6 +417,7 @@ button.perigo:hover { background: rgba(255, 120, 120, 0.12); }
 .card-detalhe { margin: 0; font: 12px/1.45 var(--mono); opacity: 0.75; overflow-wrap: anywhere; }
 .card-fichas { display: flex; flex-wrap: wrap; gap: 4px; }
 .ficha { padding: 1px 7px; border-radius: 4px; background: rgba(0, 240, 255, 0.08); font: 11px/1.6 var(--mono); overflow-wrap: anywhere; }
+.card-progresso { width: 100%; height: 6px; accent-color: var(--ciano); }
 .card-acoes { display: flex; flex-wrap: wrap; gap: 6px; margin-top: auto; padding-top: 4px; }
 .card-acoes button { margin: 0; padding: 4px 10px; }
 .cards-vazio { padding: 22px; border: 1px dashed var(--borda); border-radius: 8px; text-align: center; }

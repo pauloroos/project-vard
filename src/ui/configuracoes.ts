@@ -1,7 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { emitTo } from "@tauri-apps/api/event";
 import type { Config } from "../config/config";
-import { avisosDeUrl, limitarLado, mudancasQueExigemReinicio, salvarConfig, urlLocal } from "../config/config";
+import { atualizarConfig, avisosDeUrl, limitarLado, mudancasQueExigemReinicio, salvarConfig, urlLocal } from "../config/config";
 import { ACOES_ATALHO, ROTULOS_ATALHO, avisoAltGr, validarAtalhos, type AcaoAtalho, type FalhaAtalho } from "../config/atalhos";
 import { campoIdioma } from "../config/idiomas";
 import { gravarPerfil, lerPerfil, previaPersona } from "../config/perfil";
@@ -19,6 +19,7 @@ import { AbaPaineisMcps } from "./paineis-mcps";
 import { AbaReuniao, type PonteReuniao } from "./aba-reuniao";
 import { AbaOficina } from "./aba-oficina";
 import { AbaSistema } from "./aba-sistema";
+import { AbaTranscricao } from "./aba-transcricao";
 import { AbaVoz } from "./aba-voz";
 import { InstaladorVozes } from "./instalador-vozes";
 import { MonitorRecursos } from "./monitor-recursos";
@@ -68,6 +69,7 @@ export class Configuracoes {
   private reuniao: AbaReuniao | null = null;
   private avisos: AbaAvisos | null = null;
   private oficina: AbaOficina | null = null;
+  private transcricao: AbaTranscricao | null = null;
   private atualizacao: AbaAtualizacao | null = null;
   private diagnostico: AbaDiagnostico | null = null;
   private monitorRecursos: MonitorRecursos | null = null;
@@ -110,6 +112,13 @@ export class Configuracoes {
       });
     }
     this.marcarUrl("voz_url");
+    this.transcricao = new AbaTranscricao(this.raiz.querySelector<HTMLElement>("#cfg-transcricao")!, {
+      vozUrl: () => this.cfg.voz_url,
+      config: this.cfg,
+      salvar: (parcial) => atualizarConfig(parcial),
+      dizer: (t, ruim) => this.dizer(t, ruim),
+    });
+    this.transcricao.montar();
     this.modelos = new AbaModelos(this.raiz.querySelector<HTMLElement>("#cfg-modelos")!, {
       criarOj: (modelo) => this.deps.criarOj(this.cfg.openjarvis_url, modelo),
       statusPonte: () => this.deps.statusPonte(this.cfg.ponte_url),
@@ -212,6 +221,7 @@ export class Configuracoes {
     if (aba === "reuniao") this.reuniao?.ativar(); else this.reuniao?.desativar();
     if (aba === "avisos") this.avisos?.ativar(); else this.avisos?.desativar();
     if (aba === "oficina") void this.oficina?.ativar(); else this.oficina?.desativar();
+    if (aba === "transcricao") this.transcricao?.ativar(); else this.transcricao?.desativar();
     if (aba === "geral" && this.cfg.atualizacao_ao_abrir) this.atualizacao?.aoAbrir();
   }
 
