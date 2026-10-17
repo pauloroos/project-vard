@@ -320,3 +320,106 @@ describe("detector e interrupção (Ouvido)", () => {
     expect(lido.interromper_ao_falar).toBe(true);
   });
 });
+
+describe("modal de voz cadastrada (0.9.4 rodada 2)", () => {
+  beforeEach(() => {
+    document.body.innerHTML = "";
+    paineisMem = {
+      ...PAINEIS_PADRAO,
+      provedores: [
+        { id: "fish-aria", nome: "Aria", tipo: "fish", url_base: "http://localhost:9999", modelo: "aria-v1" },
+      ],
+    };
+    vi.clearAllMocks();
+    vi.stubGlobal("fetch", mockFetch);
+    estado = {
+      saude: { pronta: true, voz: "Suad Qasim", device: "cpu", aquecida: true, xtts: true, kokoro: true, edge: true, piper: true },
+      vozes: VOZES_XTTS,
+    };
+  });
+
+  function modalAberto(): HTMLElement {
+    const m = document.querySelector<HTMLElement>(".modal");
+    expect(m, "modal aberto").toBeTruthy();
+    return m!;
+  }
+
+  function camposModal() {
+    const m = modalAberto();
+    const entradas = [...m.querySelectorAll<HTMLElement>(".modal-voz input, .modal-voz select")];
+    return {
+      id: entradas[0] as HTMLInputElement,
+      nome: entradas[1] as HTMLInputElement,
+      tipo: entradas[2] as HTMLSelectElement,
+      url: entradas[3] as HTMLInputElement,
+      modelo: entradas[4] as HTMLInputElement,
+      cred: entradas[5] as HTMLInputElement,
+    };
+  }
+
+  function botaoModal(rotulo: string): HTMLButtonElement {
+    const m = modalAberto();
+    const b = [...m.querySelectorAll<HTMLButtonElement>(".modal-acoes button")].find((x) => x.textContent === rotulo);
+    expect(b, `botão do modal ${rotulo}`).toBeTruthy();
+    return b!;
+  }
+
+  it("editar_pelo_modal_atualiza_a_voz", async () => {
+    const { raiz } = await abrir();
+    const bloco = raiz.querySelector<HTMLElement>("#cfg-voz-cadastradas")!;
+    const btnEditar = [...bloco.querySelectorAll<HTMLButtonElement>("button")].find((b) => b.textContent === "Editar");
+    expect(btnEditar).toBeTruthy();
+    btnEditar!.click();
+    const campos = camposModal();
+    expect(campos.id.value).toBe("fish-aria");
+    campos.nome.value = "Aria Atualizada";
+    botaoModal("Salvar").click();
+    await new Promise((r) => setTimeout(r, 0));
+    expect(paineisMem?.provedores.find((p) => p.id === "fish-aria")?.nome).toBe("Aria Atualizada");
+  });
+
+  it("remover_pelo_modal_remove_a_voz", async () => {
+    const { raiz } = await abrir();
+    const bloco = raiz.querySelector<HTMLElement>("#cfg-voz-cadastradas")!;
+    const btnEditar = [...bloco.querySelectorAll<HTMLButtonElement>("button")].find((b) => b.textContent === "Editar");
+    expect(btnEditar).toBeTruthy();
+    btnEditar!.click();
+    const btnRemover = [...modalAberto().querySelectorAll<HTMLButtonElement>(".modal-acoes button")].find((b) => b.textContent === "Remover");
+    expect(btnRemover).toBeTruthy();
+    btnRemover!.click();
+    await new Promise((r) => setTimeout(r, 0));
+    expect(paineisMem?.provedores.find((p) => p.id === "fish-aria")).toBeUndefined();
+  });
+
+  it("modal_recusa_id_duplicado_e_fica_aberto", async () => {
+    paineisMem!.provedores.push({ id: "fish-dup", nome: "Dup", tipo: "fish", url_base: "", modelo: "" });
+    const { raiz } = await abrir();
+    const bloco = raiz.querySelector<HTMLElement>("#cfg-voz-cadastradas")!;
+    const btnAdd = [...bloco.querySelectorAll<HTMLButtonElement>("button")].find((b) => b.textContent === "Adicionar voz");
+    btnAdd!.click();
+    const campos = camposModal();
+    campos.id.value = "fish-aria"; // duplicado
+    campos.nome.value = "Nova";
+    campos.tipo.value = "fish";
+    botaoModal("Salvar").click();
+    await new Promise((r) => setTimeout(r, 0));
+    // Modal ainda aberto com aviso de erro
+    expect(document.querySelector(".modal")).toBeTruthy();
+    expect(modalAberto().textContent).toContain("Já existe");
+  });
+
+  it("modal_recusa_campos_obrigatorios_vazios", async () => {
+    const { raiz } = await abrir();
+    const bloco = raiz.querySelector<HTMLElement>("#cfg-voz-cadastradas")!;
+    const btnAdd = [...bloco.querySelectorAll<HTMLButtonElement>("button")].find((b) => b.textContent === "Adicionar voz");
+    btnAdd!.click();
+    const campos = camposModal();
+    campos.id.value = "";
+    campos.nome.value = "";
+    campos.tipo.value = "fish";
+    botaoModal("Salvar").click();
+    await new Promise((r) => setTimeout(r, 0));
+    expect(document.querySelector(".modal")).toBeTruthy();
+    expect(modalAberto().textContent).toContain("Preencha");
+  });
+});

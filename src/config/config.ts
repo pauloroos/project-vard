@@ -112,6 +112,11 @@ function mesclar(salvo: unknown): Config {
       if (v === "energia" || v === "silero") saida[k] = v;
     } else if (k === "voz_provedor") {
       if (typeof v === "string" && (PROVEDORES_VOZ as readonly string[]).includes(v)) saida[k] = v;
+    } else if (k === "voz_reserva_provedor") {
+      const validos = [...PROVEDORES_VOZ, "nenhuma"] as readonly string[];
+      if (typeof v === "string" && validos.includes(v)) saida[k] = v;
+    } else if (k === "voz_reserva_motor" || k === "voz_reserva_id") {
+      if (typeof v === "string") saida[k] = v;
     } else if (k === "voz_motor") {
       if (typeof v === "string") saida[k] = v;
     } else if (k === "conversa_ms") {

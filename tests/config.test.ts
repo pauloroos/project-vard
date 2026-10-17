@@ -172,6 +172,32 @@ describe("salvar no painel", () => {
     expect((await carregarConfig()).voz_provedor).toBe("gemini");
   });
 
+  it("reserva: provedor desconhecido cai em 'nenhuma'", async () => {
+    invoke.mockResolvedValue({ voz_reserva_provedor: "servico-x" });
+    expect((await carregarConfig()).voz_reserva_provedor).toBe("nenhuma");
+  });
+
+  it("reserva: provedor válido é aceito", async () => {
+    invoke.mockResolvedValue({ voz_reserva_provedor: "openjarvis" });
+    expect((await carregarConfig()).voz_reserva_provedor).toBe("openjarvis");
+    invoke.mockResolvedValue({ voz_reserva_provedor: "elevenlabs" });
+    expect((await carregarConfig()).voz_reserva_provedor).toBe("elevenlabs");
+  });
+
+  it("reserva: motor e id são strings válidas", async () => {
+    invoke.mockResolvedValue({ voz_reserva_motor: "kokoro", voz_reserva_id: "pf_dora" });
+    const cfg = await carregarConfig();
+    expect(cfg.voz_reserva_motor).toBe("kokoro");
+    expect(cfg.voz_reserva_id).toBe("pf_dora");
+  });
+
+  it("reserva: valores não-string são descartados", async () => {
+    invoke.mockResolvedValue({ voz_reserva_motor: 123, voz_reserva_id: ["x"] });
+    const cfg = await carregarConfig();
+    expect(cfg.voz_reserva_motor).toBe("");
+    expect(cfg.voz_reserva_id).toBe("");
+  });
+
   it("provedor e chave exigem reinício da voz", () => {
     expect(mudancasQueExigemReinicio(CONFIG_PADRAO, { ...copia(), voz_provedor: "gemini" })).toContain("voz");
     expect(mudancasQueExigemReinicio(CONFIG_PADRAO, { ...copia(), gemini_chave: "x" })).toContain("voz");

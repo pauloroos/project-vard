@@ -185,6 +185,7 @@ window.addEventListener("DOMContentLoaded", async () => {
     ? criarFonteDeVoz({
         voz_provedor: cfg.voz_reserva_provedor as ProvedorVoz,
         voz_url: cfg.voz_url,
+        voz_motor: cfg.voz_reserva_motor ?? "",
         voz_propria: cfg.voz_reserva_id ?? "",
         elevenlabs_chave: cfg.elevenlabs_chave,
         elevenlabs_voz: cfg.voz_reserva_provedor === "elevenlabs" ? (cfg.voz_reserva_id ?? "") : "",
