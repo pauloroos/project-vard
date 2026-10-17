@@ -105,18 +105,22 @@ export class Configuracoes {
     void this.modelos.carregar();
     this.paineisMcps = new AbaPaineisMcps(this.raiz.querySelector<HTMLElement>("#cfg-paineis-mcps")!);
     this.abaPerfil = new AbaPerfil(this.raiz.querySelector<HTMLElement>("#cfg-perfil")!, {
-      nome: () => this.el("nome").value,
-      usuario: () => this.el("usuario").value,
+      nome: () => this.cfg.nome,
+      usuario: () => this.cfg.usuario,
+      variantes: () => this.cfg.variantes,
       ler: () => lerPerfil(),
       gravar: (p) => gravarPerfil(p),
-      previa: () => previaPersona(this.el("ponte_url").value, this.el("nome").value.trim(), this.el("usuario").value.trim()),
-      aoMudar: (campo, valor) => { const alvo = this.el(campo); if (alvo.value !== valor) alvo.value = valor; },
+      previa: () => previaPersona(this.el("ponte_url").value, this.cfg.nome, this.cfg.usuario),
+      aoMudar: (campo, valor) => {
+        if (campo === "variantes") {
+          this.cfg.variantes = valor.split(",").map((v) => v.trim()).filter(Boolean);
+          if (this.cfg.variantes.length === 0) this.cfg.variantes = [this.cfg.nome];
+        } else {
+          (this.cfg as unknown as Record<string, unknown>)[campo] = valor;
+        }
+      },
     });
     await this.abaPerfil.montar();
-    // Nome/usuário são os mesmos campos da aba Geral: os dois lados acompanham um ao outro.
-    for (const campo of ["nome", "usuario"] as const) {
-      this.el(campo).addEventListener("input", () => this.abaPerfil.definir(campo, this.el(campo).value));
-    }
     const urlPonte = () => this.el("ponte_url").value.trim(); // vazio = sem ponte (desliga), não "usar a salva"
     this.sistema = new AbaSistema(this.raiz.querySelector<HTMLElement>("#cfg-sistema")!, {
       statusPonte: () => this.deps.statusPonte(urlPonte()),
@@ -167,8 +171,9 @@ export class Configuracoes {
     }
     if (aba === "paineis-mcps") void this.paineisMcps?.montar();
     if (aba === "perfil") {
-      this.abaPerfil.definir("nome", this.el("nome").value);
-      this.abaPerfil.definir("usuario", this.el("usuario").value);
+      this.abaPerfil.definir("nome", this.cfg.nome);
+      this.abaPerfil.definir("usuario", this.cfg.usuario);
+      this.abaPerfil.definir("variantes", this.cfg.variantes.join(", "));
     }
     if (aba === "sistema") this.sistema?.ativar(); else this.sistema?.desativar();
     if (aba === "reuniao") this.reuniao?.ativar(); else this.reuniao?.desativar();
@@ -238,10 +243,7 @@ export class Configuracoes {
             ${this.campo("gui_url", "Interface de texto", c.gui_url)}
             <button id="cfg-testar" type="button">Testar OpenJarvis</button>
           </fieldset>
-          <fieldset><legend>Chamada</legend>
-            ${this.campo("nome", "Nome para chamar", c.nome)}
-            ${this.campo("variantes", "Variantes (separadas por vírgula)", c.variantes.join(", "))}
-            ${this.campo("usuario", "Como te chamar (opcional)", c.usuario)}
+          <fieldset><legend>Idioma</legend>
             ${campoIdioma(c.idioma)}
           </fieldset>
           <fieldset id="cfg-janela"><legend>Janela</legend>
@@ -380,8 +382,7 @@ export class Configuracoes {
       ...c,
       openjarvis_url: txt("openjarvis_url", c.openjarvis_url), gui_url: txt("gui_url", c.gui_url), ponte_url: opc("ponte_url"),
       ...this.abaVoz.ler(), voz_url: this.abaVoz.vozUrl(),
-      nome: txt("nome", c.nome), usuario: opc("usuario"),
-      variantes: this.el("variantes").value.split(",").map((v) => v.trim()).filter(Boolean),
+      nome: c.nome, usuario: c.usuario, variantes: c.variantes,
       idioma: this.sel("idioma").value,
       velocidade: num("velocidade", c.velocidade), finish_ms: num("finish_ms", c.finish_ms), limiar_vad: num("limiar_vad", c.limiar_vad),
       conversa_ms: Math.round(Math.max(0, num("conversa_s", c.conversa_ms / 1000)) * 1000),
