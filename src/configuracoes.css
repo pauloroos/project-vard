@@ -301,11 +301,12 @@ section .acoes { display: flex; gap: 8px; flex-wrap: wrap; }
   border-radius: 4px;
 }
 
-#saber-categorias .categoria { margin: 0 0 12px; padding: 8px 10px; border: 1px solid var(--borda); border-radius: 6px; }
-#saber-categorias .cabecalho { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
-#saber-categorias h3 { margin: 0; font: 13px/1.2 var(--mono); text-transform: uppercase; letter-spacing: 0.14em; opacity: 0.9; }
-#saber-categorias .etiqueta { color: #ffb020; font-size: 11px; }
-#saber-categorias ul { margin: 6px 0 0; padding-left: 18px; opacity: 0.9; }
+.oficina-filtros { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+.oficina-filtros input[type="search"] { flex: 1 1 220px; min-width: 0; width: auto; }
+.oficina-filtros select { flex: 0 1 170px; width: auto; max-width: 100%; margin: 0; }
+.oficina-filtros button { margin: 0; }
+#oficina-habilidades .cards-grade { grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr)); }
+.oficina-formulario textarea { resize: vertical; overflow-x: hidden; }
 
 #avi-lista .aviso-linha {
   display: flex; gap: 8px; align-items: baseline; margin-top: 6px;

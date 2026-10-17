@@ -60,7 +60,13 @@ Only one instance runs at a time: opening Vard again brings the window to the fr
 - **Notice center (with the private install):** a discreet unread counter and a "Notices" tab in the panel (see result, mark as read). Nothing is spoken unless you turn on "Speak notices" (never while "Don't speak" is on).
 - **Waiting:** a discreet badge with the number of running tasks; hover for the list.
 - **Meeting:** a "Meeting" tab (start, stop, make minutes, last meeting); while a meeting runs the widget stays quiet and shows "meeting".
-- **Panel:** recognition language as a list and a "What I can do" tab.
+- **Panel:** recognition language as a list and the **Oficina** (Workshop) tab.
+
+In **Oficina**, built-in skills are labeled **Capaz** (Capable) and can be switched off. Choose **Nova habilidade**
+(New skill) to teach a recipe with example phrases and instructions; it starts as **Treinada** (Trained) and can
+be marked **Validada** (Validated) after it works. Creation and editing use a modal; deletion requires confirmation.
+Search and status filters help find recipes. `habilidades.json` lives beside `paineis.json` in the user's configuration
+directory (`VARD_CONFIG` when set).
 
 ### Shortcuts
 
