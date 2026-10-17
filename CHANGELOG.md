@@ -3,9 +3,30 @@
 Este arquivo segue o [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) em português do Brasil.
 Os instaladores de cada versão ficam na página de [releases](https://github.com/pauloroos/project-vard/releases).
 
-## [0.9.5] — não publicada
+## [0.9.5] — 2026-10-17
 
-Em andamento.
+### Adicionado/Feito
+
+- O assistente configura o Vard a pedido: novo MCP de configurações com aparência, voz, provedores (cadastrar,
+  editar, remover, testar e escolher quem responde), instalação, habilidades e programas. O que instala, apaga ou
+  troca quem responde pede confirmação; chaves nunca passam por ele.
+- Os MCPs locais passam a funcionar com o cérebro próprio: ferramentas de linha de comando e provedores de API
+  também recebem as ferramentas.
+- Mudanças feitas pelo assistente aparecem na tela de Configurações e no widget sem reiniciar.
+- Oficina (antes "O que eu sei fazer"): habilidades em cards — Capaz (de fábrica), Treinada (cadastrada) e
+  Validada (já deu certo) —, com cadastro e edição em modal, exclusão com confirmação, busca e filtro.
+- Instalação rápida em "Quem responde": LM Studio, Ollama, Claude Code, Codex e OpenCode com confirmação e
+  andamento; Gemini CLI e Antigravity com instruções; o cadastro do provedor abre preenchido ao concluir.
+- Voz: escolha de quem fala no topo da seção, com o motor ativo em destaque e o estado de cada motor.
+- Aparência: opção "Personalizada" com nome, ao lado das cores prontas.
+- Histórico de mudanças (este arquivo).
+
+### Corrigido
+
+- A cor escolhida passa a pintar o holograma e os botões do widget e vale desde a abertura.
+- O número da versão volta a acompanhar o código.
+- "Quem responde" reconsulta os serviços ao ser aberta, sem precisar recarregar a janela.
+- Barra de rolagem dos modais no tema escuro.
 
 ## [0.9.4] — 2026-10-16
 
