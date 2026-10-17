@@ -59,6 +59,10 @@ def criar_app(sessao: Sessao | None = None, *, raiz: Path = arm.RAIZ, diarizacao
             return JSONResponse({"erro": "origem_recusada"}, status_code=403)
         return await call_next(request)
 
+    @app.get("/saude")
+    def saude_supervisor():
+        return {"ok": True, "pid": os.getpid(), "versao": VERSAO}
+
     @app.get("/status")
     def status():
         return {**sessao.status(), "versao": VERSAO, "diarizacao": diarizacao_estado(),

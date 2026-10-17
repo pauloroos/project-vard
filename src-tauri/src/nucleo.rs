@@ -92,6 +92,7 @@ pub fn descritor_nucleo(
         id: "nucleo".into(),
         porta,
         comando: cmd,
+        pasta_trabalho: Some(if dev { repo.join("nucleo") } else { recursos.join("nucleo") }),
         envs,
         caminho_log,
     }

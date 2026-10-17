@@ -459,29 +459,50 @@ pub fn run() {
             let raiz = instalacao::resolver_raiz(&recursos);
             let dados = ciclo::pasta_dados();
             let arquivo = instalacao::arquivo_instalacao();
-            let mut config_instalacao = instalacao::ler_instalacao(&arquivo).unwrap_or_default();
-            // Migração automática: supervisor false → true (backup + encerra bandeja Python + ajusta atalho)
+            let mut config_instalacao = instalacao::ler_instalacao(&arquivo).unwrap_or_else(|_| {
+                instalacao::registrar_setup(&dados, "setup: instalacao.json inválido; supervisor não ativado");
+                Default::default()
+            });
+            let mut migrou = false;
+            let atalho = migracao::atalho_startup();
+            // Pré-checagem antes de mudar configuração, atalho ou processos.
             if !config_instalacao.supervisor {
                 let exe_atual = std::env::current_exe().unwrap_or_default();
-                match migracao::migrar_se_necessario(&arquivo, &dados, &exe_atual) {
+                let nucleo = instalacao::preparar_nucleo(cfg!(debug_assertions), &recursos, &raiz, &config_instalacao, &dados, env!("CARGO_PKG_VERSION"));
+                let resultado = atalho.as_ref().map_err(Clone::clone).and_then(|atalho| {
+                    migracao::migrar_se_necessario(&arquivo, &dados, &exe_atual, nucleo, atalho)
+                });
+                match resultado {
                     Ok(true) => {
-                        eprintln!("setup: migração supervisor concluída (supervisor agora é true)");
+                        instalacao::registrar_setup(&dados, "setup: migração gravada; aguardando núcleo próprio por até 60 s");
                         config_instalacao.supervisor = true;
+                        migrou = true;
                     }
                     Ok(false) => {} // já era supervisor ou não aplicável
-                    Err(e) => eprintln!("setup: migração supervisor falhou: {e}"),
+                    Err(e) => instalacao::registrar_setup(&dados, &format!("setup: migração não realizada: {e}")),
                 }
             }
             {
-                let (_iniciados, avisos) = instalacao::iniciar_servicos(
+                let (iniciados, _avisos) = instalacao::iniciar_servicos(
                     &config_instalacao,
                     &recursos,
                     &raiz,
                     &dados,
                     env!("CARGO_PKG_VERSION"),
                 );
-                for aviso in &avisos {
-                    eprintln!("instalacao: {aviso}");
+                if migrou {
+                    let respondeu = iniciados.iter().any(|id| id == "nucleo") && migracao::aguardar_saude(std::time::Duration::from_secs(60), || {
+                        servicos::foto("nucleo").is_ok_and(|f| f.estado == supervisor::EstadoServico::Ok)
+                    });
+                    let resultado = atalho.as_ref().map_err(Clone::clone).and_then(|atalho| {
+                        migracao::concluir_ou_reverter(&arquivo, &dados, atalho, respondeu,
+                            || servicos::parar_e_aguardar(&iniciados, std::time::Duration::from_secs(5)),
+                            || migracao::iniciar_legado(&config_instalacao, &arquivo, &dados))
+                    });
+                    config_instalacao.supervisor = resultado.as_ref().is_ok_and(|confirmada| *confirmada);
+                    if let Err(e) = resultado {
+                        instalacao::registrar_setup(&dados, &format!("setup: retorno ao caminho antigo falhou: {e}"));
+                    }
                 }
             }
 
