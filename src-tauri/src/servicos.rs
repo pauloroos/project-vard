@@ -35,10 +35,15 @@ pub fn iniciar(desc: DescritorServico) -> Result<(), String> {
         reg.insert(id.clone(), handle.clone());
     }
     let h = handle.clone();
-    std::thread::Builder::new()
+    if let Err(erro) = std::thread::Builder::new()
         .name(format!("supervisor-{id}"))
-        .spawn(move || loop_servico(h, desc))
-        .map_err(|e| format!("falha ao iniciar thread do serviço '{id}': {e}"))?;
+        .spawn(move || {
+            loop_servico(h.clone(), desc);
+            h.terminou.store(true, Ordering::SeqCst);
+        }) {
+        if let Ok(mut reg) = SERVICOS.write() { reg.remove(&id); }
+        return Err(format!("falha ao iniciar thread do serviço '{id}': {erro}"));
+    }
     Ok(())
 }
 
@@ -91,6 +96,23 @@ pub fn encerrar_todos() {
     }
 }
 
+/// Espera a liberação dos Job Objects antes de entregar as portas ao caminho antigo.
+pub fn parar_e_aguardar(ids: &[String], prazo: Duration) -> Result<(), String> {
+    let handles: Vec<_> = {
+        let reg = SERVICOS.read().map_err(|_| "registro de serviços indisponível")?;
+        ids.iter().filter_map(|id| reg.get(id).map(|h| (id.clone(), h.clone()))).collect()
+    };
+    for (_, h) in &handles { h.pedir_parada(); }
+    let fim = Instant::now() + prazo;
+    while handles.iter().any(|(_, h)| !h.terminou.load(Ordering::SeqCst)) {
+        if Instant::now() >= fim { return Err("prazo ao encerrar serviços próprios".into()); }
+        std::thread::sleep(Duration::from_millis(50));
+    }
+    let mut reg = SERVICOS.write().map_err(|_| "registro de serviços indisponível")?;
+    for (id, _) in handles { reg.remove(&id); }
+    Ok(())
+}
+
 /// Repete todos os serviços que estão no estado Desistiu.
 pub fn repetir_desistidos() {
     if let Ok(reg) = SERVICOS.read() {
@@ -113,6 +135,8 @@ pub struct DescritorServico {
     pub porta: u16,
     /// Comando para lançar o serviço (exe + args).
     pub comando: (PathBuf, Vec<String>),
+    /// Pasta de trabalho do módulo, independente da pasta do executável.
+    pub pasta_trabalho: Option<PathBuf>,
     /// Variáveis de ambiente adicionais.
     pub envs: Vec<(String, String)>,
     /// Caminho do log do serviço.
@@ -134,6 +158,7 @@ pub struct ServicoHandle {
     pub info: Arc<Mutex<InfoServico>>,
     parar: AtomicBool,
     reiniciar: AtomicBool,
+    terminou: AtomicBool,
 }
 
 impl ServicoHandle {
@@ -148,6 +173,7 @@ impl ServicoHandle {
             })),
             parar: AtomicBool::new(false),
             reiniciar: AtomicBool::new(false),
+            terminou: AtomicBool::new(false),
         }
     }
 
@@ -179,6 +205,28 @@ impl ServicoHandle {
 }
 
 /// Resultado de uma execução do serviço.
+/// Monta o comando usado em produção e nas provas com executáveis falsos.
+pub fn montar_comando(desc: &DescritorServico) -> Command {
+    let mut cmd = Command::new(&desc.comando.0);
+    cmd.args(&desc.comando.1);
+    if let Some(pasta) = &desc.pasta_trabalho { cmd.current_dir(pasta); }
+    limpar_ambiente(&mut cmd);
+    cmd.envs(desc.envs.iter().map(|(k, v)| (k.as_str(), v.as_str())));
+    cmd
+}
+
+/// Retira contaminação do Python e marcadores da sessão do agente dos filhos.
+pub fn limpar_ambiente(cmd: &mut Command) {
+    for variavel in supervisor::variaveis_tiradas() { cmd.env_remove(variavel); }
+    for (nome, _) in std::env::vars_os() {
+        let maiusculo = nome.to_string_lossy().to_ascii_uppercase();
+        if ["CLAUDE_", "CODEX_", "ORCA_", "AGY_", "GEMINI_CLI_"].iter().any(|p| maiusculo.starts_with(p)) {
+            cmd.env_remove(nome);
+        }
+    }
+    cmd.env("PYTHONUTF8", "1");
+}
+
 enum FimServico {
     Queda(String),
     Permanente(String),
@@ -291,28 +339,21 @@ fn rodar_uma_vez(
     log: &mut Log,
     _recuo: &mut supervisor::Recuo,
 ) -> FimServico {
-    use crate::supervisor::variaveis_tiradas;
-
     handle.mudar_estado(supervisor::EstadoServico::Subindo, "", None);
 
-    let (exe, args) = &desc.comando;
+    let exe = &desc.comando.0;
     if !exe.exists() {
         return FimServico::Permanente(format!("executável não encontrado: {}", exe.display()));
     }
 
     let token = supervisor::token_novo();
-    let mut cmd = Command::new(exe);
-    cmd.args(args)
-        .envs(desc.envs.iter().map(|(k, v)| (k.as_str(), v.as_str())))
+    let mut cmd = montar_comando(desc);
+    cmd
         .env("VARD_TOKEN", &token)
         .env("VARD_PORTA", desc.porta.to_string())
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
-
-    for v in variaveis_tiradas() {
-        cmd.env_remove(v);
-    }
 
     #[cfg(windows)]
     {
@@ -339,7 +380,7 @@ fn rodar_uma_vez(
 
     let pid = filho.id();
     handle.mudar_estado(supervisor::EstadoServico::Subindo, "", Some(pid));
-    log.linha(&format!("[{}] iniciado (pid {})", desc.id, pid));
+    log.linha(&supervisor::redigir(&format!("[{}] iniciado (pid {}; executável {}; início {})", desc.id, pid, exe.display(), chrono::Utc::now().to_rfc3339())));
 
     // Leitores de stdout/stderr com prazo
     use std::io::{BufRead, BufReader, Read};
@@ -389,7 +430,7 @@ fn rodar_uma_vez(
     let inicio = Instant::now();
     let mut no_ar = false;
     let mut proxima_sonda = inicio;
-    let limite_arranque = Duration::from_secs(15);
+    let limite_arranque = Duration::from_secs(if desc.id == "nucleo" { crate::instalacao::PRAZO_NUCLEO_S } else { crate::instalacao::PRAZO_OPCIONAIS_S });
 
     loop {
         if handle.deve_parar() {
@@ -434,7 +475,11 @@ fn rodar_uma_vez(
         let agora = Instant::now();
         if agora >= proxima_sonda {
             let pids_job = job.pids();
-        let saudavel = sondar_saude(desc.porta, pid, &pids_job);
+            let saudavel = if desc.id == "openjarvis" {
+                reqwest::blocking::Client::builder().no_proxy().timeout(SONDA_TIMEOUT).build()
+                    .ok().and_then(|c| c.get(format!("http://127.0.0.1:{}/health", desc.porta)).send().ok())
+                    .is_some_and(|r| r.status().is_success())
+            } else { sondar_saude(desc.porta, pid, &pids_job) };
             if !no_ar {
                 if saudavel {
                     no_ar = true;
@@ -537,6 +582,7 @@ mod testes {
             id: "nucleo".to_string(),
             porta: 4750,
             comando: (PathBuf::from("python.exe"), vec!["-m".into(), "vard".into()]),
+            pasta_trabalho: None,
             envs: vec![("VARD_DADOS".into(), "/tmp/dados".into())],
             caminho_log: PathBuf::from("/tmp/nucleo.log"),
         };
@@ -663,6 +709,7 @@ http.server.HTTPServer(('127.0.0.1', {porta}), H).serve_forever()
             id: "api-teste".into(),
             porta: 19804,
             comando: (PathBuf::from("cmd"), vec!["/c".into(), "echo".into(), "ok".into()]),
+            pasta_trabalho: None,
             envs: vec![],
             caminho_log: std::env::temp_dir().join("api-teste.log"),
         };
