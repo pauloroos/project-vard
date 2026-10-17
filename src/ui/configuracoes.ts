@@ -437,6 +437,8 @@ export class Configuracoes {
       for (const btn of caixaCores.querySelectorAll<HTMLButtonElement>(".aparencia-cor")) {
         btn.classList.toggle("ativa", btn.dataset.cor === cor);
       }
+      inputCor.closest(".aparencia-personalizada")?.classList.toggle("ativa",
+        !Configuracoes.CORES_PRONTAS.some(([hex]) => hex === cor));
     };
 
     caixaCores.replaceChildren();

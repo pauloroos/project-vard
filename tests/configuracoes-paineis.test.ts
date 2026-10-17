@@ -24,6 +24,7 @@ import { Configuracoes, type Aba } from "../src/ui/configuracoes";
 import type { Config } from "../src/config/config";
 import { CONFIG_PADRAO } from "../src/config/config";
 import { PAINEIS_PADRAO } from "../src/config/paineis";
+import { invoke } from "@tauri-apps/api/core";
 
 describe("configuracoes-paineis (T8)", () => {
   let dir: string;
@@ -74,6 +75,21 @@ describe("configuracoes-paineis (T8)", () => {
     expect(painel.lerFormulario().cor_elementos).toBe("");
   });
 
+  it("mudar o slider e clicar em Salvar grava a nova opacidade", async () => {
+    const raiz = criarRaiz();
+    const aoSalvar = vi.fn();
+    const painel = new Configuracoes({ ...CONFIG_PADRAO, opacidade_elementos: 0.8 }, raiz, { ...criarDeps(), aoSalvar });
+    await painel.montar();
+    vi.mocked(invoke).mockClear();
+    const slider = raiz.querySelector<HTMLInputElement>("#cfg-opacidade-elementos")!;
+    slider.value = "0.3";
+    slider.dispatchEvent(new Event("input"));
+    expect(raiz.querySelector("#cfg-opacidade-valor")?.textContent).toBe("30%");
+    raiz.querySelector<HTMLButtonElement>("#cfg-salvar")!.click();
+    await vi.waitFor(() => expect(aoSalvar).toHaveBeenCalledWith(expect.objectContaining({ opacidade_elementos: 0.3 })));
+    expect(invoke).toHaveBeenCalledWith("gravar_config", { config: expect.objectContaining({ opacidade_elementos: 0.3 }) });
+  });
+
   it("abrir Voz consulta o serviço e liga o card XTTS ao núcleo configurado", async () => {
     const buscar = vi.spyOn(globalThis, "fetch").mockImplementation(async (url) => {
       const u = String(url);
@@ -104,6 +120,10 @@ describe("configuracoes-paineis (T8)", () => {
     const input = raiz.querySelector<HTMLInputElement>("#cfg-cor-elementos")!;
     expect(raiz.querySelector<HTMLElement>(".aparencia-cor.ativa")?.dataset.cor).toBe("#a855f7");
     raiz.querySelector<HTMLButtonElement>('[data-cor="#22c55e"]')!.click();
+    expect(raiz.querySelectorAll(".aparencia-cor.ativa")).toHaveLength(1);
+    expect(raiz.querySelector<HTMLElement>(".aparencia-cor.ativa")?.dataset.cor).toBe("#22c55e");
+    expect(raiz.querySelector('label[for="cfg-cor-elementos"]')?.textContent).toBe("Personalizada");
+    expect(raiz.querySelector(".aparencia-personalizada.ativa")).toBeNull();
     expect(input.value).toBe("#22c55e");
     expect(raiz.querySelector<HTMLElement>("#cfg-aparencia-preview")!.style.color).toBe("rgb(34, 197, 94)");
     input.value = "#123456";
@@ -112,6 +132,27 @@ describe("configuracoes-paineis (T8)", () => {
     expect(raiz.querySelector<HTMLElement>("#cfg-aparencia-preview")!.style.color).toBe("rgb(18, 52, 86)");
     raiz.querySelector<HTMLInputElement>("#cfg-opacidade-elementos")!.value = "0.6";
     expect(painel.lerFormulario()).toMatchObject({ cor_elementos: "#123456", opacidade_elementos: 0.6 });
+  });
+
+  it("destaca o seletor livre só quando a cor não coincide com uma bolinha", async () => {
+    const raiz = criarRaiz();
+    const painel = new Configuracoes({ ...CONFIG_PADRAO, cor_elementos: "#123456" }, raiz, criarDeps());
+    await painel.montar();
+    const personalizada = raiz.querySelector<HTMLElement>(".aparencia-personalizada")!;
+    const input = raiz.querySelector<HTMLInputElement>("#cfg-cor-elementos")!;
+    expect(personalizada.classList.contains("ativa")).toBe(true);
+    expect(raiz.querySelector(".aparencia-cor.ativa")).toBeNull();
+    input.value = "#a855f7";
+    input.dispatchEvent(new Event("input"));
+    expect(personalizada.classList.contains("ativa")).toBe(false);
+    expect(raiz.querySelector<HTMLElement>(".aparencia-cor.ativa")?.dataset.cor).toBe("#a855f7");
+    expect(personalizada.querySelector("label")?.textContent).toBe("Personalizada");
+    input.value = "#654321";
+    input.dispatchEvent(new Event("input"));
+    expect(personalizada.classList.contains("ativa")).toBe(true);
+    raiz.querySelector<HTMLButtonElement>('[data-cor="#22c55e"]')!.click();
+    expect(personalizada.classList.contains("ativa")).toBe(false);
+    expect(raiz.querySelector<HTMLElement>(".aparencia-cor.ativa")?.dataset.cor).toBe("#22c55e");
   });
 
   it("abas do menu U7 aparecem na navegação (sem provedores/agentes separados)", async () => {
