@@ -64,7 +64,7 @@ function criarDeps(overrides: Partial<DepsQuemResponde> = {}): DepsQuemResponde 
   };
 }
 
-describe("AbaModelos (Quem responde 0.9.3)", () => {
+describe("AbaModelos (Núcleo)", () => {
   it("caixa do OpenJarvis persiste a opção extra e avisa sobre reiniciar serviços", async () => {
     configEmMemoria = { ...CONFIG_PADRAO, cerebro: "proprio" };
     const aoMudarUsoOpenJarvis = vi.fn();
@@ -188,7 +188,7 @@ describe("AbaModelos (Quem responde 0.9.3)", () => {
     const raiz = criarRaiz();
     const aba = new AbaModelos(raiz, criarDeps());
     await aba.carregar();
-    const testar = Array.from(raiz.querySelectorAll<HTMLButtonElement>("button")).filter((b) => b.textContent === "Testar")[1];
+    const testar = Array.from(raiz.querySelectorAll<HTMLButtonElement>('[data-id="lm"] button')).find((b) => b.textContent === "Testar");
     testar!.click();
     await new Promise((r) => setTimeout(r, 50));
     expect(corpos[0]).toMatchObject({ tipo: "lmstudio", provedor_id: "lm" });
@@ -212,9 +212,8 @@ describe("AbaModelos (Quem responde 0.9.3)", () => {
     const aba = new AbaModelos(raiz, deps);
     await aba.carregar();
 
-    // O segundo "Usar este" é o do provedor (o primeiro é do OpenJarvis)
-    const btns = Array.from(raiz.querySelectorAll<HTMLButtonElement>("button"));
-    const usarProv = btns.filter((b) => b.textContent === "Usar este")[1];
+    const btns = Array.from(raiz.querySelectorAll<HTMLButtonElement>('[data-id="lm"] button'));
+    const usarProv = btns.find((b) => b.textContent === "Usar este");
     expect(usarProv).toBeTruthy();
     usarProv!.click();
     await new Promise((r) => setTimeout(r, 50));
@@ -492,6 +491,95 @@ describe("AbaModelos (Quem responde 0.9.3)", () => {
     await new Promise((r) => setTimeout(r, 50));
 
     expect(modal.textContent).toContain("não encontrada neste PC");
+  });
+
+  it("LM Studio já cadastrado não volta como sugestão de instalação (bug do id x tipo)", async () => {
+    const lmstudio = {
+      id: "lmstudio", nome: "LM Studio", descricao: "Servidor local", comando: ["winget"],
+      fonte: "https://lmstudio.ai/download", tipo_provedor: "lmstudio", url_base: "http://127.0.0.1:1234/v1",
+      tamanho_mb: null, manual: false, instalado: false, login: "dispensado", estado: "aguardando", linhas: [],
+    };
+    const ollama = { ...lmstudio, id: "ollama", nome: "Ollama", tipo_provedor: "ollama", url_base: "http://127.0.0.1:11434/v1" };
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => new Response(JSON.stringify(
+      String(url).endsWith("/instalaveis") ? { itens: [lmstudio, ollama] } : [],
+    ))));
+    // Cadastro pelo modal: o id nasce do nome ("LM Studio" -> "lm-studio"), não do id do instalável.
+    cfgEmMemoria = {
+      ...PAINEIS_PADRAO,
+      provedores: [{ id: "lm-studio", nome: "LM Studio", tipo: "lmstudio", url_base: "http://localhost:1234/v1", modelo: "modelo-ficticio" }],
+    };
+    const raiz = criarRaiz();
+    await new AbaModelos(raiz, criarDeps()).carregar();
+    const sugestoes = await vi.waitFor(() => {
+      const s = raiz.querySelector<HTMLElement>(".nucleo-instalar");
+      expect(s?.querySelector('[data-id="instalar-ollama"]')).toBeTruthy();
+      return s!;
+    });
+    expect(sugestoes.querySelector('[data-id="instalar-lmstudio"]')).toBeNull();
+    expect(sugestoes.textContent).not.toContain("LM Studio");
+  });
+
+  it("disposição em blocos: em uso agora, cadastrados, instalar e avançado recolhido", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => new Response(JSON.stringify(
+      String(url).endsWith("/instalaveis") ? { itens: [] } : [],
+    ))));
+    const raiz = criarRaiz();
+    await new AbaModelos(raiz, criarDeps()).carregar();
+    await vi.waitFor(() => expect(raiz.querySelector(".nucleo-instalar .cards-vazio")).toBeTruthy());
+    const legendas = [...raiz.querySelectorAll(":scope > fieldset > legend")].map(l => l.textContent);
+    expect(legendas).toEqual(["Em uso agora", "Provedores cadastrados", "Instalar ou conectar"]);
+    const avancado = raiz.querySelector<HTMLDetailsElement>(":scope > details.nucleo-avancado")!;
+    expect(avancado.open).toBe(false);
+    expect(avancado.querySelector("summary")?.textContent).toContain("Opções avançadas");
+    expect(avancado.querySelector('[data-id="__oj__"]')).toBeTruthy();
+    expect(raiz.textContent).not.toContain("Quem responde");
+  });
+
+  it("em uso agora mostra o provedor ativo, o modelo e a reserva", async () => {
+    cfgEmMemoria = {
+      ...PAINEIS_PADRAO,
+      provedores: [
+        { id: "lm", nome: "LM Studio", tipo: "lmstudio", url_base: "http://localhost:1234/v1", modelo: "modelo-a" },
+        { id: "b", nome: "Servidor B", tipo: "ollama", url_base: "http://localhost:11434/v1", modelo: "modelo-b" },
+      ],
+      ativo: "lm",
+      reserva: "b",
+    };
+    configEmMemoria = { ...CONFIG_PADRAO, cerebro: "proprio" };
+    const raiz = criarRaiz();
+    await new AbaModelos(raiz, criarDeps({ config: { ...configEmMemoria } })).carregar();
+    const agora = raiz.querySelector<HTMLElement>(".nucleo-agora")!;
+    expect(agora.textContent).toContain("LM Studio");
+    expect(agora.textContent).toContain("modelo-a");
+    expect(agora.textContent).toContain("Reserva: Servidor B");
+    expect(agora.textContent).not.toContain("OpenJarvis");
+  });
+
+  it("em uso agora com OpenJarvis mostra o estado dele; sem escolha, orienta", async () => {
+    const raiz = criarRaiz();
+    await new AbaModelos(raiz, criarDeps({
+      config: { ...CONFIG_PADRAO, cerebro: "openjarvis" },
+      criarOj: () => ({ modelos: async () => { throw new Error("fora"); } }) as any,
+    })).carregar();
+    expect(raiz.querySelector(".nucleo-agora")?.textContent).toContain("OpenJarvis");
+    expect(raiz.querySelector(".nucleo-agora")?.textContent).toContain("Fora do ar");
+
+    const raiz2 = criarRaiz();
+    await new AbaModelos(raiz2, criarDeps({ config: { ...CONFIG_PADRAO, cerebro: "proprio" } })).carregar();
+    expect(raiz2.querySelector(".nucleo-agora")?.textContent).toContain("Nenhum provedor escolhido");
+  });
+
+  it("avançado aberto continua aberto depois de uma ação que redesenha a aba", async () => {
+    configEmMemoria = { ...CONFIG_PADRAO, cerebro: "proprio" };
+    const raiz = criarRaiz();
+    await new AbaModelos(raiz, criarDeps({ config: { ...configEmMemoria } })).carregar();
+    const avancado = raiz.querySelector<HTMLDetailsElement>("details.nucleo-avancado")!;
+    avancado.open = true;
+    avancado.dispatchEvent(new Event("toggle"));
+    [...raiz.querySelectorAll<HTMLButtonElement>('[data-id="__oj__"] button')].find(b => b.textContent === "Usar este")!.click();
+    await vi.waitFor(() => expect(configEmMemoria.cerebro).toBe("openjarvis"));
+    await vi.waitFor(() => expect(raiz.querySelector(".nucleo-agora")?.textContent).toContain("OpenJarvis"));
+    expect(raiz.querySelector<HTMLDetailsElement>("details.nucleo-avancado")?.open).toBe(true);
   });
 
   it("reabrir a aba reconsulta o status da ponte e atualiza o aviso sem recarregar a janela", async () => {

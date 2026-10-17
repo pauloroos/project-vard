@@ -15,7 +15,7 @@ function botao(raiz: HTMLElement, texto: string): HTMLButtonElement {
   return el!;
 }
 
-describe("Instaláveis em Quem responde", () => {
+describe("Instaláveis no Núcleo", () => {
   let raiz: HTMLElement;
   let chamadas: { url: string; corpo?: string }[];
   let item: Instalavel;
@@ -95,22 +95,43 @@ describe("Instaláveis em Quem responde", () => {
     expect(raiz.textContent).toContain("Falhou"); expect(cadastrar).not.toHaveBeenCalled();
   });
 
-  it("CLI instalada e já cadastrada como provedor mostra 'Já cadastrado' em vez de 'Cadastrar provedor'", async () => {
+  it("CLI instalada e já cadastrada como provedor some das sugestões", async () => {
     item = { ...ollama, id: "claude", nome: "Claude Code", tipo_provedor: "cli-claude", instalado: true, login: "dispensado" };
     const cadastrar = vi.fn();
-    // Simula que o provedor já está cadastrado passando seu ID na lista de cadastrados
-    await new InstalaveisProvedores(raiz, "http://127.0.0.1:4700", cadastrar, () => ["claude"]).carregar();
+    // O id do provedor nasce do nome digitado; o que liga o cadastro ao instalável é o tipo.
+    await new InstalaveisProvedores(raiz, "http://127.0.0.1:4700", cadastrar, () => [{ id: "meu-claude", tipo: "cli-claude" }]).carregar();
     const botoes = [...raiz.querySelectorAll("button")].map(b => b.textContent?.trim());
-    expect(botoes).toContain("Já cadastrado");
     expect(botoes).not.toContain("Cadastrar provedor");
+    expect(raiz.querySelector('[data-id="instalar-claude"]')).toBeNull();
+  });
+
+  it("provedor cadastrado não é sugerido para instalar mesmo quando o núcleo não acha o programa", async () => {
+    item = { ...ollama, id: "lmstudio", nome: "LM Studio", tipo_provedor: "lmstudio", url_base: "http://127.0.0.1:1234/v1", instalado: false };
+    await new InstalaveisProvedores(raiz, "http://127.0.0.1:4700", vi.fn(), () => [{ id: "lm-studio", tipo: "lmstudio" }]).carregar();
+    expect([...raiz.querySelectorAll("button")].some(b => b.textContent === "Instalar")).toBe(false);
+    expect(raiz.querySelector('[data-id="instalar-lmstudio"]')).toBeNull();
+    expect(raiz.textContent).toContain("Nada a sugerir");
+  });
+
+  it("cadastrada sem login continua visível só para entrar na conta", async () => {
+    item = { ...ollama, id: "claude", nome: "Claude Code", tipo_provedor: "cli-claude", instalado: true, login: "ausente" };
+    await new InstalaveisProvedores(raiz, "http://127.0.0.1:4700", vi.fn(), () => [{ id: "claude", tipo: "cli-claude" }]).carregar();
+    const botoes = [...raiz.querySelectorAll("button")].map(b => b.textContent?.trim());
+    expect(botoes).toContain("Entrar na conta");
+    expect(botoes).not.toContain("Cadastrar provedor");
+  });
+
+  it("OpenJarvis instalado não aparece nas sugestões: ele já tem card fixo", async () => {
+    item = { ...ollama, id: "openjarvis", nome: "OpenJarvis", tipo_provedor: "", url_base: "", instalado: true };
+    await new InstalaveisProvedores(raiz, "http://127.0.0.1:4700", vi.fn(), () => []).carregar();
+    expect(raiz.querySelector('[data-id="instalar-openjarvis"]')).toBeNull();
   });
 
   it("CLI instalada mas não cadastrada ainda mostra 'Cadastrar provedor'", async () => {
     item = { ...ollama, id: "claude", nome: "Claude Code", tipo_provedor: "cli-claude", instalado: true, login: "dispensado" };
     const cadastrar = vi.fn();
-    await new InstalaveisProvedores(raiz, "http://127.0.0.1:4700", cadastrar, () => []).carregar();
+    await new InstalaveisProvedores(raiz, "http://127.0.0.1:4700", cadastrar, () => [{ id: "lm", tipo: "lmstudio" }]).carregar();
     const botoes = [...raiz.querySelectorAll("button")].map(b => b.textContent?.trim());
     expect(botoes).toContain("Cadastrar provedor");
-    expect(botoes).not.toContain("Já cadastrado");
   });
 });

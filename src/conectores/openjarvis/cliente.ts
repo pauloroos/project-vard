@@ -25,7 +25,7 @@ export class OpenJarvis implements Conector {
 
   /** Consulta a configuração viva antes de cada requisição, inclusive após esperas. */
   private buscar(url: string, opcoes?: RequestInit): Promise<Response> {
-    if (!this.habilitado()) throw new Error("OpenJarvis desligado. Ative-o em Quem responde e reinicie os serviços.");
+    if (!this.habilitado()) throw new Error("OpenJarvis desligado. Ative-o em Núcleo (opções avançadas) e reinicie os serviços.");
     return fetch(url, opcoes);
   }
 
