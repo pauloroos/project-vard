@@ -11,11 +11,11 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 from dataclasses import asdict, dataclass, fields
 from pathlib import Path
 
 from . import config as modulo_config
+from .habilidades import ler_habilidades
 
 log = logging.getLogger(__name__)
 
@@ -64,11 +64,9 @@ def ler() -> Perfil:
 
 def gravar(perfil: Perfil) -> None:
     """Grava o perfil de forma atômica, sem deixar arquivo temporário no fim."""
-    arq = caminho()
-    arq.parent.mkdir(parents=True, exist_ok=True)
-    tmp = arq.parent / f"{arq.name}.tmp"
-    tmp.write_text(json.dumps(asdict(perfil), ensure_ascii=False, indent=2), encoding="utf-8")
-    os.replace(tmp, arq)
+    from . import ajustes
+    atual = ajustes.ler_documento("perfil")
+    ajustes.gravar_documento("perfil", {**atual, **asdict(perfil)})
 
 
 def montar_persona(perfil: Perfil, nome: str, usuario: str) -> str:
@@ -96,6 +94,12 @@ def montar_persona(perfil: Perfil, nome: str, usuario: str) -> str:
         produto = produto.replace(IDENTIDADE_EXEMPLO, quem, 1)
     if produto:
         partes.append(produto)
+    try:
+        ligadas = any(h["ligada"] for h in ler_habilidades()["habilidades"])
+    except (OSError, ValueError):
+        ligadas = False
+    if ligadas:
+        partes.append("Há habilidades cadastradas pelo usuário; antes de agir num pedido, consulte listar_habilidades do MCP de configurações, se a ferramenta estiver disponível.")
     return "\n\n".join(partes)
 
 

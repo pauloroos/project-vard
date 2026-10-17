@@ -34,4 +34,6 @@ def memoria_gravar(titulo: str, texto: str) -> str:
 
 
 if __name__ == "__main__":
+    from vard.instalaveis import limpar_ambiente_mcp
+    limpar_ambiente_mcp()
     mcp.run()

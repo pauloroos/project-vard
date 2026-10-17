@@ -2,6 +2,8 @@
 
 [Leia em português](README.md) · [Repository](https://github.com/pauloroos/project-vard)
 
+Versions and changes: [CHANGELOG.md](CHANGELOG.md).
+
 Vard is a local voice interface (floating widget) for assistants; the first connector is [OpenJarvis](https://github.com/open-jarvis/OpenJarvis). Built with Tauri 2. A transparent, frameless, always-on-top window with a cyan core that reacts to your voice: you speak, it transcribes, OpenJarvis answers and the answer is spoken back.
 
 ![HUD idle](docs/captura-repouso.png) ![HUD speaking](docs/captura-falando.png)
@@ -39,8 +41,8 @@ Independent project, not affiliated with OpenJarvis or Stanford.
 
 Download the installer from the releases page and run one of them:
 
-- `Vard_0.9.3_x64-setup.exe` (NSIS): per-user, no administrator needed. Silent: `Vard_0.9.3_x64-setup.exe /S`. Installs to `%LOCALAPPDATA%\Vard\`.
-- `Vard_0.9.3_x64_en-US.msi` (WiX): per-machine, needs administrator. Silent: `msiexec /i Vard_0.9.3_x64_en-US.msi /qn`.
+- `Vard_0.9.5_x64-setup.exe` (NSIS): per-user, no administrator needed. Silent: `Vard_0.9.5_x64-setup.exe /S`. Installs to `%LOCALAPPDATA%\Vard\`.
+- `Vard_0.9.5_x64_en-US.msi` (WiX): per-machine, needs administrator. Silent: `msiexec /i Vard_0.9.5_x64_en-US.msi /qn`.
 
 To build it yourself: `npm install` and `npm run tauri build` (installers land in `src-tauri/target/release/bundle/`).
 
@@ -58,7 +60,13 @@ Only one instance runs at a time: opening Vard again brings the window to the fr
 - **Notice center (with the private install):** a discreet unread counter and a "Notices" tab in the panel (see result, mark as read). Nothing is spoken unless you turn on "Speak notices" (never while "Don't speak" is on).
 - **Waiting:** a discreet badge with the number of running tasks; hover for the list.
 - **Meeting:** a "Meeting" tab (start, stop, make minutes, last meeting); while a meeting runs the widget stays quiet and shows "meeting".
-- **Panel:** recognition language as a list and a "What I can do" tab.
+- **Panel:** recognition language as a list and the **Oficina** (Workshop) tab.
+
+In **Oficina**, built-in skills are labeled **Capaz** (Capable) and can be switched off. Choose **Nova habilidade**
+(New skill) to teach a recipe with example phrases and instructions; it starts as **Treinada** (Trained) and can
+be marked **Validada** (Validated) after it works. Creation and editing use a modal; deletion requires confirmation.
+Search and status filters help find recipes. `habilidades.json` lives beside `paineis.json` in the user's configuration
+directory (`VARD_CONFIG` when set).
 
 ### Shortcuts
 

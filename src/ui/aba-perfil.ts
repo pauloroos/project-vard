@@ -34,6 +34,7 @@ export interface DepsAbaPerfil {
 const CAMPOS_PERFIL = ["tom", "personalidade", "instrucoes", "sobre_usuario"] as const;
 
 export class AbaPerfil {
+  private salvo: Perfil = { ...PERFIL_PADRAO };
   constructor(private raiz: HTMLElement, private deps: DepsAbaPerfil) {}
 
   /** Desenha chamada, perfis prontos e campos do perfil.json; carrega o perfil salvo. */
@@ -90,14 +91,22 @@ export class AbaPerfil {
 
   /** Valor atual dos quatro campos do perfil.json. */
   lerPerfil(): Perfil {
-    const valor: Perfil = { ...PERFIL_PADRAO };
+    const valor: Perfil = { ...this.salvo };
     for (const campo of CAMPOS_PERFIL) valor[campo] = this.campoLongo(campo).value;
     return valor;
   }
 
   /** Grava o perfil.json com o que está no formulário. */
   async gravar(): Promise<void> {
-    await this.deps.gravar(this.lerPerfil());
+    const novo = this.lerPerfil();
+    await this.deps.gravar(novo);
+    this.salvo = novo;
+  }
+
+  async recarregar(): Promise<void> {
+    const novo = await this.deps.ler();
+    for (const campo of CAMPOS_PERFIL) if (novo[campo] !== this.salvo[campo]) this.campoLongo(campo).value = novo[campo];
+    this.salvo = structuredClone(novo);
   }
 
   /** A aba Geral mudou nome/usuário/variantes: reflete aqui sem perder o resto do formulário. */
@@ -171,6 +180,7 @@ export class AbaPerfil {
   }
 
   private preencher(perfil: Perfil) {
+    this.salvo = structuredClone(perfil);
     this.campoChamada("nome").value = this.deps.nome();
     this.campoChamada("usuario").value = this.deps.usuario();
     this.campoChamada("variantes").value = this.deps.variantes().join(", ");

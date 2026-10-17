@@ -38,14 +38,16 @@ html, body { background: transparent; margin: 0; overflow: hidden; }
 #app:hover #botoes { opacity: 1; }
 #botoes button {
   width: calc(24px * var(--escala)); height: calc(24px * var(--escala)); padding: 0; display: flex; align-items: center;
-  justify-content: center; cursor: pointer; color: var(--cor-elementos); background: rgba(0, 240, 255, 0.06);
-  border: 1px solid rgba(0, 240, 255, 0.35); border-radius: 50%; opacity: var(--opacidade-elementos);
+  justify-content: center; cursor: pointer; color: var(--cor-elementos);
+  background: color-mix(in srgb, var(--cor-elementos) 6%, transparent);
+  border: 1px solid color-mix(in srgb, var(--cor-elementos) 35%, transparent);
+  border-radius: 50%; opacity: var(--opacidade-elementos);
 }
 #botoes button svg {
   width: calc(13px * var(--escala)); height: calc(13px * var(--escala)); fill: none; stroke: currentColor;
   stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; pointer-events: none;
 }
-#botoes button:hover { background: rgba(0, 240, 255, 0.22); box-shadow: 0 0 8px var(--brilho); }
+#botoes button:hover { background: color-mix(in srgb, var(--cor-elementos) 22%, transparent); box-shadow: 0 0 8px var(--brilho); }
 #botoes button[hidden] { display: none; }
 #app.capturando::after {
   content: ""; position: absolute; top: calc(8px * var(--escala)); right: calc(8px * var(--escala));

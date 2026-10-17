@@ -11,7 +11,7 @@ import { Configuracoes, type Aba } from "./ui/configuracoes";
 import { montarImportacaoComPonte, resumirHudAtual } from "./ui/primeiro-uso-importacao";
 import { montarAssistentePrimeiroUso, type DepsPrimeiroUso } from "./ui/primeiro-uso";
 
-const ABAS: Aba[] = ["geral", "voz", "atalhos", "modelos", "paineis-mcps", "sistema", "reuniao", "avisos"];
+const ABAS: Aba[] = ["geral", "perfil", "voz", "atalhos", "oficina", "modelos", "paineis-mcps", "sistema", "reuniao", "avisos", "diagnostico"];
 
 window.addEventListener("DOMContentLoaded", async () => {
   const cfg = await carregarConfig();
@@ -32,6 +32,10 @@ window.addEventListener("DOMContentLoaded", async () => {
     },
   });
   await painel.montar();
+  await listen("config-salva", () => { void carregarConfig().then((c) => painel.mudouExternamente(c)); });
+  await listen("paineis-mudaram", () => { void painel.paineisMudaram(); });
+  await listen("habilidades-mudaram", () => { void painel.habilidadesMudaram(); });
+  await listen("perfil-mudou", () => { void painel.perfilMudou(); });
   // T7 (0.9): caixa de importação da instalação anterior, na aba Sistema, pela ponte do campo.
   const caixaImportacao = document.querySelector<HTMLElement>("#cfg-importacao");
   if (caixaImportacao) {

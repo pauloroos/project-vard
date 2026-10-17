@@ -1,4 +1,32 @@
 /* Frente VOZ (0.9.4): listas de seleção principal/reserva, blocos de serviço e aviso. */
+.voz-motores {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(150px, 100%), 1fr));
+  gap: 8px;
+}
+.voz-motor {
+  min-width: 0;
+  min-height: 94px;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 5px;
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+.voz-motor strong { font-size: 15px; }
+.voz-motor span { font-size: 11px; }
+.voz-motor[aria-pressed="true"] {
+  background: rgba(0, 240, 255, 0.16);
+  border: 2px solid var(--ciano);
+}
+.voz-motor-ativo { font-weight: 700; }
+#cfg-voz, #cfg-voz fieldset, .voz-bloco-servico, .voz-select-linha { min-width: 0; }
+.voz-select-linha { flex-wrap: wrap; }
+.voz-select-linha select { flex-basis: 250px; max-width: 100%; }
+.voz-cadastrada-linha span { min-width: 0; overflow-wrap: anywhere; }
 .voz-aviso {
   border: 1px solid var(--aviso, #ffb347);
   background: rgba(255, 179, 71, 0.12);

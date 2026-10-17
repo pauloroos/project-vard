@@ -21,7 +21,7 @@ import shutil
 import subprocess
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Callable, Mapping, Sequence
 
@@ -187,6 +187,51 @@ def _exe_do_config(amb: Ambiente) -> dict[str, str]:
         }
     except Exception:  # noqa: BLE001
         return {}
+
+
+def localizar_instalaveis(ambiente: Ambiente | None = None) -> dict[str, str]:
+    """Caminhos locais para uso interno; nunca entram na resposta HTTP."""
+    amb = ambiente or ambiente_real()
+    locais_ollama = ((Path(amb.env["LOCALAPPDATA"]) / "Programs" / "Ollama" / "ollama.exe",)
+                     if amb.env.get("LOCALAPPDATA") else ())
+    adicionais = (
+        Definicao("ollama", "Ollama", ("ollama",), (), locais_ollama),
+        Definicao("gemini", "Gemini CLI", ("gemini",), (), ()),
+        Definicao("openjarvis", "OpenJarvis", ("jarvis",), (), ()),
+    )
+    locais_jarvis: list[Path] = []
+    arquivo_inst = amb.env.get("VARD_INSTALACAO")
+    base_dados = amb.env.get("VARD_DADOS")
+    if not base_dados and amb.env.get("LOCALAPPDATA"):
+        base_dados = str(Path(amb.env["LOCALAPPDATA"]) / "rdl-vard")
+    if not arquivo_inst and base_dados:
+        arquivo_inst = str(Path(base_dados) / "instalacao.json")
+    if arquivo_inst:
+        from vard import instalacao
+        origem = instalacao.ler(Path(arquivo_inst)).get("openjarvis_src")
+        if origem:
+            locais_jarvis.append(Path(origem) / ".venv" / "Scripts" / "jarvis.exe")
+    conf = _exe_do_config(amb)
+    definicoes = []
+    for d in (*_definicoes(amb), *adicionais):
+        # O processo do núcleo pode ter um PATH anterior à instalação.
+        locais = list(d.locais)
+        if d.id == "openjarvis":
+            locais.extend(locais_jarvis)
+        if d.id in {"claude", "codex", "opencode", "gemini", "agy"}:
+            if amb.env.get("APPDATA"):
+                locais.append(Path(amb.env["APPDATA"]) / "npm" / f"{d.id}.cmd")
+            if amb.env.get("LOCALAPPDATA"):
+                locais.append(Path(amb.env["LOCALAPPDATA"]) / "Microsoft" / "WinGet" / "Links" / f"{d.id}.exe")
+        definicoes.append(replace(d, locais=tuple(locais)))
+    return {d.id: achado.caminho for d in definicoes
+            if (achado := _resolver_item(d, amb, {}, conf)).existe}
+
+
+def detectar_instalaveis(ambiente: Ambiente | None = None) -> dict[str, bool]:
+    """Presença dos provedores, sem GPU/versão/login nem abertura de programas."""
+    encontrados = localizar_instalaveis(ambiente)
+    return {ident: ident in encontrados for ident in (*IDS, "ollama", "gemini", "openjarvis")}
 
 
 @dataclass(frozen=True)

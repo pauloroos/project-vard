@@ -27,6 +27,9 @@ from vard.cerebro import cli_capacidade, cli_deteccao, contratos as cerebro_cont
 from vard.primeiro_uso import deteccao as primeiro_uso_deteccao, estado as primeiro_uso_estado
 from vard.seguro import Frase
 from vard import telegram as telegram_mod
+from vard.instalaveis import GerenciadorInstalaveis
+
+_instalaveis = GerenciadorInstalaveis()
 
 # ----------------------------------------------------------------------------- PERSONA
 # Único lugar da personalidade: config/persona.md do usuário (a ponte e o OpenJarvis/Telegram
@@ -69,6 +72,7 @@ def _chave_lmstudio() -> str:
 
 CHAVE_LMSTUDIO = _chave_lmstudio()
 _supervisor_cli = None
+_ferramentas_cerebro = None
 
 
 def _obter_supervisor_cli():
@@ -211,12 +215,22 @@ async def _executar_pedido_cerebro(pedido, emitir):
     else:
         raise _ErroCerebro("cerebro_tipo_desconhecido")
 
-    await cerebro_laco.executar_pedido(pedido, adaptador, emitir)
+    await cerebro_laco.executar_pedido(pedido, adaptador, emitir,
+        gerenciador_ferramentas=_ferramentas_cerebro if not tipo_provedor.startswith("cli-") else None)
 
 
 @asynccontextmanager
 async def lifespan(app):
     """Ciclo de vida: inicia/para o TelegramPoller condicional (T11) e o SupervisorCli (T16)."""
+    global _ferramentas_cerebro
+    from vard.cerebro.ferramentas import GerenciadorFerramentas
+    from vard.segredos import servidores_locais
+    _ferramentas_cerebro = GerenciadorFerramentas()
+    for nome, servidor in servidores_locais().items():
+        try:
+            await _ferramentas_cerebro.adicionar_stdio(nome, servidor["command"], servidor["args"])
+        except Exception:
+            log.warning("MCP local indisponível: %s", nome)
     # Configura o executor do cérebro próprio (T16: ligação no despachante)
     cerebro_pedidos.configurar_executor(_executar_pedido_cerebro)
     # D2: encaminha eventos do cérebro próprio para o SSE /events
@@ -254,21 +268,26 @@ async def lifespan(app):
             log.info("telegram habilitado mas sem token/chats; poller nao iniciado")
     else:
         log.info("telegram desabilitado; poller nao iniciado")
-    yield
-    # T16: encerra todos os processos vivos de CLI na saída
-    if _supervisor_cli is not None:
-        try:
-            await _supervisor_cli.encerrar_tudo()
-            log.info("SupervisorCli: processos encerrados na saída")
-        except Exception:  # noqa: BLE001
-            log.warning("SupervisorCli: erro ao encerrar processos na saída")
-    if tarefa_poller is not None:
-        tarefa_poller.cancel()
-        try:
-            await tarefa_poller
-        except asyncio.CancelledError:
-            pass
-        log.info("telegram poller parado")
+    try:
+        yield
+    finally:
+        await _ferramentas_cerebro.fechar_tudo()
+        _ferramentas_cerebro = None
+        await asyncio.to_thread(_instalaveis.encerrar)
+        # T16: encerra todos os processos vivos de CLI também quando a saída tem erro.
+        if _supervisor_cli is not None:
+            try:
+                await _supervisor_cli.encerrar_tudo()
+                log.info("SupervisorCli: processos encerrados na saída")
+            except Exception:  # noqa: BLE001
+                log.warning("SupervisorCli: erro ao encerrar processos na saída")
+        if tarefa_poller is not None:
+            tarefa_poller.cancel()
+            try:
+                await tarefa_poller
+            except asyncio.CancelledError:
+                pass
+            log.info("telegram poller parado")
 
 
 app = FastAPI(title="Vard", lifespan=lifespan)
@@ -300,6 +319,66 @@ async def so_localhost(request: Request, call_next):
 
 # Por último = camada de fora: responde o preflight e põe o ACAO até na 403, para o webview ler a resposta.
 app.add_middleware(CORSMiddleware, allow_origins=sorted(ORIGENS_OK), allow_methods=["GET", "POST"], allow_headers=["*"])
+
+
+def _acao_instalavel(acao, ident, **opcoes):
+    try:
+        return acao(ident, **opcoes)
+    except KeyError:
+        raise HTTPException(404, "Instalável não encontrado.") from None
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from None
+    except RuntimeError as exc:
+        raise HTTPException(409, str(exc)) from None
+    except OSError:
+        raise HTTPException(503, "Não foi possível abrir o terminal de login.") from None
+
+
+@app.get("/instalaveis")
+def instalaveis_listar():
+    return {"itens": _instalaveis.listar()}
+
+
+@app.post("/instalaveis/{ident}/instalar")
+def instalaveis_instalar(ident: str, corpo: dict):
+    return _acao_instalavel(_instalaveis.instalar, ident, confirmado=corpo.get("confirmado") is True)
+
+
+@app.get("/instalaveis/{ident}/andamento")
+def instalaveis_andamento(ident: str):
+    return _acao_instalavel(_instalaveis.andamento, ident)
+
+
+@app.post("/instalaveis/{ident}/cancelar")
+def instalaveis_cancelar(ident: str):
+    return _acao_instalavel(_instalaveis.cancelar, ident)
+
+
+@app.post("/instalaveis/{ident}/login")
+def instalaveis_login(ident: str, corpo: dict | None = None):
+    if not corpo or corpo.get("confirmado") is not True:
+        raise HTTPException(400, "É necessária a confirmação para entrar na conta.")
+    return _acao_instalavel(_instalaveis.login, ident)
+
+
+@app.post("/configuracoes/provedores/{ident}/testar")
+async def configuracoes_testar_provedor(ident: str):
+    from vard import ajustes
+    from vard.primeiro_uso import cerebro
+    try:
+        prov = next(p for p in ajustes.ler_documento("paineis")["provedores"] if p["id"] == ident)
+    except (StopIteration, ValueError, OSError):
+        raise HTTPException(404, "Provedor não encontrado.") from None
+    if prov["tipo"].startswith("cli-"):
+        return await _testar_cli(prov["tipo"], prov["modelo"])
+    try:
+        chave = _resolver_credencial_cofre(prov.get("credencial_ref", ""), prov["tipo"])
+    except _ErroCerebro:
+        return {"ok": False, "detalhe": "Cadastre a chave na tela de Configurações."}
+    if not chave and prov["tipo"] not in ("lmstudio", "local", "ollama", "openai_compat"):
+        return {"ok": False, "detalhe": "Cadastre a chave na tela de Configurações."}
+    resultado = await cerebro.testar_cerebro(tipo=prov["tipo"], base_url=prov["url_base"], modelo=prov["modelo"], chave=chave)
+    return {"ok": resultado.get("ok", False), "detalhe": "Conexão OK." if resultado.get("ok") else "Não foi possível conectar ao provedor."}
 
 
 @app.get("/")

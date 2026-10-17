@@ -1,6 +1,8 @@
 mod bandeja;
 mod cofre;
 mod comandos;
+mod habilidades;
+mod observador_config;
 mod diagnostico;
 mod janelas;
 pub mod supervisor;
@@ -390,6 +392,8 @@ pub fn run() {
             comandos::gravar_config,
             comandos::ler_paineis,
             comandos::gravar_paineis,
+            comandos::ler_habilidades,
+            comandos::gravar_habilidades,
             comandos::ler_perfil,
             comandos::gravar_perfil,
             comandos::definir_sempre_no_topo,
@@ -424,6 +428,10 @@ pub fn run() {
         ])
         .setup(|app| {
             let handle = app.handle().clone();
+            // O núcleo e seus MCPs precisam enxergar a pasta exata deste build (inclui dev).
+            if let Ok(pasta) = handle.path().app_config_dir() {
+                nucleo::definir_pasta_hud(pasta);
+            }
             cofre::migrar_no_arranque(&handle);
 
             // T4: inicia serviços habilitados via instalacao.json
@@ -487,6 +495,7 @@ let supervisor = config_instalacao.supervisor;
                 ciclo::iniciar_consumidor_da_caixa();
             }
 
+            observador_config::iniciar(handle.clone());
             Ok(())
         })
         .run(tauri::generate_context!())

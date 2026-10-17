@@ -174,13 +174,7 @@ pub fn ler_config(app: tauri::AppHandle) -> Result<Value, String> {
 #[tauri::command]
 pub fn gravar_config(app: tauri::AppHandle, config: Value) -> Result<(), String> {
     let p = caminho_config(&app);
-    let tmp = p.with_extension("json.tmp");
-    fs::write(
-        &tmp,
-        serde_json::to_string_pretty(&config).map_err(|e| e.to_string())?,
-    )
-    .map_err(|e| e.to_string())?;
-    fs::rename(&tmp, &p).map_err(|e| e.to_string())
+    crate::observador_config::gravar(&p, &config)
 }
 
 /// Resolve caminho de um arquivo de config pela variável de ambiente; usada em produção e testes.
@@ -252,26 +246,26 @@ pub fn gravar_paineis(app: tauri::AppHandle, arquivo: String, valor: Value) -> R
     if let Some(parent) = p.parent() {
         fs::create_dir_all(parent).map_err(|e| e.to_string())?;
     }
-    let tmp = p.with_extension("json.tmp");
-    fs::write(
-        &tmp,
-        serde_json::to_string_pretty(&valor).map_err(|e| e.to_string())?,
-    )
-    .map_err(|e| e.to_string())?;
-    fs::rename(&tmp, &p).map_err(|e| e.to_string())
+    crate::observador_config::gravar(&p, &valor)
+}
+
+/// Mesmo diretório de paineis.json e do leitor Python; valida antes de devolver ou gravar.
+#[tauri::command]
+pub fn ler_habilidades() -> Result<Value, String> {
+    crate::habilidades::ler_em(&crate::ciclo::pasta_config().join("habilidades.json"))
+}
+
+#[tauri::command]
+pub fn gravar_habilidades(valor: Value) -> Result<(), String> {
+    crate::habilidades::validar_habilidades(&valor)?;
+    crate::observador_config::gravar(&crate::ciclo::pasta_config().join("habilidades.json"), &valor)
 }
 
 /// Caminho do perfil do agente: `VARD_CONFIG/perfil.json` (mesmo contrato do Python); sem a
 /// variável, a pasta de configuração do app.
 fn caminho_perfil(app: &tauri::AppHandle) -> PathBuf {
-    if let Some(p) = caminho_por_env("VARD_CONFIG", "perfil.json") {
-        return p;
-    }
-    let dir = tauri::Manager::path(app)
-        .app_config_dir()
-        .expect("app_config_dir");
-    fs::create_dir_all(&dir).ok();
-    dir.join("perfil.json")
+    let legado = tauri::Manager::path(app).app_config_dir().ok().map(|d| d.join("perfil.json"));
+    resolver_paineis(crate::ciclo::pasta_config().join("perfil.json"), legado)
 }
 
 /// Lê o perfil de um caminho (testável sem `AppHandle`); sem arquivo devolve `Value::Null`.
@@ -296,10 +290,7 @@ pub fn gravar_perfil_em(p: &Path, valor: &Value) -> Result<(), String> {
     if let Some(parent) = p.parent() {
         fs::create_dir_all(parent).map_err(|e| e.to_string())?;
     }
-    let tmp = p.with_extension("json.tmp");
-    fs::write(&tmp, serde_json::to_string_pretty(valor).map_err(|e| e.to_string())?)
-        .map_err(|e| e.to_string())?;
-    fs::rename(&tmp, p).map_err(|e| e.to_string())
+    crate::observador_config::gravar(p, valor)
 }
 
 #[tauri::command]

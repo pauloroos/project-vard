@@ -156,7 +156,16 @@ def google(segredos: dict | None = None) -> tuple[str, str]:
 
 
 # MCPs locais (stdio) que o OpenJarvis sobe.
-SERVIDORES_LOCAIS = ("mesa", "oficina", "consulta", "memoria", "reuniao")
+SERVIDORES_LOCAIS = ("mesa", "oficina", "consulta", "memoria", "reuniao", "configuracoes")
+
+
+def servidores_locais(repo: Path | None = None) -> dict:
+    """Formato Claude Code, também consumido pelo gerenciador do cérebro próprio."""
+    import sys
+    raiz = Path(repo) if repo is not None else Path(__file__).resolve().parent
+    if repo is None and not (raiz / "mesa_mcp.py").is_file():
+        raiz = raiz.parent
+    return {nome: {"command": sys.executable, "args": [str(raiz / f"{nome}_mcp.py")]} for nome in SERVIDORES_LOCAIS}
 
 
 def escrever_mcp_json(segredos: dict, repo: Path, destino: Path) -> Path:
@@ -169,12 +178,8 @@ def escrever_mcp_json(segredos: dict, repo: Path, destino: Path) -> Path:
     O usuário precisa reaplicar a configuração após atualizar o Vard para que o novo
     comando seja escrito no openjarvis.toml/mcp.json.
     """
-    import sys
-    repo = Path(repo)
-    python = sys.executable
     servidores: list[dict] = [
-        {"name": nome, "command": python, "args": [str(repo / f"{nome}_mcp.py")]}
-        for nome in SERVIDORES_LOCAIS
+        {"name": nome, **servidor} for nome, servidor in servidores_locais(repo).items()
     ]
     destino.parent.mkdir(parents=True, exist_ok=True)
     destino.write_text(json.dumps(servidores, ensure_ascii=False, indent=2), encoding="utf-8")

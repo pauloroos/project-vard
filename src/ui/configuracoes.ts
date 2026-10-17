@@ -17,7 +17,7 @@ import { AbaModelos } from "./aba-modelos";
 import { AbaPerfil } from "./aba-perfil";
 import { AbaPaineisMcps } from "./paineis-mcps";
 import { AbaReuniao, type PonteReuniao } from "./aba-reuniao";
-import { AbaSaber } from "./aba-saber";
+import { AbaOficina } from "./aba-oficina";
 import { AbaSistema } from "./aba-sistema";
 import { AbaVoz } from "./aba-voz";
 import { InstaladorVozes } from "./instalador-vozes";
@@ -44,9 +44,9 @@ export interface DepsConfiguracoes {
 /** Monitor como o comando listar_monitores devolve (pixels físicos). */
 export interface MonitorInfo { nome: string; x: number; y: number; largura: number; altura: number; escala: number; principal: boolean }
 
-export type Aba = "geral" | "perfil" | "voz" | "atalhos" | "saber" | "modelos" | "paineis-mcps" | "sistema" | "reuniao" | "avisos" | "diagnostico";
+export type Aba = "geral" | "perfil" | "voz" | "atalhos" | "oficina" | "modelos" | "paineis-mcps" | "sistema" | "reuniao" | "avisos" | "diagnostico";
 const ABAS: [Aba, string][] = [
-  ["geral", "Geral"], ["perfil", "Perfil"], ["voz", "Voz"], ["atalhos", "Atalhos"], ["saber", "O que eu sei fazer"], ["modelos", "Quem responde"],
+  ["geral", "Geral"], ["perfil", "Perfil"], ["voz", "Voz"], ["atalhos", "Atalhos"], ["oficina", "Oficina"], ["modelos", "Quem responde"],
   ["paineis-mcps", "Ferramentas (MCP)"],
   ["sistema", "Sistema"], ["reuniao", "Reunião"], ["avisos", "Avisos"], ["diagnostico", "Diagnóstico"],
 ];
@@ -67,7 +67,7 @@ export class Configuracoes {
   private sistema: AbaSistema | null = null;
   private reuniao: AbaReuniao | null = null;
   private avisos: AbaAvisos | null = null;
-  private saber: AbaSaber | null = null;
+  private oficina: AbaOficina | null = null;
   private atualizacao: AbaAtualizacao | null = null;
   private diagnostico: AbaDiagnostico | null = null;
   private monitorRecursos: MonitorRecursos | null = null;
@@ -75,9 +75,11 @@ export class Configuracoes {
   private abaPerfil!: AbaPerfil;
     private paineisMcps!: AbaPaineisMcps;
   private linhasAtalho = new Map<AcaoAtalho, { campo: HTMLButtonElement; motivo: HTMLElement }>();
+  private ultimaConfigDisco: Config;
 
   constructor(private cfg: Config, private raiz: HTMLElement, private deps: DepsConfiguracoes) {
     this.atalhos = { ...cfg.atalhos };
+    this.ultimaConfigDisco = structuredClone(cfg);
   }
 
   /** Desenha as abas e lê o que só o Rust sabe (início no logon, atalhos que não registraram). */
@@ -93,10 +95,19 @@ export class Configuracoes {
     const raizInstalador = this.raiz.querySelector<HTMLElement>("#cfg-instalador-vozes");
     if (raizInstalador) {
       const instalador = new InstaladorVozes(raizInstalador, {
-        baseUrl: this.cfg.openjarvis_url.replace(/\/$/, ""),
+        baseUrl: this.cfg.ponte_url.replace(/\/$/, ""),
         notificar: (msg, erro) => this.dizer(msg, erro),
+        aoMudar: (id, instalado) => {
+          if (id === "xtts-v2") this.abaVoz.definirPacoteXttsInstalado(instalado);
+          return this.abaVoz.atualizar();
+        },
       });
-      void instalador.montar();
+      const pronto = instalador.montar().then(() => this.abaVoz.definirPacoteXttsInstalado(instalador.estaInstalado("xtts-v2")));
+      this.abaVoz.definirInstalador(async (id) => {
+        await pronto;
+        raizInstalador.scrollIntoView?.({ block: "nearest" });
+        await instalador.instalar(id);
+      });
     }
     this.marcarUrl("voz_url");
     this.modelos = new AbaModelos(this.raiz.querySelector<HTMLElement>("#cfg-modelos")!, {
@@ -146,11 +157,11 @@ export class Configuracoes {
       eventos: (cb) => this.deps.ponte(urlPonte()).eventos(cb),
     });
     this.avisos.montar();
-    this.saber = new AbaSaber(this.raiz.querySelector<HTMLElement>("#cfg-saber")!, {
+    this.oficina = new AbaOficina(this.raiz.querySelector<HTMLElement>("#cfg-oficina")!, {
       statusPonte: () => this.deps.statusPonte(urlPonte()),
       nome: () => this.cfg.nome,
     });
-    this.saber.montar();
+    this.oficina.montar();
     // Atualização embutida na aba Geral (sem aba própria no menu).
     const blocoAtualizacao = this.raiz.querySelector<HTMLElement>("#cfg-atualizacao-bloco");
     if (blocoAtualizacao) {
@@ -185,6 +196,10 @@ export class Configuracoes {
       tituloEl.textContent = mapaRotulo.get(aba) ?? aba;
     }
     if (aba === "paineis-mcps") void this.paineisMcps?.montar();
+    if (aba === "modelos") void this.modelos?.carregar(); // reconsulta o núcleo: o aviso e as instalações refletem o estado atual
+    if (aba === "voz") {
+      void this.abaVoz.atualizar();
+    }
     if (aba === "perfil") {
       this.abaPerfil.definir("nome", this.cfg.nome);
       this.abaPerfil.definir("usuario", this.cfg.usuario);
@@ -194,7 +209,7 @@ export class Configuracoes {
     if (aba === "sistema") this.sistema?.ativar(); else this.sistema?.desativar();
     if (aba === "reuniao") this.reuniao?.ativar(); else this.reuniao?.desativar();
     if (aba === "avisos") this.avisos?.ativar(); else this.avisos?.desativar();
-    if (aba === "saber") this.saber?.ativar(); else this.saber?.desativar();
+    if (aba === "oficina") void this.oficina?.ativar(); else this.oficina?.desativar();
     if (aba === "geral" && this.cfg.atualizacao_ao_abrir) this.atualizacao?.aoAbrir();
   }
 
@@ -225,6 +240,39 @@ export class Configuracoes {
     this.el("invisivel").checked = ligado;
   }
 
+  /** Aplica apenas valores que mudaram no disco, preservando os outros campos em edição. */
+  mudouExternamente(novo: Config) {
+    const mudou = Object.keys(novo).filter((k) => JSON.stringify(novo[k as keyof Config]) !== JSON.stringify(this.ultimaConfigDisco[k as keyof Config]));
+    for (const chave of mudou) Object.assign(this.cfg, { [chave]: novo[chave as keyof Config] });
+    this.ultimaConfigDisco = structuredClone(novo);
+    for (const chave of mudou) {
+      const id = chave === "cor_elementos" ? "cor-elementos" : chave === "opacidade_elementos" ? "opacidade-elementos" : chave;
+      const campo = this.raiz.querySelector<HTMLInputElement | HTMLSelectElement>(`#cfg-${id}`);
+      if (!campo) continue;
+      const valor = novo[chave as keyof Config];
+      if (campo instanceof HTMLInputElement && campo.type === "checkbox") campo.checked = valor === true;
+      else if (typeof valor === "string" || typeof valor === "number") campo.value = String(valor || (chave === "cor_elementos" ? "#00f0ff" : valor));
+    }
+    if (mudou.includes("cor_elementos") || mudou.includes("opacidade_elementos")) {
+      const preview = this.raiz.querySelector<HTMLElement>("#cfg-aparencia-preview");
+      if (preview) { preview.style.color = novo.cor_elementos || "#00f0ff"; preview.style.borderColor = preview.style.color; preview.style.opacity = String(novo.opacidade_elementos); }
+      const rotulo = this.raiz.querySelector<HTMLElement>("#cfg-opacidade-valor");
+      if (rotulo) rotulo.textContent = `${Math.round(novo.opacidade_elementos * 100)}%`;
+    }
+    if (mudou.some((k) => k.startsWith("voz") || k.endsWith("_voz"))) void this.abaVoz?.atualizar();
+    for (const campo of ["nome", "usuario", "variantes"] as const) if (mudou.includes(campo)) this.abaPerfil?.definir(campo, campo === "variantes" ? novo.variantes.join(", ") : novo[campo]);
+    if (mudou.includes("atalhos")) { this.atalhos = { ...novo.atalhos }; this.marcarAtalhos({}); }
+  }
+
+  async paineisMudaram() {
+    await this.modelos?.carregar();
+    await this.abaVoz?.atualizar();
+    await this.paineisMcps?.montar();
+  }
+
+  async habilidadesMudaram() { await this.oficina?.ativar(); }
+  async perfilMudou() { await this.abaPerfil?.recarregar(); }
+
   private campo(id: string, rotulo: string, valor: string | number, tipo = "text", extra = ""): string {
     return `<label>${rotulo}<input id="cfg-${id}" type="${tipo}" value="${esc(String(valor))}" ${extra}></label>`;
   }
@@ -240,7 +288,7 @@ export class Configuracoes {
     const GRUPOS: [string, Aba[]][] = [
       ["Conversa", ["geral", "perfil"]],
       ["Voz e áudio", ["voz", "atalhos"]],
-      ["Cérebro", ["saber", "modelos", "paineis-mcps"]],
+      ["Cérebro", ["oficina", "modelos", "paineis-mcps"]],
             ["Sistema", ["sistema", "reuniao", "avisos", "diagnostico"]],
     ];
     const mapaRotulo = new Map(ABAS);
@@ -267,6 +315,7 @@ export class Configuracoes {
             <div class="aparencia-linha">
               <div class="aparencia-cores" id="cfg-aparencia-cores"></div>
               <div class="aparencia-personalizada">
+                <label for="cfg-cor-elementos">Personalizada</label>
                 <input id="cfg-cor-elementos" type="color" value="${esc(c.cor_elementos || "#00f0ff")}" title="Cor personalizada">
               </div>
               <div class="aparencia-preview" id="cfg-aparencia-preview">Prévia</div>
@@ -328,7 +377,7 @@ export class Configuracoes {
           <div id="cfg-importacao"></div>
         </section>
         <section data-aba="reuniao"><div id="cfg-reuniao"></div></section>
-        <section data-aba="saber"><div id="cfg-saber"></div></section>
+        <section data-aba="oficina"><div id="cfg-oficina"></div></section>
         <section data-aba="avisos"><div id="cfg-avisos"></div></section>
                 <section data-aba="modelos" id="cfg-modelos"></section>
         <section data-aba="diagnostico"><div id="cfg-diagnostico"></div></section>
@@ -424,6 +473,8 @@ export class Configuracoes {
       for (const btn of caixaCores.querySelectorAll<HTMLButtonElement>(".aparencia-cor")) {
         btn.classList.toggle("ativa", btn.dataset.cor === cor);
       }
+      inputCor.closest(".aparencia-personalizada")?.classList.toggle("ativa",
+        !Configuracoes.CORES_PRONTAS.some(([hex]) => hex === cor));
     };
 
     caixaCores.replaceChildren();
@@ -457,6 +508,7 @@ export class Configuracoes {
     const txt = (id: string, atual: string) => this.el(id).value.trim() || atual;
     const opc = (id: string) => this.el(id).value.trim(); // vazio é valor válido (desliga, tira o nome, idioma automático)
     const c = this.cfg;
+    const cor = this.el("cor-elementos")?.value || c.cor_elementos;
     return {
       ...c,
       openjarvis_url: txt("openjarvis_url", c.openjarvis_url), gui_url: txt("gui_url", c.gui_url), ponte_url: opc("ponte_url"),
@@ -476,8 +528,8 @@ export class Configuracoes {
       atalhos: { ...this.atalhos },
       modelo: c.modelo,
       sala_monitor: this.sel("sala_monitor").options.length ? this.sel("sala_monitor").value : c.sala_monitor, // lista ainda não chegou: mantém
-      cor_elementos: this.el("cfg-cor-elementos")?.value || c.cor_elementos,
-      opacidade_elementos: Number(this.el("cfg-opacidade-elementos")?.value) || c.opacidade_elementos,
+      cor_elementos: !c.cor_elementos && cor === "#00f0ff" ? "" : cor,
+      opacidade_elementos: Number(this.el("opacidade-elementos")?.value) || c.opacidade_elementos,
     };
   }
 
@@ -498,6 +550,7 @@ export class Configuracoes {
     try { await salvarConfig(novo); }
     catch (erro) { this.dizer(`Não consegui salvar: ${String(erro)}`, true); return; }
     Object.assign(this.cfg, novo);
+    this.ultimaConfigDisco = structuredClone(novo);
     // O perfil do agente é outro arquivo: falha aqui não desfaz o config.json salvo.
     let erroPerfil = "";
     try { await this.abaPerfil.gravar(); }

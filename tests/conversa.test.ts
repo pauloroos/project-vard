@@ -4,6 +4,9 @@ import { Conversa } from "../src/fala/conversa";
 import { FALAS } from "../src/fala/falas";
 import { CONFIG_PADRAO } from "../src/config/config";
 import { ErroVoz } from "../src/conectores/voz/cliente";
+import { invoke } from "@tauri-apps/api/core";
+
+vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn().mockResolvedValue(null) }));
 
 const WAV = new ArrayBuffer(8);
 
@@ -16,6 +19,7 @@ describe("conversa", () => {
   let deps: DepsConversa;
 
   beforeEach(() => {
+    vi.mocked(invoke).mockReset().mockResolvedValue(null);
     oj = { perguntar: vi.fn().mockResolvedValue("Agora são 13h."), sintetizar: vi.fn().mockResolvedValue(WAV) };
     boca = { falando: false, tocar: vi.fn().mockResolvedValue(undefined), parar: vi.fn() };
     estados = []; ultimaFala = null;
@@ -45,8 +49,28 @@ describe("conversa", () => {
   it("manda instrução de formato e o comando sem o nome", async () => {
     await c.aoTextoTranscrito("Vard, que horas são", false);
     const msgs = oj.perguntar.mock.calls[0][0];
-    expect(msgs[0]).toEqual({ role: "system", content: CONFIG_PADRAO.instrucao_formato });
+    expect(msgs[0].role).toBe("system");
+    expect(msgs[0].content).toContain(CONFIG_PADRAO.instrucao_formato);
+    expect(msgs[0].content).not.toContain("listar_habilidades");
     expect(msgs[msgs.length - 1]).toEqual({ role: "user", content: "que horas são" });
+  });
+  it("consulta as habilidades do arquivo a cada pedido e só orienta com receita ligada", async () => {
+    const receita = { id: "rotina-dia", nome: "Planejar", quando: ["bom dia"], instrucoes: "Consultar agenda.", ligada: false, situacao: "treinada", criada_em: "2026-10-17T12:00:00Z", validada_em: null };
+    vi.mocked(invoke).mockResolvedValue({ versao: 1, habilidades: [receita] });
+    await c.aoTextoTranscrito("que horas são", true);
+    expect(oj.perguntar.mock.calls[0][0][0].content).not.toContain("listar_habilidades");
+    vi.mocked(invoke).mockResolvedValue({ versao: 1, habilidades: [{ ...receita, ligada: true }] });
+    await c.aoTextoTranscrito("como vai o dia", true);
+    expect(oj.perguntar.mock.calls[1][0][0].content).toContain("listar_habilidades");
+    expect(oj.perguntar.mock.calls[1][0][0].content).toContain("se a ferramenta estiver disponível");
+    vi.mocked(invoke).mockResolvedValue({ versao: 1, habilidades: [] });
+    await c.aoTextoTranscrito("e agora", true);
+    expect(oj.perguntar.mock.calls[2][0][0].content).not.toContain("listar_habilidades");
+  });
+  it("arquivo ilegível não afirma habilidades nem impede conversar", async () => {
+    vi.mocked(invoke).mockRejectedValue(new Error("arquivo inválido"));
+    await c.aoTextoTranscrito("que horas são", true);
+    expect(oj.perguntar.mock.calls[0][0][0].content).toBe(CONFIG_PADRAO.instrucao_formato);
   });
   it("histórico guarda no máximo 10 trocas", async () => {
     for (let i = 0; i < 12; i++) await c.aoTextoTranscrito("pergunta " + i, true);
@@ -110,7 +134,7 @@ describe("interromper cancela a pergunta em voo", () => {
     const estados: string[] = [];
     const c = new Conversa({ oj, boca, config: CONFIG_PADRAO, falas: async () => WAV2, aoEstado: (e) => estados.push(e) });
     const p = c.aoTextoTranscrito("Vard, oi", false);
-    await Promise.resolve();
+    await vi.waitFor(() => expect(oj.perguntar).toHaveBeenCalledOnce());
     c.interromper();
     liberar("resposta atrasada");
     await p;
@@ -310,7 +334,7 @@ describe("corridas do modo jogo", () => {
     let liberar!: (t: string) => void;
     m.oj.perguntar.mockImplementation(() => new Promise<string>((r) => { liberar = r; }));
     const p = m.c.aoTextoTranscrito("Vard, oi", false);
-    await Promise.resolve();
+    await vi.waitFor(() => expect(m.oj.perguntar).toHaveBeenCalledOnce());
     await m.c.aoStatusPonte({ modo: "jogo" });
     expect(m.c.estado).toBe("jogo");
     liberar("resposta tardia");

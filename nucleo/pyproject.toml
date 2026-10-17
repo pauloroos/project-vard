@@ -1,6 +1,6 @@
 [project]
 name = "vard-nucleo"
-version = "0.9.3"
+version = "0.9.5"
 description = "Vard: ponte, MCPs e módulos do Vard"
 requires-python = ">=3.13,<3.14"
 dependencies = [
@@ -45,5 +45,7 @@ packages = ["vard"]
 "mesa_mcp.py" = "vard/mesa_mcp.py"
 "oficina_mcp.py" = "vard/oficina_mcp.py"
 "reuniao_mcp.py" = "vard/reuniao_mcp.py"
+"configuracoes_mcp.py" = "vard/configuracoes_mcp.py"
+"../config/vozes.json" = "vard/vozes.json"
 "preflight.py" = "vard/preflight.py"
 "viewer" = "vard/viewer"

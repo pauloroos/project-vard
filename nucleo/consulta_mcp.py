@@ -102,6 +102,8 @@ def rotina_manha() -> str:
 
 
 if __name__ == "__main__":
+    from vard.instalaveis import limpar_ambiente_mcp
+    limpar_ambiente_mcp()
     vigia.iniciar()      # a vigia é única (trava); quem sobe primeiro cuida dos avisos
     try:
         mcp.run()

@@ -91,6 +91,8 @@ def listar_tarefas() -> str:
 
 
 if __name__ == "__main__":
+    from vard.instalaveis import limpar_ambiente_mcp
+    limpar_ambiente_mcp()
     vigia.iniciar()      # um processo vigia; os outros esperam a trava e assumem se o dono morrer
     try:
         mcp.run()

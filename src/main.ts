@@ -4,7 +4,7 @@ import { emit, emitTo, listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { PhysicalPosition } from "@tauri-apps/api/dpi";
 import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
-import { aplicarAoVivo, atualizarConfig, carregarConfig, lerConfigAoVivo } from "./config/config";
+import { aplicarAoVivo, aplicarVozAoVivo, atualizarConfig, carregarConfig, lerConfigAoVivo, normalizarConfig } from "./config/config";
 import type { FalhaAtalho } from "./config/atalhos";
 import { abrirMicrofone, definirMudo, fecharMicrofone, estaMudo, onAmostras, rmsAtual, taxaAtual, definirMicrofonePreferido } from "./audio/microfone";
 import { DetectorSelecionavel, ControleCapturaVoz, pareceEco } from "./audio/vad-selecionavel";
@@ -29,6 +29,7 @@ import { Adiador } from "./ui/dock";
 import { Hud } from "./ui/hud";
 import { Invisibilidade } from "./ui/invisivel";
 import { Nucleo } from "./ui/nucleo";
+import { aplicarAparencia } from "./ui/aparencia";
 import { restaurarPreferencia, onDeviceChange, obterPreferencia } from "./audio/dispositivos";
 import { ladoDoTamanho, ladoMudou, medidasDoWidget } from "./ui/tamanho";
 import { ESPELHO_INICIAL, reduzir, salaExiste, type Espelho, type EventoEspelho } from "./sala/espelho";
@@ -45,6 +46,7 @@ window.addEventListener("DOMContentLoaded", async () => {
   const canvas = document.getElementById("nucleo") as HTMLCanvasElement;
   const app = document.getElementById("app") as HTMLElement;
   const nucleo = new Nucleo(canvas, ladoDoTamanho(cfg));
+  aplicarAparencia(cfg, nucleo);
   // Dock: a barra de botões abre do lado oposto à borda do monitor em que o widget está. Decidido pelo Rust 200 ms depois de parar de arrastar.
   const aplicarDock = async () => {
     try { app.classList.toggle("dock-cima", await invoke<boolean>("dock_em_cima")); } catch { /* fora do Tauri */ }
@@ -179,9 +181,9 @@ window.addEventListener("DOMContentLoaded", async () => {
   const base = import.meta.env.DEV ? `${location.origin}/oj` : cfg.openjarvis_url;
   const oj = new OpenJarvis(base, cfg.modelo);
   // Voz própria opcional (docs/voz-propria.md). Vazio desliga: a voz fica sempre a do OpenJarvis.
-  const voz: FonteDeVoz | null = criarFonteDeVoz(cfg);
+  let voz: FonteDeVoz | null = criarFonteDeVoz(cfg);
   // Voz de reserva configurada pelo usuário; usada automaticamente quando a principal falhar.
-  const vozReserva: FonteDeVoz | null = cfg.voz_reserva_provedor && cfg.voz_reserva_provedor !== "nenhuma"
+  const criarReserva = (): FonteDeVoz | null => cfg.voz_reserva_provedor && cfg.voz_reserva_provedor !== "nenhuma"
     ? criarFonteDeVoz({
         voz_provedor: cfg.voz_reserva_provedor as ProvedorVoz,
         voz_url: cfg.voz_url,
@@ -193,6 +195,7 @@ window.addEventListener("DOMContentLoaded", async () => {
         gemini_voz: cfg.voz_reserva_provedor === "gemini" ? (cfg.voz_reserva_id ?? "") : "",
       })
     : null;
+  let vozReserva = criarReserva();
 
   // Painel de configurações: janela própria (engrenagem, bandeja ou atalho). Aqui só o clique atravessando a janela.
   const aplicarClickThrough = (ligado: boolean) => { void invoke("definir_click_through", { ligado }).catch(() => {}); };
@@ -309,9 +312,10 @@ window.addEventListener("DOMContentLoaded", async () => {
   // Falas fixas: a voz própria primeiro (o cache guarda o WAV dela), o OpenJarvis como reserva.
   const fixa = async (t: string, rapido = true) => {
     const fontes: FonteDeFala[] = [];
-    if (voz && (voz.nome || (await voz.saude(), voz.nome))) {
+    const fonteAtual = voz;
+    if (fonteAtual && (fonteAtual.nome || (await fonteAtual.saude(), fonteAtual.nome))) {
       // Prazo curto: uma voz pendurada não segura "Oi." por 8 s antes da reserva. O aquecimento, que não tem pressa, usa o prazo normal.
-      fontes.push({ origem: "voz", voz: voz.nome, sintetizar: () => voz.falarWav(t, cfg.velocidade, rapido ? PRAZO_FALA_FIXA_MS : undefined) });
+      fontes.push({ origem: "voz", voz: fonteAtual.nome, sintetizar: () => fonteAtual.falarWav(t, cfg.velocidade, rapido ? PRAZO_FALA_FIXA_MS : undefined) });
     }
     fontes.push({ origem: "oj", voz: cfg.voz, sintetizar: () => oj.sintetizar(t, cfg.voz, cfg.velocidade) });
     return falaFixa(t, fontes);
@@ -334,12 +338,12 @@ window.addEventListener("DOMContentLoaded", async () => {
   let sessaoVozId = crypto.randomUUID();
   const conversa = new Conversa({
     oj, boca, config: cfg,
-    ...(voz ? { voz } : {}),
-    ...(vozReserva ? { vozReserva } : {}),
+    get voz() { return voz ?? undefined; },
+    get vozReserva() { return vozReserva ?? undefined; },
     falas: fixa,
     reuniaoAtiva: () => reuniaoAtiva,
     falarPermitida: () => !naoFalar,
-    cerebro: cfg.cerebro,
+    get cerebro() { return cfg.cerebro; },
     sessaoVoz: () => sessaoVozId,
     aoEstado: (e, detalhe) => {
       mostrarEstado(e, detalhe);
@@ -789,10 +793,12 @@ window.addEventListener("DOMContentLoaded", async () => {
 
   // Painel salvou (janela configuracoes): aplica na hora só o que o widget sabe aplicar; o resto espera o reinício.
   const aplicarConfigSalva = async (payload: unknown) => {
-    const novo = lerConfigAoVivo(payload);
+    const recebido = normalizarConfig(payload);
+    const novo = lerConfigAoVivo(recebido);
     if (!novo) { console.warn("config-salva ignorada: payload inválido"); return; }
     const antes = { tamanho: cfg.tamanho, tamanho_px: cfg.tamanho_px };
     const mudou = aplicarAoVivo(cfg, novo);
+    if (aplicarVozAoVivo(cfg, recebido)) { voz = criarFonteDeVoz(cfg); vozReserva = criarReserva(); }
     if (ladoMudou(antes, cfg)) await aplicarTamanho(); // só quando o lado de fato mudou
     if (mudou.includes("compacto")) hud.setCompacto(cfg.compacto);
     if (mudou.includes("sempre_no_topo")) {
@@ -809,12 +815,13 @@ window.addEventListener("DOMContentLoaded", async () => {
     if (mudou.includes("nao_ouvir")) await aplicarNaoOuvir(cfg.nao_ouvir, false); // o painel já gravou
     if (mudou.includes("nao_falar")) await aplicarNaoFalar(cfg.nao_falar, false);
     if (mudou.includes("cor_elementos") || mudou.includes("opacidade_elementos")) {
-      const raiz = document.documentElement;
-      raiz.style.setProperty("--cor-elementos", cfg.cor_elementos || "var(--ciano)");
-      raiz.style.setProperty("--opacidade-elementos", String(cfg.opacidade_elementos));
+      aplicarAparencia(cfg, nucleo);
     }
   };
   await listen<unknown>("config-salva", (ev) => { void aplicarConfigSalva(ev.payload); });
+  // As seleções e receitas são consultadas pelo núcleo a cada pedido; o widget acompanha seu arquivo.
+  await listen("paineis-mudaram", () => { void carregarConfig().then(aplicarConfigSalva); });
+  await listen("habilidades-mudaram", () => { void carregarConfig().then(aplicarConfigSalva); });
 
   // T7b — Restaurar estado ao voltar do modo jogo: escuta/fala/dispositivos/janelas.
   await listen<{ modo: string; servicos_ligados?: string[] }>("ciclo-estado", (ev) => {

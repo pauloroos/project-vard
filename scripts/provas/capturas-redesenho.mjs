@@ -17,7 +17,7 @@ const URL_BASE = process.env.VITE_URL || "http://localhost:5175";
 fs.mkdirSync(CAPTURAS_DIR, { recursive: true });
 
 const ABAS = [
-  "geral", "perfil", "voz", "atalhos", "saber", "modelos",
+  "geral", "perfil", "voz", "atalhos", "oficina", "modelos",
   "paineis-mcps",
   "sistema", "reuniao", "avisos", "diagnostico"
 ];

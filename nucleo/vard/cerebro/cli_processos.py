@@ -34,6 +34,7 @@ from typing import Any, AsyncIterator, Dict, List, Optional
 
 from vard import config as modulo_config
 from vard import perfil as modulo_perfil
+from vard.instalaveis import ambiente_limpo
 from .cli import AdaptadorCli, CanalCli, DIALETOS
 from .cli_capacidade import registrar_aviso, verificar_enxuto
 from .provedores import ErroProvedor
@@ -242,10 +243,10 @@ def _preparar_pasta_sessao(
     (pasta / "CLAUDE.md").write_text(persona, encoding="utf-8")
     (pasta / "AGENTS.md").write_text(persona, encoding="utf-8")
 
-    # mcp.json vazio por enquanto; T17/T18 preenchem com MCPs habilitados
+    # Cada sessão recebe a lista vigente; arquivos antigos também são atualizados.
+    from vard.segredos import servidores_locais
     mcp_json = pasta / "mcp.json"
-    if not mcp_json.exists():
-        mcp_json.write_text(json.dumps({"mcpServers": {}}, ensure_ascii=False), encoding="utf-8")
+    mcp_json.write_text(json.dumps({"mcpServers": servidores_locais()}, ensure_ascii=False), encoding="utf-8")
 
     return pasta
 
@@ -318,6 +319,7 @@ class SupervisorCli:
                 "stdout": asyncio.subprocess.PIPE,
                 "stderr": asyncio.subprocess.PIPE,
                 "cwd": str(pasta),
+                "env": ambiente_limpo(),
                 # A CLI claude real manda linhas de dezenas de KB (lista de comandos/skills); o padrão
                 # do asyncio (64 KB) faria o readline falhar e o canal virar cli_caiu.
                 "limit": _LIMITE_LINHA,

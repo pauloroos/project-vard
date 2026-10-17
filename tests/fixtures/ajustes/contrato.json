@@ -1,0 +1,21 @@
+[
+  {"arquivo":"hud","valor":{"cor_elementos":"#aA1122","opacidade_elementos":0.2},"valido":true},
+  {"arquivo":"hud","valor":{"cor_elementos":"","opacidade_elementos":1,"futuro":3},"valido":true},
+  {"arquivo":"hud","valor":{"cor_elementos":"vermelho"},"valido":false},
+  {"arquivo":"hud","valor":{"opacidade_elementos":0.19},"valido":false},
+  {"arquivo":"hud","valor":{"opacidade_elementos":true},"valido":false},
+  {"arquivo":"hud","valor":{"voz_provedor":"inexistente"},"valido":false},
+  {"arquivo":"hud","valor":{"voz_reserva_provedor":"nenhuma","voz_motor":"edge"},"valido":true},
+  {"arquivo":"hud","valor":[],"valido":false},
+  {"arquivo":"perfil","valor":{"versao":1,"tom":"calmo","futuro":3},"valido":true},
+  {"arquivo":"perfil","valor":{"versao":2},"valido":false},
+  {"arquivo":"perfil","valor":{"versao":true},"valido":false},
+  {"arquivo":"perfil","valor":{"versao":1,"instrucoes":3},"valido":false},
+  {"arquivo":"programas","valor":{"apelidos":{"editor":"editor.exe"},"sites":{"busca":"https://example.com"},"futuro":true},"valido":true},
+  {"arquivo":"programas","valor":{"sites":{"busca":4}},"valido":false},
+  {"arquivo":"programas","valor":{"apelidos":[]},"valido":false},
+  {"arquivo":"paineis","valor":{"versao":1,"provedores":[{"id":"cli","nome":"CLI","tipo":"cli-claude","modelo":""}],"ativo":"cli","reserva":null,"agentes":{"claude":{"padrao":"","modelos":[]},"codex":{"padrao":"","modelos":[]},"opencode":{"padrao":"","modelos":[]},"agy":{"padrao":"","modelos":[]}},"mcps":[],"futuro":3},"valido":true},
+  {"arquivo":"paineis","valor":{"versao":1,"provedores":[],"ativo":null,"reserva":null,"agentes":{},"mcps":[]},"valido":false},
+  {"arquivo":"habilidades","valor":{"versao":1,"habilidades":[],"desligadas":["sistema"],"campo_futuro":3},"valido":true},
+  {"arquivo":"habilidades","valor":{"versao":1,"habilidades":[],"desligadas":["inexistente"]},"valido":false}
+]

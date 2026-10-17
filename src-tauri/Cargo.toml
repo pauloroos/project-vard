@@ -1,6 +1,6 @@
 [package]
 name = "vard"
-version = "0.9.3"
+version = "0.9.5"
 description = "Vard: interface de voz local para assistentes"
 authors = ["Paulo Roos"]
 edition = "2024"

@@ -4,6 +4,8 @@ import logging
 
 from vard import config as vconfig
 from vard import perfil
+from vard import habilidades
+import pytest
 
 INSTRUCOES = "Responda em frases curtas e confirme ações feitas."
 
@@ -64,6 +66,32 @@ def test_montar_persona_sem_usuario_nao_quebra():
     assert "Aurora" in texto and INSTRUCOES in texto
     assert "Como chamar a pessoa" not in texto
     assert isinstance(perfil.montar_persona(perfil.Perfil(), "", ""), str)
+
+
+@pytest.mark.parametrize("ligada", [None, False, True])
+def test_persona_so_orienta_com_habilidade_do_usuario_ligada(monkeypatch, ligada):
+    monkeypatch.setattr(perfil, "_bloco_produto", lambda: "")
+    if ligada is not None:
+        habilidades.gravar_habilidades({"versao": 1, "habilidades": [{
+            "id": "rotina-dia", "nome": "Planejar", "quando": ["bom dia"],
+            "instrucoes": "Consultar agenda.", "ligada": ligada, "situacao": "treinada",
+            "criada_em": "2026-10-17T12:00:00Z", "validada_em": None,
+        }]})
+    texto = perfil.montar_persona(perfil.Perfil(), "Aurora", "")
+    assert ("listar_habilidades" in texto) is (ligada is True)
+    if ligada:
+        assert "antes de agir" in texto
+        assert "se a ferramenta estiver disponível" in texto
+
+
+def test_persona_com_habilidades_invalidas_preserva_perfil(monkeypatch):
+    monkeypatch.setattr(perfil, "_bloco_produto", lambda: "")
+    arq = habilidades.caminho()
+    arq.parent.mkdir(parents=True, exist_ok=True)
+    arq.write_text("{quebrado", encoding="utf-8")
+    texto = perfil.montar_persona(perfil.Perfil(instrucoes=INSTRUCOES), "Aurora", "")
+    assert INSTRUCOES in texto
+    assert "listar_habilidades" not in texto
 
 
 def test_perfil_json_invalido_cai_no_padrao_e_avisa(caplog):

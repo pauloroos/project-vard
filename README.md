@@ -2,6 +2,8 @@
 
 [Read in English](README.en.md) · [Repositório](https://github.com/pauloroos/project-vard)
 
+Versões e mudanças: [CHANGELOG.md](CHANGELOG.md).
+
 Vard é uma interface de voz local (widget flutuante) para assistentes; o primeiro conector é o [OpenJarvis](https://github.com/open-jarvis/OpenJarvis). Feito com Tauri 2. Uma janela transparente e sem moldura, sempre no topo, com um núcleo ciano que reage à sua voz: você fala, ele transcreve, o OpenJarvis responde e a resposta sai em voz alta.
 
 ![HUD em repouso](docs/captura-repouso.png) ![HUD falando](docs/captura-falando.png)
@@ -37,8 +39,8 @@ Projeto independente, sem vínculo com o OpenJarvis nem com a Stanford.
 
 Baixe o instalador na página de releases e rode um dos dois:
 
-- `Vard_0.9.3_x64-setup.exe` (NSIS): instala só para o seu usuário, sem pedir administrador. Silencioso: `Vard_0.9.3_x64-setup.exe /S`. Fica em `%LOCALAPPDATA%\Vard\`.
-- `Vard_0.9.3_x64_en-US.msi` (WiX): instala para a máquina toda e exige administrador. Silencioso: `msiexec /i Vard_0.9.3_x64_en-US.msi /qn`.
+- `Vard_0.9.5_x64-setup.exe` (NSIS): instala só para o seu usuário, sem pedir administrador. Silencioso: `Vard_0.9.5_x64-setup.exe /S`. Fica em `%LOCALAPPDATA%\Vard\`.
+- `Vard_0.9.5_x64_en-US.msi` (WiX): instala para a máquina toda e exige administrador. Silencioso: `msiexec /i Vard_0.9.5_x64_en-US.msi /qn`.
 
 Para gerar você mesmo: `npm install` e `npm run tauri build` (os instaladores saem em `src-tauri/target/release/bundle/`).
 
@@ -56,7 +58,13 @@ Só uma instância roda por vez: abrir o Vard de novo traz a janela para a frent
 - **Central de avisos (com a instalação privada):** contador discreto de avisos não lidos e aba "Avisos" no painel (ver resultado, marcar lidos). Nada é falado, a não ser que você ligue "Falar os avisos" (e nunca com "Não falar" ligado).
 - **Aguardando:** sinal discreto com o número de tarefas em andamento; passe o mouse para ver a lista.
 - **Reunião:** aba "Reunião" (iniciar, encerrar, gerar ata, última reunião); com a reunião ativa o widget fica mudo e mostra "reunião".
-- **Painel:** idioma do reconhecimento em lista e aba "O que eu sei fazer".
+- **Painel:** idioma do reconhecimento em lista e aba **Oficina**.
+
+Na **Oficina**, as habilidades de fábrica aparecem como **Capaz** e podem ser desligadas. Use **Nova habilidade**
+para ensinar uma receita com frases de exemplo e instruções; ela começa como **Treinada** e pode ser marcada como
+**Validada** depois de funcionar. Cadastro e edição abrem em modal; excluir pede confirmação. Busca e filtro por
+situação ajudam a encontrar as receitas. O arquivo `habilidades.json` fica junto de `paineis.json`, na pasta de
+configuração do usuário (`VARD_CONFIG` quando definida).
 
 ### Atalhos
 
