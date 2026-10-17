@@ -67,11 +67,11 @@ interface AbaTeste {
   dizer: ReturnType<typeof vi.fn>;
 }
 
-function criarAba(): AbaTeste {
+function criarAba(extra: Partial<typeof CONFIG_PADRAO> = {}): AbaTeste {
   const raiz = document.createElement("div");
   document.body.append(raiz);
   const dizer = vi.fn();
-  const aba = new AbaVoz(raiz, { ...CONFIG_PADRAO, voz_url: "http://127.0.0.1:4710" }, {
+  const aba = new AbaVoz(raiz, { ...CONFIG_PADRAO, voz_url: "http://127.0.0.1:4710", ...extra }, {
     criarOj: () => ojFalso,
     velocidade: () => 1,
     dizer,
@@ -80,8 +80,8 @@ function criarAba(): AbaTeste {
   return { raiz, aba, dizer };
 }
 
-async function abrir(): Promise<AbaTeste> {
-  const t = criarAba();
+async function abrir(extra: Partial<typeof CONFIG_PADRAO> = {}): Promise<AbaTeste> {
+  const t = criarAba(extra);
   await t.aba.atualizar();
   return t;
 }
@@ -107,6 +107,23 @@ describe("listas de seleção principal e reserva (0.9.4)", () => {
     expect(grupos.some((g) => g.includes("Kokoro"))).toBe(true);
     expect(grupos.some((g) => g.includes("Edge"))).toBe(true);
     expect(grupos.some((g) => g.includes("Piper"))).toBe(true);
+  });
+
+  it("lista_de_vozes_do_servico_falhando_nao_esvazia_as_listas", async () => {
+    estado.vozes = null; // /saude responde, /vozes cai
+    const { raiz } = await abrir();
+    const principal = raiz.querySelector<HTMLSelectElement>("#cfg-voz-principal")!;
+    const reserva = raiz.querySelector<HTMLSelectElement>("#cfg-voz-reserva")!;
+    expect([...principal.options].some((o) => o.value.startsWith("openjarvis:"))).toBe(true);
+    expect([...reserva.options].some((o) => o.value === "")).toBe(true);
+    estado.vozes = VOZES_XTTS;
+  });
+
+  it("sem_voz_escolhida_mostra_texto_legivel_e_nao_o_codigo_interno", async () => {
+    const { raiz } = await abrir({ voz_provedor: "propria", voz_motor: "", voz_propria: "" });
+    const sel = raiz.querySelector<HTMLSelectElement>("#cfg-voz-principal")!;
+    expect(sel.selectedOptions[0].textContent).toBe("Escolha uma voz");
+    expect(sel.textContent).not.toContain("propria::");
   });
 
   it("select_reserva_tem_opcao_nenhuma_e_as_mesmas_vozes", async () => {

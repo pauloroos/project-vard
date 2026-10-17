@@ -175,6 +175,7 @@ export class AbaVoz {
     this.selReserva.addEventListener("change", () => { this.aplicarSelecaoReserva(); });
     this.btnAmostraPrincipal.addEventListener("click", () => { void this.amostraSelecionada("principal"); });
     this.btnAmostraReserva.addEventListener("click", () => { void this.amostraSelecionada("reserva"); });
+    this.preencherListas(); // já com o que não depende do serviço; atualizar() completa
     this.desenharServicos();
   }
 
@@ -195,8 +196,8 @@ export class AbaVoz {
       } else {
         this.estado = "no-ar";
         this.motores = { xtts: saude.xtts === true, kokoro: saude.kokoro === true, edge: saude.edge === true, piper: saude.piper === true };
-        const { vozes } = await new Voz(url).vozes();
-        this.vozesServico = vozes;
+        // Lista de vozes falhando não pode esvaziar a tela: sem ela, as listas ficam com o que não depende do serviço.
+        try { this.vozesServico = (await new Voz(url).vozes()).vozes; } catch { this.vozesServico = []; }
       }
     }
     try { this.cfgPaineis = await lerPaineis(); } catch { this.cfgPaineis = paineisEmBranco(); }
@@ -278,8 +279,12 @@ export class AbaVoz {
         if (!g) { g = document.createElement("optgroup"); g.label = op.grupo; sel.append(g); grupos.set(op.grupo, g); }
         g.append(new Option(op.rotulo, op.valor, false, op.valor === valorAtual));
       }
-      if (valorAtual && !ops.some((o) => o.valor === valorAtual) && !(comNenhuma && valorAtual === "")) {
-        sel.append(new Option(`${valorAtual} (não encontrado)`, valorAtual, false, true));
+      if (!comNenhuma && !ops.some((o) => o.valor === valorAtual)) {
+        // Nada escolhido ainda ("propria::") ou voz salva que sumiu: texto legível, nunca o código interno.
+        const nome = valorAtual.split(":").filter(Boolean).slice(1).join(" ");
+        const rotulo = nome ? `Voz salva não encontrada: ${nome}` : "Escolha uma voz";
+        sel.prepend(new Option(rotulo, valorAtual, false, true));
+        sel.value = valorAtual;
       }
     };
     preencher(this.selPrincipal, valorPrincipal, false);
