@@ -1,16 +1,20 @@
 import { invoke } from "@tauri-apps/api/core";
 import { emitTo, listen } from "@tauri-apps/api/event";
 import { Nucleo } from "./ui/nucleo";
+import { carregarConfig, lerConfigAoVivo } from "./config/config";
+import { aplicarAparencia } from "./ui/aparencia";
 import { ROTULO_ESTADO } from "./ui/hud";
 import { EspectroRemoto, type Niveis } from "./sala/espectro";
 import { ESPELHO_INICIAL, formatarHora, reduzir, type Espelho } from "./sala/espelho";
 
 // Sala: só espelho. Quem ouve, pensa e fala é o widget; aqui chegam estado, textos e níveis por evento.
 window.addEventListener("DOMContentLoaded", async () => {
+  const cfg = await carregarConfig();
   const canvas = document.getElementById("nucleo") as HTMLCanvasElement;
   const el = (id: string) => document.getElementById(id) as HTMLElement;
   const ladoSala = () => Math.round(Math.min(window.innerWidth, window.innerHeight) * 0.62);
   const nucleo = new Nucleo(canvas, ladoSala());
+  aplicarAparencia(cfg, nucleo);
   const entrada = new EspectroRemoto();
   const saida = new EspectroRemoto();
   nucleo.setAnalisadores(entrada, saida);
@@ -32,6 +36,10 @@ window.addEventListener("DOMContentLoaded", async () => {
 
   // Payloads vêm de outra janela: reduzir e EspectroRemoto.atualizar descartam o que não tem a forma esperada.
   await listen<unknown>("sala:espelho", (ev) => { espelho = reduzir(espelho, ev.payload); pintar(); });
+  await listen<unknown>("config-salva", (ev) => {
+    const nova = lerConfigAoVivo(ev.payload);
+    if (nova) aplicarAparencia(nova, nucleo);
+  });
   await listen<unknown>("sala:niveis", (ev) => {
     const p = typeof ev.payload === "object" && ev.payload !== null ? (ev.payload as { entrada?: Partial<Niveis>; saida?: Partial<Niveis> }) : null;
     entrada.atualizar(p?.entrada);

@@ -22,7 +22,7 @@ html, body {
 /* Layout raiz: menu lateral fixo + área de conteúdo flexível */
 #painel {
   display: grid;
-  grid-template-columns: var(--menu-w) 1fr;
+  grid-template-columns: var(--menu-w) minmax(0, 1fr);
   grid-template-rows: 1fr auto;
   height: 100vh;
   width: 100vw;
@@ -81,6 +81,7 @@ nav button.ativa {
 
 /* Área de conteúdo */
 .conteudo {
+  min-width: 0;
   grid-column: 2;
   grid-row: 1;
   overflow-y: auto;

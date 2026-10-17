@@ -93,10 +93,19 @@ export class Configuracoes {
     const raizInstalador = this.raiz.querySelector<HTMLElement>("#cfg-instalador-vozes");
     if (raizInstalador) {
       const instalador = new InstaladorVozes(raizInstalador, {
-        baseUrl: this.cfg.openjarvis_url.replace(/\/$/, ""),
+        baseUrl: this.cfg.ponte_url.replace(/\/$/, ""),
         notificar: (msg, erro) => this.dizer(msg, erro),
+        aoMudar: (id, instalado) => {
+          if (id === "xtts-v2") this.abaVoz.definirPacoteXttsInstalado(instalado);
+          return this.abaVoz.atualizar();
+        },
       });
-      void instalador.montar();
+      const pronto = instalador.montar().then(() => this.abaVoz.definirPacoteXttsInstalado(instalador.estaInstalado("xtts-v2")));
+      this.abaVoz.definirInstalador(async (id) => {
+        await pronto;
+        raizInstalador.scrollIntoView?.({ block: "nearest" });
+        await instalador.instalar(id);
+      });
     }
     this.marcarUrl("voz_url");
     this.modelos = new AbaModelos(this.raiz.querySelector<HTMLElement>("#cfg-modelos")!, {
@@ -185,6 +194,9 @@ export class Configuracoes {
       tituloEl.textContent = mapaRotulo.get(aba) ?? aba;
     }
     if (aba === "paineis-mcps") void this.paineisMcps?.montar();
+    if (aba === "voz") {
+      void this.abaVoz.atualizar();
+    }
     if (aba === "perfil") {
       this.abaPerfil.definir("nome", this.cfg.nome);
       this.abaPerfil.definir("usuario", this.cfg.usuario);
@@ -267,6 +279,7 @@ export class Configuracoes {
             <div class="aparencia-linha">
               <div class="aparencia-cores" id="cfg-aparencia-cores"></div>
               <div class="aparencia-personalizada">
+                <label for="cfg-cor-elementos">Personalizada</label>
                 <input id="cfg-cor-elementos" type="color" value="${esc(c.cor_elementos || "#00f0ff")}" title="Cor personalizada">
               </div>
               <div class="aparencia-preview" id="cfg-aparencia-preview">Prévia</div>
@@ -424,6 +437,8 @@ export class Configuracoes {
       for (const btn of caixaCores.querySelectorAll<HTMLButtonElement>(".aparencia-cor")) {
         btn.classList.toggle("ativa", btn.dataset.cor === cor);
       }
+      inputCor.closest(".aparencia-personalizada")?.classList.toggle("ativa",
+        !Configuracoes.CORES_PRONTAS.some(([hex]) => hex === cor));
     };
 
     caixaCores.replaceChildren();
@@ -457,6 +472,7 @@ export class Configuracoes {
     const txt = (id: string, atual: string) => this.el(id).value.trim() || atual;
     const opc = (id: string) => this.el(id).value.trim(); // vazio é valor válido (desliga, tira o nome, idioma automático)
     const c = this.cfg;
+    const cor = this.el("cor-elementos")?.value || c.cor_elementos;
     return {
       ...c,
       openjarvis_url: txt("openjarvis_url", c.openjarvis_url), gui_url: txt("gui_url", c.gui_url), ponte_url: opc("ponte_url"),
@@ -476,8 +492,8 @@ export class Configuracoes {
       atalhos: { ...this.atalhos },
       modelo: c.modelo,
       sala_monitor: this.sel("sala_monitor").options.length ? this.sel("sala_monitor").value : c.sala_monitor, // lista ainda não chegou: mantém
-      cor_elementos: this.el("cfg-cor-elementos")?.value || c.cor_elementos,
-      opacidade_elementos: Number(this.el("cfg-opacidade-elementos")?.value) || c.opacidade_elementos,
+      cor_elementos: !c.cor_elementos && cor === "#00f0ff" ? "" : cor,
+      opacidade_elementos: Number(this.el("opacidade-elementos")?.value) || c.opacidade_elementos,
     };
   }
 

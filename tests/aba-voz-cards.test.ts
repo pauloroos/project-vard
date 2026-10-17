@@ -98,15 +98,15 @@ describe("listas de seleção principal e reserva (0.9.4)", () => {
     };
   });
 
-  it("select_principal_contem_opcoes_de_todos_os_motores", async () => {
-    const { raiz } = await abrir();
+  it("select_principal_contem_so_as_vozes_do_motor_escolhido", async () => {
+    const { raiz } = await abrir({ voz_motor: "xtts" });
     const sel = raiz.querySelector<HTMLSelectElement>("#cfg-voz-principal")!;
     expect(sel).toBeTruthy();
     const grupos = [...sel.querySelectorAll("optgroup")].map((g) => g.label);
     expect(grupos.some((g) => g.includes("XTTS"))).toBe(true);
-    expect(grupos.some((g) => g.includes("Kokoro"))).toBe(true);
-    expect(grupos.some((g) => g.includes("Edge"))).toBe(true);
-    expect(grupos.some((g) => g.includes("Piper"))).toBe(true);
+    expect(grupos.some((g) => g.includes("Kokoro"))).toBe(false);
+    expect(grupos.some((g) => g.includes("Edge"))).toBe(false);
+    expect(grupos.some((g) => g.includes("Piper"))).toBe(false);
   });
 
   it("lista_de_vozes_do_servico_falhando_nao_esvazia_as_listas", async () => {
@@ -138,7 +138,7 @@ describe("listas de seleção principal e reserva (0.9.4)", () => {
   });
 
   it("escolher_voz_no_select_principal_grava_na_config", async () => {
-    const { raiz, aba } = await abrir();
+    const { raiz, aba } = await abrir({ voz_motor: "xtts" });
     const sel = raiz.querySelector<HTMLSelectElement>("#cfg-voz-principal")!;
     const opcao = [...sel.options].find((o) => o.value.startsWith("propria:xtts:Suad"));
     expect(opcao).toBeTruthy();
@@ -254,7 +254,7 @@ describe("blocos de serviço (0.9.4)", () => {
   it("servico_desligado_mostra_aviso_e_estado_no_bloco", async () => {
     const { raiz, aba } = criarAba();
     // cfg sem voz_url → estado desligado
-    (aba as unknown as { cfg: typeof CONFIG_PADRAO }).cfg.voz_url = "";
+    raiz.querySelector<HTMLInputElement>("#cfg-voz_url")!.value = "";
     await aba.atualizar();
     const aviso = raiz.querySelector<HTMLElement>("#cfg-voz-aviso")!;
     expect(aviso.hidden).toBe(false);
@@ -281,6 +281,7 @@ describe("vozes cadastradas (modal)", () => {
 
   it("voz_cadastrada_aparece_na_lista_de_selecao", async () => {
     const { raiz } = await abrir();
+    raiz.querySelector<HTMLButtonElement>('[data-motor="fish"]')!.click();
     const sel = raiz.querySelector<HTMLSelectElement>("#cfg-voz-principal")!;
     const opcao = [...sel.options].find((o) => o.value === "cadastrada:fish-aria");
     expect(opcao).toBeTruthy();
@@ -289,6 +290,7 @@ describe("vozes cadastradas (modal)", () => {
 
   it("voz_cadastrada_aparece_no_bloco_de_cadastradas_com_botao_editar", async () => {
     const { raiz } = await abrir();
+    raiz.querySelector<HTMLButtonElement>('[data-motor="fish"]')!.click();
     const bloco = raiz.querySelector<HTMLElement>("#cfg-voz-cadastradas")!;
     expect(bloco).toBeTruthy();
     expect(bloco.textContent).toContain("Aria");
@@ -383,6 +385,7 @@ describe("modal de voz cadastrada (0.9.4 rodada 2)", () => {
 
   it("editar_pelo_modal_atualiza_a_voz", async () => {
     const { raiz } = await abrir();
+    raiz.querySelector<HTMLButtonElement>('[data-motor="fish"]')!.click();
     const bloco = raiz.querySelector<HTMLElement>("#cfg-voz-cadastradas")!;
     const btnEditar = [...bloco.querySelectorAll<HTMLButtonElement>("button")].find((b) => b.textContent === "Editar");
     expect(btnEditar).toBeTruthy();
@@ -397,6 +400,7 @@ describe("modal de voz cadastrada (0.9.4 rodada 2)", () => {
 
   it("remover_pelo_modal_remove_a_voz", async () => {
     const { raiz } = await abrir();
+    raiz.querySelector<HTMLButtonElement>('[data-motor="fish"]')!.click();
     const bloco = raiz.querySelector<HTMLElement>("#cfg-voz-cadastradas")!;
     const btnEditar = [...bloco.querySelectorAll<HTMLButtonElement>("button")].find((b) => b.textContent === "Editar");
     expect(btnEditar).toBeTruthy();

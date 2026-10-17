@@ -54,6 +54,11 @@ interface OpcaoVoz {
   motor?: string;
 }
 
+const MOTORES = [
+  ["xtts", "XTTS"], ["kokoro", "Kokoro"], ["edge", "Edge"], ["piper", "Piper"],
+  ["elevenlabs", "ElevenLabs"], ["gemini", "Gemini"], ["fish", "Fish"],
+] as const;
+
 /** Cópia descartável do padrão. */
 function paineisEmBranco(): PaineisConfig {
   return { ...PAINEIS_PADRAO, provedores: [], mcps: [], agentes: { ...PAINEIS_PADRAO.agentes } };
@@ -119,11 +124,19 @@ export class AbaVoz {
   private selReserva!: HTMLSelectElement;
   private btnAmostraPrincipal!: HTMLButtonElement;
   private btnAmostraReserva!: HTMLButtonElement;
+  private instalar?: (id: string) => void | Promise<void>;
+  private pacoteXttsInstalado = false;
 
-  constructor(private raiz: HTMLElement, private cfg: Config, private deps: DepsAbaVoz) {}
+  constructor(private raiz: HTMLElement, private cfg: Config, private deps: DepsAbaVoz) {
+    this.cfg = { ...cfg };
+  }
 
   montar() {
     this.raiz.insertAdjacentHTML("afterbegin", `
+      <fieldset id="cfg-quem-fala"><legend>Quem fala</legend>
+        <p class="nota">Escolha o motor e depois a voz. Salve para aplicar.</p>
+        <div class="voz-motores" id="cfg-voz-motores"></div>
+      </fieldset>
       <div id="cfg-voz-aviso" class="voz-aviso" hidden>
         <strong id="cfg-voz-aviso-texto"></strong>
         <p id="cfg-voz-aviso-detalhe"></p>
@@ -171,16 +184,118 @@ export class AbaVoz {
     this.btnAmostraPrincipal = this.raiz.querySelector("#cfg-voz-amostra-principal")!;
     this.btnAmostraReserva = this.raiz.querySelector("#cfg-voz-amostra-reserva")!;
 
-    this.selPrincipal.addEventListener("change", () => { this.aplicarSelecaoPrincipal(); this.desenharServicos(); });
+    this.selPrincipal.addEventListener("change", () => { this.aplicarSelecaoPrincipal(); this.desenharMotores(); });
     this.selReserva.addEventListener("change", () => { this.aplicarSelecaoReserva(); });
     this.btnAmostraPrincipal.addEventListener("click", () => { void this.amostraSelecionada("principal"); });
     this.btnAmostraReserva.addEventListener("click", () => { void this.amostraSelecionada("reserva"); });
     this.preencherListas(); // já com o que não depende do serviço; atualizar() completa
     this.desenharServicos();
+    this.desenharCadastradas();
+    this.desenharMotores();
+  }
+
+  /** Reaproveita o instalador de pacotes do painel, incluindo licença e cancelamento. */
+  definirInstalador(instalar: (id: string) => void | Promise<void>) { this.instalar = instalar; }
+
+  definirPacoteXttsInstalado(instalado: boolean) {
+    this.pacoteXttsInstalado = instalado;
+    this.desenharMotores();
+  }
+
+  private motorAtual(): string {
+    if (this.cfg.voz_provedor === "openjarvis") return "kokoro";
+    if (this.cfg.voz_provedor !== "propria") return this.cfg.voz_provedor;
+    const cadastrada = vozesCadastradas(this.cfgPaineis).find((p) => p.id === this.cfg.voz_propria);
+    if (cadastrada) return motorDoTipo(cadastrada.tipo).toLowerCase();
+    if (this.cfg.voz_motor) return this.cfg.voz_motor;
+    const id = this.cfg.voz_propria;
+    for (const [motor, vozes] of Object.entries(VOZES_POR_MOTOR)) if (vozes.some((v) => v.id === id)) return motor;
+    return this.motorAutomatico;
+  }
+
+  private motorAutomatico = "xtts";
+
+  private desenharMotores() {
+    const alvo = this.raiz.querySelector<HTMLElement>("#cfg-voz-motores")!;
+    const atual = this.motorAtual();
+    alvo.replaceChildren();
+    for (const [id, nome] of MOTORES) {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "voz-motor";
+      btn.dataset.motor = id;
+      btn.setAttribute("aria-pressed", String(id === atual));
+      const local = id in this.motores;
+      const disponivel = id === "kokoro" || (local && this.motores[id as keyof typeof this.motores]);
+      const nuvem = id === "elevenlabs" || id === "gemini";
+      const semChave = nuvem && !this.el(`${id}_chave`)?.value.trim();
+      const cadastrada = vozesCadastradas(this.cfgPaineis).some((p) => motorDoTipo(p.tipo).toLowerCase() === id);
+      const situacao = semChave ? "Falta a chave · cadastrar" : id === "xtts" && !disponivel && !cadastrada
+        ? this.pacoteXttsInstalado ? "Instalado · ligue o serviço de voz" : "Instalar"
+        : id === "fish" && !cadastrada ? "Cadastrar voz"
+        : local ? id === "kokoro" && !this.motores.kokoro ? "Via OpenJarvis" : disponivel ? "Disponível · serviço de voz" : "Indisponível · vem do serviço de voz"
+        : "Nuvem";
+      const titulo = document.createElement("strong");
+      titulo.textContent = nome;
+      const status = document.createElement("span");
+      status.textContent = situacao;
+      btn.append(titulo, status);
+      if (id === atual) {
+        const ativo = document.createElement("span");
+        ativo.className = "voz-motor-ativo";
+        ativo.textContent = "Fala agora";
+        btn.append(ativo);
+      }
+      btn.addEventListener("click", () => {
+        if (semChave) {
+          this.deps.dizer(`Falta a chave do ${nome}; cadastre em Serviços e chaves.`, true);
+          this.el(`${id}_chave`).focus();
+          return;
+        }
+        if (id === "xtts" && !disponivel && !cadastrada && !this.pacoteXttsInstalado) {
+          if (this.instalar) void this.instalar("xtts-v2");
+          else this.deps.dizer("Abra o instalador de pacotes de voz abaixo.", true);
+          return;
+        }
+        if (id === "fish" && !cadastrada) { this.abrirCadastro(undefined, "fish"); return; }
+        this.escolherMotor(id);
+      });
+      alvo.append(btn);
+    }
+  }
+
+  private escolherMotor(motor: string) {
+    const ops = this.opcoesDisponiveis().filter((op) => this.motorDaOpcao(op) === motor);
+    if (!ops.length) {
+      this.deps.dizer(motor === "elevenlabs" ? "Carregue as vozes do ElevenLabs em Serviços e chaves." : "Este motor vem do serviço de voz; ligue o serviço e atualize a lista.", true);
+      if (motor === "elevenlabs") this.raiz.querySelector<HTMLButtonElement>("#cfg-voz-carregar-elevenlabs")?.focus();
+      return;
+    }
+    const salva = this.valorDaSelecao(this.cfg.voz_provedor, this.cfg.voz_motor, this.cfg.voz_propria, this.cfg.voz, this.cfg.elevenlabs_voz, this.cfg.gemini_voz);
+    const padrao = motor === "gemini" ? `gemini:${this.cfg.gemini_voz || "Kore"}` : "";
+    const escolha = ops.find((op) => op.valor === salva || op.valor === padrao) ?? ops[0];
+    const opcao = new Option(escolha.rotulo, escolha.valor, false, true);
+    this.selPrincipal.replaceChildren(opcao);
+    this.aplicarSelecaoPrincipal();
+    this.preencherListas();
+    this.desenharCadastradas();
+    this.desenharMotores();
+  }
+
+  private motorDaOpcao(op: OpcaoVoz): string {
+    if (op.valor.startsWith("cadastrada:")) {
+      const p = this.cfgPaineis.provedores.find((p) => `cadastrada:${p.id}` === op.valor);
+      return motorDoTipo(p?.tipo ?? "").toLowerCase();
+    }
+    return op.provedor === "openjarvis" ? "kokoro" : op.motor || op.provedor;
   }
 
   /** Estado do serviço de voz + vozes; redesenha listas. */
   async atualizar(): Promise<void> {
+    // Preserva campos ainda não salvos ao atualizar disponibilidade e vozes.
+    if (this.el("voz_url")) {
+      this.cfg.voz_url = this.vozUrl();
+    }
     const url = this.cfg.voz_url?.trim();
     if (!url) {
       this.estado = "desligado";
@@ -188,7 +303,7 @@ export class AbaVoz {
       this.vozesServico = [];
     } else {
       const base = url.replace(/\/+$/, "");
-      const saude = await buscarJson<{ xtts?: unknown; kokoro?: unknown; edge?: unknown; piper?: unknown }>(`${base}/saude`, 3000);
+      const saude = await buscarJson<{ xtts?: unknown; xtts_carregado?: unknown; kokoro?: unknown; edge?: unknown; piper?: unknown }>(`${base}/saude`, 3000);
       if (!saude) {
         this.estado = "fora";
         this.motores = { xtts: false, kokoro: false, edge: false, piper: false };
@@ -196,15 +311,20 @@ export class AbaVoz {
       } else {
         this.estado = "no-ar";
         this.motores = { xtts: saude.xtts === true, kokoro: saude.kokoro === true, edge: saude.edge === true, piper: saude.piper === true };
+        this.motorAutomatico = saude.xtts_carregado === true ? "xtts" : this.motores.kokoro ? "kokoro" : this.motores.edge ? "edge" : this.motores.piper ? "piper" : "xtts";
         // Lista de vozes falhando não pode esvaziar a tela: sem ela, as listas ficam com o que não depende do serviço.
         try { this.vozesServico = (await new Voz(url).vozes()).vozes; } catch { this.vozesServico = []; }
       }
     }
     try { this.cfgPaineis = await lerPaineis(); } catch { this.cfgPaineis = paineisEmBranco(); }
+    this.cfg.voz_url = this.vozUrl();
+    this.cfg.elevenlabs_chave = this.el("elevenlabs_chave").value;
+    this.cfg.gemini_chave = this.el("gemini_chave").value;
     this.atualizarAviso();
     this.preencherListas();
     this.desenharServicos();
     this.desenharCadastradas();
+    this.desenharMotores();
   }
 
   private atualizarAviso() {
@@ -231,7 +351,8 @@ export class AbaVoz {
     }
     if (!fora) {
       if (this.motores.xtts) {
-        for (const nome of this.vozesServico) {
+        const outrosIds = new Set(Object.values(VOZES_POR_MOTOR).flat().map((v) => v.id));
+        for (const nome of this.vozesServico.filter((v) => !outrosIds.has(v))) {
           ops.push({ valor: `propria:xtts:${nome}`, rotulo: `${nome} (XTTS, neste PC)`, grupo: "XTTS · neste PC", provedor: "propria", motor: "xtts" });
         }
       }
@@ -264,7 +385,7 @@ export class AbaVoz {
   }
 
   private preencherListas() {
-    const ops = this.opcoesDisponiveis();
+    const ops = this.opcoesDisponiveis().filter((op) => this.motorDaOpcao(op) === this.motorAtual());
     const valorPrincipal = this.valorDaSelecao(this.cfg.voz_provedor, this.cfg.voz_motor, this.cfg.voz_propria, this.cfg.voz, this.cfg.elevenlabs_voz, this.cfg.gemini_voz);
     const valorReserva = this.cfg.voz_reserva_provedor && this.cfg.voz_reserva_provedor !== "nenhuma"
       ? this.valorDaSelecao(this.cfg.voz_reserva_provedor as ProvedorVoz, this.cfg.voz_reserva_motor, this.cfg.voz_reserva_id ?? "", this.cfg.voz_reserva_id ?? "", this.cfg.voz_reserva_provedor === "elevenlabs" ? (this.cfg.voz_reserva_id ?? "") : "", this.cfg.voz_reserva_provedor === "gemini" ? (this.cfg.voz_reserva_id ?? "") : "")
@@ -286,12 +407,18 @@ export class AbaVoz {
         sel.prepend(new Option(rotulo, valorAtual, false, true));
         sel.value = valorAtual;
       }
+      if (comNenhuma && valorAtual && !ops.some((o) => o.valor === valorAtual)) {
+        const salva = new Option("Reserva salva de outro motor (mantida)", valorAtual, false, true);
+        salva.disabled = true;
+        sel.append(salva);
+      }
     };
     preencher(this.selPrincipal, valorPrincipal, false);
     preencher(this.selReserva, valorReserva, true);
   }
 
   private valorDaSelecao(provedor: ProvedorVoz | "openjarvis", motor?: string, propria?: string, oj?: string, el?: string, gem?: string): string {
+    if (provedor === "propria" && vozesCadastradas(this.cfgPaineis).some((p) => p.id === propria)) return `cadastrada:${propria}`;
     if (provedor === "openjarvis") return `openjarvis:${oj || this.cfg.voz}`;
     if (provedor === "elevenlabs") return `elevenlabs:${el || ""}`;
     if (provedor === "gemini") return `gemini:${gem || "Kore"}`;
@@ -390,6 +517,7 @@ export class AbaVoz {
           <input type="text" id="cfg-voz_url" value="${esc(url)}" placeholder="http://127.0.0.1:4710">
           <span class="campo-modal-ajuda">${estadoTxt}</span>
         </label>
+        <button type="button" id="cfg-voz-atualizar" class="voz-btn-secundario">Atualizar motores e vozes</button>
       </div>
       <div class="voz-bloco-servico">
         <h4>ElevenLabs</h4>
@@ -410,6 +538,8 @@ export class AbaVoz {
       </div>
     `;
     bloco.querySelector("#cfg-voz-carregar-elevenlabs")?.addEventListener("click", () => { void this.carregarElevenLabs(); });
+    bloco.querySelector("#cfg-voz-atualizar")?.addEventListener("click", () => { void this.atualizar(); });
+    for (const id of ["elevenlabs_chave", "gemini_chave"]) this.el(id).addEventListener("input", () => { this.desenharMotores(); });
   }
 
   private async carregarElevenLabs() {
@@ -419,6 +549,7 @@ export class AbaVoz {
       const lista = await new ElevenLabs(chave, "x").vozes();
       this.vozesElevenLabs = lista;
       this.preencherListas();
+      this.desenharMotores();
       this.deps.dizer(`${lista.length} vozes carregadas.`);
     } catch (erro) {
       this.deps.dizer(`Não consegui carregar as vozes: ${erro instanceof Error ? erro.message : "falha"}`, true);
@@ -427,8 +558,7 @@ export class AbaVoz {
 
   private desenharCadastradas() {
     const bloco = this.raiz.querySelector<HTMLElement>("#cfg-voz-cadastradas")!;
-    const lista = vozesCadastradas(this.cfgPaineis);
-    if (lista.length === 0) { bloco.innerHTML = ""; return; }
+    const lista = vozesCadastradas(this.cfgPaineis).filter((p) => motorDoTipo(p.tipo).toLowerCase() === this.motorAtual());
     bloco.innerHTML = `<fieldset><legend>Vozes cadastradas</legend><div id="cfg-voz-cadastradas-lista"></div></fieldset>`;
     const alvo = bloco.querySelector("#cfg-voz-cadastradas-lista")!;
     for (const p of lista) {
@@ -447,14 +577,18 @@ export class AbaVoz {
     btnAdd.type = "button";
     btnAdd.textContent = "Adicionar voz";
     btnAdd.className = "primaria";
-    btnAdd.addEventListener("click", () => { this.abrirCadastro(); });
+    btnAdd.addEventListener("click", () => {
+      const tipo = this.motorAtual() === "xtts" ? "suad" : this.motorAtual();
+      this.abrirCadastro(undefined, ["suad", "kokoro", "elevenlabs", "gemini", "fish"].includes(tipo) ? tipo as VozCadastrada["tipo"] : undefined);
+    });
     alvo.append(btnAdd);
   }
 
-  private abrirCadastro(atual?: VozCadastrada) {
+  private abrirCadastro(atual?: VozCadastrada, tipoInicial?: VozCadastrada["tipo"]) {
     abrirModalVoz({
       cfg: this.cfgPaineis,
       atual,
+      tipoInicial,
       aoSalvar: async (campos, idOriginal) => { await this.salvarCadastrada(campos, idOriginal); },
       aoRemover: async (id) => {
         const p = this.cfgPaineis.provedores.find((x) => x.id === id);
@@ -477,6 +611,7 @@ export class AbaVoz {
       this.deps.dizer("Voz salva.");
       this.desenharCadastradas();
       this.preencherListas();
+      this.desenharMotores();
     } catch (erro) {
       this.deps.dizer(`Não consegui salvar: ${erro instanceof Error ? erro.message : "falha"}`, true);
     }
@@ -490,6 +625,7 @@ export class AbaVoz {
       this.deps.dizer("Voz removida.");
       this.desenharCadastradas();
       this.preencherListas();
+      this.desenharMotores();
     } catch (erro) {
       this.deps.dizer(`Não consegui remover: ${erro instanceof Error ? erro.message : "falha"}`, true);
     }

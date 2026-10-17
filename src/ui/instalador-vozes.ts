@@ -16,6 +16,7 @@ export interface PacoteManifesto {
   licenca_nome: string;
   indisponivel: boolean;
   motivo_indisponivel?: string | null;
+  instalado?: boolean;
 }
 
 export interface EstadoPacote {
@@ -36,6 +37,7 @@ export interface DepsInstaladorVozes {
   baseUrl: string;
   /** Callback para notificações de status ao usuário */
   notificar: (msg: string, erro?: boolean) => void;
+  aoMudar?: (id: string, instalado: boolean) => void | Promise<void>;
 }
 
 const esc = (t: string) => t.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
@@ -58,6 +60,7 @@ export class InstaladorVozes {
   constructor(raiz: HTMLElement, deps: DepsInstaladorVozes) {
     this.raiz = raiz;
     this.deps = deps;
+    this.vincularEventos();
   }
 
   async montar(): Promise<void> {
@@ -74,7 +77,7 @@ export class InstaladorVozes {
       // Mapeia estados de instalação
       for (const pkg of this.pacotes) {
         this.estados[pkg.id] = {
-          instalado: !!dados.instalados?.[pkg.id],
+          instalado: typeof pkg.instalado === "boolean" ? pkg.instalado : !!dados.instalados?.[pkg.id],
           ativo: !!dados.ativos?.[pkg.id],
           versao_instalada: dados.instalados?.[pkg.id]?.versao,
         };
@@ -136,8 +139,12 @@ export class InstaladorVozes {
       </fieldset>
     `;
 
-    this.vincularEventos();
   }
+
+  /** Entrada dos cards de motor: usa a mesma licença, progresso e cancelamento da lista. */
+  async instalar(pkgId: string): Promise<void> { await this.iniciarInstalacao(pkgId); }
+
+  estaInstalado(pkgId: string): boolean { return this.estados[pkgId]?.instalado ?? false; }
 
   private vincularEventos(): void {
     this.raiz.addEventListener("click", (ev) => {
@@ -154,7 +161,7 @@ export class InstaladorVozes {
 
   private async iniciarInstalacao(pkgId: string): Promise<void> {
     const pkg = this.pacotes.find((p) => p.id === pkgId);
-    if (!pkg) return;
+    if (!pkg || pkg.indisponivel || this.estados[pkgId]?.instalado || this.abortControllers[pkgId]) return;
 
     // Confirmação de licença
     if (pkg.licenca_url) {
@@ -210,6 +217,7 @@ export class InstaladorVozes {
               this.deps.notificar(`${pkg.nome} instalado com sucesso.`);
               this.estados[pkgId] = { ...this.estados[pkgId], instalado: true, versao_instalada: pkg.versao };
               this.renderizar();
+              void this.deps.aoMudar?.(pkgId, true);
               return;
             }
             if (dados.estado === "falhou") {
@@ -274,6 +282,7 @@ export class InstaladorVozes {
       this.deps.notificar(`${pkg.nome} removido.`);
       this.estados[pkgId] = { instalado: false, ativo: false };
       this.renderizar();
+      void this.deps.aoMudar?.(pkgId, false);
     } catch (exc) {
       this.deps.notificar(`Erro ao remover: ${(exc as Error).message}`, true);
     }
