@@ -2,6 +2,8 @@
 
 [Read in English](README.en.md) · [Repositório](https://github.com/pauloroos/project-vard)
 
+Versões e mudanças: [CHANGELOG.md](CHANGELOG.md).
+
 Vard é uma interface de voz local (widget flutuante) para assistentes; o primeiro conector é o [OpenJarvis](https://github.com/open-jarvis/OpenJarvis). Feito com Tauri 2. Uma janela transparente e sem moldura, sempre no topo, com um núcleo ciano que reage à sua voz: você fala, ele transcreve, o OpenJarvis responde e a resposta sai em voz alta.
 
 ![HUD em repouso](docs/captura-repouso.png) ![HUD falando](docs/captura-falando.png)
