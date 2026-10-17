@@ -9,7 +9,11 @@ troca atômica. Campos desconhecidos são preservados.
 
 As ferramentas permitem consultar e alterar aparência, vozes, provedores,
 receitas da Oficina e apelidos de programas/sites. `listar_habilidades` devolve
-somente receitas ligadas, com nome, exemplos e instruções. A validação da tela
+somente receitas ligadas, com nome, exemplos e instruções, seguidas das habilidades
+de fábrica personalizadas e ligadas (situação `capaz`). `editar_habilidade` também
+aceita os IDs de fábrica: nome, exemplos e instruções vão para `fabrica` em
+`habilidades.json` e `ligada` usa `desligadas`. Fábrica não se exclui;
+`restaurar_habilidade` apaga o ajuste e mantém ligada ou desligada. A validação da tela
 e do núcleo usa exemplos compartilhados em `tests/fixtures/ajustes` e
 `tests/fixtures/habilidades`. O catálogo de vozes de fábrica também é compartilhado.
 

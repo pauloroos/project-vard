@@ -15,7 +15,7 @@ from dataclasses import asdict, dataclass, fields
 from pathlib import Path
 
 from . import config as modulo_config
-from .habilidades import ler_habilidades
+from .habilidades import ler_habilidades, tem_ligadas
 
 log = logging.getLogger(__name__)
 
@@ -95,7 +95,7 @@ def montar_persona(perfil: Perfil, nome: str, usuario: str) -> str:
     if produto:
         partes.append(produto)
     try:
-        ligadas = any(h["ligada"] for h in ler_habilidades()["habilidades"])
+        ligadas = tem_ligadas(ler_habilidades())
     except (OSError, ValueError):
         ligadas = False
     if ligadas:
