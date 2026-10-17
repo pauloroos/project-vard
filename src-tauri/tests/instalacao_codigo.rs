@@ -115,8 +115,14 @@ fn executaveis_falsos_recebem_comando_cwd_ambiente_e_sao_encerrados() {
     }
     // Os marcadores existem no pai; a prova exige removê-los efetivamente do filho.
     let nomes = ["PYTHONHOME", "PYTHONPATH", "VIRTUAL_ENV", "CLAUDE_SESSION_ID", "CODEX_SESSION_ID", "ORCA_AGENT_SECRET"];
-    let _ambiente = Ambiente(nomes.iter().map(|n| (n.to_string(), std::env::var_os(n))).collect());
+    let _ambiente = Ambiente(nomes.iter().copied().chain(["VARD_CONFIG", "VARD_INSTALACAO", "VARD_HUD_CONFIG_DIR"])
+        .map(|n| (n.to_string(), std::env::var_os(n))).collect());
     for nome in nomes { unsafe { std::env::set_var(nome, "marcador-ficticio"); } }
+    unsafe {
+        std::env::set_var("VARD_CONFIG", pasta.path().join("config"));
+        std::env::set_var("VARD_INSTALACAO", &arquivo);
+        std::env::set_var("VARD_HUD_CONFIG_DIR", pasta.path());
+    }
     let copiar = |caminho: PathBuf| { falso(&caminho); std::fs::copy(executavel_falso(), &caminho).unwrap(); caminho };
     copiar(raiz.join("nucleo/.venv/Scripts/python.exe"));
     falso(&raiz.join("nucleo/server.py"));
@@ -135,13 +141,7 @@ fn executaveis_falsos_recebem_comando_cwd_ambiente_e_sao_encerrados() {
     let mut descritores = vec![instalacao::preparar_nucleo(false, pasta.path(), pasta.path(), &config, pasta.path(), "teste").unwrap(),
         instalacao::descritor_voz(&config, pasta.path()).unwrap(), instalacao::descritor_reuniao(&config, pasta.path()).unwrap()];
     // Lê HUD fictício; nenhuma decisão consulta a configuração do usuário.
-    let desc_oj = {
-        let antigo = std::env::var_os("VARD_HUD_CONFIG_DIR");
-        unsafe { std::env::set_var("VARD_HUD_CONFIG_DIR", pasta.path()); }
-        let desc = instalacao::descritor_openjarvis(&config, pasta.path()).unwrap();
-        unsafe { if let Some(v) = antigo { std::env::set_var("VARD_HUD_CONFIG_DIR", v); } else { std::env::remove_var("VARD_HUD_CONFIG_DIR"); } }
-        desc
-    };
+    let desc_oj = instalacao::descritor_openjarvis(&config, pasta.path()).unwrap();
     assert_eq!(desc_oj.comando.1, ["serve", "--agent", "orchestrator"]);
     descritores.push(desc_oj);
     let mut ids = Vec::new();
@@ -153,13 +153,13 @@ fn executaveis_falsos_recebem_comando_cwd_ambiente_e_sao_encerrados() {
         let esperado = desc.pasta_trabalho.as_ref().unwrap();
         let args = desc.comando.1.join("|");
         // Usa exatamente o lançador de produção; saída do dublê só contém dados fictícios.
-        desc.envs.extend([("VARD_CONFIG".into(), pasta.path().join("config").to_string_lossy().into_owned()), ("VARD_INSTALACAO".into(), arquivo.to_string_lossy().into_owned())]);
         let saida = servicos::montar_comando(&desc).output().unwrap();
         assert!(saida.status.success());
         let texto = String::from_utf8(saida.stdout).unwrap();
         assert!(texto.contains(&format!("PASTA={}", esperado.display())));
         assert!(texto.contains(&format!("ARGS={args}")));
         assert!(texto.contains(&format!("VARD_INSTALACAO={}", arquivo.display())));
+        assert!(texto.contains(&format!("VARD_CONFIG={}", pasta.path().join("config").display())));
         for nome in ["PYTHONHOME", "PYTHONPATH", "VIRTUAL_ENV", "CLAUDE_SESSION_ID", "CODEX_SESSION_ID", "ORCA_AGENT_SECRET"] {
             assert!(texto.contains(&format!("{nome}=false")));
         }
