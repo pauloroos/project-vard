@@ -38,6 +38,8 @@ const ESTADOS: Record<AndamentoInstalacao["estado"], string> = {
 
 export class InstalaveisProvedores {
   private itens: Instalavel[] = [];
+  /** Estado da última leitura: a aba pode redesenhar e reanexar antes de a lista chegar. */
+  private situacao: "carregando" | "pronto" | "indisponivel" = "carregando";
   constructor(
     private raiz: HTMLElement,
     private base: string,
@@ -57,13 +59,32 @@ export class InstalaveisProvedores {
   }
 
   async carregar(): Promise<void> {
+    if (this.situacao !== "pronto") this.mostrar();
     try {
       const corpo = await this.requisitar("") as { itens?: Instalavel[] };
       this.itens = Array.isArray(corpo.itens) ? corpo.itens : [];
-      this.desenhar();
+      this.situacao = "pronto";
     } catch {
-      this.raiz.textContent = "Instalações indisponíveis. Ligue os serviços do Vard e reabra esta aba.";
+      this.situacao = "indisponivel";
     }
+    this.mostrar();
+  }
+
+  /** Passa a desenhar em outro contêiner (a aba redesenhou) com o que já tem, sem consultar o núcleo de novo. */
+  anexar(raiz: HTMLElement): void {
+    this.raiz = raiz;
+    this.mostrar();
+  }
+
+  private mostrar() {
+    if (this.situacao === "pronto") { this.desenhar(); return; }
+    this.raiz.replaceChildren();
+    const p = document.createElement("p");
+    p.className = "nucleo-ajuda";
+    p.textContent = this.situacao === "carregando"
+      ? "Carregando instalações…"
+      : "Instalações indisponíveis. Ligue os serviços do Vard e reabra esta aba.";
+    this.raiz.append(p);
   }
 
   private desenhar() {
