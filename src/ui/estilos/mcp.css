@@ -23,3 +23,6 @@
 
 #msg-mcps { min-height: 20px; margin-top: 10px; opacity: 0.85; }
 #msg-mcps.ruim { color: #ffb020; opacity: 1; }
+
+/* Modelos prontos (ex.: Windows-MCP) acima da lista. */
+.mcp-modelos { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 12px; }

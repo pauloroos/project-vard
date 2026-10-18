@@ -22,7 +22,7 @@ vi.mock("../src/config/segredos", () => ({
   cofreExiste: vi.fn(),
 }));
 import { cofreExiste } from "../src/config/segredos";
-import { AbaPaineisMcps, AVISO_SERVICOS_DESLIGADOS, VAZIO_LISTA } from "../src/ui/paineis-mcps";
+import { AbaPaineisMcps, AVISO_SERVICOS_DESLIGADOS, AVISO_WINDOWS_MCP, MODELO_WINDOWS_MCP, VAZIO_LISTA } from "../src/ui/paineis-mcps";
 
 const mockCofreExiste = vi.mocked(cofreExiste);
 const PONTE_NO_AR: StatusPonte = { ok: true, modo: "normal" };
@@ -371,5 +371,89 @@ describe("paineis-mcps (T7) — Ferramentas (MCP)", () => {
     expect([...card(raiz, "h").querySelectorAll("button")].map((b) => b.textContent)).toEqual([
       "Habilitar", "Editar", "Remover",
     ]);
+  });
+
+  describe("modelo pronto do Windows-MCP", () => {
+    function botaoModelo(raiz: HTMLElement): HTMLButtonElement {
+      const b = raiz.querySelector<HTMLButtonElement>("#mcp-modelo-windows-mcp");
+      if (!b) throw new Error("botão do modelo Windows-MCP não encontrado");
+      return b;
+    }
+
+    it("o comando do modelo é o recomendado pelo projeto (uvx windows-mcp serve)", () => {
+      expect(MODELO_WINDOWS_MCP).toEqual({
+        id: "windows-mcp", nome: "Windows-MCP (controle do computador)", command: "uvx", args: ["windows-mcp", "serve"],
+      });
+    });
+
+    it("a aba oferece o botão do modelo, mesmo com a lista vazia", async () => {
+      const raiz = criarRaiz();
+      await montar(raiz);
+      expect(botaoModelo(raiz).textContent).toBe("Adicionar Windows-MCP (controle do computador)");
+      expect(raiz.textContent).toContain(VAZIO_LISTA);
+    });
+
+    it("o botão abre o cadastro pré-preenchido com o aviso, sem salvar nada", async () => {
+      const raiz = criarRaiz();
+      await montar(raiz);
+      botaoModelo(raiz).click();
+
+      expect(campo("mcp-id").value).toBe("windows-mcp");
+      expect(campo("mcp-nome").value).toBe("Windows-MCP (controle do computador)");
+      expect(modal().querySelector<HTMLSelectElement>("#mcp-tipo")!.value).toBe("stdio");
+      expect(campo("mcp-command").value).toBe("uvx");
+      expect(campo("mcp-args").value).toBe("windows-mcp serve");
+      const aviso = modal().querySelector<HTMLElement>("#mcp-aviso-modelo")!;
+      expect(aviso.textContent).toBe(AVISO_WINDOWS_MCP);
+      expect(AVISO_WINDOWS_MCP).toContain("terceiros");
+      expect(AVISO_WINDOWS_MCP).toContain("clicar e digitar");
+      expect(cfgEmMemoria).toBeNull();
+    });
+
+    it("salvar o modelo grava desabilitado; habilitar é um passo do usuário", async () => {
+      const raiz = criarRaiz();
+      await montar(raiz);
+      botaoModelo(raiz).click();
+      clicarSalvar();
+      await esperar();
+
+      expect(document.querySelector(".modal")).toBeNull();
+      expect(cfgEmMemoria!.mcps).toEqual([
+        { id: "windows-mcp", nome: "Windows-MCP (controle do computador)", habilitado: false, command: "uvx", args: ["windows-mcp", "serve"] },
+      ]);
+      expect(card(raiz, "windows-mcp").textContent).toContain("Desabilitado");
+      expect(raiz.querySelector("#msg-mcps")!.textContent).toContain("Habilitar");
+
+      acaoCard(raiz, "windows-mcp", "Habilitar").click();
+      await esperar();
+      expect(cfgEmMemoria!.mcps[0].habilitado).toBe(true);
+    });
+
+    it("cancelar o modelo não grava nada", async () => {
+      const raiz = criarRaiz();
+      await montar(raiz);
+      botaoModelo(raiz).click();
+      [...modal().querySelectorAll<HTMLButtonElement>(".modal-acoes button")].find((b) => b.textContent === "Cancelar")!.click();
+      await esperar();
+      expect(cfgEmMemoria).toBeNull();
+      expect(raiz.querySelector(".card")).toBeNull();
+    });
+
+    it("com o Windows-MCP já cadastrado o botão abre a edição dele, sem duplicar", async () => {
+      cfgEmMemoria = {
+        ...PAINEIS_PADRAO,
+        mcps: [{ id: "windows-mcp", nome: "Meu Windows-MCP", habilitado: true, command: "uvx", args: ["windows-mcp", "serve"] }],
+      };
+      const raiz = criarRaiz();
+      await montar(raiz);
+      botaoModelo(raiz).click();
+
+      expect(campo("mcp-id").readOnly).toBe(true);
+      expect(campo("mcp-nome").value).toBe("Meu Windows-MCP");
+      clicarSalvar();
+      await esperar();
+      expect(cfgEmMemoria!.mcps).toHaveLength(1);
+      expect(cfgEmMemoria!.mcps[0].habilitado).toBe(true);
+    });
   });
 });

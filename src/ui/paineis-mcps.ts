@@ -25,6 +25,32 @@ export const AVISO_SERVICOS_DESLIGADOS =
 /** Texto do card quando a lista não tem nenhum servidor. */
 export const VAZIO_LISTA = "Nenhum servidor MCP cadastrado.";
 
+/**
+ * Modelo pronto do Windows-MCP (CursorTouch, MIT): comando recomendado pelo projeto,
+ * `uvx windows-mcp serve` (README do repositório e PyPI `windows-mcp`). Ver docs/windows-mcp.md.
+ */
+export const MODELO_WINDOWS_MCP = {
+  id: "windows-mcp",
+  nome: "Windows-MCP (controle do computador)",
+  command: "uvx",
+  args: ["windows-mcp", "serve"],
+} as const;
+
+/** Aviso mostrado no cadastro pelo modelo pronto. */
+export const AVISO_WINDOWS_MCP =
+  "Projeto de terceiros (Windows-MCP, licença MIT). Habilitado, permite ao assistente clicar e digitar " +
+  "no computador, abrir janelas e ler a tela. Precisa do uv instalado; o Vard não instala nada. " +
+  "Fica desabilitado até você habilitar no card.";
+
+/** Cadastro pré-preenchido vindo de um modelo pronto. */
+interface ModeloMcp {
+  id: string;
+  nome: string;
+  command: string;
+  args: readonly string[];
+  aviso: string;
+}
+
 type TipoMcp = "stdio" | "http";
 type EstadoCredencial = "ok" | "ausente";
 
@@ -74,6 +100,15 @@ export class AbaPaineisMcps {
     explicacao.textContent = "Servidores MCP dão ferramentas ao Vard, como arquivos, banco de dados e a web.";
     titulo.append(h2, explicacao);
 
+    const modelos = document.createElement("div");
+    modelos.className = "mcp-modelos";
+    const botaoWindows = document.createElement("button");
+    botaoWindows.type = "button";
+    botaoWindows.id = "mcp-modelo-windows-mcp";
+    botaoWindows.textContent = "Adicionar Windows-MCP (controle do computador)";
+    botaoWindows.addEventListener("click", () => this.abrirModelo({ ...MODELO_WINDOWS_MCP, aviso: AVISO_WINDOWS_MCP }));
+    modelos.append(botaoWindows);
+
     this.lista = document.createElement("div");
     this.lista.id = "mcp-lista";
 
@@ -81,7 +116,7 @@ export class AbaPaineisMcps {
     this.recado.id = "msg-mcps";
     this.recado.setAttribute("role", "status");
 
-    this.raiz.append(this.aviso, titulo, this.lista, this.recado);
+    this.raiz.append(this.aviso, titulo, modelos, this.lista, this.recado);
   }
 
   private desenhar() {
@@ -120,22 +155,30 @@ export class AbaPaineisMcps {
     };
   }
 
-  /** Abre o modal de adicionar (sem id) ou de editar (com o id de um existente). */
-  private abrirModal(id?: string) {
+  /** Modelo pronto: se já existe um cadastro com o mesmo id, abre a edição dele; senão, o cadastro pré-preenchido. */
+  private abrirModelo(modelo: ModeloMcp) {
+    if (this.cfg.mcps.some((m) => m.id === modelo.id)) this.abrirModal(modelo.id);
+    else this.abrirModal(undefined, modelo);
+  }
+
+  /** Abre o modal de adicionar (sem id), de adicionar por modelo pronto ou de editar (com o id de um existente). */
+  private abrirModal(id?: string, modelo?: ModeloMcp) {
     this.modal?.fechar(); // nunca dois modais um em cima do outro
     const atual = id ? this.cfg.mcps.find((m) => m.id === id) : undefined;
+    const inicial = atual ?? (modelo ? { id: modelo.id, nome: modelo.nome, command: modelo.command, args: [...modelo.args] } : undefined);
 
     const campoId = document.createElement("input");
     campoId.id = "mcp-id";
     campoId.type = "text";
     if (atual) { campoId.value = atual.id; campoId.readOnly = true; }
+    else if (modelo) campoId.value = modelo.id;
 
     const campoNome = document.createElement("input");
     campoNome.id = "mcp-nome";
     campoNome.type = "text";
-    campoNome.value = atual?.nome ?? "";
+    campoNome.value = inicial?.nome ?? "";
 
-    const tipoInicial: TipoMcp = atual ? (atual.command ? "stdio" : "http") : "stdio";
+    const tipoInicial: TipoMcp = inicial ? (inicial.command ? "stdio" : "http") : "stdio";
     const campoTipo = document.createElement("select");
     campoTipo.id = "mcp-tipo";
     for (const [valor, rotulo] of [["stdio", "stdio (comando local)"], ["http", "http (servidor remoto)"]] as const) {
@@ -149,12 +192,12 @@ export class AbaPaineisMcps {
     const campoCommand = document.createElement("input");
     campoCommand.id = "mcp-command";
     campoCommand.type = "text";
-    campoCommand.value = atual?.command ?? "";
+    campoCommand.value = inicial?.command ?? "";
 
     const campoArgs = document.createElement("input");
     campoArgs.id = "mcp-args";
     campoArgs.type = "text";
-    campoArgs.value = atual?.args?.join(" ") ?? "";
+    campoArgs.value = inicial?.args?.join(" ") ?? "";
 
     const campoUrl = document.createElement("input");
     campoUrl.id = "mcp-url";
@@ -177,10 +220,17 @@ export class AbaPaineisMcps {
     grupoHttp.id = "mcp-grupo-http";
     grupoHttp.append(
       campoModal("URL", campoUrl, "Endereço do servidor MCP no formato http."),
-      campoModal("Referência da credencial (opcional)", campoCred, "Formato tipo:id, como cofre:github. O valor fica no cofre e nunca aparece aqui."),
+      campoModal("Referência da credencial (opcional)", campoCred, "Formato tipo:id, como mcp:github. O valor fica no cofre e nunca aparece aqui."),
     );
 
     const corpo = document.createElement("div");
+    if (modelo) {
+      const aviso = document.createElement("p");
+      aviso.id = "mcp-aviso-modelo";
+      aviso.className = "mcp-aviso";
+      aviso.textContent = modelo.aviso;
+      corpo.append(aviso);
+    }
     corpo.append(
       campoModal("Identificador", campoId, atual ? "O identificador não muda depois de criado." : "Único na lista; use letras, números, ponto ou hífen."),
       campoModal("Nome", campoNome),
@@ -197,7 +247,7 @@ export class AbaPaineisMcps {
 
     let modal: ModalAberto;
     modal = abrirModal({
-      titulo: atual ? "Editar servidor MCP" : "Adicionar servidor MCP",
+      titulo: atual ? "Editar servidor MCP" : modelo ? `Adicionar ${modelo.nome}` : "Adicionar servidor MCP",
       corpo,
       acoes: [
         {
@@ -211,7 +261,7 @@ export class AbaPaineisMcps {
             args: campoArgs.value.trim(),
             url: campoUrl.value.trim(),
             credencial: campoCred.value.trim(),
-          }, atual?.id),
+          }, atual?.id, !modelo),
         },
         { rotulo: "Cancelar" },
       ],
@@ -224,6 +274,7 @@ export class AbaPaineisMcps {
     modal: ModalAberto,
     v: { id: string; nome: string; tipo: TipoMcp; command: string; args: string; url: string; credencial: string },
     editando?: string,
+    habilitadoNovo = true,
   ): Promise<boolean> {
     if (!v.id || !v.nome) { modal.avisar("Preencha o identificador e o nome.", true); return false; }
     if (!editando && this.cfg.mcps.some((m) => m.id === v.id)) {
@@ -241,7 +292,7 @@ export class AbaPaineisMcps {
     const novo: Mcp = {
       id: v.id,
       nome: v.nome,
-      habilitado: anterior?.habilitado ?? true,
+      habilitado: anterior?.habilitado ?? habilitadoNovo,
       ...(v.tipo === "stdio"
         ? { command: v.command, args: v.args ? v.args.split(/\s+/) : undefined }
         : { url: v.url }),
@@ -264,7 +315,7 @@ export class AbaPaineisMcps {
     }
     this.deps.aoMudar?.();
     this.desenhar();
-    this.msg("Salvo.");
+    this.msg(anterior || novo.habilitado ? "Salvo." : `Salvo desabilitado. Use Habilitar no card de ${novo.nome} quando quiser.`);
     return true;
   }
 
