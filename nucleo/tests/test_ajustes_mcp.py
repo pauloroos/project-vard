@@ -167,7 +167,7 @@ async def test_servidor_mcp_real_expoe_todas_as_ferramentas_e_grava_aparencia():
     try:
         await gerente.adicionar_stdio("configuracoes", sys.executable, [str(Path(__file__).parents[1] / "configuracoes_mcp.py")])
         nomes = {f["nome"] for f in await gerente.listar_todas()}
-        assert nomes == {"ver_configuracoes", "mudar_aparencia", "listar_vozes", "escolher_voz", "listar_provedores", "cadastrar_provedor", "editar_provedor", "remover_provedor", "escolher_quem_responde", "testar_provedor", "listar_instalaveis", "instalar", "andamento_instalacao", "listar_habilidades", "cadastrar_habilidade", "editar_habilidade", "excluir_habilidade", "restaurar_habilidade", "marcar_habilidade_validada", "listar_programas", "cadastrar_programa", "remover_programa", "ver_telegram", "configurar_telegram"}
+        assert nomes == {"ver_configuracoes", "mudar_aparencia", "listar_vozes", "escolher_voz", "listar_provedores", "cadastrar_provedor", "editar_provedor", "remover_provedor", "escolher_quem_responde", "testar_provedor", "listar_instalaveis", "instalar", "andamento_instalacao", "listar_habilidades", "cadastrar_habilidade", "editar_habilidade", "excluir_habilidade", "restaurar_habilidade", "marcar_habilidade_validada", "listar_programas", "cadastrar_programa", "remover_programa", "ver_telegram", "configurar_telegram", "trazer_telegram_do_openjarvis"}
         assert await gerente.chamar("configuracoes", "mudar_aparencia", {"cor": "#112233", "opacidade": 0.5}) == "Aparência atualizada."
         assert ajustes.ler_documento("hud")["cor_elementos"] == "#112233"
         assert "confirmação" in await gerente.chamar("configuracoes", "remover_programa", {"nome": "editor"})

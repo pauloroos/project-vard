@@ -222,6 +222,51 @@ async def _executar_pedido_cerebro(pedido, emitir):
         gerenciador_ferramentas=_ferramentas_cerebro if not tipo_provedor.startswith("cli-") else None)
 
 
+# Poller do Telegram: um por núcleo, religado quando a configuração muda (tela, assistente, migração).
+_telegram: dict = {"tarefa": None, "chave": None}
+
+
+async def _parar_telegram() -> None:
+    tarefa, _telegram["tarefa"], _telegram["chave"] = _telegram["tarefa"], None, None
+    if tarefa is None:
+        return
+    tarefa.cancel()
+    try:
+        await tarefa
+    except asyncio.CancelledError:
+        pass
+    log.info("telegram poller parado")
+
+
+async def _sincronizar_telegram() -> bool:
+    """Liga, religa ou desliga o poller conforme telegram.toml e o cofre. True = poller rodando."""
+    cfg = telegram_mod._ler_config_telegram()
+    token = telegram_mod._token_seguro(cfg) if telegram_mod.deve_iniciar_poller() else ""
+    chats = telegram_mod._chats_permitidos(cfg)
+    base_url = str(cfg.get("base_url", "https://api.telegram.org"))
+    chave = (token, frozenset(chats), base_url) if token and chats else None
+    tarefa = _telegram["tarefa"]
+    if chave is not None and chave == _telegram["chave"] and tarefa is not None and not tarefa.done():
+        return True
+    await _parar_telegram()
+    if chave is None:
+        log.info("telegram sem ligar/token/chat; poller nao iniciado")
+        return False
+    poller = telegram_mod.TelegramPoller(token=token, chats_permitidos=chats, base_url=base_url)
+
+    async def _loop():
+        while True:
+            try:
+                await poller.processar_updates()
+            except Exception:  # noqa: BLE001
+                log.warning("erro no loop do telegram poller")
+            await asyncio.sleep(telegram_mod.ESPERA_CONFLITO_S if poller.conflito else telegram_mod.POLL_INTERVAL_PADRAO)
+
+    _telegram["tarefa"], _telegram["chave"] = asyncio.create_task(_loop()), chave
+    log.info("telegram poller iniciado (chats=%d)", len(chats))
+    return True
+
+
 @asynccontextmanager
 async def lifespan(app):
     """Ciclo de vida: inicia/para o TelegramPoller condicional (T11) e o SupervisorCli (T16)."""
@@ -250,27 +295,8 @@ async def lifespan(app):
             pass
     cerebro_pedidos.configurar_emissor(_emissor_sse)
 
-    poller = None
-    tarefa_poller = None
-    if telegram_mod.deve_iniciar_poller():
-        cfg = telegram_mod._ler_config_telegram()
-        token = telegram_mod._token_seguro(cfg)
-        chats = telegram_mod._chats_permitidos(cfg)
-        if token and chats:
-            poller = telegram_mod.TelegramPoller(token=token, chats_permitidos=chats)
-            async def _loop():
-                while True:
-                    try:
-                        await poller.processar_updates()
-                    except Exception:  # noqa: BLE001
-                        log.warning("erro no loop do telegram poller")
-                    await asyncio.sleep(telegram_mod.POLL_INTERVAL_PADRAO)
-            tarefa_poller = asyncio.create_task(_loop())
-            log.info("telegram poller iniciado (chats=%d)", len(chats))
-        else:
-            log.info("telegram habilitado mas sem token/chats; poller nao iniciado")
-    else:
-        log.info("telegram desabilitado; poller nao iniciado")
+    # Telegram próprio: sobe com o núcleo pelo telegram.toml + cofre, sem depender do OpenJarvis.
+    await _sincronizar_telegram()
     try:
         yield
     finally:
@@ -284,13 +310,7 @@ async def lifespan(app):
                 log.info("SupervisorCli: processos encerrados na saída")
             except Exception:  # noqa: BLE001
                 log.warning("SupervisorCli: erro ao encerrar processos na saída")
-        if tarefa_poller is not None:
-            tarefa_poller.cancel()
-            try:
-                await tarefa_poller
-            except asyncio.CancelledError:
-                pass
-            log.info("telegram poller parado")
+        await _parar_telegram()
 
 
 app = FastAPI(title="Vard", lifespan=lifespan)
@@ -1255,8 +1275,50 @@ def recursos():
 
 
 # --------------------------------------------------------------------------- TELEGRAM (T9 tela)
-# Endpoints para a seção Telegram da aba Sistema. Token nunca passa por aqui;
-# só a tela grava o token via invoke Rust ou gravação direta no telegram.toml.
+# Endpoints para a seção Telegram da aba Sistema. Token nunca passa por aqui: a tela grava
+# no cofre do Windows (cofre_gravar canal/telegram) e a migração do OpenJarvis grava direto no cofre.
+
+@app.get("/telegram")
+async def telegram_estado():
+    """Estado da seção Telegram e o que há para trazer do OpenJarvis; nunca o token."""
+    from vard import telegram_migracao
+    return {**telegram_mod.estado(), "rodando": _telegram["tarefa"] is not None,
+            "openjarvis": telegram_migracao.previa()}
+
+
+@app.post("/telegram/configurar")
+async def telegram_configurar(request: Request):
+    """Liga/desliga e define o chat permitido; o token vai pelo cofre (tela) ou pela migração."""
+    try:
+        corpo = await request.json()
+    except ValueError:
+        corpo = None
+    if not isinstance(corpo, dict) or not isinstance(corpo.get("ligado"), bool):
+        raise HTTPException(422, "ligado precisa ser verdadeiro ou falso")
+    telegram_mod.configurar(corpo["ligado"], str(corpo.get("chat", "") or ""))
+    return {"ok": True, "rodando": await _sincronizar_telegram()}
+
+
+@app.post("/telegram/sincronizar")
+async def telegram_sincronizar():
+    """Relê telegram.toml e o cofre (depois de gravar o token pela tela ou pelo assistente)."""
+    return {"ok": True, "rodando": await _sincronizar_telegram()}
+
+
+@app.post("/telegram/trazer_openjarvis")
+async def telegram_trazer_openjarvis(request: Request):
+    """Traz token (cofre) e chats do OpenJarvis; um Telegram já configurado só sai com substituir=true."""
+    from vard import telegram_migracao
+    try:
+        corpo = await request.json()
+    except ValueError:
+        corpo = {}
+    substituir = isinstance(corpo, dict) and corpo.get("substituir") is True
+    resultado = await asyncio.to_thread(telegram_migracao.trazer, substituir)
+    if resultado.get("ok"):
+        resultado["rodando"] = await _sincronizar_telegram()
+    return resultado
+
 
 @app.get("/telegram/descobrir_chat")
 async def telegram_descobrir_chat():

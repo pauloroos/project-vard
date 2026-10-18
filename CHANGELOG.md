@@ -15,12 +15,17 @@ Os instaladores de cada versão ficam na página de [releases](https://github.co
 - Voz: escolher uma voz que precisa de chave abre o cadastro da chave na hora; escolher uma voz não instalada
   pergunta se quer instalar e já deixa a voz em uso ao terminar.
 - Oficina: as habilidades de fábrica podem ser editadas e restauradas ao padrão.
+- Telegram: "Trazer do OpenJarvis" na aba Sistema (e pelo assistente) copia o bot e os chats permitidos
+  do OpenJarvis para o Vard, com o token direto no cofre, sem mexer no OpenJarvis e sem substituir um
+  Telegram já configurado sem confirmação. Com o Telegram no Vard, o OpenJarvis fica desligado.
 
 ### Corrigido
 
 - Sem o OpenJarvis, o widget mostrava "sem conexão com o núcleo" com o núcleo no ar.
 - O LM Studio cadastrado como provedor ainda aparecia como sugestão de instalação.
 - Desligar Resumo da manhã, Pesquisa ou Agente remoto gravava um arquivo de habilidades que não era aceito.
+- A seção Telegram da aba Sistema não aparecia na tela; o token digitado agora vai de fato para o cofre e
+  o bot liga, religa ou desliga na hora, sem reiniciar o núcleo.
 
 ## [0.9.6] — 2026-10-17
 

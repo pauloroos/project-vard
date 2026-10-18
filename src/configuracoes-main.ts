@@ -8,6 +8,8 @@ import { deveMostrarAssistente } from "./config/primeiro-uso";
 import { OpenJarvis } from "./conectores/openjarvis/cliente";
 import { Ponte } from "./conectores/ponte/cliente";
 import { Configuracoes, type Aba } from "./ui/configuracoes";
+import { AbaSistemaTelegram, depsTelegramDaPonte } from "./ui/aba-sistema";
+import { cofreGravar } from "./config/segredos";
 import { montarImportacaoComPonte, resumirHudAtual } from "./ui/primeiro-uso-importacao";
 import { montarAssistentePrimeiroUso, type DepsPrimeiroUso } from "./ui/primeiro-uso";
 
@@ -36,10 +38,15 @@ window.addEventListener("DOMContentLoaded", async () => {
   await listen("paineis-mudaram", () => { void painel.paineisMudaram(); });
   await listen("habilidades-mudaram", () => { void painel.habilidadesMudaram(); });
   await listen("perfil-mudou", () => { void painel.perfilMudou(); });
+  const ponteDoCampo = () => new Ponte(document.querySelector<HTMLInputElement>("#cfg-ponte_url")?.value?.trim() ?? "");
+  // Telegram na aba Sistema: estado e migração pelo núcleo; o token digitado vai só para o cofre.
+  const caixaTelegram = document.querySelector<HTMLElement>("#cfg-telegram");
+  if (caixaTelegram) {
+    void new AbaSistemaTelegram(caixaTelegram, depsTelegramDaPonte(ponteDoCampo, (token) => cofreGravar("canal", "telegram", token))).montar();
+  }
   // T7 (0.9): caixa de importação da instalação anterior, na aba Sistema, pela ponte do campo.
   const caixaImportacao = document.querySelector<HTMLElement>("#cfg-importacao");
   if (caixaImportacao) {
-    const ponteDoCampo = () => new Ponte(document.querySelector<HTMLInputElement>("#cfg-ponte_url")?.value?.trim() ?? "");
     montarImportacaoComPonte(caixaImportacao, ponteDoCampo, () => cfg, async (c) => {
       Object.assign(cfg, resumirHudAtual(c));
       await salvarConfig(cfg);

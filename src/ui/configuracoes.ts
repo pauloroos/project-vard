@@ -383,6 +383,7 @@ export class Configuracoes {
         <section data-aba="sistema">
           ${this.campo("ponte_url", "Ponte do Vard (opcional; vazio desliga)", c.ponte_url)}
           <div id="cfg-sistema"></div>
+          <div id="cfg-telegram"></div>
           <div id="cfg-importacao"></div>
         </section>
         <section data-aba="reuniao"><div id="cfg-reuniao"></div></section>

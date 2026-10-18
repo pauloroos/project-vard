@@ -1,7 +1,7 @@
 """Testes do acessor de credenciais (cofre generalizado).
 
 Prova a validação de alvo, recusa de valores inválidos e isolamento
-entre entradas sem depender do cofre Windows real (mock do subprocess).
+entre entradas sem depender do cofre Windows real (dublê do CredWriteW/CredReadW).
 """
 from __future__ import annotations
 
@@ -62,7 +62,7 @@ class TestValidacaoValor:
 
 
 class TestDuasEntradasIsoladas:
-    @patch("vard.credenciais._invocar_comando")
+    @patch("vard.credenciais._gravar_windows")
     def test_entradas_isoladas(self, mock_invocar):
         """Duas entradas diferentes não interferem entre si."""
         mock_invocar.return_value = ""
@@ -70,8 +70,8 @@ class TestDuasEntradasIsoladas:
         credenciais.gravar("provedor", "b", "vb")
         # Verifica que ambas foram chamadas com alvos distintos
         chamadas = [c.args for c in mock_invocar.call_args_list]
-        assert ("gravar", "vard:provedor:a", "va") in chamadas
-        assert ("gravar", "vard:provedor:b", "vb") in chamadas
+        assert ("vard:provedor:a", "va") in chamadas
+        assert ("vard:provedor:b", "vb") in chamadas
 
 
 class TestReferenciaInvalidaRecusada:
@@ -87,7 +87,7 @@ class TestReferenciaInvalidaRecusada:
 
 
 class TestCofreIndisponivelSemValorNoErro:
-    @patch("vard.credenciais._invocar_comando")
+    @patch("vard.credenciais._gravar_windows")
     def test_erro_nao_vaza_detalhes(self, mock_invocar):
         mock_invocar.side_effect = RuntimeError("falha no cofre (detalhes suprimidos)")
         with pytest.raises(RuntimeError, match="cofre"):
@@ -109,7 +109,7 @@ class TestMigracaoFalhaPreservaOriginal:
     confirma leitura antes de remover do JSON). Aqui testamos que o
     Python propaga a exceção sem silenciar.
     """
-    @patch("vard.credenciais._invocar_comando")
+    @patch("vard.credenciais._gravar_windows")
     def test_falha_propaga_excecao(self, mock_invocar):
         mock_invocar.side_effect = RuntimeError("falha no cofre")
         with pytest.raises(RuntimeError):
@@ -138,3 +138,17 @@ class TestLeituraDiretaDoCofreWindows:
     def test_referencia_com_tipo_e_id(self):
         assert credenciais.separar_referencia("provedor:lm1", "provedor") == ("provedor", "lm1")
         assert credenciais.separar_referencia("lm1", "provedor") == ("provedor", "lm1")
+
+
+class TestCofreFalsoDosTestes:
+    """O conftest troca o cofre do Windows por um dicionário: nenhum teste lê ou grava o cofre real."""
+
+    def test_gravar_ler_e_apagar_no_dublê(self, cofre_falso):
+        credenciais.gravar("canal", "telegram", "123:ficticio")
+        assert cofre_falso == {"vard:canal:telegram": "123:ficticio"}
+        assert credenciais.ler_para_uso_interno("canal", "telegram") == "123:ficticio"
+        credenciais.apagar("canal", "telegram")
+        assert credenciais.existe("canal", "telegram") is False
+
+    def test_tipo_canal_aceito(self):
+        assert credenciais._validar_alvo("canal", "telegram") == "vard:canal:telegram"

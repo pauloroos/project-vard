@@ -137,6 +137,13 @@ export interface ResultadoReversaoImportacao {
   hud_anterior?: Record<string, unknown> | null;
 }
 
+/** O que o núcleo achou do Telegram no OpenJarvis (nunca o token). */
+export interface TelegramDoOpenJarvis { disponivel: boolean; vard_configurado: boolean; ja_migrado: boolean; pode_trazer: boolean; fonte?: string; chats?: number; ligado?: boolean }
+/** GET /telegram: estado da seção Telegram; `token_configurado` diz só se há token guardado. */
+export interface EstadoTelegram { ligado: boolean; chat_permitido: string; token_configurado?: boolean; rodando?: boolean; openjarvis?: TelegramDoOpenJarvis }
+/** POST /telegram/trazer_openjarvis: `motivo` ja_configurado pede confirmação para substituir. */
+export interface ResultadoTrazerTelegram { ok: boolean; mudou?: boolean; motivo?: string; detalhe?: string; aviso?: string; chats?: number; ligado?: boolean; rodando?: boolean }
+
 export class Ponte {
   private base: string;
   constructor(base: string) { this.base = base.replace(/\/+$/, ""); }
@@ -499,4 +506,33 @@ export class Ponte {
       });
     } catch { return null; }
   }
+
+  /** JSON do núcleo; rede fora, HTTP de erro ou corpo inválido viram ErroPonte. */
+  private async json<T>(rota: string, corpo?: unknown, ms = 15000): Promise<T> {
+    if (!this.base) throw new ErroPonte("sem_ponte");
+    return comTimeout(ms, async (signal) => {
+      let r: Response;
+      try {
+        r = await fetch(`${this.base}${rota}`, corpo === undefined ? { signal } : {
+          method: "POST", headers: { "Content-Type": "application/json" }, signal, body: JSON.stringify(corpo),
+        });
+      } catch { throw new ErroPonte("rede"); }
+      const j = await r.json().catch(() => null);
+      if (!r.ok || !j || typeof j !== "object") throw new ErroPonte(String((j as { erro?: unknown } | null)?.erro ?? "http"));
+      return j as T;
+    });
+  }
+
+  /** Estado do Telegram do Vard e o que há para trazer do OpenJarvis. */
+  telegramEstado(): Promise<EstadoTelegram> { return this.json<EstadoTelegram>("/telegram"); }
+  /** Liga/desliga e define o chat permitido; o núcleo religa o poller na hora. */
+  telegramConfigurar(ligado: boolean, chat: string): Promise<{ ok: boolean; rodando?: boolean }> { return this.json("/telegram/configurar", { ligado, chat }); }
+  /** chat_id do último /start mandado ao bot. */
+  telegramDescobrirChat(): Promise<{ ok: boolean; chat_id?: string; detalhe?: string }> { return this.json("/telegram/descobrir_chat"); }
+  /** Mensagem de teste ao chat permitido. */
+  telegramTestar(): Promise<{ ok: boolean; detalhe?: string }> { return this.json("/telegram/testar", {}); }
+  /** Depois de gravar o token no cofre: o núcleo relê a configuração. */
+  telegramSincronizar(): Promise<{ ok: boolean; rodando?: boolean }> { return this.json("/telegram/sincronizar", {}); }
+  /** Traz o Telegram do OpenJarvis (o token vai do núcleo direto ao cofre; não passa pela tela). */
+  telegramTrazerOpenJarvis(substituir = false): Promise<ResultadoTrazerTelegram> { return this.json("/telegram/trazer_openjarvis", { substituir }, 30000); }
 }

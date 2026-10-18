@@ -1,16 +1,16 @@
-"""Acessor de credenciais via cofre Windows (Rust/Tauri).
+"""Acessor de credenciais do cofre do Windows (o mesmo que o app grava em Rust).
 
-Este módulo chama os comandos Tauri do cofre generalizado sem expor valores.
+Lê e grava direto no Gerenciador de Credenciais (CredReadW/CredWriteW), no formato do
+keyring do app: alvo `vard:<tipo>:<id>`, credencial genérica, segredo em UTF-16LE.
 Uso exclusivo pelo núcleo; o webview nunca recebe o valor da credencial.
 Nada aqui imprime segredos.
 """
 from __future__ import annotations
 
-import subprocess
 import sys
-from pathlib import Path
 
-_TIPOS_VALIDOS = {"provedor", "voz", "mcp"}
+#: Mesmos tipos do cofre do app (src-tauri/src/cofre.rs); canal = Telegram e afins.
+_TIPOS_VALIDOS = {"provedor", "voz", "mcp", "canal"}
 
 
 def _validar_alvo(tipo: str, id_: str) -> str:
@@ -23,43 +23,6 @@ def _validar_alvo(tipo: str, id_: str) -> str:
     return f"vard:{tipo}:{id_}"
 
 
-def _binario_tauri() -> Path:
-    """Caminho do binário Tauri em dev ou instalado."""
-    # Em dev: target/debug/vard.exe ou target/release/vard.exe
-    raiz = Path(__file__).resolve().parents[2]  # nucleo/vard/ → raiz do projeto
-    for perfil in ("debug", "release"):
-        candidato = raiz / "src-tauri" / "target" / perfil / "vard.exe"
-        if candidato.exists():
-            return candidato
-    # Instalado: ao lado do executável principal
-    exe = Path(sys.executable).resolve()
-    candidato = exe.parent / "vard.exe"
-    if candidato.exists():
-        return candidato
-    raise FileNotFoundError("binário Tauri não encontrado para acessar o cofre")
-
-
-def _invocar_comando(comando: str, *args: str) -> str:
-    """Chama um comando Tauri via CLI interna (placeholder).
-
-    Na implementação real, isso será feito via IPC do Tauri ou chamada
-    direta à DLL. Por enquanto, usamos subprocess como prova de conceito
-    para validação de integração.
-    """
-    binario = _binario_tauri()
-    cmd = [str(binario), "--cofre", comando, *args]
-    resultado = subprocess.run(
-        cmd, capture_output=True, text=True, timeout=10, creationflags=0x08000000
-    )
-    if resultado.returncode != 0:
-        stderr = resultado.stderr.strip()
-        # Não vazar detalhes sensíveis do erro
-        if any(kw in stderr.lower() for kw in ("key", "token", "password", "secret")):
-            raise RuntimeError("falha no cofre (detalhes suprimidos)")
-        raise RuntimeError(stderr or "falha desconhecida no cofre")
-    return resultado.stdout.strip()
-
-
 def _decodificar(blob: bytes) -> str:
     """O keyring do app grava o segredo em UTF-16; aceita UTF-8 também (gravado por outra ferramenta)."""
     if len(blob) % 2 == 0 and blob[1:2] == b"\x00":
@@ -70,10 +33,13 @@ def _decodificar(blob: bytes) -> str:
     return blob.decode("utf-8", errors="strict")
 
 
-def _ler_windows(alvo: str) -> str | None:
-    """Lê uma credencial genérica do Gerenciador de Credenciais (o mesmo alvo que o app grava)."""
-    if sys.platform != "win32":
-        return None
+_CRED_TYPE_GENERIC = 1
+_CRED_PERSIST_ENTERPRISE = 3     # o mesmo do keyring do app
+_COMENTARIO = "keyring v3.6.3"   # o app grava com este comentário; só informativo
+
+
+def _api():
+    """advapi32 e a estrutura CREDENTIALW; só no Windows."""
     import ctypes
     from ctypes import wintypes
 
@@ -86,9 +52,16 @@ def _ler_windows(alvo: str) -> str | None:
             ("TargetAlias", wintypes.LPWSTR), ("UserName", wintypes.LPWSTR),
         ]
 
-    advapi = ctypes.WinDLL("advapi32", use_last_error=True)
+    return ctypes, ctypes.WinDLL("advapi32", use_last_error=True), _Credencial
+
+
+def _ler_windows(alvo: str) -> str | None:
+    """Lê uma credencial genérica do Gerenciador de Credenciais (o mesmo alvo que o app grava)."""
+    if sys.platform != "win32":
+        return None
+    ctypes, advapi, _Credencial = _api()
     ponteiro = ctypes.POINTER(_Credencial)()
-    if not advapi.CredReadW(alvo, 1, 0, ctypes.byref(ponteiro)):   # 1 = CRED_TYPE_GENERIC
+    if not advapi.CredReadW(alvo, _CRED_TYPE_GENERIC, 0, ctypes.byref(ponteiro)):
         return None
     try:
         cred = ponteiro.contents
@@ -98,6 +71,37 @@ def _ler_windows(alvo: str) -> str | None:
         return None
     finally:
         advapi.CredFree(ponteiro)
+
+
+def _gravar_windows(alvo: str, valor: str) -> None:
+    """Grava como o keyring do app (UTF-16LE, usuário = alvo), para o app ler o mesmo valor."""
+    if sys.platform != "win32":
+        raise RuntimeError("cofre do Windows indisponível")
+    ctypes, advapi, _Credencial = _api()
+    dados = valor.encode("utf-16-le")
+    blob = (ctypes.c_ubyte * len(dados)).from_buffer_copy(dados)
+    cred = _Credencial()
+    cred.Type = _CRED_TYPE_GENERIC
+    cred.TargetName = alvo
+    cred.Comment = _COMENTARIO
+    cred.CredentialBlobSize = len(dados)
+    cred.CredentialBlob = ctypes.cast(blob, ctypes.POINTER(ctypes.c_ubyte))
+    cred.Persist = _CRED_PERSIST_ENTERPRISE
+    cred.TargetAlias = ""
+    cred.UserName = alvo
+    try:
+        if not advapi.CredWriteW(ctypes.byref(cred), 0):
+            raise RuntimeError("não foi possível gravar no cofre")   # nunca o valor nem o erro bruto
+    finally:
+        ctypes.memset(blob, 0, len(dados))
+
+
+def _apagar_windows(alvo: str) -> None:
+    if sys.platform != "win32":
+        raise RuntimeError("cofre do Windows indisponível")
+    ctypes, advapi, _ = _api()
+    if not advapi.CredDeleteW(alvo, _CRED_TYPE_GENERIC, 0) and ctypes.get_last_error() != 1168:   # 1168 = não existe
+        raise RuntimeError("não foi possível apagar do cofre")
 
 
 def separar_referencia(ref: str, tipo_padrao: str) -> tuple[str, str]:
@@ -122,13 +126,12 @@ def gravar(tipo: str, id_: str, valor: str) -> None:
         raise ValueError("valor deve ter de 1 a 4096 caracteres")
     if any(ord(c) < 32 for c in valor):
         raise ValueError("valor não pode conter caracteres de controle")
-    _invocar_comando("gravar", alvo, valor)
+    _gravar_windows(alvo, valor)
 
 
 def apagar(tipo: str, id_: str) -> None:
-    """Remove uma credencial do cofre."""
-    alvo = _validar_alvo(tipo, id_)
-    _invocar_comando("apagar", alvo)
+    """Remove uma credencial do cofre (ausente não é erro)."""
+    _apagar_windows(_validar_alvo(tipo, id_))
 
 
 def ler_para_uso_interno(tipo: str, id_: str) -> str | None:
