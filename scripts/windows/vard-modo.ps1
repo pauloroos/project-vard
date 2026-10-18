@@ -266,6 +266,8 @@ function PublicarNaCaixa($verbo) {
 }
 
 # ---------------------------------------------------------------- verbos
+# supervisor:true no instalacao.json = app único: a bandeja é a do vard.exe, mesmo sem app.json na caixa IPC.
+function BandejaNativa() { return [bool]($Inst -and $Inst.supervisor -eq $true) }
 function ModoAtual() {
   if (Test-Path $Estado) { try { return (Get-Content $Estado -Raw -Encoding UTF8 | ConvertFrom-Json).modo } catch {} }
   return "desconhecido"
@@ -287,7 +289,9 @@ function AbrirAba() {
 function Iniciar() {
   GravarEstado "ligando" "subindo serviços"
   # Bandeja primeiro: se algo abaixo falhar (logon sem LM Studio, variável faltando), o erro aparece nela.
-  Subir "bandeja" "uv" "run --no-sync python `"$Bandeja`"" $Nucleo
+  # Com supervisor (app único) a bandeja é a nativa do vard.exe: a antiga (bandeja.py) nunca sobe.
+  if (BandejaNativa) { Log "bandeja nativa do vard.exe (supervisor): bandeja.py não sobe" }
+  else { Subir "bandeja" "uv" "run --no-sync python `"$Bandeja`"" $Nucleo }
   if (-not $VariaveisOk) {
     $faltam = ($Obrigatorias | Where-Object { -not $Vars[$_] }) -join ", "
     Falhar "faltam variáveis de usuário (rode scripts\windows\aplicar-config.ps1): $faltam"
