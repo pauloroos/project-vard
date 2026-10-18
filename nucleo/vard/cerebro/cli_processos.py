@@ -264,9 +264,14 @@ def _preparar_pasta_sessao(
     (pasta / "AGENTS.md").write_text(persona, encoding="utf-8")
 
     # Cada sessão recebe a lista vigente; arquivos antigos também são atualizados.
+    # Os MCPs habilitados na aba Ferramentas (MCP) entram depois dos locais, sem substituí-los e sem segredo.
+    from vard.mcp_usuario import servidores_do_usuario
     from vard.segredos import servidores_locais
+    servidores = servidores_locais()
+    for nome, servidor in servidores_do_usuario().items():
+        servidores.setdefault(nome, servidor)
     mcp_json = pasta / "mcp.json"
-    mcp_json.write_text(json.dumps({"mcpServers": servidores_locais()}, ensure_ascii=False), encoding="utf-8")
+    mcp_json.write_text(json.dumps({"mcpServers": servidores}, ensure_ascii=False), encoding="utf-8")
 
     return pasta
 
