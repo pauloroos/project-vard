@@ -57,7 +57,7 @@
       "nome": "Kokoro (motor de voz leve, CPU ou GPU)",
       "versao": "1.0.0",
       "tipo": "motor",
-      "descricao": "Kokoro-82M v1.0 em ONNX (int8) para o serviço de voz do Vard, sem OpenJarvis. Roda na CPU; na GPU com onnxruntime-gpu. Vozes pt-BR Dora, Alex e Santa. Requer o extra 'kokoro' do serviço de voz (kokoro-onnx).",
+      "descricao": "Kokoro-82M v1.0 em ONNX (int8) para o serviço de voz do Vard, sem OpenJarvis. Roda na CPU; na GPU com onnxruntime-gpu. Vozes pt-BR Dora, Alex e Santa. O instalador também instala a biblioteca kokoro-onnx no ambiente do serviço de voz.",
       "url": "https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/kokoro-v1.0.int8.onnx",
       "sha256": "6e742170d309016e5891a994e1ce1559c702a2ccd0075e67ef7157974f6406cb",
       "bytes_download": 92361271,

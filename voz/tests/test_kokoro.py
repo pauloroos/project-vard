@@ -327,3 +327,19 @@ def test_manifesto_do_instalador_traz_os_arquivos_que_o_motor_procura():
     assert [e["nome"] for e in pacote["arquivos_extras"]] == [kokoro.ARQUIVO_VOZES]
     assert all(len(e["sha256"]) == 64 for e in pacote["arquivos_extras"])
     assert any(d.startswith("kokoro-onnx") for d in pacote["dependencias"])
+
+
+def test_biblioteca_instalada_reavalia_a_cada_consulta(monkeypatch):
+    """Instalada pelo instalador de vozes com o serviço no ar: a próxima consulta já enxerga (sem cache da subida)."""
+    import importlib
+    import importlib.util
+
+    kokoro = _importar_kokoro()
+    invalidacoes = []
+    presente = {"valor": False}
+    monkeypatch.setattr(importlib, "invalidate_caches", lambda: invalidacoes.append(1))
+    monkeypatch.setattr(importlib.util, "find_spec", lambda nome: object() if presente["valor"] and nome == "kokoro_onnx" else None)
+    assert kokoro.biblioteca_instalada() is False
+    presente["valor"] = True
+    assert kokoro.biblioteca_instalada() is True
+    assert len(invalidacoes) == 2

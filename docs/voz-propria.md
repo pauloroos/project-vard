@@ -25,7 +25,17 @@ O Kokoro é um motor do serviço de voz do Vard, como XTTS, Edge e Piper; não p
   Apache-2.0, das releases do kokoro-onnx. Vêm do pacote opcional `kokoro` do instalador de vozes
   (`config/pacotes/vozes.json`, hash SHA-256 conferido); nunca no teste nem na carga do serviço.
 - Na aba Voz, o card **Kokoro** mostra **Instalar** quando falta o pacote: confirmar ("Instalar e usar") baixa pelo
-  instalador e já deixa uma voz Kokoro escolhida. As vozes da lista vêm do `/vozes` do serviço (`por_motor.kokoro`).
+  instalador, instala as bibliotecas e já deixa uma voz Kokoro escolhida.
+
+## Bibliotecas dos pacotes de voz
+
+As `dependencias` de um pacote do manifesto que não são ids de outro pacote (ex.: `kokoro-onnx==0.6.1`; no XTTS,
+`coqui-tts` e `torch`) são instaladas pelo núcleo no Python do serviço de voz depois de baixar e conferir os arquivos,
+antes de marcar o pacote como instalado. A tela mostra **Instalando bibliotecas…**; se falhar, o pacote não fica
+instalado e o aviso traz o motivo. O Python do serviço de voz é o do app: `servicos.voz_python` do
+`instalacao.json`, senão `<raiz_codigo>/voz/.venv/Scripts/python.exe`. Com `uv` no PATH usa
+`uv pip install --python <python da voz>`; sem ele, `<python da voz> -m pip install`. O `onnxruntime-gpu` não é
+instalado sozinho: o Kokoro usa a CPU até ele ser instalado à mão. As vozes da lista vêm do `/vozes` do serviço (`por_motor.kokoro`).
 - Vozes pt-BR: `pf_dora`, `pm_alex`, `pm_santa`; a escolha vai no campo `voz` do `/falar`, como as outras.
 - Config antiga com `voz_provedor = "openjarvis"` e uma voz Kokoro (por exemplo `pm_alex`): o HUD pede a mesma voz ao
   serviço de voz. Com o Kokoro instalado lá, ela sai dele; sem ele, o serviço recusa a frase e ela segue a reserva

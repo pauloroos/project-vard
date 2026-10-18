@@ -20,7 +20,8 @@ Projeto uv separado (Python 3.12, torch cu128) em `voz/.venv`; o projeto princip
   vozes baixa no pacote `kokoro` (`kokoro-v1.0.int8.onnx`, ~88 MB, e `voices-v1.0.bin`, ~27 MB, hash conferido) para
   `<VARD_DADOS ou %LOCALAPPDATA%\rdl-vard>\pacotes\ativo\kokoro` (outra pasta: `VARD_KOKORO_DIR`). Nada baixa no
   teste nem na carga: sem biblioteca ou arquivos o motor fica fora.
-  - Subir com ele: `uv --directory voz run --extra kokoro python -m vard_voz`.
+  - "Instalar e usar" na aba Voz faz tudo: baixa os arquivos e instala `kokoro-onnx` no Python do serviço de voz;
+    o serviço enxerga a biblioteca sem reiniciar. Em dev: `uv --directory voz run --extra kokoro python -m vard_voz`.
   - Vozes pt-BR `pf_dora`, `pm_alex`, `pm_santa` (e as en-US/en-GB de `VOZES_KOKORO`); o idioma dos fonemas segue a
     primeira letra do ID (`p` pt-br, `a` en-us, `b` en-gb). Velocidade limitada a 0,5–2.
   - CPU por padrão; com `VARD_KOKORO_DEVICE` (ou `VARD_VOZ_DEVICE`) = `cuda` e o `onnxruntime-gpu` no ambiente usa

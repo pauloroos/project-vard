@@ -17,6 +17,7 @@ Contrato (mesma interface pública do Motor XTTS):
 """
 from __future__ import annotations
 
+import importlib
 import importlib.util
 import io
 import logging
@@ -86,7 +87,9 @@ def arquivos_modelo(pasta: Path) -> tuple[Path, Path] | None:
 
 
 def biblioteca_instalada() -> bool:
-    """kokoro-onnx presente no ambiente do serviço de voz (sem importar)."""
+    """kokoro-onnx presente no ambiente do serviço de voz (sem importar). Reavalia a cada consulta: o instalador
+    de vozes pode instalar a biblioteca com o serviço no ar, e o import tardio de carregar() a pega sem reiniciar."""
+    importlib.invalidate_caches()
     return importlib.util.find_spec("kokoro_onnx") is not None
 
 
