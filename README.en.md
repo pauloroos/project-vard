@@ -22,7 +22,7 @@ Independent project, not affiliated with OpenJarvis or Stanford.
 - Full screen ("sala") on a monitor of your choice: a large vortex, what you said, the answer in large type and a clock.
 - Pick the model among the ones OpenJarvis exposes.
 - Conversation mode: after an answer it keeps listening without the wake word for 20 s (adjustable); "pode parar de me ouvir" or "vou entrar em reunião" mute the microphone until you turn it back on.
-- Choice of voice: your own voice (XTTS, with the service's voice list), OpenJarvis' (Kokoro) or, if you want and with your own key, ElevenLabs and Gemini TTS; a Ouvir button plays a sample sentence.
+- Choice of voice: the Vard voice service (XTTS, Kokoro, Edge or Piper, with the service's voice list; Kokoro and XTTS install from the Voz tab, no OpenJarvis needed) or, if you want and with your own key, ElevenLabs and Gemini TTS; a Ouvir button plays a sample sentence.
 - Invisible mode: the widget disappears and only shows while a conversation lasts.
 - The button bar opens on the side away from the monitor edge (above when the widget is at the bottom).
 - Atualização tab: checks GitHub for the newest release only when you ask and installs from there.
@@ -181,7 +181,7 @@ nothing changes on screen. The full contract is in [docs/voz-propria.md](docs/vo
 
 ### Other voice providers
 
-In the Voz tab the provider can be `propria`, `openjarvis` (Kokoro, OpenJarvis' voice), `elevenlabs` or `gemini`. The last two are optional and in the cloud: they are only called when chosen as the provider and a key is set (password fields; the key never goes to the log), and the text of the spoken lines goes to the vendor. For ElevenLabs also set the voice id; Gemini's default voice is `Kore` and it ignores the speed. The **Ouvir** button plays a sample sentence with the chosen provider.
+In the Voz tab the provider can be `propria` (the Vard voice service: XTTS, Kokoro, Edge or Piper), `elevenlabs` or `gemini`; `openjarvis` only remains in old configs (with a Kokoro voice, the same voice now comes from the voice service's Kokoro, see [docs/voz-propria.md](docs/voz-propria.md)). The last two are optional and in the cloud: they are only called when chosen as the provider and a key is set (password fields; the key never goes to the log), and the text of the spoken lines goes to the vendor. For ElevenLabs also set the voice id; Gemini's default voice is `Kore` and it ignores the speed. The **Ouvir** button plays a sample sentence with the chosen provider.
 
 With a cloud provider on, the fixed phrases ("Voltei." and the others) are synthesized on it once at startup to warm the cache; that sends those short texts to the vendor. With `propria` or `openjarvis` nothing leaves your machine.
 
@@ -203,7 +203,8 @@ Vard talks to assistants through connectors. Today there is only one, OpenJarvis
 
 ## Core (bridge, MCPs and services)
 
-The Python core, the optional voice and meeting services and the Windows scripts live in this repository (`nucleo/`, `voz/`, `reuniao/`, `scripts/`). User configuration and data stay outside it (`%LOCALAPPDATA%dl-vard`, or `VARD_CONFIG` and `VARD_DADOS`). Layout, tests and the switch-over with rollback are described in [docs/fusao.md](docs/fusao.md) (in Portuguese).
+The Python core, the optional voice and meeting services and the Windows scripts live in this repository (`nucleo/`, `voz/`, `reuniao/`, `scripts/`). User configuration and data stay outside it (`%LOCALAPPDATA%
+dl-vard`, or `VARD_CONFIG` and `VARD_DADOS`). Layout, tests and the switch-over with rollback are described in [docs/fusao.md](docs/fusao.md) (in Portuguese).
 
 ## Development
 

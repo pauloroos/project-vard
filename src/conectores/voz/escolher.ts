@@ -5,19 +5,33 @@ import { ElevenLabs } from "../nuvem/elevenlabs";
 import { Gemini } from "../nuvem/gemini";
 import { OpenJarvis } from "../openjarvis/cliente";
 import { fluxoParaWav } from "../../audio/wav";
+import { VOZES_KOKORO } from "./kokoro";
 
 export const PROVEDORES_VOZ = ["propria", "openjarvis", "elevenlabs", "gemini"] as const;
 export type ProvedorVoz = (typeof PROVEDORES_VOZ)[number];
 export const FRASE_AMOSTRA = "Olá, eu sou a Vard. Esta é a minha voz.";
 
 type Fetch = (url: string, init: RequestInit) => Promise<Response>;
-type ConfigVoz = Pick<Config, "voz_provedor" | "voz_url" | "voz_motor" | "voz_propria" | "elevenlabs_chave" | "elevenlabs_voz" | "gemini_chave" | "gemini_voz">;
+type ConfigVoz = Pick<Config, "voz_provedor" | "voz_url" | "voz_motor" | "voz_propria" | "elevenlabs_chave" | "elevenlabs_voz" | "gemini_chave" | "gemini_voz">
+  & { /** Voz da config antiga com provedor `openjarvis` (um ID Kokoro, como `pm_alex`). */ voz?: string };
 
-/** A fonte de voz da config; null = só a voz do OpenJarvis (Kokoro). Nuvem sem chave vira null com aviso. Nunca faz rede. */
+/** ID Kokoro conhecido (config/vozes.json), ou null. */
+export function idKokoro(voz: string | undefined): string | null {
+  const v = (voz ?? "").trim();
+  return VOZES_KOKORO.some((k) => k.id === v) ? v : null;
+}
+
+/** A fonte de voz da config; null = só a voz do OpenJarvis. Nuvem sem chave vira null com aviso. Nunca faz rede.
+ *  Config antiga `openjarvis` com voz Kokoro: a mesma voz sai do Kokoro do serviço de voz do Vard; sem ele lá, o
+ *  serviço recusa a frase e ela segue a reserva de sempre (a voz de reserva ou o OpenJarvis, se estiver ligado). */
 export function criarFonteDeVoz(c: ConfigVoz, buscar?: Fetch): FonteDeVoz | null {
   const op = buscar ? { fetch: buscar } : {};
   switch (c.voz_provedor) {
     case "propria": return c.voz_url.trim() ? new Voz(c.voz_url.trim(), { ...op, voz: c.voz_propria }) : null;
+    case "openjarvis": {
+      const kokoro = idKokoro(c.voz);
+      return kokoro && c.voz_url.trim() ? new Voz(c.voz_url.trim(), { ...op, voz: kokoro }) : null;
+    }
     case "elevenlabs":
       if (!c.elevenlabs_chave.trim() || !c.elevenlabs_voz.trim()) { console.warn("ElevenLabs sem chave ou voz: uso a voz do OpenJarvis"); return null; }
       return new ElevenLabs(c.elevenlabs_chave.trim(), c.elevenlabs_voz.trim(), op);

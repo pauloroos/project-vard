@@ -4,6 +4,8 @@
  * Reserva automática: se a principal falhar, o Vard fala pela reserva configurada.
  * 0.9.7: escolher voz de nuvem sem chave abre o modal da chave na hora; escolher motor que falta
  * pergunta se instala, instala pelo instalador de pacotes e já deixa a voz escolhida.
+ * 0.9.7: o Kokoro é motor do serviço de voz do Vard (pacote "kokoro" do instalador), sem OpenJarvis; a lista de vozes
+ * vem do serviço. Config antiga com Kokoro pelo OpenJarvis passa ao Kokoro do serviço quando ele está instalado.
  */
 import type { Config } from "../config/config";
 import { PAINEIS_PADRAO, gravarPaineis, lerPaineis, type PaineisConfig } from "../config/paineis";
@@ -11,7 +13,7 @@ import type { OpenJarvis } from "../conectores/openjarvis/cliente";
 import { ElevenLabs } from "../conectores/nuvem/elevenlabs";
 import { VOZES_GEMINI } from "../conectores/nuvem/gemini";
 import { Voz } from "../conectores/voz/cliente";
-import { FRASE_AMOSTRA, type ProvedorVoz } from "../conectores/voz/escolher";
+import { FRASE_AMOSTRA, idKokoro, type ProvedorVoz } from "../conectores/voz/escolher";
 import { VOZES_KOKORO, VOZES_EDGE_PT_BR, VOZES_PIPER_PT_BR } from "../conectores/voz/kokoro";
 import { listarDispositivos, definirPreferencia, obterPreferencia } from "../audio/dispositivos";
 import { abrirModalVoz, motorDoTipo, pedirChaveDeVoz, vozesCadastradas, type CamposVozCadastrada, type VozCadastrada } from "./paineis-vozes";
@@ -56,7 +58,10 @@ const servicoComChave = (provedor: string): ServicoComChave | null =>
   Object.prototype.hasOwnProperty.call(CHAVES_NUVEM, provedor) ? provedor as ServicoComChave : null;
 
 /** Motores que vêm de pacote opcional do instalador (manifesto do núcleo). */
-const PACOTE_DO_MOTOR: Record<string, string> = { xtts: "xtts-v2" };
+const PACOTE_DO_MOTOR: Record<string, string> = { xtts: "xtts-v2", kokoro: "kokoro" };
+
+/** Rótulo legível de uma voz Kokoro (config/vozes.json); ID desconhecido aparece como veio do serviço. */
+const rotuloKokoro = (id: string) => VOZES_KOKORO.find((v) => v.id === id)?.rotulo ?? id;
 
 /** Instala pelo instalador de pacotes; true só quando terminou instalado. */
 export type InstalarPacote = (id: string, op: { licencaAceita: boolean }) => boolean | void | Promise<boolean | void>;
@@ -138,6 +143,8 @@ export class AbaVoz {
   private estado: EstadoServico = "fora";
   private motores = { xtts: false, kokoro: false, edge: false, piper: false };
   private vozesServico: string[] = [];
+  /** De que motor é cada voz, quando o serviço informa (`por_motor` do /vozes). */
+  private vozesPorMotor: Record<string, string[]> = {};
   private vozesElevenLabs: { id: string; nome: string }[] = [];
   private aviso!: HTMLElement;
   private avisoDetalhe!: HTMLElement;
@@ -224,11 +231,14 @@ export class AbaVoz {
     this.descreverPacote = descrever;
   }
 
-  definirPacoteXttsInstalado(instalado: boolean) {
-    if (instalado) this.pacotesInstalados.add("xtts-v2");
-    else this.pacotesInstalados.delete("xtts-v2");
+  /** Pacote do instalador já instalado (o card não oferece instalar de novo). */
+  definirPacoteInstalado(id: string, instalado: boolean) {
+    if (instalado) this.pacotesInstalados.add(id);
+    else this.pacotesInstalados.delete(id);
     this.desenharMotores();
   }
+
+  definirPacoteXttsInstalado(instalado: boolean) { this.definirPacoteInstalado("xtts-v2", instalado); }
 
   private motorAtual(): string {
     if (this.cfg.voz_provedor === "openjarvis") return "kokoro";
@@ -254,7 +264,7 @@ export class AbaVoz {
       btn.dataset.motor = id;
       btn.setAttribute("aria-pressed", String(id === atual));
       const local = id in this.motores;
-      const disponivel = id === "kokoro" || (local && this.motores[id as keyof typeof this.motores]);
+      const disponivel = local && this.motores[id as keyof typeof this.motores];
       const servico = servicoComChave(id);
       const semChave = servico !== null && !this.temChave(servico);
       const cadastrada = vozesCadastradas(this.cfgPaineis).some((p) => motorDoTipo(p.tipo).toLowerCase() === id);
@@ -264,7 +274,7 @@ export class AbaVoz {
       const situacao = semChave ? "Falta a chave · cadastrar" : falta
         ? this.instalando === id ? "Instalando… veja o progresso abaixo" : faltaInstalar ? "Instalar" : "Instalado · ligue o serviço de voz"
         : id === "fish" && !cadastrada ? "Cadastrar voz"
-        : local ? id === "kokoro" && !this.motores.kokoro ? "Via OpenJarvis" : disponivel ? "Disponível · serviço de voz" : "Indisponível · vem do serviço de voz"
+        : local ? disponivel ? "Disponível · serviço de voz" : "Indisponível · vem do serviço de voz"
         : "Nuvem";
       const titulo = document.createElement("strong");
       titulo.textContent = nome;
@@ -406,6 +416,7 @@ export class AbaVoz {
       this.estado = "desligado";
       this.motores = { xtts: false, kokoro: false, edge: false, piper: false };
       this.vozesServico = [];
+      this.vozesPorMotor = {};
     } else {
       const base = url.replace(/\/+$/, "");
       const saude = await buscarJson<{ xtts?: unknown; xtts_carregado?: unknown; kokoro?: unknown; edge?: unknown; piper?: unknown }>(`${base}/saude`, 3000);
@@ -413,14 +424,20 @@ export class AbaVoz {
         this.estado = "fora";
         this.motores = { xtts: false, kokoro: false, edge: false, piper: false };
         this.vozesServico = [];
+        this.vozesPorMotor = {};
       } else {
         this.estado = "no-ar";
         this.motores = { xtts: saude.xtts === true, kokoro: saude.kokoro === true, edge: saude.edge === true, piper: saude.piper === true };
         this.motorAutomatico = saude.xtts_carregado === true ? "xtts" : this.motores.kokoro ? "kokoro" : this.motores.edge ? "edge" : this.motores.piper ? "piper" : "xtts";
         // Lista de vozes falhando não pode esvaziar a tela: sem ela, as listas ficam com o que não depende do serviço.
-        try { this.vozesServico = (await new Voz(url).vozes()).vozes; } catch { this.vozesServico = []; }
+        try {
+          const lista = await new Voz(url).vozes();
+          this.vozesServico = lista.vozes;
+          this.vozesPorMotor = lista.porMotor ?? {};
+        } catch { this.vozesServico = []; this.vozesPorMotor = {}; }
       }
     }
+    if (this.motores.kokoro) this.migrarKokoroDoOpenJarvis();
     try { this.cfgPaineis = await lerPaineis(); } catch { this.cfgPaineis = paineisEmBranco(); }
     this.cfg.voz_url = this.vozUrl();
     this.atualizarAviso();
@@ -428,6 +445,32 @@ export class AbaVoz {
     this.desenharServicos();
     this.desenharCadastradas();
     this.desenharMotores();
+  }
+
+  /** Config antiga com Kokoro pelo OpenJarvis: com o Kokoro no serviço de voz, a mesma voz passa a sair dele. */
+  private migrarKokoroDoOpenJarvis() {
+    const principal = this.cfg.voz_provedor === "openjarvis" ? idKokoro(this.cfg.voz) : null;
+    if (principal) {
+      this.cfg.voz_provedor = "propria";
+      this.cfg.voz_motor = "kokoro";
+      this.cfg.voz_propria = principal;
+    }
+    const reserva = this.cfg.voz_reserva_provedor === "openjarvis" ? idKokoro(this.cfg.voz_reserva_id) : null;
+    if (reserva) {
+      this.cfg.voz_reserva_provedor = "propria";
+      this.cfg.voz_reserva_motor = "kokoro";
+      this.cfg.voz_reserva_id = reserva;
+    }
+    if (principal || reserva) this.deps.dizer("O Kokoro agora vem do serviço de voz do Vard, sem OpenJarvis. Salve para aplicar.");
+  }
+
+  /** Vozes Kokoro que o serviço tem: o `por_motor` dele; serviço antigo, as conhecidas que ele lista (ou todas). */
+  private vozesKokoro(): string[] {
+    const doServico = this.vozesPorMotor.kokoro;
+    if (doServico) return doServico;
+    const conhecidas = VOZES_KOKORO.map((v) => v.id);
+    const listadas = conhecidas.filter((id) => this.vozesServico.includes(id));
+    return listadas.length ? listadas : conhecidas;
   }
 
   private atualizarAviso() {
@@ -449,19 +492,26 @@ export class AbaVoz {
   private opcoesDisponiveis(): OpcaoVoz[] {
     const ops: OpcaoVoz[] = [];
     const fora = this.estado !== "no-ar";
-    for (const v of VOZES_KOKORO) {
-      ops.push({ valor: `openjarvis:${v.id}`, rotulo: `${v.rotulo} (OpenJarvis)`, grupo: "Kokoro · OpenJarvis", provedor: "openjarvis" });
+    // Config antiga com Kokoro pelo OpenJarvis enquanto o Kokoro não está no serviço: a voz salva fica visível.
+    const antigas = new Set<string>();
+    const principalAntiga = this.cfg.voz_provedor === "openjarvis" ? idKokoro(this.cfg.voz) : null;
+    if (principalAntiga) antigas.add(principalAntiga);
+    const reservaAntiga = this.cfg.voz_reserva_provedor === "openjarvis" ? idKokoro(this.cfg.voz_reserva_id) : null;
+    if (reservaAntiga) antigas.add(reservaAntiga);
+    for (const id of antigas) {
+      ops.push({ valor: `openjarvis:${id}`, rotulo: `${rotuloKokoro(id)} (OpenJarvis, até instalar o Kokoro)`, grupo: "Kokoro · config antiga", provedor: "openjarvis" });
     }
     if (!fora) {
       if (this.motores.xtts) {
         const outrosIds = new Set(Object.values(VOZES_POR_MOTOR).flat().map((v) => v.id));
-        for (const nome of this.vozesServico.filter((v) => !outrosIds.has(v))) {
+        const xtts = this.vozesPorMotor.xtts ?? this.vozesServico.filter((v) => !outrosIds.has(v));
+        for (const nome of xtts) {
           ops.push({ valor: `propria:xtts:${nome}`, rotulo: `${nome} (XTTS, neste PC)`, grupo: "XTTS · neste PC", provedor: "propria", motor: "xtts" });
         }
       }
       if (this.motores.kokoro) {
-        for (const v of VOZES_KOKORO) {
-          ops.push({ valor: `propria:kokoro:${v.id}`, rotulo: `${v.rotulo} (Kokoro, neste PC)`, grupo: "Kokoro · neste PC", provedor: "propria", motor: "kokoro" });
+        for (const id of this.vozesKokoro()) {
+          ops.push({ valor: `propria:kokoro:${id}`, rotulo: `${rotuloKokoro(id)} (Kokoro, neste PC)`, grupo: "Kokoro · neste PC", provedor: "propria", motor: "kokoro" });
         }
       }
       if (this.motores.edge) {
@@ -612,7 +662,7 @@ export class AbaVoz {
     bloco.innerHTML = `
       <div class="voz-bloco-servico">
         <h4>Serviço de voz deste PC</h4>
-        <p class="voz-servico-desc">Endereço do serviço local que roda XTTS, Kokoro, Edge ou Piper. As vozes locais aparecem na lista quando o serviço está no ar.</p>
+        <p class="voz-servico-desc">Endereço do serviço local que roda XTTS, Kokoro, Edge ou Piper (sem OpenJarvis). As vozes locais aparecem na lista quando o serviço está no ar.</p>
         <label class="campo-modal">
           <span class="campo-modal-rotulo">Endereço do serviço de voz</span>
           <input type="text" id="cfg-voz_url" value="${esc(url)}" placeholder="http://127.0.0.1:4710">

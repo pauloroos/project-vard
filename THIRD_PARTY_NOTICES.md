@@ -213,3 +213,42 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ```
+
+## Kokoro no serviço de voz (opcional)
+
+Instalado só quando você escolhe o Kokoro na aba Voz; nada disto vem no instalador do Vard.
+
+- **kokoro-onnx 0.6.1** (MIT), extra `kokoro` do serviço de voz (`voz/pyproject.toml`).
+  Origem: https://github.com/thewh1teagle/kokoro-onnx
+- **Modelo Kokoro-82M v1.0** (Apache-2.0), arquivos `kokoro-v1.0.int8.onnx` e `voices-v1.0.bin` baixados pelo
+  instalador de vozes (pacote `kokoro`, hash SHA-256 conferido) a partir das releases do kokoro-onnx.
+  Origem dos pesos: https://huggingface.co/hexgrad/Kokoro-82M. Texto da licença: https://www.apache.org/licenses/LICENSE-2.0
+- Dependências que o kokoro-onnx instala no ambiente do serviço de voz, rodando como processo separado do
+  aplicativo: **phonemizer 3.4.0** (GPL-3.0-or-later, https://github.com/bootphon/phonemizer) e
+  **espeakng-loader 0.2.4** (MIT, https://github.com/thewh1teagle/espeakng-loader), que traz a biblioteca
+  **eSpeak NG** (GPL-3.0-or-later, https://github.com/espeak-ng/espeak-ng) usada para os fonemas; e
+  **onnxruntime** (MIT, https://github.com/microsoft/onnxruntime).
+
+```
+MIT License
+
+Copyright (c) 2025 github.com/thewh1teagle
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```

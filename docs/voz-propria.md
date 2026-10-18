@@ -1,7 +1,7 @@
 # Voz própria (opcional)
 
-Sem configuração extra, o HUD fala com a voz do OpenJarvis (`POST /v1/speech/synthesize`, Kokoro): a resposta inteira é
-sintetizada e só depois começa a tocar. Para respostas longas isso leva segundos.
+Sem o serviço de voz, o HUD fala com a voz do OpenJarvis (`POST /v1/speech/synthesize`), quando ele está ligado: a
+resposta inteira é sintetizada e só depois começa a tocar. Para respostas longas isso leva segundos.
 
 A **voz própria** é um serviço local, separado do OpenJarvis, que recebe uma frase e devolve o áudio em fluxo, enquanto
 sintetiza. Com ele no ar o HUD:
@@ -13,6 +13,24 @@ sintetiza. Com ele no ar o HUD:
 
 Qualquer motor de voz serve (XTTS, Piper, F5, outro), desde que siga o contrato abaixo. O endereço fica em `voz_url`
 (padrão `http://127.0.0.1:4710`); vazio desliga e o HUD volta a usar só o OpenJarvis.
+
+## Kokoro sem OpenJarvis
+
+O Kokoro é um motor do serviço de voz do Vard, como XTTS, Edge e Piper; não precisa do OpenJarvis.
+
+- Biblioteca: [`kokoro-onnx`](https://github.com/thewh1teagle/kokoro-onnx) 0.6.1 (MIT), extra `kokoro` de
+  `voz/pyproject.toml`. Escolhido por ser o mais leve: roda no onnxruntime, na CPU, e na GPU com o `onnxruntime-gpu`,
+  sem torch.
+- Modelo: Kokoro-82M v1.0 em ONNX int8 (`kokoro-v1.0.int8.onnx`, ~88 MB) e as vozes (`voices-v1.0.bin`, ~27 MB),
+  Apache-2.0, das releases do kokoro-onnx. Vêm do pacote opcional `kokoro` do instalador de vozes
+  (`config/pacotes/vozes.json`, hash SHA-256 conferido); nunca no teste nem na carga do serviço.
+- Na aba Voz, o card **Kokoro** mostra **Instalar** quando falta o pacote: confirmar ("Instalar e usar") baixa pelo
+  instalador e já deixa uma voz Kokoro escolhida. As vozes da lista vêm do `/vozes` do serviço (`por_motor.kokoro`).
+- Vozes pt-BR: `pf_dora`, `pm_alex`, `pm_santa`; a escolha vai no campo `voz` do `/falar`, como as outras.
+- Config antiga com `voz_provedor = "openjarvis"` e uma voz Kokoro (por exemplo `pm_alex`): o HUD pede a mesma voz ao
+  serviço de voz. Com o Kokoro instalado lá, ela sai dele; sem ele, o serviço recusa a frase e ela segue a reserva
+  de sempre. A aba Voz troca a config para `propria` + `kokoro` quando encontra o Kokoro no serviço (salve para
+  gravar) e, sem ele, marca o Kokoro e oferece instalar.
 
 ## Quando a voz própria falha
 
@@ -86,10 +104,11 @@ responder ao preflight (`OPTIONS`) desses dois `Origin` aceitando `POST` e os ca
 ### `GET /vozes` (opcional)
 
 ```json
-{ "vozes": ["Voz A", "Voz B"], "atual": "Voz A" }
+{ "vozes": ["Voz A", "Voz B", "pf_dora"], "atual": "Voz A", "por_motor": { "xtts": ["Voz A", "Voz B"], "kokoro": ["pf_dora"] } }
 ```
 
-Alimenta a lista da aba Voz. Sem a rota (ou fora do ar) a lista fica vazia e a voz atual do serviço continua valendo.
+Alimenta a lista da aba Voz. `por_motor` (opcional) diz de que motor é cada voz; sem ele a aba separa pelas listas
+conhecidas de `config/vozes.json`. Sem a rota (ou fora do ar) a lista fica vazia e a voz atual do serviço continua valendo.
 
 ### `voz` no `/falar` (opcional)
 
@@ -97,7 +116,7 @@ O corpo do `POST /falar` pode trazer `"voz": "Voz B"`, um nome da lista de `/voz
 
 ## Outros provedores
 
-Os provedores `openjarvis` (Kokoro), `elevenlabs` e `gemini` não usam este contrato: o HUD fala com eles direto, só quando escolhidos na aba Voz e, nos dois da nuvem, com a chave informada. Com um provedor na nuvem ligado, as falas fixas são sintetizadas nele uma vez no arranque, para aquecer o cache; com `propria` ou `openjarvis` nada sai da máquina.
+Os provedores `openjarvis` (voz do OpenJarvis; com voz Kokoro, ver acima), `elevenlabs` e `gemini` não usam este contrato: o HUD fala com eles direto, só quando escolhidos na aba Voz e, nos dois da nuvem, com a chave informada. Com um provedor na nuvem ligado, as falas fixas são sintetizadas nele uma vez no arranque, para aquecer o cache; com `propria` ou `openjarvis` nada sai da máquina.
 
 ## Testar sem um motor de voz
 

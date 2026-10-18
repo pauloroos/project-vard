@@ -87,7 +87,7 @@ def criar_app(
     if motor_kokoro is _NAO_FORNECIDO:
         try:
             from .kokoro import MotorKokoro
-            motor_kokoro = MotorKokoro(os.environ.get("VARD_VOZ_DEVICE", "cpu"))
+            motor_kokoro = MotorKokoro(os.environ.get("VARD_KOKORO_DEVICE") or os.environ.get("VARD_VOZ_DEVICE", "cpu"))
         except Exception:
             log.warning("kokoro indisponivel")
             motor_kokoro = None
@@ -120,6 +120,18 @@ def criar_app(
         modelos_stt = GerenciadorModelos()
     # Estado da troca de modelo pedida pela tela (a carga roda em segundo plano).
     troca_stt = {"dispositivo": escolha["dispositivo"], "carregando": False, "erro": None}
+
+    def _kokoro_instalado() -> bool:
+        """Kokoro carregado, ou instalado (biblioteca + arquivos do modelo) e pronto para carregar sob demanda."""
+        if motor_kokoro is None:
+            return False
+        if motor_kokoro.pronta:
+            return True
+        instalado = getattr(motor_kokoro, "instalado", None)
+        try:
+            return bool(instalado()) if callable(instalado) else False
+        except Exception:
+            return False
 
     # Lista de motores opcionais na ordem de prioridade de reserva.
     motores_opcionais = [
@@ -205,7 +217,9 @@ def criar_app(
             "aquecida": pronta,
             "xtts": xtts_instalado,
             "xtts_carregado": xtts_carregado,
-            "kokoro": kokoro_ok,
+            # Como o XTTS: kokoro=true é instalado (carrega sob demanda); kokoro_carregado diz se está na memória.
+            "kokoro": kokoro_ok or _kokoro_instalado(),
+            "kokoro_carregado": kokoro_ok,
             "edge": edge_ok,
             "piper": piper_ok,
         }
@@ -215,14 +229,17 @@ def criar_app(
         # 0.9.4 leve rodada 2: lista vozes do XTTS mesmo descarregado (ele está instalado
         # e pode ser recarregado sob demanda). Só devolve 503 se nenhum motor estiver disponível.
         xtts_instalado = not isinstance(motor, _MotorAusente)
-        algum_motor_pronto = motor.pronta or any(m is not None and m.pronta for _, m in motores_opcionais)
+        kokoro_instalado = _kokoro_instalado()
+        algum_motor_pronto = motor.pronta or kokoro_instalado or any(m is not None and m.pronta for _, m in motores_opcionais)
         if not xtts_instalado and not algum_motor_pronto:
             return JSONResponse({"erro": "aquecendo"}, status_code=503)
         # Lista vozes do XTTS (mesmo descarregado, motor.vozes() devolve pelo menos VOZ)
         lista = list(motor.vozes()) if xtts_instalado else []
+        por_motor: dict[str, list[str]] = {"xtts": list(lista)} if xtts_instalado else {}
         for nome, m in motores_opcionais:
-            if m is not None and m.pronta:
-                for v in m.vozes():
+            if m is not None and (m.pronta or (nome == "kokoro" and kokoro_instalado)):
+                por_motor[nome] = list(m.vozes())
+                for v in por_motor[nome]:
                     if v not in lista:
                         lista.append(v)
         if motor.pronta:
@@ -238,7 +255,8 @@ def criar_app(
             atual = next(iter(VOZES_PIPER_PT_BR), "")
         else:
             atual = ""
-        return {"vozes": lista, "atual": atual}
+        # por_motor: de que motor é cada voz (a aba Voz monta a lista de cada card com ela).
+        return {"vozes": lista, "atual": atual, "por_motor": por_motor}
 
     def _xtts_utilizavel() -> bool:
         """XTTS carregado agora, ou descarregado por ociosidade (já carregou antes): falar() recarrega sozinho."""
@@ -408,6 +426,11 @@ def criar_app(
         except (TypeError, ValueError):
             return JSONResponse({"erro": "velocidade_invalida"}, status_code=400)
         voz = str(corpo.get("voz", "") or "").strip() or None
+        if voz is not None and motor_kokoro is not None and not motor_kokoro.pronta:
+            from .kokoro import VOZES_KOKORO
+            if voz in VOZES_KOKORO and _kokoro_instalado():
+                # Instalado depois que o serviço subiu (ou carga da abertura ainda não chegou nele): carrega agora.
+                await run_in_threadpool(motor_kokoro.carregar)
         alvo = _motor_para_voz(voz)
         if alvo is None:
             return JSONResponse({"erro": "aquecendo"}, status_code=503)

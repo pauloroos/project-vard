@@ -156,6 +156,12 @@ describe("Voz", () => {
     expect(await voz.vozes()).toEqual({ vozes: ["A", "B"], atual: "A" });
   });
 
+  it("vozes com por_motor devolve de que motor é cada voz", async () => {
+    const corpo = { vozes: ["A", "pf_dora"], atual: "A", por_motor: { xtts: ["A"], kokoro: ["pf_dora", 3], edge: "x" } };
+    const voz = new Voz("http://x", { fetch: async () => new Response(JSON.stringify(corpo), { status: 200 }) });
+    expect(await voz.vozes()).toEqual({ vozes: ["A", "pf_dora"], atual: "A", porMotor: { xtts: ["A"], kokoro: ["pf_dora"] } });
+  });
+
   it("vozes 404 devolve vazio", async () => {
     const voz = new Voz("http://x", { fetch: async () => new Response("{}", { status: 404 }) });
     expect(await voz.vozes()).toEqual({ vozes: [], atual: "" });

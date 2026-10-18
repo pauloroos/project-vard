@@ -148,7 +148,10 @@ def test_motor_recebe_texto_normalizado_wav_e_pcm():
 def test_vozes_lista_e_atual():
     # motor_kokoro=None isola o comportamento XTTS-only; com Kokoro ativo a lista inclui vozes Kokoro.
     r = cliente(MotorFalso(), motor_kokoro=None, motor_edge=None, motor_piper=None).get("/vozes")
-    assert r.status_code == 200 and r.json() == {"vozes": ["Suad Qasim", "Ana Florence"], "atual": "Suad Qasim"}
+    assert r.status_code == 200 and r.json() == {
+        "vozes": ["Suad Qasim", "Ana Florence"], "atual": "Suad Qasim",
+        "por_motor": {"xtts": ["Suad Qasim", "Ana Florence"]},
+    }
 
 
 def test_vozes_xtts_instalado_mas_nao_pronto_retorna_200():
