@@ -1,4 +1,4 @@
-import type { StatusPonte } from "../conectores/ponte/cliente";
+import type { EstadoTelegram, Ponte, ResultadoTrazerTelegram, StatusPonte } from "../conectores/ponte/cliente";
 
 /** O que cada botão pode fazer num modo do ciclo nativo. null = supervisor fora: nada. */
 export function acoesDoModo(modo: string | null): { ligar: boolean; jogo: boolean; desligar: boolean } {
@@ -132,19 +132,47 @@ export class AbaSistema {
 
 /** Dependências da seção Telegram na aba Sistema. */
 export interface DepsAbaSistemaTelegram {
-  verTelegram: () => Promise<{ ligado: boolean; chat_permitido: string }>;
+  verTelegram: () => Promise<EstadoTelegram>;
   configurarTelegram: (ligado: boolean, chat: string) => Promise<{ ok: boolean }>;
   descobrirChat: () => Promise<{ ok: boolean; chat_id?: string; detalhe?: string }>;
   enviarTeste: () => Promise<{ ok: boolean; detalhe?: string }>;
+  /** Grava no cofre do Windows pela janela de Configurações; o valor nunca volta à tela. */
   gravarToken: (token: string) => Promise<{ ok: boolean }>;
+  /** Depois do token: o núcleo relê a configuração e liga o poller sem reiniciar. */
+  sincronizar?: () => Promise<unknown>;
+  /** Traz o Telegram do OpenJarvis; o token vai do núcleo direto ao cofre. */
+  trazerDoOpenJarvis?: (substituir: boolean) => Promise<ResultadoTrazerTelegram>;
 }
 
-/** Seção Telegram dentro da aba Sistema: toggle, token (cofre), chat, descobrir e testar. */
+type PonteTelegram = Pick<Ponte, "telegramEstado" | "telegramConfigurar" | "telegramDescobrirChat" | "telegramTestar" | "telegramSincronizar" | "telegramTrazerOpenJarvis">;
+
+/** Ponte (núcleo) do campo da aba Sistema e gravação no cofre → dependências da seção Telegram. */
+export function depsTelegramDaPonte(ponte: () => PonteTelegram, gravarNoCofre: (token: string) => Promise<void>): DepsAbaSistemaTelegram {
+  return {
+    verTelegram: () => ponte().telegramEstado(),
+    configurarTelegram: (ligado, chat) => ponte().telegramConfigurar(ligado, chat),
+    descobrirChat: () => ponte().telegramDescobrirChat(),
+    enviarTeste: () => ponte().telegramTestar(),
+    gravarToken: async (token) => { await gravarNoCofre(token); return { ok: true }; },
+    sincronizar: () => ponte().telegramSincronizar(),
+    trazerDoOpenJarvis: (substituir) => ponte().telegramTrazerOpenJarvis(substituir),
+  };
+}
+
+const ROTULO_TRAZER = "Trazer do OpenJarvis";
+const NOTA_TRAZER = "O bot e os chats permitidos do OpenJarvis vêm para o Vard (a chave do bot vai direto para o cofre). Depois, deixe o OpenJarvis desligado: dois programas no mesmo bot brigam pelas mensagens.";
+const DICA_TOKEN = "Cole o token aqui (salvo no cofre)";
+const DICA_TOKEN_GUARDADO = "Token guardado no cofre (cole outro para trocar)";
+
+/** Seção Telegram dentro da aba Sistema: toggle, token (cofre), chat, descobrir, testar e trazer do OpenJarvis. */
 export class AbaSistemaTelegram {
   private toggle!: HTMLInputElement;
   private tokenInput!: HTMLInputElement;
   private chatInput!: HTMLInputElement;
   private msg!: HTMLElement;
+  private caixaTrazer!: HTMLElement;
+  private btnTrazer!: HTMLButtonElement;
+  private substituirArmado = false;
 
   constructor(private raiz: HTMLElement, private deps: DepsAbaSistemaTelegram) {}
 
@@ -155,6 +183,21 @@ export class AbaSistemaTelegram {
     const titulo = document.createElement("h3");
     titulo.textContent = "Telegram";
     secao.append(titulo);
+
+    // Trazer do OpenJarvis: só aparece com algo a trazer e o Telegram do Vard vazio.
+    this.caixaTrazer = document.createElement("div");
+    this.caixaTrazer.className = "tg-trazer";
+    const nota = document.createElement("p");
+    nota.className = "nota";
+    nota.textContent = NOTA_TRAZER;
+    this.btnTrazer = document.createElement("button");
+    this.btnTrazer.type = "button";
+    this.btnTrazer.id = "tg-trazer";
+    this.btnTrazer.textContent = ROTULO_TRAZER;
+    this.btnTrazer.addEventListener("click", () => { void this.trazer(); });
+    this.caixaTrazer.append(nota, this.btnTrazer);
+    this.mostrarTrazer(false);
+    secao.append(this.caixaTrazer);
 
     // Toggle ligado/desligado
     const lblToggle = document.createElement("label");
@@ -172,7 +215,7 @@ export class AbaSistemaTelegram {
     this.tokenInput = document.createElement("input");
     this.tokenInput.type = "password";
     this.tokenInput.id = "tg-token";
-    this.tokenInput.placeholder = "Cole o token aqui (salvo no cofre)";
+    this.tokenInput.placeholder = DICA_TOKEN;
     lblToken.append(this.tokenInput);
     secao.append(lblToken);
 
@@ -218,6 +261,7 @@ export class AbaSistemaTelegram {
 
     // Listeners
     this.toggle.addEventListener("change", () => { void this.salvarEstado(); });
+    this.chatInput.addEventListener("change", () => { void this.salvarEstado(); });
     this.tokenInput.addEventListener("change", () => { void this.salvarToken(); });
   }
 
@@ -226,8 +270,41 @@ export class AbaSistemaTelegram {
       const estado = await this.deps.verTelegram();
       this.toggle.checked = estado.ligado;
       this.chatInput.value = estado.chat_permitido || "";
+      this.tokenInput.placeholder = estado.token_configurado ? DICA_TOKEN_GUARDADO : DICA_TOKEN;
+      this.mostrarTrazer(Boolean(this.deps.trazerDoOpenJarvis && estado.openjarvis?.pode_trazer));
     } catch {
       this.msg.textContent = "Erro ao carregar configuração do Telegram.";
+    }
+  }
+
+  private mostrarTrazer(visivel: boolean) {
+    this.caixaTrazer.hidden = !visivel;
+    this.btnTrazer.hidden = !visivel;
+    if (!visivel) { this.substituirArmado = false; this.btnTrazer.textContent = ROTULO_TRAZER; }
+  }
+
+  private async trazer() {
+    if (!this.deps.trazerDoOpenJarvis) return;
+    const substituir = this.substituirArmado;
+    this.msg.textContent = "Trazendo do OpenJarvis...";
+    this.btnTrazer.disabled = true;
+    try {
+      const r = await this.deps.trazerDoOpenJarvis(substituir);
+      if (!r.ok && r.motivo === "ja_configurado" && !substituir) {
+        this.substituirArmado = true;
+        this.btnTrazer.textContent = "Confirmar substituição";
+        this.msg.textContent = r.detalhe || "O Vard já tem um Telegram configurado; clique de novo para substituir.";
+        return;
+      }
+      this.substituirArmado = false;
+      this.btnTrazer.textContent = ROTULO_TRAZER;
+      const texto = r.detalhe || (r.ok ? "Telegram trazido do OpenJarvis." : "Não consegui trazer do OpenJarvis.");
+      if (r.ok) await this.carregar();
+      this.msg.textContent = r.aviso ? `${texto} ${r.aviso}` : texto;
+    } catch {
+      this.msg.textContent = "Erro ao trazer do OpenJarvis.";
+    } finally {
+      this.btnTrazer.disabled = false;
     }
   }
 
@@ -247,9 +324,12 @@ export class AbaSistemaTelegram {
     this.msg.textContent = "Salvando token...";
     try {
       await this.deps.gravarToken(token);
-      this.msg.textContent = "Token salvo.";
       this.tokenInput.value = "";
+      try { await this.deps.sincronizar?.(); } catch { /* núcleo fora: vale no próximo início */ }
+      await this.carregar();
+      this.msg.textContent = "Token salvo.";
     } catch {
+      this.tokenInput.value = "";
       this.msg.textContent = "Erro ao salvar token.";
     }
   }

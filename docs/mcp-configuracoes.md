@@ -22,6 +22,11 @@ responde exigem `confirmado=true`. Sem confirmação, a ferramenta descreve o
 efeito para o agente pedir autorização à pessoa. O catálogo informa o tamanho
 quando disponível; tamanho desconhecido é indicado explicitamente.
 
+`ver_telegram` e `configurar_telegram` mostram e mudam o Telegram (ligado e chat permitido);
+`trazer_telegram_do_openjarvis` traz o bot do OpenJarvis pelo núcleo, com o token indo direto
+para o cofre, e pede confirmação antes de substituir um Telegram já configurado (`substituir=true`).
+Veja [Telegram](telegram.md).
+
 Nenhuma ferramenta recebe chaves ou as devolve. Para autenticação, use a tela
 de Configurações. Testar provedor e instalar usam o núcleo por HTTP local,
 preservando o estado da instalação no processo do servidor. O teste usa somente

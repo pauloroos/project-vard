@@ -1,9 +1,12 @@
 """Telegram próprio do cérebro: long polling com Bot API direta, desligado por padrão.
 
-O poller só sobe quando telegram.toml tem habilitado=true; nunca disputa o token com
-OpenJarvis/Liv (409). Cada chat autorizado gera uma sessão isolada no cérebro; áudio
-recebido marca origem TELEGRAM para transcrição posterior pelo STT próprio. Token e
-URL completa da Bot API NUNCA aparecem em log, erro ou exceção.
+O poller só sobe quando telegram.toml tem habilitado=true, há token e chat permitido.
+O token fica no cofre do Windows (alvo vard:canal:telegram); `token` no telegram.toml é
+só o formato antigo, lido quando o cofre está vazio. Dois consumidores no mesmo bot
+brigam pelo getUpdates (409): com o Telegram no Vard, o OpenJarvis fica desligado.
+Cada chat autorizado gera uma sessão isolada no cérebro; áudio recebido marca origem
+TELEGRAM para transcrição posterior pelo STT próprio. Token e URL completa da Bot API
+NUNCA aparecem em log, erro ou exceção.
 """
 from __future__ import annotations
 
@@ -11,12 +14,13 @@ import asyncio
 import json
 import logging
 import os
+import re
 from pathlib import Path
 from typing import Any
 
 import httpx
 
-from vard import config, modo
+from vard import config, credenciais, modo
 from vard.cerebro import pedidos
 from vard.cerebro.contratos import Origem, Pedido
 
@@ -29,6 +33,9 @@ for _nome in ("httpx", "httpcore"):
 LIMITE_MENSAGEM = 4096
 POLL_TIMEOUT_PADRAO = 30
 POLL_INTERVAL_PADRAO = 1.0
+ESPERA_CONFLITO_S = 30.0     # 409: outro consumidor (OpenJarvis?) no mesmo bot; não insistir a cada segundo
+#: Alvo do token no cofre do Windows (o app grava o mesmo pela tela).
+COFRE_TIPO, COFRE_ID = "canal", "telegram"
 ESTADO_ARQUIVO_PADRAO = None  # resolvido em tempo de execução via config.pasta_dados()
 
 
@@ -63,9 +70,71 @@ def _chats_permitidos(cfg: dict[str, Any]) -> set[str]:
     return set()
 
 
+def token_do_cofre() -> str:
+    """Token do bot no cofre do Windows; vazio se ausente ou cofre indisponível. Nunca logado."""
+    try:
+        return (credenciais.ler_para_uso_interno(COFRE_TIPO, COFRE_ID) or "").strip()
+    except Exception:  # noqa: BLE001
+        return ""
+
+
 def _token_seguro(cfg: dict[str, Any]) -> str:
-    """Token do telegram.toml; vazio se não configurado. Nunca logado."""
-    return str(cfg.get("token", "")).strip()
+    """Token do cofre; sem ele, o `token` antigo do telegram.toml. Vazio se não configurado. Nunca logado."""
+    return token_do_cofre() or str(cfg.get("token", "")).strip()
+
+
+def gravar_config_telegram(dados: dict[str, Any]) -> None:
+    """Grava telegram.toml de forma atômica (tmp + replace)."""
+    import tomli_w
+    alvo = config.arquivo_config("telegram.toml")
+    alvo.parent.mkdir(parents=True, exist_ok=True)
+    tmp = alvo.with_suffix(".tmp")
+    tmp.write_text(tomli_w.dumps(dados), encoding="utf-8")
+    os.replace(tmp, alvo)
+
+
+def separar_chats(valor: Any) -> tuple[str, ...]:
+    """Chats como a tela e o OpenJarvis escrevem: "1, 2", "1;2", lista ou número; só ids numéricos, sem repetição."""
+    if isinstance(valor, (list, tuple)):
+        partes = [str(v) for v in valor]
+    elif isinstance(valor, (int, str)) and not isinstance(valor, bool):
+        partes = re.split(r"[,;\s]+", str(valor))
+    else:
+        partes = []
+    vistos: list[str] = []
+    for p in (x.strip() for x in partes):
+        if re.fullmatch(r"-?\d{1,20}", p) and p not in vistos:
+            vistos.append(p)
+    return tuple(vistos)
+
+
+def configurar(ligado: bool, chat: str = "") -> None:
+    """Liga/desliga e define os chats permitidos (o campo da tela, "1, 2"); chat vazio mantém os atuais.
+
+    Preserva o resto do telegram.toml; o token não passa por aqui.
+    """
+    dados = _ler_config_telegram()
+    dados["habilitado"] = bool(ligado)
+    chats = separar_chats(chat)
+    if chats:
+        dados["chats_permitidos"] = list(chats)
+    elif not isinstance(dados.get("chats_permitidos"), list):
+        dados["chats_permitidos"] = []
+    gravar_config_telegram(dados)
+
+
+def estado() -> dict[str, Any]:
+    """Resumo para a tela e o assistente: nunca o token, só se ele existe."""
+    cfg = _ler_config_telegram()
+    chats = sorted(_chats_permitidos(cfg))
+    return {"ligado": bool(cfg.get("habilitado")), "chat_permitido": ", ".join(chats),
+            "token_configurado": bool(_token_seguro(cfg))}
+
+
+def configurado() -> bool:
+    """O Vard já tem Telegram (token ou chat permitido): migrar por cima exige confirmação."""
+    cfg = _ler_config_telegram()
+    return bool(_token_seguro(cfg)) or bool(_chats_permitidos(cfg))
 
 
 class TelegramPoller:
@@ -88,6 +157,7 @@ class TelegramPoller:
         self._interval = poll_interval_s
         self._estado_arq = estado_arquivo or _arquivo_estado()
         self._offset: int | None = None
+        self.conflito = False   # último getUpdates deu 409 (outro consumidor no mesmo bot)
         self._carregar_offset()
 
     def _carregar_offset(self) -> None:
@@ -123,8 +193,9 @@ class TelegramPoller:
                 url = f"{self._base}/bot{self._token}/getUpdates"
                 r = await client.get(url, params=params)
 
+                self.conflito = r.status_code == 409
                 if r.status_code == 409:
-                    log.warning("conflito 409 no getUpdates: outro consumidor ativo; polling parado")
+                    log.warning("conflito 409 no getUpdates: outro consumidor no mesmo bot (OpenJarvis ligado?)")
                     return 0
                 if r.status_code == 429:
                     retry = r.json().get("parameters", {}).get("retry_after", 30)

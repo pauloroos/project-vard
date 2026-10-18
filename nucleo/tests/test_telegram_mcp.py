@@ -107,3 +107,66 @@ def test_configurar_telegram_preserva_token_existente():
     assert dados.get("habilitado") is True
     assert dados.get("token") == "TOKEN_EXISTENTE_ABC"
     assert "111222333" in dados.get("chats_permitidos", [])
+
+@pytest.fixture(autouse=True)
+def nucleo_falso(monkeypatch):
+    """O MCP fala com o núcleo por http_local; aqui um dublê guarda as chamadas e responde."""
+    from vard import ajustes
+    chamadas: list[tuple] = []
+    respostas: dict[str, dict] = {}
+
+    def http_local(metodo, rota, corpo=None):
+        chamadas.append((metodo, rota, corpo))
+        return respostas.get(rota, {"ok": True})
+
+    monkeypatch.setattr(ajustes, "http_local", http_local)
+    return chamadas, respostas
+
+
+def test_configurar_telegram_avisa_o_nucleo_e_nao_grava_token(nucleo_falso):
+    import configuracoes_mcp as mcp
+    from vard import config as cfg_mod
+    import tomllib
+
+    chamadas, _ = nucleo_falso
+    mcp.configurar_telegram(ligado=True, chat="123")
+    assert ("POST", "/telegram/sincronizar", None) in chamadas
+    dados = tomllib.loads(cfg_mod.arquivo_config("telegram.toml").read_text(encoding="utf-8"))
+    assert "token" not in dados
+
+
+def test_trazer_do_openjarvis_pelo_nucleo_sem_token(nucleo_falso):
+    import configuracoes_mcp as mcp
+
+    chamadas, respostas = nucleo_falso
+    respostas["/telegram/trazer_openjarvis"] = {"ok": True, "mudou": True, "fonte": "openjarvis", "chats": 1,
+                                                 "ligado": True, "rodando": True, "detalhe": "Telegram trazido do OpenJarvis."}
+    texto = mcp.trazer_telegram_do_openjarvis()
+    assert chamadas == [("POST", "/telegram/trazer_openjarvis", {"substituir": False})]
+    assert "trazido" in texto and "rodando" in texto
+
+
+def test_trazer_por_cima_pede_confirmacao(nucleo_falso):
+    import configuracoes_mcp as mcp
+
+    chamadas, respostas = nucleo_falso
+    respostas["/telegram/trazer_openjarvis"] = {"ok": False, "motivo": "ja_configurado"}
+    texto = mcp.trazer_telegram_do_openjarvis()
+    assert "confirmação" in texto and "substituir=true" in texto
+    mcp.trazer_telegram_do_openjarvis(substituir=True)
+    assert chamadas[-1] == ("POST", "/telegram/trazer_openjarvis", {"substituir": True})
+
+
+def test_ver_telegram_mostra_o_que_ha_no_openjarvis_sem_token(tmp_path, monkeypatch):
+    import tomli_w
+    import configuracoes_mcp as mcp
+
+    token = "123456789:FICTICIO_token-de-teste_abc"
+    casa = tmp_path / "oj"
+    casa.mkdir()
+    (casa / "config.toml").write_text(tomli_w.dumps({"channel": {"enabled": True, "telegram": {
+        "bot_token": token, "allowed_chat_ids": "111"}}}), encoding="utf-8")
+    monkeypatch.setenv("OPENJARVIS_HOME", str(casa))
+    texto = mcp.ver_telegram()
+    assert '"pode_trazer": true' in texto and '"bot_guardado": false' in texto
+    assert token not in texto

@@ -37,6 +37,17 @@ def _ambiente_isolado(tmp_path: Path, monkeypatch, request):
     monkeypatch.delenv("VARD_INSTALACAO", raising=False)
 
 
+@pytest.fixture(autouse=True)
+def cofre_falso(monkeypatch) -> dict:
+    """Cofre do Windows em memória: nenhum teste lê ou grava o Gerenciador de Credenciais real."""
+    from vard import credenciais
+    cofre: dict[str, str] = {}
+    monkeypatch.setattr(credenciais, "_ler_windows", lambda alvo: cofre.get(alvo))
+    monkeypatch.setattr(credenciais, "_gravar_windows", lambda alvo, valor: cofre.__setitem__(alvo, valor))
+    monkeypatch.setattr(credenciais, "_apagar_windows", lambda alvo: cofre.pop(alvo, None))
+    return cofre
+
+
 @pytest.fixture
 def config_usuario(tmp_path: Path) -> Path:
     """Configuração fictícia do usuário (delegada.toml, pasta delegada/ e memoria.toml) na pasta isolada."""

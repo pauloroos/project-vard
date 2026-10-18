@@ -224,52 +224,44 @@ def remover_programa(nome: str, site: bool = False, confirmado: bool = False) ->
 @mcp.tool()
 @_seguro
 def ver_telegram() -> str:
-    """Mostra se o Telegram está ligado e qual chat é permitido; nunca mostra o token."""
-    from vard import telegram as tg_mod
-    cfg = tg_mod._ler_config_telegram()
-    ligado = bool(cfg.get("habilitado"))
-    chats = cfg.get("chats_permitidos", [])
-    chat_txt = ", ".join(str(c) for c in chats) if isinstance(chats, list) else ""
-    return _texto("Telegram", {"ligado": ligado, "chat_permitido": chat_txt})
+    """Mostra se o Telegram está ligado, o chat permitido, se o bot está guardado no cofre e o que há no OpenJarvis; nunca o token."""
+    from vard import telegram as tg_mod, telegram_migracao
+    estado = tg_mod.estado()
+    return _texto("Telegram", {"ligado": estado["ligado"], "chat_permitido": estado["chat_permitido"],
+        "bot_guardado": estado["token_configurado"], "do_openjarvis": telegram_migracao.previa()})
+
+
+def _sincronizar_telegram() -> None:
+    """O poller vive no processo do núcleo: avisa para reler a configuração (núcleo fora = vale no próximo início)."""
+    try:
+        ajustes.http_local("POST", "/telegram/sincronizar")
+    except Exception:  # noqa: BLE001
+        pass
 
 
 @mcp.tool()
 @_seguro
 def configurar_telegram(ligado: bool, chat: str = "") -> str:
     """Liga ou desliga o Telegram e define o chat permitido; o token só é gravado pela tela."""
-    from vard import config as cfg_mod
-    import tomllib
-    import tomli_w
-
-    alvo = cfg_mod.arquivo_config("telegram.toml")
-    dados: dict = {}
-    if alvo.exists():
-        try:
-            dados = tomllib.loads(alvo.read_text(encoding="utf-8"))
-        except Exception:  # noqa: BLE001
-            dados = {}
-    if not isinstance(dados, dict):
-        dados = {}
-    dados["habilitado"] = bool(ligado)
-    chat_limpo = str(chat).strip()
-    if chat_limpo:
-        existentes = dados.get("chats_permitidos", [])
-        if not isinstance(existentes, list):
-            existentes = []
-        if chat_limpo not in [str(c) for c in existentes]:
-            existentes.append(chat_limpo)
-        dados["chats_permitidos"] = existentes
-    else:
-        dados.setdefault("chats_permitidos", [])
-    # Preserva token existente; nunca grava token vazio sobre um existente
-    if "token" not in dados:
-        dados["token"] = ""
-    alvo.parent.mkdir(parents=True, exist_ok=True)
-    tmp = alvo.with_suffix(".tmp")
-    tmp.write_text(tomli_w.dumps(dados), encoding="utf-8")
-    import os as _os
-    _os.replace(tmp, alvo)
+    from vard import telegram as tg_mod
+    tg_mod.configurar(ligado, chat)
+    _sincronizar_telegram()
     return "Telegram atualizado."
+
+
+@mcp.tool()
+@_seguro
+def trazer_telegram_do_openjarvis(substituir: bool = False) -> str:
+    """Traz o Telegram do OpenJarvis para o Vard: token direto para o cofre (não passa por aqui), chats e ligado.
+
+    Não altera o OpenJarvis. Se o Vard já tiver Telegram, pede confirmação e só substitui com substituir=true.
+    Depois de trazido, o OpenJarvis precisa ficar desligado: dois programas no mesmo bot brigam pelas mensagens.
+    """
+    r = ajustes.http_local("POST", "/telegram/trazer_openjarvis", {"substituir": substituir is True})
+    if not r.get("ok") and r.get("motivo") == "ja_configurado":
+        return _confirmar("O Vard já tem um Telegram configurado; vou substituí-lo pelo do OpenJarvis (chame de novo com substituir=true)")
+    campos = {k: r[k] for k in ("ok", "mudou", "fonte", "chats", "ligado", "rodando", "detalhe", "aviso") if k in r}
+    return _texto("Telegram do OpenJarvis", campos)
 
 
 if __name__ == "__main__":

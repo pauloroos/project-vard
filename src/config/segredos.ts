@@ -6,7 +6,8 @@
  */
 import { invoke } from "@tauri-apps/api/core";
 
-const TIPOS_VALIDOS = ["provedor", "voz", "mcp"] as const;
+/** Mesmos tipos do cofre do app (cofre.rs); canal = token de bot, como o do Telegram. */
+const TIPOS_VALIDOS = ["provedor", "voz", "mcp", "canal"] as const;
 export type TipoCredencial = (typeof TIPOS_VALIDOS)[number];
 
 function validarTipo(tipo: string): TipoCredencial {
