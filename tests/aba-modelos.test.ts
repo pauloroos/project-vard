@@ -707,3 +707,78 @@ describe("AbaModelos (Núcleo)", () => {
     });
   });
 });
+
+describe("AbaModelos: desenha antes das consultas lentas (0.9.7)", () => {
+  beforeEach(() => {
+    cfgEmMemoria = null;
+    configEmMemoria = { ...CONFIG_PADRAO, cerebro: "proprio" };
+  });
+  afterEach(() => { vi.unstubAllGlobals(); mockDetectarClis.mockResolvedValue([]); });
+
+  /** Promessa que só resolve quando o teste mandar. */
+  function pendente<T>() {
+    let resolver!: (v: T) => void;
+    const promessa = new Promise<T>((r) => { resolver = r; });
+    return { promessa, resolver };
+  }
+
+  it("cards aparecem na hora; estado, CLIs e instalações chegam depois, com indicador discreto", async () => {
+    const status = pendente<any>();
+    const clis = pendente<any>();
+    const modelosOj = pendente<string[]>();
+    const instalaveis = pendente<Response>();
+    mockDetectarClis.mockReturnValue(clis.promessa);
+    vi.stubGlobal("fetch", vi.fn(() => instalaveis.promessa));
+    const raiz = criarRaiz();
+    const aba = new AbaModelos(raiz, criarDeps({
+      statusPonte: () => status.promessa,
+      criarOj: () => ({ modelos: () => modelosOj.promessa }) as any,
+    }));
+    const fim = aba.carregar();
+    // Primeiro desenho sem esperar nenhuma consulta lenta.
+    await vi.waitFor(() => expect(raiz.querySelector('[data-id="__agora__"]')).toBeTruthy());
+    expect(raiz.textContent).toContain("OpenJarvis (servidor atual)");
+    expect(raiz.textContent).toContain("Adicionar provedor");
+    expect(raiz.querySelector(".nucleo-carregando")?.textContent).toContain("Consultando o núcleo");
+    expect(raiz.querySelector(".nucleo-instalar")?.textContent).toContain("Carregando instalações");
+
+    status.resolver(null); // núcleo fora: o aviso entra quando a resposta chega
+    await vi.waitFor(() => expect(raiz.querySelector(".qr-aviso-ponte")).toBeTruthy());
+    modelosOj.resolver(["m1", "m2"]);
+    clis.resolver([]);
+    instalaveis.resolver(new Response(JSON.stringify({ itens: [] })));
+    await fim;
+    expect(raiz.querySelector(".nucleo-carregando")).toBeNull();
+  });
+
+  it("instalações chegam e aparecem sem nova consulta ao redesenhar por uma ação", async () => {
+    const f = vi.fn(async (url: string) => new Response(JSON.stringify(String(url).endsWith("/instalaveis") ? { itens: [{
+      id: "ollama", nome: "Ollama", descricao: "Servidor local", comando: [], fonte: "https://docs.ollama.com/windows",
+      tipo_provedor: "ollama", url_base: "http://127.0.0.1:11434/v1", tamanho_mb: null, manual: false,
+      instalado: false, login: "dispensado", estado: "aguardando", linhas: [],
+    }] } : [])));
+    vi.stubGlobal("fetch", f);
+    cfgEmMemoria = { ...PAINEIS_PADRAO, provedores: [{ id: "p1", nome: "Prov 1", tipo: "openai_compat", url_base: "http://127.0.0.1:1/v1", modelo: "m" } as any] };
+    const raiz = criarRaiz();
+    await new AbaModelos(raiz, criarDeps()).carregar();
+    expect(raiz.textContent).toContain("Ollama");
+    const chamadas = f.mock.calls.length;
+    [...raiz.querySelectorAll<HTMLButtonElement>("button")].find((b) => b.textContent === "Reserva")!.click();
+    await vi.waitFor(() => expect(cfgEmMemoria?.reserva).toBe("p1"));
+    expect(raiz.textContent).toContain("Ollama");
+    expect(f.mock.calls.length).toBe(chamadas);
+  });
+
+  it("resposta atrasada não apaga um modal aberto", async () => {
+    const status = pendente<any>();
+    const raiz = criarRaiz();
+    const aba = new AbaModelos(raiz, criarDeps({ statusPonte: () => status.promessa }));
+    const fim = aba.carregar();
+    await vi.waitFor(() => expect(raiz.textContent).toContain("Adicionar provedor"));
+    [...raiz.querySelectorAll<HTMLButtonElement>("button")].find((b) => b.textContent === "Adicionar provedor")!.click();
+    await vi.waitFor(() => expect(raiz.querySelector(".modal")).toBeTruthy());
+    status.resolver(null);
+    await fim;
+    expect(raiz.querySelector(".modal")).toBeTruthy();
+  });
+});

@@ -30,6 +30,11 @@ from vard.cerebro import cli_capacidade, cli_deteccao, contratos as cerebro_cont
 from vard.primeiro_uso import deteccao as primeiro_uso_deteccao, estado as primeiro_uso_estado
 from vard.seguro import Frase
 from vard import telegram as telegram_mod
+from vard import sondas
+from vard import aceite_windows
+
+# Cliente que desiste antes do aceite não pode fechar a escuta do núcleo (ver vard/aceite_windows.py).
+aceite_windows.instalar()
 from vard.instalaveis import GerenciadorInstalaveis
 
 _instalaveis = GerenciadorInstalaveis()
@@ -297,7 +302,9 @@ app = FastAPI(title="Vard", lifespan=lifespan)
 
 
 @app.get("/saude")
-def saude_supervisor():
+async def saude_supervisor():
+    # Assíncrona de propósito: responde no laço de eventos, sem esperar vaga no pool de threads
+    # que as rotas síncronas lentas (/recursos, /cli/detectar) ocupam.
     from vard import __version__
     return {"ok": True, "versao": __version__, "pid": os.getpid()}
 
@@ -456,7 +463,11 @@ async def _perguntar_cerebro(texto: str, sessao_id: str) -> str:
     raise _ErroCerebro("cli_tempo")
 
 
-def _ver_pela_cli(jpeg: bytes, pergunta: str) -> JSONResponse | dict:
+# Sessão da visão quando o widget não manda a da voz: estável, para não abrir uma CLI por pedido.
+SESSAO_VISAO_PADRAO = "voz"
+
+
+def _ver_pela_cli(jpeg: bytes, pergunta: str, sessao_id: str = SESSAO_VISAO_PADRAO) -> JSONResponse | dict:
     """Núcleo numa CLI: a captura vai para ela num arquivo temporário (a CLI abre a imagem); o arquivo some ao fim."""
     pasta = config.pasta_dados() / "capturas"
     pasta.mkdir(parents=True, exist_ok=True)
@@ -467,7 +478,8 @@ def _ver_pela_cli(jpeg: bytes, pergunta: str) -> JSONResponse | dict:
         "Abra essa imagem e responda olhando para ela, em poucas frases faladas."
     )
     try:
-        resposta = anyio.from_thread.run(_perguntar_cerebro, texto, "visao")
+        # Mesma sessão da conversa por voz: a visão não abre um segundo processo de CLI.
+        resposta = anyio.from_thread.run(_perguntar_cerebro, texto, sessao_id)
     except _ErroCerebro as exc:
         log.warning("visão pela CLI falhou: %s", exc.codigo)
         return JSONResponse({"erro": exc.codigo}, status_code=503)
@@ -479,13 +491,13 @@ def _ver_pela_cli(jpeg: bytes, pergunta: str) -> JSONResponse | dict:
 
 
 @app.post("/see")
-def see(imagem: UploadFile = File(...), pergunta: str = Form("O que está na tela?")):
+def see(imagem: UploadFile = File(...), pergunta: str = Form("O que está na tela?"), sessao_id: str = Form("")):
     if imagem.content_type != "image/jpeg":
         raise HTTPException(422, "mande image/jpeg")
     jpeg = imagem.file.read()
     cuidado = "com mais cuidado" in pergunta.lower()
     if not cuidado and _ler_provedor_ativo().get("tipo", "").startswith("cli-"):
-        return _ver_pela_cli(jpeg, pergunta)
+        return _ver_pela_cli(jpeg, pergunta, sessao_id.strip()[:128] or SESSAO_VISAO_PADRAO)
     b64 = base64.b64encode(jpeg).decode()
     try:
         if cuidado:
@@ -527,10 +539,15 @@ def _reuniao_ativa() -> bool:
         return False
 
 
+def _prazo_sonda(url: str) -> httpx.Timeout:
+    """Porta fechada no loopback do Windows leva ~2 s para recusar: conexão curta, leitura de 2 s."""
+    return sondas.prazo(url)
+
+
 async def _sondar_reuniao() -> str:
-    """Sonda assíncrona ao serviço de reunião com timeout de 2 s."""
+    """Sonda assíncrona ao serviço de reunião (leitura 2 s, conexão curta)."""
     try:
-        async with httpx.AsyncClient(timeout=2, trust_env=False) as client:
+        async with httpx.AsyncClient(timeout=_prazo_sonda(REUNIAO), trust_env=False) as client:
             r = await client.get(f"{REUNIAO}/status")
             return "ativa" if r.json().get("ativa") else "inativa"
     except (httpx.HTTPError, ValueError, AttributeError):
@@ -538,9 +555,9 @@ async def _sondar_reuniao() -> str:
 
 
 async def _sondar_openjarvis() -> bool:
-    """Sonda assíncrona ao OpenJarvis com timeout de 2 s."""
+    """Sonda assíncrona ao OpenJarvis (leitura 2 s, conexão curta)."""
     try:
-        async with httpx.AsyncClient(timeout=2, trust_env=False) as client:
+        async with httpx.AsyncClient(timeout=_prazo_sonda(OPENJARVIS), trust_env=False) as client:
             r = await client.get(f"{OPENJARVIS}/health")
             return r.status_code == 200
     except httpx.HTTPError:
@@ -548,10 +565,10 @@ async def _sondar_openjarvis() -> bool:
 
 
 async def _sondar_lmstudio() -> tuple[bool, list[str], str]:
-    """Sonda assíncrona ao LM Studio com timeout de 2 s; devolve (ok, ids, modelo)."""
+    """Sonda assíncrona ao LM Studio (leitura 2 s, conexão curta); devolve (ok, ids, modelo)."""
     try:
         cab = {"Authorization": f"Bearer {CHAVE_LMSTUDIO}"} if CHAVE_LMSTUDIO else {}
-        async with httpx.AsyncClient(timeout=2, trust_env=False) as client:
+        async with httpx.AsyncClient(timeout=_prazo_sonda(LMSTUDIO), trust_env=False) as client:
             r = await client.get(f"{LMSTUDIO}/v1/models", headers=cab)
             if r.status_code != 200:
                 return False, [], ""
@@ -1251,7 +1268,12 @@ async def pacote_remover(pacote_id: str):
 def recursos():
     """Monitor de recursos do Vard (0.9.4 leve): memória e CPU por componente."""
     from vard import recursos as mod_recursos
-    return mod_recursos.coletar_recursos()
+    supervisor = _supervisor_cli
+    try:
+        cli_pids = list(supervisor.pids()) if supervisor is not None else []
+    except Exception:  # noqa: BLE001
+        cli_pids = []
+    return mod_recursos.coletar_recursos(cli_pids=cli_pids)
 
 
 # --------------------------------------------------------------------------- TELEGRAM (T9 tela)

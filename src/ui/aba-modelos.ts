@@ -84,29 +84,75 @@ export class AbaModelos {
   private ojFora = false;
   /** Lembra se o usuário abriu as opções avançadas: ações redesenham a aba. */
   private avancadoAberto = false;
+  /** Consultas ao núcleo ainda em andamento (indicador discreto no topo). */
+  private carregando = false;
+  /** Cada abertura da aba é uma geração: resposta de uma abertura antiga não mexe na tela. */
+  private geracao = 0;
+  private instalaveis: InstalaveisProvedores | null = null;
+  /** Algo chegou com um modal aberto: redesenha quando der (na próxima ação ou ao fim das consultas). */
+  private redesenhoPendente = false;
 
   constructor(
     private raiz: HTMLElement,
     private deps: DepsQuemResponde,
   ) {}
 
+  /**
+   * Desenha na hora com o que é local (paineis/config) e preenche depois o que vem do núcleo:
+   * estado (/status), CLIs (/cli/detectar), modelos do OpenJarvis e instalações, todos em paralelo.
+   * A promessa termina quando tudo chegou (os testes e quem precisa do estado final esperam por ela).
+   */
   async carregar() {
+    const geracao = ++this.geracao;
     this.cfg = await lerPaineis();
-    this.clis = await detectarClis(this.deps.ponteUrl).catch(() => []);
-    const st = await this.deps.statusPonte().catch(() => null);
-    this.ponteOk = st !== null;
-    try {
-      this.ojModelos = await this.deps.criarOj("").modelos();
-      this.ojFora = false;
-    } catch {
-      this.ojModelos = [];
-      this.ojFora = true;
-    }
-    await this.desenhar();
+    if (geracao !== this.geracao) return;
+    this.carregando = true;
+    this.instalaveis = new InstalaveisProvedores(document.createElement("div"), this.deps.ponteUrl, async (item) => {
+      if (item.id === "openjarvis") { this.abrirModalOpenJarvis(); return; }
+      this.clis = await detectarClis(this.deps.ponteUrl).catch(() => []);
+      if (item.instalado && EH_CLI.has(item.tipo_provedor) && !this.clis.some(c => c.tipo === item.tipo_provedor && c.instalada)) {
+        this.clis = this.clis.filter(c => c.tipo !== item.tipo_provedor);
+        this.clis.push({ tipo: item.tipo_provedor, instalada: true, versao: "", modelos: [] });
+      }
+      this.abrirModal(undefined, { tipo: item.tipo_provedor, nome: item.nome, url_base: item.url_base });
+    }, () => this.cfg.provedores);
+    this.desenhar();
+    const valendo = () => geracao === this.geracao;
+    const clis = detectarClis(this.deps.ponteUrl).catch(() => [] as CliDetectada[])
+      .then((c) => { if (valendo()) this.clis = c; }); // só o modal usa: nada a redesenhar
+    const status = this.deps.statusPonte().catch(() => null).then((st) => {
+      if (!valendo()) return;
+      const ok = st !== null;
+      if (ok !== this.ponteOk) { this.ponteOk = ok; this.redesenharSeLivre(); }
+    });
+    const oj = this.deps.criarOj("").modelos().then(
+      (m) => { if (valendo()) { this.ojModelos = m; this.ojFora = false; this.redesenharSeLivre(); } },
+      () => { if (valendo()) { this.ojModelos = []; this.ojFora = true; this.redesenharSeLivre(); } },
+    );
+    const instalaveis = this.instalaveis.carregar();
+    await Promise.all([clis, status, oj, instalaveis]);
+    if (!valendo()) return;
+    this.carregando = false;
+    if (this.redesenhoPendente) this.redesenharSeLivre();
+    else this.raiz.querySelector(".nucleo-carregando")?.remove();
+  }
+
+  /** Redesenha com o estado novo, menos com um modal aberto (apagaria o que o usuário digita). */
+  private redesenharSeLivre() {
+    if (this.raiz.querySelector(".modal")) { this.redesenhoPendente = true; return; }
+    this.desenhar();
   }
 
   private desenhar() {
+    this.redesenhoPendente = false;
     this.raiz.innerHTML = "";
+    if (this.carregando) {
+      const aviso = document.createElement("p");
+      aviso.className = "nucleo-carregando";
+      aviso.setAttribute("role", "status");
+      aviso.textContent = "Consultando o núcleo…";
+      this.raiz.append(aviso);
+    }
     if (!this.ponteOk) {
       const aviso = document.createElement("div");
       aviso.className = "qr-aviso-ponte";
@@ -156,18 +202,8 @@ export class AbaModelos {
       } finally { usarOj.disabled = false; }
     });
     cardOj.append(rotulo, avisoOj);
-    if (instalacoes) {
-      return new InstalaveisProvedores(instalacoes, this.deps.ponteUrl, async (item) => {
-        if (item.id === "openjarvis") { this.abrirModalOpenJarvis(); return; }
-        this.clis = await detectarClis(this.deps.ponteUrl).catch(() => []);
-        if (item.instalado && EH_CLI.has(item.tipo_provedor) && !this.clis.some(c => c.tipo === item.tipo_provedor && c.instalada)) {
-          this.clis = this.clis.filter(c => c.tipo !== item.tipo_provedor);
-          this.clis.push({ tipo: item.tipo_provedor, instalada: true, versao: "", modelos: [] });
-        }
-        this.abrirModal(undefined, { tipo: item.tipo_provedor, nome: item.nome, url_base: item.url_base });
-      }, () => this.cfg.provedores).carregar();
-    }
-    return Promise.resolve();
+    // As instalações já lidas voltam no contêiner novo, sem consultar o núcleo de novo.
+    if (instalacoes && this.instalaveis) this.instalaveis.anexar(instalacoes);
   }
 
   /** Bloco com título, no estilo dos demais da janela (fieldset + legenda). */

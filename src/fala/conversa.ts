@@ -49,7 +49,7 @@ export interface DepsConversa {
   config: Pick<Config, "nome" | "variantes" | "voz" | "velocidade" | "instrucao_formato" | "conversa_ms"> & Partial<Pick<Config, "usuario">>;
   /** Ponte opcional do Vard: olhos na tela e modo jogo. */
   ponte?: {
-    ver(jpegB64: string, pergunta: string): Promise<string>;
+    ver(jpegB64: string, pergunta: string, sessaoId?: string): Promise<string>;
     modo(verbo: string): Promise<boolean>;
     /** Cérebro próprio: admite um pedido e devolve o estado inicial. */
     pedir?(texto: string, sessaoId: string): Promise<{ pedido_id: string; sessao_id: string; estado: string }>;
@@ -331,7 +331,8 @@ export class Conversa {
           if (ac.signal.aborted) return;
           jpeg = await this.d.capturar();
         } finally { this.d.depoisDaCaptura?.(); }
-        resposta = (await this.d.ponte.ver(jpeg, comando)).trim();
+        const sessao = this.d.sessaoVoz?.(); // a visão entra na mesma sessão da voz (uma CLI só)
+        resposta = (await (sessao ? this.d.ponte.ver(jpeg, comando, sessao) : this.d.ponte.ver(jpeg, comando))).trim();
       } else if (this.d.cerebro === "proprio" && this.d.ponte?.pedir && this.d.sessaoVoz) {
         // Cérebro próprio: admite pedido e espera texto via EventoPedido (SSE).
         const sessaoId = this.d.sessaoVoz();
