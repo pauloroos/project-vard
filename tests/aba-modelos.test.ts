@@ -620,4 +620,90 @@ describe("AbaModelos (Núcleo)", () => {
     await aba.carregar();
     expect(raiz.querySelector(".qr-aviso-ponte")).toBeNull();
   });
+
+  describe("modal Editar OpenJarvis (endereços saíram da aba Geral)", () => {
+    const abrirEditar = async (deps: DepsQuemResponde) => {
+      const raiz = criarRaiz();
+      await new AbaModelos(raiz, deps).carregar();
+      [...raiz.querySelectorAll<HTMLButtonElement>('[data-id="__oj__"] button')].find((b) => b.textContent === "Editar")!.click();
+      const modal = raiz.querySelector<HTMLElement>(".modal")!;
+      const url = modal.querySelector<HTMLInputElement>("#nucleo-oj-url")!;
+      const gui = modal.querySelector<HTMLInputElement>("#nucleo-oj-gui")!;
+      const salvar = [...modal.querySelectorAll<HTMLButtonElement>(".modal-acoes button")].find((b) => b.textContent === "Salvar")!;
+      return { raiz, modal, url, gui, salvar };
+    };
+
+    it("mostra endereço, interface de texto e modelo com os valores atuais", async () => {
+      configEmMemoria = { ...CONFIG_PADRAO, cerebro: "proprio", openjarvis_url: "http://127.0.0.1:8100", gui_url: "http://127.0.0.1:5200" };
+      const { modal, url, gui } = await abrirEditar(criarDeps({ config: { ...configEmMemoria } }));
+      expect(modal.querySelector(".modal-titulo")?.textContent).toBe("Editar OpenJarvis");
+      const rotulos = [...modal.querySelectorAll(".campo-modal-rotulo")].map((r) => r.textContent);
+      expect(rotulos).toEqual(["Endereço", "Interface de texto", "Modelo do OpenJarvis"]);
+      expect(url.value).toBe("http://127.0.0.1:8100");
+      expect(gui.value).toBe("http://127.0.0.1:5200");
+      expect(modal.querySelector("select")).toBeTruthy();
+    });
+
+    it("Salvar grava os dois endereços, atualiza a config viva e o card, e avisa que vale após reiniciar", async () => {
+      configEmMemoria = { ...CONFIG_PADRAO, cerebro: "proprio" };
+      const dizer = vi.fn();
+      const deps = criarDeps({ config: { ...configEmMemoria }, dizer });
+      const { raiz, url, gui, salvar } = await abrirEditar(deps);
+      url.value = "  http://127.0.0.1:8300/  ";
+      gui.value = "http://localhost:5300";
+      salvar.click();
+      await vi.waitFor(() => expect(raiz.querySelector(".modal")).toBeNull());
+      expect(configEmMemoria.openjarvis_url).toBe("http://127.0.0.1:8300/");
+      expect(configEmMemoria.gui_url).toBe("http://localhost:5300");
+      expect(deps.config.openjarvis_url).toBe("http://127.0.0.1:8300/");
+      expect(deps.config.gui_url).toBe("http://localhost:5300");
+      expect(raiz.querySelector('[data-id="__oj__"]')?.textContent).toContain("http://127.0.0.1:8300/");
+      expect(dizer).toHaveBeenCalledWith(expect.stringContaining("Reinicie o Vard para aplicar: endereços"), false);
+    });
+
+    it("só o modelo mudou: grava sem pedir reinício", async () => {
+      configEmMemoria = { ...CONFIG_PADRAO, cerebro: "proprio" };
+      const dizer = vi.fn();
+      const deps = criarDeps({ config: { ...configEmMemoria }, dizer });
+      const { raiz, modal, salvar } = await abrirEditar(deps);
+      modal.querySelector<HTMLSelectElement>("select")!.value = "modelo-oj-2";
+      salvar.click();
+      await vi.waitFor(() => expect(raiz.querySelector(".modal")).toBeNull());
+      expect(configEmMemoria.modelo).toBe("modelo-oj-2");
+      expect(configEmMemoria.openjarvis_url).toBe(CONFIG_PADRAO.openjarvis_url);
+      expect(dizer).not.toHaveBeenCalledWith(expect.stringContaining("Reinicie"), expect.anything());
+    });
+
+    it("endereço vazio ou que não é http(s) não salva e avisa no modal", async () => {
+      configEmMemoria = { ...CONFIG_PADRAO, cerebro: "proprio" };
+      const deps = criarDeps({ config: { ...configEmMemoria } });
+      const { modal, url, gui, salvar } = await abrirEditar(deps);
+      url.value = "   ";
+      salvar.click();
+      await vi.waitFor(() => expect(modal.querySelector(".modal-aviso")?.textContent).toContain("Preencha o endereço"));
+      expect(modal.isConnected).toBe(true);
+      url.value = "http://127.0.0.1:8000";
+      gui.value = "pasta/local";
+      salvar.click();
+      await vi.waitFor(() => expect(modal.querySelector(".modal-aviso")?.textContent).toContain("Interface de texto"));
+      expect(modal.isConnected).toBe(true);
+      expect(configEmMemoria.openjarvis_url).toBe(CONFIG_PADRAO.openjarvis_url);
+      expect(configEmMemoria.gui_url).toBe(CONFIG_PADRAO.gui_url);
+      expect(deps.config.gui_url).toBe(CONFIG_PADRAO.gui_url);
+    });
+
+    it("endereço fora da máquina marca o campo e salva com aviso, como o resto do painel", async () => {
+      configEmMemoria = { ...CONFIG_PADRAO, cerebro: "proprio" };
+      const dizer = vi.fn();
+      const { raiz, url, salvar } = await abrirEditar(criarDeps({ config: { ...configEmMemoria }, dizer }));
+      expect(url.classList.contains("aviso")).toBe(false);
+      url.value = "http://servidor.exemplo:8000";
+      url.dispatchEvent(new Event("input"));
+      expect(url.classList.contains("aviso")).toBe(true);
+      salvar.click();
+      await vi.waitFor(() => expect(raiz.querySelector(".modal")).toBeNull());
+      expect(configEmMemoria.openjarvis_url).toBe("http://servidor.exemplo:8000");
+      expect(dizer).toHaveBeenCalledWith(expect.stringContaining("OpenJarvis: o endereço não é 127.0.0.1 nem localhost"), true);
+    });
+  });
 });

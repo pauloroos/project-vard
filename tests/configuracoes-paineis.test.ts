@@ -235,4 +235,56 @@ describe("configuracoes-paineis (T8)", () => {
     painel.abrirAba("modelos" as Aba);
     await vi.waitFor(() => expect(aviso()).toBeNull(), { timeout: 3000 });
   });
+
+  it("aba Geral não tem mais o OpenJarvis: endereço, interface de texto e Testar ficam no Núcleo", async () => {
+    const raiz = criarRaiz();
+    const painel = new Configuracoes({ ...CONFIG_PADRAO } as Config, raiz, criarDeps());
+    await painel.montar();
+    const geral = raiz.querySelector<HTMLElement>('section[data-aba="geral"]')!;
+    expect(geral.textContent).not.toContain("OpenJarvis");
+    expect(raiz.querySelector("#cfg-openjarvis_url")).toBeNull();
+    expect(raiz.querySelector("#cfg-gui_url")).toBeNull();
+    expect(raiz.querySelector("#cfg-testar")).toBeNull();
+  });
+
+  it("Salvar do painel mantém os endereços do OpenJarvis gravados pelo modal do Núcleo", async () => {
+    document.body.innerHTML = "";
+    let disco: Config = { ...CONFIG_PADRAO, openjarvis_url: "http://127.0.0.1:8100", gui_url: "http://127.0.0.1:5200" };
+    vi.mocked(invoke).mockImplementation((cmd: string, args?: unknown) => {
+      if (cmd === "falhas_de_atalho") return Promise.resolve([]);
+      if (cmd === "ler_config") return Promise.resolve(disco);
+      if (cmd === "gravar_config") { disco = (args as { config: Config }).config; return Promise.resolve(undefined); }
+      return Promise.resolve(null);
+    });
+    const raiz = criarRaiz();
+    const aoSalvar = vi.fn();
+    const painel = new Configuracoes({ ...disco }, raiz, { ...criarDeps(), statusPonte: async () => ({ ok: true, modo: "ligado" }) as any, aoSalvar });
+    await painel.montar();
+    painel.abrirAba("modelos" as Aba);
+    await vi.waitFor(() => expect(raiz.querySelector('[data-id="__oj__"]')).toBeTruthy(), { timeout: 3000 });
+    [...raiz.querySelectorAll<HTMLButtonElement>('[data-id="__oj__"] button')].find((b) => b.textContent === "Editar")!.click();
+    const modal = raiz.querySelector<HTMLElement>(".modal")!;
+    modal.querySelector<HTMLInputElement>("#nucleo-oj-url")!.value = "http://127.0.0.1:8300";
+    modal.querySelector<HTMLInputElement>("#nucleo-oj-gui")!.value = "http://127.0.0.1:5300";
+    [...modal.querySelectorAll<HTMLButtonElement>(".modal-acoes button")].find((b) => b.textContent === "Salvar")!.click();
+    await vi.waitFor(() => expect(raiz.querySelector(".modal")).toBeNull());
+    expect(disco).toMatchObject({ openjarvis_url: "http://127.0.0.1:8300", gui_url: "http://127.0.0.1:5300" });
+    // O modal avisa do reinício no rodapé do painel.
+    expect(raiz.querySelector("#cfg-msg")?.textContent).toContain("Reinicie o Vard");
+
+    raiz.querySelector<HTMLButtonElement>("#cfg-salvar")!.click();
+    await vi.waitFor(() => expect(aoSalvar).toHaveBeenCalled());
+    expect(disco).toMatchObject({ openjarvis_url: "http://127.0.0.1:8300", gui_url: "http://127.0.0.1:5300" });
+    expect(painel.lerFormulario()).toMatchObject({ openjarvis_url: "http://127.0.0.1:8300", gui_url: "http://127.0.0.1:5300" });
+  });
+
+  it("mudança externa dos endereços do OpenJarvis atualiza a config sem os campos na Geral", async () => {
+    const raiz = criarRaiz();
+    const cfg = { ...CONFIG_PADRAO } as Config;
+    const painel = new Configuracoes(cfg, raiz, criarDeps());
+    await painel.montar();
+    expect(() => painel.mudouExternamente({ ...cfg, openjarvis_url: "http://127.0.0.1:8400", gui_url: "http://127.0.0.1:5400" })).not.toThrow();
+    expect(cfg.openjarvis_url).toBe("http://127.0.0.1:8400");
+    expect(painel.lerFormulario()).toMatchObject({ openjarvis_url: "http://127.0.0.1:8400", gui_url: "http://127.0.0.1:5400" });
+  });
 });

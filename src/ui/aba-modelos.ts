@@ -13,7 +13,7 @@ import "./estilos/quem-responde.css";
 import type { OpenJarvis } from "../conectores/openjarvis/cliente";
 import type { StatusPonte } from "../conectores/ponte/cliente";
 import type { Cerebro } from "../config/cerebro";
-import { atualizarConfig, type Config } from "../config/config";
+import { atualizarConfig, avisosDeUrl, mudancasQueExigemReinicio, urlLocal, type Config } from "../config/config";
 import { lerPaineis, gravarPaineis, type PaineisConfig, type Provedor, type Agente, type EscolhaAgente } from "../config/paineis";
 import { detectarClis, type CliDetectada } from "../config/clis";
 import { cofreExiste, cofreGravar } from "../config/segredos";
@@ -32,6 +32,8 @@ export interface DepsQuemResponde {
   config: Config;
   aoMudarCerebro?: (cerebro: Cerebro) => void;
   aoMudarUsoOpenJarvis?: (usar: boolean) => void;
+  /** Mensagem no rodapé do painel (reinício, avisos de endereço). */
+  dizer?: (texto: string, ruim?: boolean) => void;
 }
 
 const TIPOS_PROVEDOR: [string, string][] = [
@@ -56,6 +58,14 @@ const SO_DELEGADA = new Set(["cli-codex", "cli-opencode"]);
 export function resumoTeste(j: { ok?: boolean; detalhe?: string; primeiro_token_ms?: number | null }): string {
   if (!j.ok) return j.detalhe === "cli_nao_encontrada" ? "CLI não encontrada neste PC." : `Falha: ${j.detalhe ?? "sem resposta"}`;
   return j.primeiro_token_ms != null ? `Conexão OK (${j.primeiro_token_ms} ms)` : `OK: ${j.detalhe ?? ""}`.trim();
+}
+
+/** true para um endereço http(s) que o navegador consegue interpretar. */
+function urlHttp(u: string): boolean {
+  try {
+    const x = new URL(u);
+    return x.protocol === "http:" || x.protocol === "https:";
+  } catch { return false; }
 }
 
 /** Normaliza endpoint: aceita com ou sem /v1 no final. */
@@ -336,10 +346,26 @@ export class AbaModelos {
     }
   }
 
-  /** Modal de edição do OpenJarvis: escolha do modelo entre os disponíveis. */
+  /** Modal de edição do OpenJarvis: endereço, interface de texto e o modelo entre os disponíveis. */
   private abrirModalOpenJarvis() {
     const corpo = document.createElement("div");
     corpo.className = "qr-modal-campos";
+    // Mesmo aviso da aba Geral: endereço fora de 127.0.0.1/localhost fica marcado, mas não impede salvar.
+    const campoUrl = (id: string, valor: string, exemplo: string) => {
+      const inp = document.createElement("input");
+      inp.type = "url";
+      inp.id = id;
+      inp.placeholder = exemplo;
+      inp.value = valor;
+      const marcar = () => inp.classList.toggle("aviso", !urlLocal(inp.value.trim()));
+      inp.addEventListener("input", marcar);
+      marcar();
+      return inp;
+    };
+    const urlInp = campoUrl("nucleo-oj-url", this.deps.config.openjarvis_url, "http://127.0.0.1:8000");
+    const guiInp = campoUrl("nucleo-oj-gui", this.deps.config.gui_url, "http://127.0.0.1:5173");
+    corpo.append(campoModal("Endereço", urlInp, "Onde o servidor do OpenJarvis responde."));
+    corpo.append(campoModal("Interface de texto", guiInp, "Página que o botão Texto do widget abre."));
     const modeloSel = document.createElement("select");
     const opAuto = document.createElement("option");
     opAuto.value = "";
@@ -354,14 +380,30 @@ export class AbaModelos {
     modeloSel.value = this.deps.config.modelo || "";
     corpo.append(campoModal("Modelo do OpenJarvis", modeloSel, "Escolha um modelo específico ou deixe em automático."));
 
+    let modalRef: ReturnType<typeof abrirModal> | undefined;
     const salvar = async (): Promise<boolean> => {
-      await atualizarConfig({ modelo: modeloSel.value });
-      this.deps.config.modelo = modeloSel.value;
+      const parcial = { openjarvis_url: urlInp.value.trim(), gui_url: guiInp.value.trim(), modelo: modeloSel.value };
+      const campos: [string, string, string][] = [
+        [parcial.openjarvis_url, "Endereço", "do OpenJarvis"],
+        [parcial.gui_url, "Interface de texto", "da interface de texto"],
+      ];
+      for (const [valor, rotulo, de] of campos) {
+        if (!valor) { modalRef?.avisar(`Preencha o endereço ${de}.`, true); return false; }
+        if (!urlHttp(valor)) { modalRef?.avisar(`${rotulo}: use um endereço http:// ou https://.`, true); return false; }
+      }
+      const reiniciar = mudancasQueExigemReinicio(this.deps.config, { ...this.deps.config, ...parcial });
+      await atualizarConfig(parcial);
+      Object.assign(this.deps.config, parcial);
       this.desenhar();
+      const avisos = avisosDeUrl({ ...parcial, ponte_url: "", voz_url: "" });
+      const partes = ["OpenJarvis salvo."];
+      if (reiniciar.length) partes.push(`Reinicie o Vard para aplicar: ${reiniciar.join(", ")}.`);
+      if (avisos.length) partes.push(`Atenção: ${avisos.join("; ")}.`);
+      this.deps.dizer?.(partes.join(" "), avisos.length > 0);
       return true;
     };
 
-    abrirModal({
+    modalRef = abrirModal({
       titulo: "Editar OpenJarvis",
       corpo,
       acoes: [
