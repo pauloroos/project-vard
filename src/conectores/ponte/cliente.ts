@@ -141,6 +141,19 @@ export class Ponte {
   private base: string;
   constructor(base: string) { this.base = base.replace(/\/+$/, ""); }
 
+  /** O núcleo está vivo? GET /saude (não consulta LM Studio nem OpenJarvis): false se não responder em 3 s. */
+  async saude(): Promise<boolean> {
+    if (!this.base) return false; // ponte_url vazio = ponte desligada
+    try {
+      return await comTimeout(3000, async (signal) => {
+        const r = await fetch(`${this.base}/saude`, { signal });
+        if (!r.ok) return false;
+        const j = await r.json().catch(() => null);
+        return (j as { ok?: unknown } | null)?.ok === true;
+      });
+    } catch { return false; }
+  }
+
   /** null = ponte ausente (não respondeu em 5 s). `ok` = OpenJarvis e LM Studio no ar. */
   async status(): Promise<StatusPonte | null> {
     if (!this.base) return null; // ponte_url vazio = ponte desligada
@@ -159,11 +172,15 @@ export class Ponte {
     } catch { return null; }
   }
 
-  /** Manda o quadro (JPEG em base64) e a pergunta; devolve a resposta. 503 vira ErroPonte(codigo). */
-  async ver(jpegB64: string, pergunta: string): Promise<string> {
+  /**
+   * Manda o quadro (JPEG em base64) e a pergunta; devolve a resposta. 503 vira ErroPonte(codigo).
+   * `sessaoId`: a sessão da conversa por voz; com o núcleo numa CLI, a visão usa a mesma sessão (e o mesmo processo).
+   */
+  async ver(jpegB64: string, pergunta: string, sessaoId?: string): Promise<string> {
     const form = new FormData();
     form.append("imagem", paraBlob(jpegB64), "tela.jpg");
     form.append("pergunta", pergunta);
+    if (sessaoId) form.append("sessao_id", sessaoId);
     return comTimeout(90000, async (signal) => {
       let r: Response;
       try { r = await fetch(`${this.base}/see`, { method: "POST", body: form, signal }); }

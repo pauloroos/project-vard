@@ -174,6 +174,19 @@ describe("ponte do Vard (opcional)", () => {
     expect(m.falas).toEqual([FALAS.semPonte, FALAS.semPonte]);
   });
 
+  it("com_ponte_ver: manda a sessão da voz junto, para a visão usar a mesma CLI da conversa", async () => {
+    const ponte = { ver: vi.fn().mockResolvedValue("Um editor."), modo: vi.fn().mockResolvedValue(true) };
+    const c = new Conversa({
+      oj: { perguntar: vi.fn(), sintetizar: vi.fn().mockResolvedValue(WAV) },
+      boca: { falando: false, tocar: vi.fn().mockResolvedValue(undefined), parar: vi.fn() },
+      config: CONFIG_PADRAO, falas: async () => WAV,
+      ponte, capturar: vi.fn().mockResolvedValue("QUJD"), abrirMicrofone: vi.fn(), fecharMicrofone: vi.fn(),
+      sessaoVoz: () => "sessao-voz-ficticia",
+    });
+    await c.aoTextoTranscrito("Vard, o que você está vendo", false);
+    expect(ponte.ver).toHaveBeenCalledWith("QUJD", "o que você está vendo", "sessao-voz-ficticia");
+  });
+
   it("com_ponte_ver: captura uma vez, ponte.ver e fala a resposta", async () => {
     const m = montar(true);
     await m.c.aoTextoTranscrito("Vard, o que você está vendo", false);

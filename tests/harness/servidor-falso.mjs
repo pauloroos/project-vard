@@ -107,7 +107,7 @@ export function criarServidor({ log = () => {}, release = false } = {}) {
   });
 }
 
-/** Ponte falsa do Vard (porta 4700 no uso real): /status, /see, /modo e /events. Guarda a origem e o modo em `estado`. */
+/** Ponte falsa do Vard (porta 4700 no uso real): /saude, /status, /see, /modo e /events. Guarda a origem e o modo em `estado`. */
 export function criarPonteFalsa({ estado = { modo: "ligado", pedidos: [], sseClientes: [] } } = {}) {
   if (!estado.sseClientes) estado.sseClientes = [];
   const srv = http.createServer(async (req, res) => {
@@ -116,6 +116,7 @@ export function criarPonteFalsa({ estado = { modo: "ligado", pedidos: [], sseCli
     const cors = { ...CORS, ...(origem ? { "Access-Control-Allow-Origin": origem } : {}) };
     const json = (obj, status = 200) => { res.writeHead(status, { "Content-Type": "application/json", ...cors }); res.end(JSON.stringify(obj)); };
     if (req.method === "OPTIONS") { res.writeHead(204, cors); res.end(); return; }
+    if (caminho === "/saude") return json({ ok: true, versao: "falsa", pid: process.pid });
     if (caminho === "/status") return json({ openjarvis: true, lmstudio: true, modelo: "falso", modo: estado.modo, tarefas_abertas: 0, modelos_lmstudio: ["falso"] });
     if (req.method === "POST" && caminho === "/see") {
       const corpo = await lerCorpo(req);

@@ -25,7 +25,7 @@ import { Conversa, type Estado } from "./fala/conversa";
 import { processarTextoOuvido } from "./fala/textoOuvido";
 import { criarMaquinaConversaAberta, processamentoConcluido } from "./conversa/aberta";
 import { FALAS, saudacaoPara } from "./fala/falas";
-import { sondarCerebro } from "./fala/saude-cerebro";
+import { criarMemoriaSaude, sondarCerebro } from "./fala/saude-cerebro";
 import { Adiador } from "./ui/dock";
 import { Hud } from "./ui/hud";
 import { Invisibilidade } from "./ui/invisivel";
@@ -484,9 +484,10 @@ async function transcreverFala(wav: ArrayBuffer, sinal?: AbortSignal): Promise<s
       try { await fixa(t, false); } catch { aquecido = false; } // uma de cada vez: não disputa a GPU com a conversa
     }
   };
+  const memoriaSaude = criarMemoriaSaude();
   const checarSaude = async () => {
-    // Com cerebro=proprio e toggle desligado, oj é null: quem responde é o núcleo (o /status da ponte).
-    const { ok, falaOk } = await sondarCerebro(oj, ponte);
+    // Com cerebro=proprio e toggle desligado, oj é null: quem responde é o núcleo (a /saude da ponte).
+    const { ok, falaOk } = await sondarCerebro(oj, ponte, memoriaSaude);
     await conversa.aoHealth(ok, falaOk);
     if (voz) {
       const pronta = await voz.saude();

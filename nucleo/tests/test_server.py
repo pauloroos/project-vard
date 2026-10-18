@@ -167,6 +167,23 @@ def test_see_com_nucleo_cli_manda_a_captura_para_a_cli(cliente, monkeypatch):
     assert not Path(vistos["caminho"]).exists()  # a captura não fica no disco
 
 
+def test_see_com_nucleo_cli_usa_a_sessao_da_voz(cliente, monkeypatch):
+    """A visão entra na mesma sessão (e no mesmo processo de CLI) da conversa por voz, não numa sessão própria."""
+    monkeypatch.setattr(server, "_ler_provedor_ativo", lambda: {"tipo": "cli-claude", "modelo": "m"})
+    sessoes = []
+
+    async def _perguntar(texto, sessao_id):
+        sessoes.append(sessao_id)
+        return "ok"
+
+    monkeypatch.setattr(server, "_perguntar_cerebro", _perguntar)
+    arquivos = {"imagem": ("q.jpg", JPEG_1PX, "image/jpeg")}
+    cliente.post("/see", files=arquivos, data={"pergunta": "o que vê?", "sessao_id": "sessao-voz-ficticia"})
+    cliente.post("/see", files={"imagem": ("q.jpg", JPEG_1PX, "image/jpeg")}, data={"pergunta": "o que vê?"})
+    assert sessoes == ["sessao-voz-ficticia", server.SESSAO_VISAO_PADRAO]
+    assert server.SESSAO_VISAO_PADRAO == "voz"
+
+
 def test_see_com_nucleo_cli_erro_vira_codigo(cliente, monkeypatch):
     monkeypatch.setattr(server, "_ler_provedor_ativo", lambda: {"tipo": "cli-claude", "modelo": "m"})
 
