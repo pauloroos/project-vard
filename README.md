@@ -121,7 +121,7 @@ Pela engrenagem, pelo item **Configurações** da bandeja ou por `Ctrl+Alt+P`. O
 | `atalhos` | ver acima | Atalhos globais: `falar`, `parar`, `mostrar`, `config`, `escuta`, `sala` |
 | `instrucao_formato` | respostas curtas | Instrução enviada junto com cada pergunta |
 
-Endereços fora de `127.0.0.1` ou `localhost` geram um aviso (o HUD manda o que você diz e, com a ponte, imagens da sua tela; mantenha tudo na própria máquina). A caixa **Iniciar com o Windows** cria ou remove `Vard.lnk` na pasta Startup do seu usuário. O botão **Testar OpenJarvis** confere o servidor e a fala.
+Endereços fora de `127.0.0.1` ou `localhost` geram um aviso (o HUD manda o que você diz e, com a ponte, imagens da sua tela; mantenha tudo na própria máquina). A caixa **Iniciar com o Windows** cria ou remove `Vard.lnk` na pasta Startup do seu usuário. O endereço, a interface de texto e o modelo do OpenJarvis ficam em **Núcleo → Editar OpenJarvis**; o **Testar** do card dele faz uma pergunta curta ao servidor.
 
 ## Tela cheia (sala)
 

@@ -123,7 +123,7 @@ Use the gear, **Configurações** in the tray menu or `Ctrl+Alt+P`. The panel op
 | `atalhos` | see above | Global shortcuts: `falar`, `parar`, `mostrar`, `config`, `escuta`, `sala` |
 | `instrucao_formato` | short answers | Instruction sent with every question |
 
-URLs outside `127.0.0.1` or `localhost` raise a warning (the HUD sends what you say and, with the bridge, images of your screen; keep everything on your own machine). **Iniciar com o Windows** creates or removes `Vard.lnk` in your user Startup folder. **Testar OpenJarvis** checks the server and speech.
+URLs outside `127.0.0.1` or `localhost` raise a warning (the HUD sends what you say and, with the bridge, images of your screen; keep everything on your own machine). **Iniciar com o Windows** creates or removes `Vard.lnk` in your user Startup folder. The OpenJarvis address, text interface and model are in **Núcleo → Editar OpenJarvis**; **Testar** on its card sends the server a short question.
 
 ## Full screen (sala)
 

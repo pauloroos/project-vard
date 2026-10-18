@@ -126,6 +126,7 @@ export class Configuracoes {
       config: this.cfg,
       aoMudarCerebro: (cerebro) => { this.cfg.cerebro = cerebro; void salvarConfig(this.cfg); },
       aoMudarUsoOpenJarvis: () => { this.deps.aoSalvar?.(this.cfg); },
+      dizer: (t, ruim) => this.dizer(t, ruim),
     });
     void this.modelos.carregar();
     this.paineisMcps = new AbaPaineisMcps(this.raiz.querySelector<HTMLElement>("#cfg-paineis-mcps")!);
@@ -314,11 +315,6 @@ export class Configuracoes {
       <div class="conteudo">
         <div id="cfg-titulo-secao" class="conteudo-titulo"></div>
         <section data-aba="geral">
-          <fieldset><legend>OpenJarvis</legend>
-            ${this.campo("openjarvis_url", "Endereço", c.openjarvis_url)}
-            ${this.campo("gui_url", "Interface de texto", c.gui_url)}
-            <button id="cfg-testar" type="button">Testar</button>
-          </fieldset>
           <fieldset><legend>Idioma</legend>
             ${campoIdioma(c.idioma)}
           </fieldset>
@@ -404,12 +400,11 @@ export class Configuracoes {
     for (const b of this.raiz.querySelectorAll<HTMLButtonElement>("nav button")) b.addEventListener("click", () => this.abrirAba(b.dataset.aba as Aba));
     this.raiz.querySelector("#cfg-fechar")!.addEventListener("click", () => this.deps.fechar?.());
     this.raiz.querySelector("#cfg-salvar")!.addEventListener("click", () => { void this.salvar(); });
-    this.raiz.querySelector("#cfg-testar")!.addEventListener("click", () => { void this.testar(); });
     this.raiz.querySelector("#cfg-primeiro-uso")?.addEventListener("click", () => {
       void emitTo("main", "reabrir-primeiro-uso").catch(() => {});
     });
     this.montarAtalhos(this.raiz.querySelector<HTMLElement>("#cfg-atalhos")!);
-    for (const id of ["openjarvis_url", "gui_url", "ponte_url"]) this.marcarUrl(id);
+    this.marcarUrl("ponte_url");
   }
 
   /** Marca em aviso o campo de endereço que não é local; nos opcionais (ponte, voz) vazio desliga e não é aviso. */
@@ -524,7 +519,8 @@ export class Configuracoes {
     const cor = this.el("cor-elementos")?.value || c.cor_elementos;
     return {
       ...c,
-      openjarvis_url: txt("openjarvis_url", c.openjarvis_url), gui_url: txt("gui_url", c.gui_url), ponte_url: opc("ponte_url"),
+      // Endereço e interface de texto do OpenJarvis ficam no modal do Núcleo, que já os grava em this.cfg.
+      ponte_url: opc("ponte_url"),
       ...this.abaVoz.ler(), voz_url: this.abaVoz.vozUrl(),
       nome: c.nome, usuario: c.usuario, variantes: c.variantes,
       idioma: this.sel("idioma").value,
@@ -581,16 +577,5 @@ export class Configuracoes {
     if (reiniciar.length) partes.push(`Reinicie o Vard para aplicar: ${reiniciar.join(", ")}.`);
     if (avisos.length) partes.push(`Atenção: ${avisos.join("; ")}.`);
     this.dizer(partes.join(" "), avisos.length > 0 || falhouLogon || erroPerfil !== "");
-  }
-
-  private async testar() {
-    const url = this.el("openjarvis_url").value.trim();
-    this.dizer("Testando...");
-    try {
-      const oj = this.deps.criarOj(url);
-      if (!(await oj.saude())) { this.dizer("OpenJarvis não respondeu nesse endereço.", true); return; }
-      if (!(await oj.fala())) { this.dizer("OpenJarvis no ar, mas a fala está desligada. Veja docs/ligar-a-fala.md.", true); return; }
-      this.dizer("OpenJarvis no ar e a fala está ligada.");
-    } catch (erro) { this.dizer(`Falha no teste: ${String(erro)}`, true); }
   }
 }

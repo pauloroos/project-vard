@@ -35,7 +35,7 @@ Com o servidor no ar (`jarvis serve`), este endereço deve responder `{"availabl
 curl http://127.0.0.1:8000/v1/speech/health
 ```
 
-Ou abra o painel do HUD e use **Testar OpenJarvis**. Se `available` vier `false`, leia o log do servidor: costuma faltar um pacote da fala (instale o extra de fala do OpenJarvis) ou as bibliotecas CUDA.
+Se `available` vier `false`, leia o log do servidor: costuma faltar um pacote da fala (instale o extra de fala do OpenJarvis) ou as bibliotecas CUDA.
 
 ## CORS
 
