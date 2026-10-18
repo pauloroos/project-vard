@@ -24,7 +24,7 @@ max_turns = 8
 # file_read fica fora até existir diretório permitido, para não ler segredos.toml.
 # Este exemplo cobre os cinco MCPs locais (mesa, oficina, consulta, memória e reunião).
 # Mantenha só ferramentas das integrações configuradas; a instalação antiga usa liv até a troca na T11 (adaptador legado).
-tools = "think,llm,hora_atual,abrir_url,abrir_programa,listar_janelas,focar_janela,fechar_janela,print_da_tela,disparar_tarefa,status_tarefa,resultado_tarefa,responder_tarefa,aprovar_tarefa,descartar_tarefa,listar_tarefas,github_prs,github_issues,deploys,relatorio,agente_remoto,delegar,rotina_manha,memoria_buscar,memoria_ler,memoria_gravar,reuniao_iniciar,reuniao_encerrar,reuniao_status,reuniao_ata,reuniao_falante,reuniao_guardar"
+tools = "think,llm,hora_atual,abrir_url,abrir_programa,listar_janelas,focar_janela,fechar_janela,print_da_tela,listar_monitores,mover_janela,elementos_da_janela,clicar_elemento,clicar,digitar,teclar,rolar,disparar_tarefa,status_tarefa,resultado_tarefa,responder_tarefa,aprovar_tarefa,descartar_tarefa,listar_tarefas,github_prs,github_issues,deploys,relatorio,agente_remoto,delegar,rotina_manha,memoria_buscar,memoria_ler,memoria_gravar,reuniao_iniciar,reuniao_encerrar,reuniao_status,reuniao_ata,reuniao_falante,reuniao_guardar"
 objective = "Você é o Vard, assistente de Fulano. Use as ferramentas disponíveis quando precisar agir."
 context_from_memory = false     # memória opcional desativada
 # Persona em config/persona.md: a aplicação da configuração injeta seu conteúdo aqui.

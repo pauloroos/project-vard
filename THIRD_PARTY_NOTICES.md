@@ -94,6 +94,7 @@ As seguintes bibliotecas são instaladas via `uv pip install --require-hashes` e
 | certifi | MPL-2.0 |
 | cffi | MIT |
 | click | BSD-3-Clause |
+| comtypes | MIT |
 | cryptography | Apache-2.0 / BSD-3-Clause |
 | fastapi | MIT |
 | h11 | MIT |
@@ -125,6 +126,7 @@ As seguintes bibliotecas são instaladas via `uv pip install --require-hashes` e
 | starlette | BSD-3-Clause |
 | tomli-w | MIT |
 | typing-extensions | PSF |
+| uiautomation | Apache-2.0 |
 | uvicorn | BSD-3-Clause |
 | watchfiles | MIT |
 | websockets | BSD-3-Clause |

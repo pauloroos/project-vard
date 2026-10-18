@@ -18,7 +18,9 @@ import pytest
 
 PORTAS_REAIS = {1234, 8000, 4700, 4710, 4720}
 EXECUTAVEIS = {"claude", "codex", "agy", "gemini", "opencode", "ssh", "gh", "lms",
-               "taskkill", "powershell", "pwsh", "reg", "wmic", "tasklist", "netstat", "nvidia-smi"}
+               "taskkill", "powershell", "pwsh", "reg", "wmic", "tasklist", "netstat", "nvidia-smi",
+               # navegadores: a mesa abre o navegador pedido; teste nunca abre um de verdade
+               "brave", "chrome", "msedge", "firefox", "opera", "launcher", "vivaldi"}
 _popen = subprocess.Popen
 _run = subprocess.run
 _connect = socket.socket.connect
@@ -136,6 +138,21 @@ def pytest_collection_modifyitems(config, items):
                 item.add_marker(pytest.mark.skip(reason="PC real: exige --pc-real explícito"))
 
 
+def _bloquear_entrada_e_janelas(monkeypatch):
+    """Mouse, teclado e janelas reais do dono ficam fora dos testes: o teste que precisar troca por dublê."""
+    try:
+        from vard import janelas, teclado_mouse
+    except ImportError:
+        return  # suítes de voz e reunião não carregam o núcleo
+
+    def proibido(*_a, **_kw):
+        raise AcessoAoPcReal("guarda do PC real: entrada de teclado/mouse ou janela real; injete um dublê")
+
+    for modulo, nome in ((teclado_mouse, "_enviar"), (teclado_mouse, "_posicionar_cursor"),
+                         (janelas, "_colocar"), (janelas, "_mostrar")):
+        monkeypatch.setattr(modulo, nome, proibido)
+
+
 @pytest.fixture(autouse=True)
 def guarda_pc(request, tmp_path, monkeypatch):
     global _real
@@ -143,6 +160,7 @@ def guarda_pc(request, tmp_path, monkeypatch):
     if not _real:
         for nome in ("APPDATA", "LOCALAPPDATA", "PROGRAMDATA", "USERPROFILE", "HOME"):
             monkeypatch.setenv(nome, str(tmp_path / nome.lower()))
+        _bloquear_entrada_e_janelas(monkeypatch)
     yield
     _real = False
 
