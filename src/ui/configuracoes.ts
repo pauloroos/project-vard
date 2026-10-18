@@ -100,11 +100,13 @@ export class Configuracoes {
         baseUrl: this.cfg.ponte_url.replace(/\/$/, ""),
         notificar: (msg, erro) => this.dizer(msg, erro),
         aoMudar: (id, instalado) => {
-          if (id === "xtts-v2") this.abaVoz.definirPacoteXttsInstalado(instalado);
+          this.abaVoz.definirPacoteInstalado(id, instalado);
           return this.abaVoz.atualizar();
         },
       });
-      const pronto = instalador.montar().then(() => this.abaVoz.definirPacoteXttsInstalado(instalador.estaInstalado("xtts-v2")));
+      const pronto = instalador.montar().then(() => {
+        for (const id of ["xtts-v2", "kokoro"]) this.abaVoz.definirPacoteInstalado(id, instalador.estaInstalado(id));
+      });
       this.abaVoz.definirInstalador(async (id, op) => {
         await pronto;
         raizInstalador.scrollIntoView?.({ block: "nearest" });

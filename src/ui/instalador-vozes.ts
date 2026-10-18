@@ -27,7 +27,8 @@ export interface EstadoPacote {
 }
 
 export interface ProgressoInstalacao {
-  estado: "aguardando" | "baixando" | "verificando" | "instalando" | "concluido" | "falhou" | "cancelado";
+  /** "bibliotecas": o núcleo instala as bibliotecas Python do pacote no ambiente do serviço de voz. */
+  estado: "aguardando" | "baixando" | "verificando" | "instalando" | "bibliotecas" | "concluido" | "falhou" | "cancelado";
   bytes_baixados: number;
   bytes_total: number;
   erro?: string | null;
@@ -258,7 +259,10 @@ export class InstaladorVozes {
     texto: HTMLElement | null,
   ): void {
     if (!bar || !texto) return;
-    if (dados.bytes_total > 0) {
+    if (dados.estado === "bibliotecas") {
+      bar.removeAttribute("value"); // sem porcentagem: o instalador de pacotes Python não informa progresso
+      texto.textContent = "Instalando bibliotecas…";
+    } else if (dados.bytes_total > 0) {
       const pct = Math.round((dados.bytes_baixados / dados.bytes_total) * 100);
       bar.value = pct;
       texto.textContent = `${pct}% (${formatarBytes(dados.bytes_baixados)})`;

@@ -126,6 +126,24 @@ describe("InstaladorVozes", () => {
     expect(tela.estaInstalado("xtts-v2")).toBe(false);
   });
 
+  it("mostra 'Instalando bibliotecas…' enquanto o núcleo instala as bibliotecas e avisa a falha com o motivo", async () => {
+    const { raiz } = criarDom();
+    mockPacotesResponse([PACOTE_XTTS]);
+    const tela = new InstaladorVozes(raiz, deps);
+    await tela.montar();
+    const cod = new TextEncoder();
+    let fluxo!: ReadableStreamDefaultController<Uint8Array>;
+    mockFetch.mockResolvedValueOnce(new Response(new ReadableStream<Uint8Array>({ start(c) { fluxo = c; } })));
+    const instalando = tela.instalar("xtts-v2", { licencaAceita: true });
+    await vi.waitFor(() => expect(fluxo).toBeTruthy());
+    fluxo.enqueue(cod.encode('data: {"estado":"bibliotecas","bytes_baixados":10,"bytes_total":10}\n'));
+    await vi.waitFor(() => expect(raiz.querySelector("#prog-xtts-v2 .progresso-texto")?.textContent).toBe("Instalando bibliotecas…"));
+    fluxo.enqueue(cod.encode('data: {"estado":"falhou","bytes_baixados":10,"bytes_total":10,"erro":"nao consegui instalar as bibliotecas (lib-ficticia==1)"}\n'));
+    fluxo.close();
+    await expect(instalando).resolves.toBe(false);
+    expect(notificarSpy).toHaveBeenCalledWith(expect.stringContaining("lib-ficticia==1"), true);
+  });
+
   it("entrada do card não contorna pacote indisponível", async () => {
     const { raiz } = criarDom();
     mockPacotesResponse([PACOTE_INDISPONIVEL]);

@@ -202,6 +202,7 @@ async function transcreverFala(wav: ArrayBuffer, sinal?: AbortSignal): Promise<s
         voz_url: cfg.voz_url,
         voz_motor: cfg.voz_reserva_motor ?? "",
         voz_propria: cfg.voz_reserva_id ?? "",
+        voz: cfg.voz_reserva_id ?? "", // reserva antiga pelo OpenJarvis: o ID Kokoro vai para o serviço de voz
         elevenlabs_chave: cfg.elevenlabs_chave,
         elevenlabs_voz: cfg.voz_reserva_provedor === "elevenlabs" ? (cfg.voz_reserva_id ?? "") : "",
         gemini_chave: cfg.gemini_chave,

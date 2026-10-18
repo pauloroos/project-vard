@@ -1,5 +1,6 @@
 import catalogo from "../../../config/vozes.json";
-/** Vozes Kokoro próprias do Vard (voice_id do /falar quando roteadas pelo motor Kokoro local).
+/** Vozes Kokoro do serviço de voz do Vard (voz do /falar roteada ao motor Kokoro, sem OpenJarvis).
+ *  Rótulos e reserva da lista; quem diz quais estão disponíveis é o /vozes do serviço.
  *  Compatíveis com VOZES_KOKORO em voz/vard_voz/kokoro.py. */
 export const VOZES_KOKORO = catalogo.kokoro;
 

@@ -131,8 +131,9 @@ export class Voz implements FonteDeVoz {
     }
   }
 
-  /** Vozes que o serviço tem (GET /vozes). Serviço antigo (404) ou fora: lista vazia. */
-  async vozes(): Promise<{ vozes: string[]; atual: string }> {
+  /** Vozes que o serviço tem (GET /vozes). Serviço antigo (404) ou fora: lista vazia.
+   *  `porMotor` (quando o serviço informa): de que motor é cada voz, para a lista de cada card. */
+  async vozes(): Promise<{ vozes: string[]; atual: string; porMotor?: Record<string, string[]> }> {
     const ac = new AbortController();
     const t = setTimeout(() => ac.abort(), 3000);
     try {
@@ -140,7 +141,14 @@ export class Voz implements FonteDeVoz {
       if (!r.ok) return { vozes: [], atual: "" };
       const j = await r.json();
       const vozes = Array.isArray(j?.vozes) ? j.vozes.filter((v: unknown) => typeof v === "string") : [];
-      return { vozes, atual: typeof j?.atual === "string" ? j.atual : "" };
+      const atual = typeof j?.atual === "string" ? j.atual : "";
+      const bruto = j?.por_motor;
+      if (!bruto || typeof bruto !== "object" || Array.isArray(bruto)) return { vozes, atual };
+      const porMotor: Record<string, string[]> = {};
+      for (const [motor, lista] of Object.entries(bruto as Record<string, unknown>)) {
+        if (Array.isArray(lista)) porMotor[motor] = lista.filter((v): v is string => typeof v === "string");
+      }
+      return { vozes, atual, porMotor };
     } catch { return { vozes: [], atual: "" }; } finally { clearTimeout(t); }
   }
 

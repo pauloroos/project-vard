@@ -14,6 +14,10 @@ Os instaladores de cada versão ficam na página de [releases](https://github.co
 - Núcleo em blocos: quem responde agora, provedores cadastrados, o que falta instalar e opções avançadas recolhidas.
 - Voz: escolher uma voz que precisa de chave abre o cadastro da chave na hora; escolher uma voz não instalada
   pergunta se quer instalar e já deixa a voz em uso ao terminar.
+- Kokoro sem OpenJarvis: o Kokoro passa a ser motor do serviço de voz do Vard (kokoro-onnx, CPU ou GPU), instalável
+  pela aba Voz ("Instalar e usar" baixa o modelo e instala a biblioteca no serviço de voz, sem reiniciar); as vozes
+  vêm do serviço. Quem usava o Kokoro pelo OpenJarvis passa ao do serviço de voz quando ele
+  estiver instalado.
 - Oficina: as habilidades de fábrica podem ser editadas e restauradas ao padrão.
 
 ### Corrigido
