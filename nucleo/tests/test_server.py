@@ -142,9 +142,29 @@ def test_see_com_mais_cuidado_vai_ao_omniroute(cliente, monkeypatch, tmp_path):
 
 @respx.mock
 def test_see_lmstudio_fora_devolve_503(cliente):
+    # A visão fora tem código próprio: a fala não pode dizer que o núcleo caiu.
     respx.post("http://127.0.0.1:1234/v1/chat/completions").mock(side_effect=httpx.ConnectError("x"))
     r = cliente.post("/see", files={"imagem": ("q.jpg", JPEG_1PX, "image/jpeg")}, data={"pergunta": "o que vê?"})
-    assert r.status_code == 503 and r.json()["erro"] == "modelo_fora"
+    assert r.status_code == 503 and r.json()["erro"] == "visao_fora"
+
+
+@respx.mock
+def test_see_usa_o_lmstudio_cadastrado_no_nucleo(cliente, monkeypatch):
+    from vard import config as vconfig
+    monkeypatch.delenv("VARD_LMSTUDIO_URL", raising=False)
+    vconfig.arquivo_config("paineis.json").parent.mkdir(parents=True, exist_ok=True)
+    vconfig.arquivo_config("paineis.json").write_text(
+        '{"versao": 1, "ativo": "cli", "provedores": ['
+        '{"id": "cli", "tipo": "cli-claude", "modelo": "m"},'
+        '{"id": "lm", "tipo": "lmstudio", "url_base": "http://192.0.2.10:1234/v1", "modelo": "visao-ficticia"}]}',
+        encoding="utf-8",
+    )
+    rota = respx.post("http://192.0.2.10:1234/v1/chat/completions").mock(
+        return_value=httpx.Response(200, json={"choices": [{"message": {"content": "Vejo a planilha."}}]})
+    )
+    r = cliente.post("/see", files={"imagem": ("q.jpg", JPEG_1PX, "image/jpeg")}, data={"pergunta": "o que vê?"})
+    assert r.status_code == 200 and "planilha" in r.json()["resposta"]
+    assert '"model":"visao-ficticia"' in rota.calls[0].request.content.decode().replace(" ", "")
 
 
 @respx.mock

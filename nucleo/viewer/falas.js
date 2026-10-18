@@ -7,6 +7,7 @@ export const FALAS = {
   erroModelo: "Não consegui falar com o cérebro.",
   erros: {   // a ponte devolve só o código; nunca texto técnico para a boca
     modelo_fora: "O cérebro não está no ar.",
+    visao_fora: "Não consigo ver a tela: o LM Studio está desligado.",
     modelo_demorou: "O cérebro demorou demais.",
     modelo_http: "O cérebro recusou o pedido.",
     modelo_vazio: "O cérebro não chegou a responder.",

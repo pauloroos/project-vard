@@ -414,6 +414,21 @@ def ask(corpo: dict):
     return {"resposta": resposta}
 
 
+def _visao_local() -> tuple[str, str]:
+    """Endereço e modelo da visão local: VARD_LMSTUDIO_URL manda; senão o LM Studio cadastrado no Núcleo; senão o padrão."""
+    if os.environ.get("VARD_LMSTUDIO_URL"):
+        return LMSTUDIO, MODELO_LOCAL
+    try:
+        dados = json.loads(config.arquivo_config("paineis.json").read_text(encoding="utf-8-sig"))
+    except (OSError, ValueError):
+        return LMSTUDIO, MODELO_LOCAL
+    for p in dados.get("provedores", []) if isinstance(dados, dict) else []:
+        if isinstance(p, dict) and p.get("tipo") == "lmstudio" and str(p.get("url_base") or "").strip():
+            base = str(p["url_base"]).strip().rstrip("/").removesuffix("/v1")
+            return base, str(p.get("modelo") or "").strip() or MODELO_LOCAL
+    return LMSTUDIO, MODELO_LOCAL
+
+
 @app.post("/see")
 def see(imagem: UploadFile = File(...), pergunta: str = Form("O que está na tela?")):
     if imagem.content_type != "image/jpeg":
@@ -430,13 +445,17 @@ def see(imagem: UploadFile = File(...), pergunta: str = Form("O que está na tel
                 chave=segredos.chave_omniroute(),
             )
         else:
+            base, modelo = _visao_local()
             resposta = modelos.ver_imagem(
-                b64, pergunta, base=LMSTUDIO, modelo=MODELO_LOCAL, instrucao=INSTRUCAO_VISAO,
+                b64, pergunta, base=base, modelo=modelo, instrucao=INSTRUCAO_VISAO,
                 chave=CHAVE_LMSTUDIO,
             )
     except FileNotFoundError:
         return _erro(modelos.ErroModelo("segredos", "segredos.toml não encontrado"))
     except modelos.ErroModelo as exc:
+        # Servidor de visão fora: código próprio, para a fala não dizer que o núcleo caiu.
+        if exc.codigo == "modelo_fora":
+            exc = modelos.ErroModelo("visao_fora", exc.detalhe)
         return _erro(exc)
     return {"resposta": resposta, "nuvem": cuidado}
 

@@ -15,6 +15,7 @@ export const FALAS = {
   microfoneBloqueado: "Não estou ouvindo: o microfone está bloqueado.",
   erros: {
     modelo_fora: "Meu núcleo não está respondendo.",
+    visao_fora: "Não consigo ver a tela: o LM Studio está desligado.",
     modelo_demorou: "Demorei demais para pensar nisso.",
     modelo_http: "Não consegui pensar nisso agora.",
     modelo_vazio: "Fiquei sem resposta para isso.",
