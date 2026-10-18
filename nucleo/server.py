@@ -11,8 +11,11 @@ import json
 import logging
 import os
 import re
+import time
+import uuid
 from pathlib import Path
 
+import anyio.from_thread
 import httpx
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
@@ -429,12 +432,61 @@ def _visao_local() -> tuple[str, str]:
     return LMSTUDIO, MODELO_LOCAL
 
 
+PRAZO_VER_CEREBRO = 85.0  # o widget desiste do /see em 90 s
+
+
+async def _perguntar_cerebro(texto: str, sessao_id: str) -> str:
+    """Admite um pedido no cérebro próprio e espera a resposta final (para quem precisa dela de uma vez, como o /see)."""
+    pedido = cerebro_contratos.Pedido(
+        pedido_id=f"ver-{uuid.uuid4().hex}", sessao_id=sessao_id, origem=cerebro_contratos.Origem.VOZ, texto=texto,
+    )
+    cerebro_pedidos.admitir(pedido)
+    limite = time.monotonic() + PRAZO_VER_CEREBRO
+    while time.monotonic() < limite:
+        await asyncio.sleep(0.3)
+        info = cerebro_pedidos.consultar(pedido.pedido_id)
+        if info is None:
+            continue
+        estado = info.estado.value
+        if estado == "concluido":
+            return (info.resposta or "").strip()
+        if estado in ("falhou", "cancelado"):
+            raise _ErroCerebro(info.erro or "cerebro_erro")
+    cerebro_pedidos.cancelar(pedido.pedido_id)
+    raise _ErroCerebro("cli_tempo")
+
+
+def _ver_pela_cli(jpeg: bytes, pergunta: str) -> JSONResponse | dict:
+    """Núcleo numa CLI: a captura vai para ela num arquivo temporário (a CLI abre a imagem); o arquivo some ao fim."""
+    pasta = config.pasta_dados() / "capturas"
+    pasta.mkdir(parents=True, exist_ok=True)
+    arquivo = pasta / f"tela-{uuid.uuid4().hex}.jpg"
+    arquivo.write_bytes(jpeg)
+    texto = (
+        f"{pergunta}\n\nA captura da minha tela está no arquivo: {arquivo}\n"
+        "Abra essa imagem e responda olhando para ela, em poucas frases faladas."
+    )
+    try:
+        resposta = anyio.from_thread.run(_perguntar_cerebro, texto, "visao")
+    except _ErroCerebro as exc:
+        log.warning("visão pela CLI falhou: %s", exc.codigo)
+        return JSONResponse({"erro": exc.codigo}, status_code=503)
+    finally:
+        arquivo.unlink(missing_ok=True)
+    if not resposta:
+        return JSONResponse({"erro": "modelo_vazio"}, status_code=503)
+    return {"resposta": resposta, "nuvem": False}
+
+
 @app.post("/see")
 def see(imagem: UploadFile = File(...), pergunta: str = Form("O que está na tela?")):
     if imagem.content_type != "image/jpeg":
         raise HTTPException(422, "mande image/jpeg")
-    b64 = base64.b64encode(imagem.file.read()).decode()
+    jpeg = imagem.file.read()
     cuidado = "com mais cuidado" in pergunta.lower()
+    if not cuidado and _ler_provedor_ativo().get("tipo", "").startswith("cli-"):
+        return _ver_pela_cli(jpeg, pergunta)
+    b64 = base64.b64encode(jpeg).decode()
     try:
         if cuidado:
             url = segredos.url_omniroute()

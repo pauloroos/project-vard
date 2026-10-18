@@ -148,13 +148,43 @@ def test_see_lmstudio_fora_devolve_503(cliente):
     assert r.status_code == 503 and r.json()["erro"] == "visao_fora"
 
 
+def test_see_com_nucleo_cli_manda_a_captura_para_a_cli(cliente, monkeypatch):
+    # Núcleo numa CLI: a imagem vai para ela (num arquivo que ela abre), nunca para o LM Studio.
+    monkeypatch.setattr(server, "_ler_provedor_ativo", lambda: {"tipo": "cli-claude", "modelo": "m"})
+    vistos = {}
+
+    async def _perguntar(texto, sessao_id):
+        caminho = texto.split("arquivo: ")[1].split("\n")[0].strip()
+        from pathlib import Path
+        vistos.update(texto=texto, sessao=sessao_id, existia=Path(caminho).read_bytes() == JPEG_1PX, caminho=caminho)
+        return "Vejo o editor aberto."
+
+    monkeypatch.setattr(server, "_perguntar_cerebro", _perguntar)
+    r = cliente.post("/see", files={"imagem": ("q.jpg", JPEG_1PX, "image/jpeg")}, data={"pergunta": "o que vê?"})
+    assert r.status_code == 200 and r.json()["resposta"] == "Vejo o editor aberto."
+    assert "o que vê?" in vistos["texto"] and vistos["existia"]
+    from pathlib import Path
+    assert not Path(vistos["caminho"]).exists()  # a captura não fica no disco
+
+
+def test_see_com_nucleo_cli_erro_vira_codigo(cliente, monkeypatch):
+    monkeypatch.setattr(server, "_ler_provedor_ativo", lambda: {"tipo": "cli-claude", "modelo": "m"})
+
+    async def _falha(texto, sessao_id):
+        raise server._ErroCerebro("cli_tempo")
+
+    monkeypatch.setattr(server, "_perguntar_cerebro", _falha)
+    r = cliente.post("/see", files={"imagem": ("q.jpg", JPEG_1PX, "image/jpeg")}, data={"pergunta": "o que vê?"})
+    assert r.status_code == 503 and r.json()["erro"] == "cli_tempo"
+
+
 @respx.mock
 def test_see_usa_o_lmstudio_cadastrado_no_nucleo(cliente, monkeypatch):
     from vard import config as vconfig
     monkeypatch.delenv("VARD_LMSTUDIO_URL", raising=False)
     vconfig.arquivo_config("paineis.json").parent.mkdir(parents=True, exist_ok=True)
     vconfig.arquivo_config("paineis.json").write_text(
-        '{"versao": 1, "ativo": "cli", "provedores": ['
+        '{"versao": 1, "ativo": "lm", "provedores": ['
         '{"id": "cli", "tipo": "cli-claude", "modelo": "m"},'
         '{"id": "lm", "tipo": "lmstudio", "url_base": "http://192.0.2.10:1234/v1", "modelo": "visao-ficticia"}]}',
         encoding="utf-8",
