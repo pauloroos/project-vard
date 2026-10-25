@@ -56,7 +56,7 @@ export interface DepsConversa {
     /** Cancela um pedido do cérebro próprio. */
     cancelar?(pedidoId: string): Promise<{ estado: string } | null>;
     /** Consulta o estado de um pedido do cérebro próprio. */
-    consultarPedido?(pedidoId: string): Promise<{ resposta?: string | null; estado: string } | null>;
+    consultarPedido?(pedidoId: string): Promise<{ resposta?: string | null; estado: string; erro?: string | null; ultimo_seq?: number } | null>;
   };
   /** Cérebro ativo: 'openjarvis' (padrão) ou 'proprio' (usa rotas /pedidos). */
   cerebro?: Cerebro;
