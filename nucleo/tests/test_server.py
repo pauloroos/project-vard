@@ -136,7 +136,7 @@ def test_see_com_mais_cuidado_vai_ao_omniroute(cliente, monkeypatch, tmp_path):
     assert r.status_code == 200 and r.json()["nuvem"] is True
     req = rota.calls[0].request
     assert req.headers["authorization"] == "Bearer chave-teste"
-    assert '"model": "combo/t1-work"' in req.content.decode() or '"model":"combo/t1-work"' in req.content.decode()
+    assert '"model": "combo/equipe"' in req.content.decode() or '"model":"combo/equipe"' in req.content.decode()
     assert "reasoning_effort" not in req.content.decode()
 
 

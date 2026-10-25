@@ -59,7 +59,7 @@ português, manchete primeiro, em até três frases, sobre o que está na tela. 
 estiver pequeno ou ilegível, diga isso em vez de chutar."""
 
 MODELO_LOCAL = "gemma-4-12b-it-qat@q4_k_xl"
-MODELO_NUVEM = "combo/t1-work"
+MODELO_NUVEM = "combo/equipe"
 OPENJARVIS = os.environ.get("VARD_OPENJARVIS_URL", "http://127.0.0.1:8000")
 LMSTUDIO = os.environ.get("VARD_LMSTUDIO_URL", "http://127.0.0.1:1234")
 REUNIAO = "http://127.0.0.1:4720"
