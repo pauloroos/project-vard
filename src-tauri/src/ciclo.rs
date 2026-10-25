@@ -439,9 +439,7 @@ fn executar_parar() -> Result<ModoCiclo, String> {
 
 fn executar_recarregar() -> Result<ModoCiclo, String> {
     // Reinicia só núcleo e OpenJarvis; conserva voz/reunião.
-    let _ = crate::servicos::parar("nucleo");
-    let _ = crate::servicos::parar("openjarvis");
-    std::thread::sleep(std::time::Duration::from_millis(500));
+    // repetir() recria a thread se ela estiver morta, então não precisa parar antes.
     let _ = crate::servicos::repetir("nucleo");
     let _ = crate::servicos::repetir("openjarvis");
     Ok(ModoCiclo::Ligado)
