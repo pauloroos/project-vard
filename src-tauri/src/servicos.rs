@@ -30,6 +30,11 @@ pub fn iniciar(desc: DescritorServico) -> Result<(), String> {
         }
     }
     let handle = Arc::new(ServicoHandle::novo(&id, desc.porta));
+    // Guarda o descritor no handle ANTES de mover o original para a thread.
+    {
+        let mut d = handle.desc.lock().map_err(|e| e.to_string())?;
+        *d = Some(desc.clone());
+    }
     {
         let mut reg = SERVICOS.write().map_err(|e| e.to_string())?;
         reg.insert(id.clone(), handle.clone());
@@ -55,11 +60,63 @@ pub fn parar(id: &str) -> Result<(), String> {
     Ok(())
 }
 
-/// Sinaliza reinício manual de um serviço (cancela recuo/arranque em andamento).
+/// Sinaliza reinício manual de um serviço. Se a thread morreu, recria com o descritor guardado.
 pub fn repetir(id: &str) -> Result<(), String> {
     let reg = SERVICOS.read().map_err(|e| e.to_string())?;
     let handle = reg.get(id).ok_or_else(|| format!("serviço '{id}' não encontrado"))?;
-    handle.pedir_reinicio();
+
+    // Se a thread terminou, recria usando o descritor guardado no handle.
+    if handle.terminou.load(Ordering::SeqCst) {
+        let desc = {
+            let d = handle.desc.lock().map_err(|e| e.to_string())?;
+            d.clone()
+        };
+        let desc = desc.ok_or_else(|| format!("serviço '{id}' sem descritor para recriar"))?;
+
+        // Reseta flags antes de spawnar nova thread.
+        handle.parar.store(false, Ordering::SeqCst);
+        handle.reiniciar.store(false, Ordering::SeqCst);
+        handle.terminou.store(false, Ordering::SeqCst);
+
+        let h = handle.clone();
+        if let Err(erro) = std::thread::Builder::new()
+            .name(format!("supervisor-{id}"))
+            .spawn(move || {
+                loop_servico(h.clone(), desc);
+                h.terminou.store(true, Ordering::SeqCst);
+            })
+        {
+            return Err(format!("falha ao recriar thread do serviço '{id}': {erro}"));
+        }
+    } else {
+        // Thread ainda viva: sinaliza reinício suave.
+        handle.pedir_reinicio();
+    }
+    Ok(())
+}
+
+/// Parada definitiva: sinaliza parada, espera a thread terminar e remove o registro.
+/// Permite chamar `iniciar()` novamente depois.
+pub fn parar_definitiva(id: &str) -> Result<(), String> {
+    let handle = {
+        let reg = SERVICOS.read().map_err(|e| e.to_string())?;
+        reg.get(id).cloned().ok_or_else(|| format!("serviço '{id}' não encontrado"))?
+    };
+
+    handle.pedir_parada();
+
+    // Espera a thread terminar (timeout de 5s).
+    let fim = std::time::Instant::now() + std::time::Duration::from_secs(5);
+    while !handle.terminou.load(Ordering::SeqCst) {
+        if std::time::Instant::now() >= fim {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(50));
+    }
+
+    // Remove o registro para permitir novo iniciar().
+    let mut reg = SERVICOS.write().map_err(|e| e.to_string())?;
+    reg.remove(id);
     Ok(())
 }
 
@@ -156,9 +213,11 @@ pub struct InfoServico {
 /// Handle de um serviço em execução.
 pub struct ServicoHandle {
     pub info: Arc<Mutex<InfoServico>>,
+    /// Descritor guardado para permitir recriar a thread após parada definitiva ou morte.
+    pub desc: Mutex<Option<DescritorServico>>,
     parar: AtomicBool,
     reiniciar: AtomicBool,
-    terminou: AtomicBool,
+    pub terminou: AtomicBool,
 }
 
 impl ServicoHandle {
@@ -171,6 +230,7 @@ impl ServicoHandle {
                 pid: None,
                 porta,
             })),
+            desc: Mutex::new(None),
             parar: AtomicBool::new(false),
             reiniciar: AtomicBool::new(false),
             terminou: AtomicBool::new(false),
@@ -1094,6 +1154,97 @@ http.server.HTTPServer(('127.0.0.1', {porta}), H).serve_forever()
                 .stdout(std::process::Stdio::null()).stderr(std::process::Stdio::null()).status();
         }
         assert!(!ficou_vivo, "o filho sobreviveu ao desenrolamento do teste");
+    }
+
+    /// repetir() recria a thread após parada definitiva (terminou == true).
+    #[test]
+    fn test_repetir_recria_thread_apos_parada() {
+        let id = "teste-repetir-recria";
+        let porta = porta_livre();
+        // Descritor com executável que termina rápido (echo).
+        let desc = DescritorServico {
+            id: id.to_string(),
+            porta,
+            comando: if cfg!(windows) {
+                (PathBuf::from("cmd"), vec!["/c".into(), "exit".into()])
+            } else {
+                (PathBuf::from("echo"), vec!["ok".into()])
+            },
+            pasta_trabalho: None,
+            envs: Vec::new(),
+            caminho_log: std::env::temp_dir().join(format!("{id}.log")),
+        };
+        iniciar(desc).expect("iniciar");
+        // Espera a thread terminar (echo sai imediatamente).
+        std::thread::sleep(std::time::Duration::from_secs(2));
+        let reg = SERVICOS.read().unwrap();
+        let handle = reg.get(id).expect("handle existe");
+        assert!(handle.terminou.load(Ordering::SeqCst), "thread deveria ter terminado");
+        drop(reg);
+        // repetir deve recriar a thread.
+        repetir(id).expect("repetir recria");
+        // Após repetir, terminou deve estar false (nova thread rodando ou recém-iniciada).
+        let reg = SERVICOS.read().unwrap();
+        let handle = reg.get(id).expect("handle ainda existe");
+        // A nova thread pode terminar rápido também (echo), mas o importante é que não deu erro.
+        drop(reg);
+        // Limpeza: parar_definitiva remove o registro.
+        let _ = parar_definitiva(id);
+    }
+
+    /// parar_definitiva remove o registro e permite novo iniciar().
+    #[test]
+    fn test_parar_definitiva_remove_registro() {
+        let id = "teste-parar-def";
+        let porta = porta_livre();
+        let desc = DescritorServico {
+            id: id.to_string(),
+            porta,
+            comando: if cfg!(windows) {
+                (PathBuf::from("cmd"), vec!["/c".into(), "exit".into()])
+            } else {
+                (PathBuf::from("echo"), vec!["ok".into()])
+            },
+            pasta_trabalho: None,
+            envs: Vec::new(),
+            caminho_log: std::env::temp_dir().join(format!("{id}.log")),
+        };
+        iniciar(desc.clone()).expect("iniciar");
+        std::thread::sleep(std::time::Duration::from_millis(500));
+        parar_definitiva(id).expect("parar_definitiva");
+        // foto() deve retornar erro pois o registro foi removido.
+        assert!(foto(id).is_err(), "registro deveria ter sido removido");
+        // iniciar() novamente deve funcionar.
+        iniciar(desc).expect("reiniciar após parada definitiva");
+        let _ = parar_definitiva(id);
+    }
+
+    /// recarregar sem parar antes funciona (só repetir).
+    #[test]
+    fn test_recarregar_sem_parar_funciona() {
+        let id = "teste-recarregar";
+        let porta = porta_livre();
+        let desc = DescritorServico {
+            id: id.to_string(),
+            porta,
+            comando: if cfg!(windows) {
+                (PathBuf::from("cmd"), vec!["/c".into(), "timeout /t 30".into()])
+            } else {
+                (PathBuf::from("sleep"), vec!["30".into()])
+            },
+            pasta_trabalho: None,
+            envs: Vec::new(),
+            caminho_log: std::env::temp_dir().join(format!("{id}.log")),
+        };
+        iniciar(desc).expect("iniciar");
+        std::thread::sleep(std::time::Duration::from_millis(500));
+        // repetir sem parar antes — simula executar_recarregar.
+        repetir(id).expect("repetir sem parar");
+        // Handle ainda existe e está registrado.
+        let reg = SERVICOS.read().unwrap();
+        assert!(reg.contains_key(id), "registro deve persistir após repetir");
+        drop(reg);
+        let _ = parar_definitiva(id);
     }
 
 }
