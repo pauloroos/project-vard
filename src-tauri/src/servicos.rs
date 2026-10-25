@@ -429,6 +429,7 @@ fn rodar_uma_vez(
     // Loop de sonda
     let inicio = Instant::now();
     let mut no_ar = false;
+    let mut falhas_seguidas = 0u32;
     let mut proxima_sonda = inicio;
     let limite_arranque = Duration::from_secs(if desc.id == "nucleo" { crate::instalacao::PRAZO_NUCLEO_S } else { crate::instalacao::PRAZO_OPCIONAIS_S });
 
@@ -498,10 +499,13 @@ fn rodar_uma_vez(
                 }
             } else {
                 if saudavel {
-                    // Saúde contínua: nada a fazer além de manter o intervalo
+                    falhas_seguidas = 0;
+                } else if falhas_seguidas == 0 {
+                    // Uma falha isolada não reinicia: a voz trava o /saude por alguns segundos ao carregar o modelo na GPU
+                    falhas_seguidas = 1;
+                    log.linha(&format!("[{}] sonda de saúde falhou; reinicia se a próxima falhar", desc.id));
                 } else {
                     // Falha de saúde em regime: duas consecutivas encerram/reiniciam
-                    // Por enquanto, marca como caiu e deixa o loop externo decidir
                     handle.mudar_estado(supervisor::EstadoServico::Caiu, "falha de saúde", Some(pid));
                     log.linha(&format!("[{}] falha de saúde em regime", desc.id));
                     let _ = filho.kill();
