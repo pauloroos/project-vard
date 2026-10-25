@@ -8,7 +8,7 @@ import { aPartirDoGatilho, classificar, ehConfirmacao, ehInterrupcao, extrairCom
 import type { Cerebro } from "../config/cerebro";
 import { ErroPonte, type EventoPedidoSSE } from "../conectores/ponte/cliente";
 
-export type Estado = "repouso" | "ouvindo" | "pensando" | "falando" | "jogo" | "erro" | "fora";
+export type Estado = "repouso" | "ouvindo" | "transcrevendo" | "pensando" | "falando" | "jogo" | "erro" | "fora";
 export interface Mensagem { role: "system" | "user" | "assistant"; content: string }
 /** PCM 16 bits mono em fluxo, como o serviço de voz entrega. */
 export interface FalaEmFluxo { corpo: ReadableStream<Uint8Array>; taxa: number }
@@ -214,7 +214,7 @@ export class Conversa {
       for (let i = 0; i < frases.length; i++) {
         if (!this.podeFalar()) return; // "não falar" ligou no meio: corta sem esperar o fim de uma fala que não existe
         let som: Som | null = null;
-        try { som = await pendente; } catch (erro) { console.warn("falha ao sintetizar a frase", erro); }
+        try { som = await pendente; } catch (erro) { console.warn("falha ao sintetizar a frase", erro); this.mudar("erro", `sintese: ${(erro as Error).message || String(erro)}`); }
         pendente = null;
         if (sinal.aborted || this.emJogo()) { descartar(som); return; }
         if (i + 1 < frases.length) pendente = sintetizar(frases[i + 1]);
@@ -507,7 +507,7 @@ export class Conversa {
       console.warn(ver ? "olhos falharam" : "agente falhou", erro);
       const codigo = (erro as { codigo?: string } | null)?.codigo;
       const fala = (codigo && (FALAS.erros as Record<string, string>)[codigo]) || FALAS.erroModelo;
-      this.mudar("erro", fala);
+      this.mudar("erro", `resposta: ${fala}`);
       await this.falarFixa(fala);
       this.abrirCanal();
       if (this.estado !== "repouso") this.mudar("repouso");
