@@ -544,6 +544,12 @@ let supervisor = config_instalacao.supervisor;
             if config_instalacao.supervisor {
                 let sessao = format!("{}-{}", std::process::id(), chrono::Utc::now().timestamp_millis());
                 ciclo::inicializar_fila(&sessao);
+                // Sem isto o estado ficava no último verbo da sessão anterior ("saindo") e o núcleo
+                // não achava o app (sem ciclo/app.json), caindo no vard-modo.ps1 legado.
+                if let Err(e) = ciclo::registrar_sessao(std::process::id(), &sessao) {
+                    instalacao::registrar_setup(&dados, &format!("setup: sessão do ciclo não registrada: {e}"));
+                }
+                let _ = ciclo::escrever_estado(&ciclo::ModoCiclo::Ligado, Some("abertura"));
                 ciclo::iniciar_executor_da_fila();
                 ciclo::iniciar_consumidor_da_caixa();
             }
