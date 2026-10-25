@@ -2,7 +2,7 @@
 
 Contrato mínimo da T4:
 - Recebe Pedido, AdaptadorProvedor e GerenciadorFerramentas.
-- Mantém histórico da sessão via sessoes.obter_historico/adicionar_mensagem.
+- Mantém histórico da sessão via sessoes.obter_historico/adicionar_troca.
 - Emite EventosPedido (texto, ferramenta, fim, erro) via callback.
 - Diário registra intenção antes do efeito e resultado após confirmação.
 - Repetição no mesmo turno reutiliza resultado confirmado; incerto termina sem repetir.
@@ -275,7 +275,6 @@ async def executar_pedido(
                     tipo=TipoEvento.TEXTO,
                     dados={"texto": texto},
                 ))
-                sessoes.adicionar_mensagem(pedido.sessao_id, {"role": "assistant", "content": texto})
             resposta_final = texto
             break
         else:
@@ -320,6 +319,8 @@ async def executar_pedido(
     else:
         info.estado = EstadoPedido.CONCLUIDO
         info.resposta = resposta_final
+        if resposta_final is not None:
+            sessoes.adicionar_troca(pedido.sessao_id, pedido.texto, resposta_final)
     info.provedor_usado = getattr(adaptador, 'nome', '') or type(adaptador).__name__
     modulo_pedidos._gravar_info(info)
 
