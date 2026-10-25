@@ -20,7 +20,7 @@ Projeto independente, sem vínculo com o OpenJarvis nem com a Stanford.
 - Tela cheia ("sala") num monitor à escolha: vórtice grande, o que você disse, a resposta em letra grande e um relógio.
 - Escolha do modelo entre os que o OpenJarvis expõe.
 - Modo conversa: depois de uma resposta, continua ouvindo sem o nome por 20 s (ajustável); "pode parar de me ouvir" ou "vou entrar em reunião" mutam o microfone até você reativar.
-- Voz à escolha: a voz própria (XTTS, com a lista de vozes do serviço), a do OpenJarvis (Kokoro) ou, se você quiser e com a sua chave, ElevenLabs e Gemini TTS; botão Ouvir com uma frase de amostra.
+- Voz à escolha: o serviço de voz do Vard (XTTS, Kokoro, Edge ou Piper, com a lista de vozes do serviço; Kokoro e XTTS se instalam pela aba Voz, sem OpenJarvis) ou, se você quiser e com a sua chave, ElevenLabs e Gemini TTS; botão Ouvir com uma frase de amostra.
 - Modo invisível: o widget some e só aparece enquanto a conversa dura.
 - A barra de botões abre do lado oposto à borda do monitor (em cima quando o widget está embaixo).
 - Aba Atualização: consulta a release mais nova no GitHub só quando você pede e instala dali.
@@ -39,8 +39,8 @@ Projeto independente, sem vínculo com o OpenJarvis nem com a Stanford.
 
 Baixe o instalador na página de releases e rode um dos dois:
 
-- `Vard_0.9.5_x64-setup.exe` (NSIS): instala só para o seu usuário, sem pedir administrador. Silencioso: `Vard_0.9.5_x64-setup.exe /S`. Fica em `%LOCALAPPDATA%\Vard\`.
-- `Vard_0.9.5_x64_en-US.msi` (WiX): instala para a máquina toda e exige administrador. Silencioso: `msiexec /i Vard_0.9.5_x64_en-US.msi /qn`.
+- `Vard_0.9.6_x64-setup.exe` (NSIS): instala só para o seu usuário, sem pedir administrador. Silencioso: `Vard_0.9.6_x64-setup.exe /S`. Fica em `%LOCALAPPDATA%\Vard\`.
+- `Vard_0.9.6_x64_en-US.msi` (WiX): instala para a máquina toda e exige administrador. Silencioso: `msiexec /i Vard_0.9.6_x64_en-US.msi /qn`.
 
 Para gerar você mesmo: `npm install` e `npm run tauri build` (os instaladores saem em `src-tauri/target/release/bundle/`).
 
@@ -60,7 +60,8 @@ Só uma instância roda por vez: abrir o Vard de novo traz a janela para a frent
 - **Reunião:** aba "Reunião" (iniciar, encerrar, gerar ata, última reunião); com a reunião ativa o widget fica mudo e mostra "reunião".
 - **Painel:** idioma do reconhecimento em lista e aba **Oficina**.
 
-Na **Oficina**, as habilidades de fábrica aparecem como **Capaz** e podem ser desligadas. Use **Nova habilidade**
+Na **Oficina**, as habilidades de fábrica aparecem como **Capaz** e podem ser desligadas ou editadas (nome, frases
+e orientações extras, no mesmo modal); **Restaurar padrão** desfaz a edição, já que elas não se excluem. Use **Nova habilidade**
 para ensinar uma receita com frases de exemplo e instruções; ela começa como **Treinada** e pode ser marcada como
 **Validada** depois de funcionar. Cadastro e edição abrem em modal; excluir pede confirmação. Busca e filtro por
 situação ajudam a encontrar as receitas. O arquivo `habilidades.json` fica junto de `paineis.json`, na pasta de
@@ -120,7 +121,7 @@ Pela engrenagem, pelo item **Configurações** da bandeja ou por `Ctrl+Alt+P`. O
 | `atalhos` | ver acima | Atalhos globais: `falar`, `parar`, `mostrar`, `config`, `escuta`, `sala` |
 | `instrucao_formato` | respostas curtas | Instrução enviada junto com cada pergunta |
 
-Endereços fora de `127.0.0.1` ou `localhost` geram um aviso (o HUD manda o que você diz e, com a ponte, imagens da sua tela; mantenha tudo na própria máquina). A caixa **Iniciar com o Windows** cria ou remove `Vard.lnk` na pasta Startup do seu usuário. O botão **Testar OpenJarvis** confere o servidor e a fala.
+Endereços fora de `127.0.0.1` ou `localhost` geram um aviso (o HUD manda o que você diz e, com a ponte, imagens da sua tela; mantenha tudo na própria máquina). A caixa **Iniciar com o Windows** cria ou remove `Vard.lnk` na pasta Startup do seu usuário. O endereço, a interface de texto e o modelo do OpenJarvis ficam em **Núcleo → Editar OpenJarvis**; o **Testar** do card dele faz uma pergunta curta ao servidor.
 
 ## Tela cheia (sala)
 
@@ -178,7 +179,7 @@ na tela. O contrato completo está em [docs/voz-propria.md](docs/voz-propria.md)
 
 ### Outros provedores de voz
 
-Na aba Voz o provedor pode ser `propria`, `openjarvis` (Kokoro, a voz do OpenJarvis), `elevenlabs` ou `gemini`. Os dois últimos são opcionais e na nuvem: só são chamados com o provedor escolhido e a chave informada (campos de senha; a chave nunca vai para o log), e o texto das falas vai para o fornecedor. Para o ElevenLabs informe também o id da voz; no Gemini a voz padrão é `Kore` e a velocidade é ignorada. O botão **Ouvir** toca uma frase de amostra no provedor escolhido.
+Na aba Voz o provedor pode ser `propria` (serviço de voz do Vard: XTTS, Kokoro, Edge ou Piper), `elevenlabs` ou `gemini`; `openjarvis` fica só nas configs antigas (com voz Kokoro, a mesma voz passa a sair do Kokoro do serviço de voz, ver [docs/voz-propria.md](docs/voz-propria.md)). Os dois últimos são opcionais e na nuvem: só são chamados com o provedor escolhido e a chave informada (campos de senha; a chave nunca vai para o log), e o texto das falas vai para o fornecedor. Para o ElevenLabs informe também o id da voz; no Gemini a voz padrão é `Kore` e a velocidade é ignorada. O botão **Ouvir** toca uma frase de amostra no provedor escolhido.
 
 Com um provedor na nuvem ligado, as falas fixas ("Voltei." e as outras) são sintetizadas nele uma vez no arranque, para aquecer o cache; isso envia esses textos curtos ao fornecedor. Com `propria` ou `openjarvis` nada sai da máquina.
 
@@ -200,7 +201,8 @@ O Vard fala com assistentes por conectores. Hoje existe um só, o OpenJarvis (`s
 
 ## Núcleo (ponte, MCPs e serviços)
 
-O código do núcleo em Python, a voz e a reunião opcionais e os scripts do Windows vivem neste repositório (`nucleo/`, `voz/`, `reuniao/`, `scripts/`). Configuração e dados do usuário ficam fora dele (`%LOCALAPPDATA%dl-vard`, ou `VARD_CONFIG` e `VARD_DADOS`). Estrutura, testes e a troca de instalação com retorno estão em [docs/fusao.md](docs/fusao.md).
+O código do núcleo em Python, a voz e a reunião opcionais e os scripts do Windows vivem neste repositório (`nucleo/`, `voz/`, `reuniao/`, `scripts/`). Configuração e dados do usuário ficam fora dele (`%LOCALAPPDATA%
+dl-vard`, ou `VARD_CONFIG` e `VARD_DADOS`). Estrutura, testes e a troca de instalação com retorno estão em [docs/fusao.md](docs/fusao.md).
 
 ## Desenvolvimento
 

@@ -128,6 +128,8 @@ export interface Card {
   detalhes?: string[];
   /** Lista curta de itens (ex.: modelos) mostrada como fichas. */
   fichas?: string[];
+  /** Barra de progresso de 0 a 100 (ex.: download em andamento). */
+  progresso?: number;
   acoes?: AcaoCard[];
   /** Texto usado pela busca além do título. */
   busca?: string;
@@ -226,6 +228,13 @@ export function desenharCards(alvo: HTMLElement, cards: Card[], op: OpcoesCards)
         f.append(s);
       }
       el.append(f);
+    }
+    if (c.progresso !== undefined) {
+      const barra = document.createElement("progress");
+      barra.className = "card-progresso";
+      barra.max = 100;
+      barra.value = Math.max(0, Math.min(100, c.progresso));
+      el.append(barra);
     }
     if (c.acoes?.length) {
       const a = document.createElement("div");

@@ -6,7 +6,7 @@ import json
 from urllib.parse import quote
 
 from mcp.server.mcpserver import MCPServer
-from vard import ajustes
+from vard import ajustes, habilidades
 
 mcp = MCPServer("configuracoes")
 
@@ -36,7 +36,8 @@ def _confirmar(efeito):
 def ver_configuracoes() -> str:
     """Mostra aparência, voz, perfil e quem responde; nunca mostra chaves ou credenciais."""
     hud = ajustes.ler_documento("hud")
-    campos = ("nome", "cor_elementos", "opacidade_elementos", "voz_provedor", "voz_motor", "voz_propria", "voz_reserva_provedor", "voz_reserva_id", "cerebro")
+    hud.setdefault("usar_openjarvis", False)
+    campos = ("nome", "cor_elementos", "opacidade_elementos", "voz_provedor", "voz_motor", "voz_propria", "voz_reserva_provedor", "voz_reserva_id", "cerebro", "usar_openjarvis")
     return _texto("Configurações atuais", {"widget": {k: hud[k] for k in campos if k in hud},
         "perfil": ajustes.ler_documento("perfil"), "quem_responde": ajustes.ler_documento("paineis").get("ativo")})
 
@@ -163,7 +164,8 @@ def cadastrar_habilidade(habilidade: dict) -> str:
 @mcp.tool()
 @_seguro
 def editar_habilidade(id: str, campos: dict) -> str:
-    """Edita nome, exemplos, instruções ou ligada de uma receita; volta à situação treinada."""
+    """Edita nome, exemplos, instruções ou ligada; receita volta a treinada. Também vale para as de fábrica:
+    conversa, computador, oficina, consultas, memoria, reuniao, sistema, resumo-manha, pesquisa, agente-remoto."""
     ajustes.editar_habilidade(id, campos)
     return "Habilidade atualizada."
 
@@ -171,11 +173,19 @@ def editar_habilidade(id: str, campos: dict) -> str:
 @mcp.tool()
 @_seguro
 def excluir_habilidade(id: str, confirmado: bool = False) -> str:
-    """Exclui definitivamente uma receita do usuário, após confirmação."""
-    if confirmado is not True:
+    """Exclui definitivamente uma receita do usuário, após confirmação. Fábrica não se exclui: restaure ou desligue."""
+    if confirmado is not True and id not in habilidades.IDS_FABRICA:
         return _confirmar(f"Vou excluir a receita {id}; suas instruções deixarão de estar disponíveis")
     ajustes.excluir_habilidade(id)
     return "Habilidade excluída."
+
+
+@mcp.tool()
+@_seguro
+def restaurar_habilidade(id: str) -> str:
+    """Volta uma habilidade de fábrica ao nome, exemplos e instruções de fábrica; ligada/desligada não muda."""
+    ajustes.restaurar_habilidade(id)
+    return "Habilidade de fábrica restaurada ao padrão."
 
 
 @mcp.tool()
@@ -209,6 +219,49 @@ def remover_programa(nome: str, site: bool = False, confirmado: bool = False) ->
         return _confirmar(f"Vou remover o apelido {nome}; o programa continuará instalado")
     ajustes.remover_programa(nome, site)
     return "Apelido removido."
+
+
+@mcp.tool()
+@_seguro
+def ver_telegram() -> str:
+    """Mostra se o Telegram está ligado, o chat permitido, se o bot está guardado no cofre e o que há no OpenJarvis; nunca o token."""
+    from vard import telegram as tg_mod, telegram_migracao
+    estado = tg_mod.estado()
+    return _texto("Telegram", {"ligado": estado["ligado"], "chat_permitido": estado["chat_permitido"],
+        "bot_guardado": estado["token_configurado"], "do_openjarvis": telegram_migracao.previa()})
+
+
+def _sincronizar_telegram() -> None:
+    """O poller vive no processo do núcleo: avisa para reler a configuração (núcleo fora = vale no próximo início)."""
+    try:
+        ajustes.http_local("POST", "/telegram/sincronizar")
+    except Exception:  # noqa: BLE001
+        pass
+
+
+@mcp.tool()
+@_seguro
+def configurar_telegram(ligado: bool, chat: str = "") -> str:
+    """Liga ou desliga o Telegram e define o chat permitido; o token só é gravado pela tela."""
+    from vard import telegram as tg_mod
+    tg_mod.configurar(ligado, chat)
+    _sincronizar_telegram()
+    return "Telegram atualizado."
+
+
+@mcp.tool()
+@_seguro
+def trazer_telegram_do_openjarvis(substituir: bool = False) -> str:
+    """Traz o Telegram do OpenJarvis para o Vard: token direto para o cofre (não passa por aqui), chats e ligado.
+
+    Não altera o OpenJarvis. Se o Vard já tiver Telegram, pede confirmação e só substitui com substituir=true.
+    Depois de trazido, o OpenJarvis precisa ficar desligado: dois programas no mesmo bot brigam pelas mensagens.
+    """
+    r = ajustes.http_local("POST", "/telegram/trazer_openjarvis", {"substituir": substituir is True})
+    if not r.get("ok") and r.get("motivo") == "ja_configurado":
+        return _confirmar("O Vard já tem um Telegram configurado; vou substituí-lo pelo do OpenJarvis (chame de novo com substituir=true)")
+    campos = {k: r[k] for k in ("ok", "mudou", "fonte", "chats", "ligado", "rodando", "detalhe", "aviso") if k in r}
+    return _texto("Telegram do OpenJarvis", campos)
 
 
 if __name__ == "__main__":

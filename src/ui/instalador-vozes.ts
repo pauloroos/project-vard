@@ -3,6 +3,7 @@
  * Lista pacotes opcionais, mostra licença antes de instalar,
  * exibe progresso via SSE e permite cancelar/remover.
  */
+import { abrirModal } from "./componentes";
 
 export interface PacoteManifesto {
   id: string;
@@ -26,7 +27,8 @@ export interface EstadoPacote {
 }
 
 export interface ProgressoInstalacao {
-  estado: "aguardando" | "baixando" | "verificando" | "instalando" | "concluido" | "falhou" | "cancelado";
+  /** "bibliotecas": o núcleo instala as bibliotecas Python do pacote no ambiente do serviço de voz. */
+  estado: "aguardando" | "baixando" | "verificando" | "instalando" | "bibliotecas" | "concluido" | "falhou" | "cancelado";
   bytes_baixados: number;
   bytes_total: number;
   erro?: string | null;
@@ -141,10 +143,16 @@ export class InstaladorVozes {
 
   }
 
-  /** Entrada dos cards de motor: usa a mesma licença, progresso e cancelamento da lista. */
-  async instalar(pkgId: string): Promise<void> { await this.iniciarInstalacao(pkgId); }
+  /** Entrada dos cards de motor: usa a mesma licença, progresso e cancelamento da lista.
+   * Devolve true só quando o pacote terminou instalado; licença já aceita na pergunta não é repetida. */
+  async instalar(pkgId: string, op: { licencaAceita?: boolean } = {}): Promise<boolean> {
+    return this.iniciarInstalacao(pkgId, op.licencaAceita === true);
+  }
 
   estaInstalado(pkgId: string): boolean { return this.estados[pkgId]?.instalado ?? false; }
+
+  /** Dados do manifesto (nome, tamanho, licença) para a pergunta de instalar. */
+  pacote(pkgId: string): PacoteManifesto | undefined { return this.pacotes.find((p) => p.id === pkgId); }
 
   private vincularEventos(): void {
     this.raiz.addEventListener("click", (ev) => {
@@ -159,18 +167,19 @@ export class InstaladorVozes {
     });
   }
 
-  private async iniciarInstalacao(pkgId: string): Promise<void> {
+  private async iniciarInstalacao(pkgId: string, licencaAceita = false): Promise<boolean> {
     const pkg = this.pacotes.find((p) => p.id === pkgId);
-    if (!pkg || pkg.indisponivel || this.estados[pkgId]?.instalado || this.abortControllers[pkgId]) return;
+    if (!pkg || pkg.indisponivel || this.abortControllers[pkgId]) return false;
+    if (this.estados[pkgId]?.instalado) return true;
 
     // Confirmação de licença
-    if (pkg.licenca_url) {
+    if (pkg.licenca_url && !licencaAceita) {
       const aceito = window.confirm(
         `Este pacote está sob a licença "${pkg.licenca_nome || "Desconhecida"}".\n\n` +
         `Leia os termos em:\n${pkg.licenca_url}\n\n` +
         `Deseja continuar com a instalação?`
       );
-      if (!aceito) return;
+      if (!aceito) return false;
     }
 
     // UI: mostrar progresso
@@ -193,7 +202,7 @@ export class InstaladorVozes {
       if (!resp.ok && !resp.body) {
         const err = await resp.json().catch(() => ({ erro: `HTTP ${resp.status}` }));
         this.deps.notificar(`Falha ao iniciar: ${err.erro || resp.status}`, true);
-        return;
+        return false;
       }
 
       // Ler SSE
@@ -218,17 +227,17 @@ export class InstaladorVozes {
               this.estados[pkgId] = { ...this.estados[pkgId], instalado: true, versao_instalada: pkg.versao };
               this.renderizar();
               void this.deps.aoMudar?.(pkgId, true);
-              return;
+              return true;
             }
             if (dados.estado === "falhou") {
               this.deps.notificar(`Falha na instalação: ${dados.erro || "desconhecido"}`, true);
               this.renderizar();
-              return;
+              return false;
             }
             if (dados.estado === "cancelado") {
               this.deps.notificar("Instalação cancelada.");
               this.renderizar();
-              return;
+              return false;
             }
           } catch { /* ignora linha malformada */ }
         }
@@ -240,6 +249,7 @@ export class InstaladorVozes {
     } finally {
       delete this.abortControllers[pkgId];
     }
+    return false;
   }
 
   private atualizarProgresso(
@@ -249,7 +259,10 @@ export class InstaladorVozes {
     texto: HTMLElement | null,
   ): void {
     if (!bar || !texto) return;
-    if (dados.bytes_total > 0) {
+    if (dados.estado === "bibliotecas") {
+      bar.removeAttribute("value"); // sem porcentagem: o instalador de pacotes Python não informa progresso
+      texto.textContent = "Instalando bibliotecas…";
+    } else if (dados.bytes_total > 0) {
       const pct = Math.round((dados.bytes_baixados / dados.bytes_total) * 100);
       bar.value = pct;
       texto.textContent = `${pct}% (${formatarBytes(dados.bytes_baixados)})`;
@@ -287,4 +300,49 @@ export class InstaladorVozes {
       this.deps.notificar(`Erro ao remover: ${(exc as Error).message}`, true);
     }
   }
+}
+
+export interface PerguntaInstalacao {
+  /** Nome do motor/voz como aparece no card. */
+  nome: string;
+  /** Do manifesto, quando o instalador já carregou a lista. */
+  pacote?: Pick<PacoteManifesto, "nome" | "bytes_download" | "licenca_nome" | "licenca_url">;
+  raiz?: HTMLElement;
+}
+
+/** Pergunta em modal se instala a voz que falta; mostra tamanho e licença do pacote. Resolve true para instalar. */
+export function perguntarInstalacao(op: PerguntaInstalacao): Promise<boolean> {
+  const corpo = document.createElement("div");
+  corpo.className = "modal-instalar-voz";
+  const texto = document.createElement("p");
+  texto.textContent = `${op.nome} não está instalado neste PC. Quer instalar agora? Ao terminar, o Vard já deixa esta voz escolhida.`;
+  corpo.append(texto);
+  const pkg = op.pacote;
+  if (pkg) {
+    const meta = document.createElement("p");
+    meta.className = "nota";
+    meta.append(`${pkg.nome}${pkg.bytes_download > 0 ? ` · download de ${formatarBytes(pkg.bytes_download)}` : ""}`);
+    if (pkg.licenca_url) {
+      meta.append(" · Licença: ");
+      const link = document.createElement("a");
+      link.href = pkg.licenca_url;
+      link.target = "_blank";
+      link.rel = "noopener";
+      link.textContent = pkg.licenca_nome || "ver termos";
+      meta.append(link, ". Instalar significa aceitar esses termos.");
+    }
+    corpo.append(meta);
+  }
+  return new Promise((resolver) => {
+    let instalar = false;
+    abrirModal({
+      titulo: `Instalar ${op.nome}?`,
+      corpo,
+      acoes: [
+        { rotulo: "Instalar e usar", primaria: true, aoClicar: () => { instalar = true; } },
+        { rotulo: "Agora não" },
+      ],
+      aoFechar: () => resolver(instalar),
+    }, op.raiz);
+  });
 }

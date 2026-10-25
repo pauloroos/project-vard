@@ -9,8 +9,8 @@ use serde_json::Value;
 #[cfg(test)]
 use std::{collections::HashMap, sync::Mutex};
 
-/// Prefixos de alvo aceitos pelo cofre generalizado.
-pub const TIPOS: [&str; 3] = ["provedor", "voz", "mcp"];
+/// Prefixos de alvo aceitos pelo cofre generalizado (canal = token de bot, como o do Telegram).
+pub const TIPOS: [&str; 4] = ["provedor", "voz", "mcp", "canal"];
 
 /// Nomes legados que ainda podem aparecer na config da 0.5.
 pub const LEGADOS: [&str; 2] = ["elevenlabs", "gemini"];
@@ -294,6 +294,7 @@ mod testes {
         assert_eq!(alvo("provedor", "suad").unwrap(), "vard:provedor:suad");
         assert_eq!(alvo("voz", "kokoro-local").unwrap(), "vard:voz:kokoro-local");
         assert_eq!(alvo("mcp", "filesystem").unwrap(), "vard:mcp:filesystem");
+        assert_eq!(alvo("canal", "telegram").unwrap(), "vard:canal:telegram");
     }
 
     #[test]

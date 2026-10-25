@@ -55,6 +55,8 @@ def validar_documento(arquivo: str, valor) -> dict:
     if arquivo == "habilidades":
         return habilidades.validar_habilidades(obj)
     if arquivo == "hud":
+        if "usar_openjarvis" in obj and not isinstance(obj["usar_openjarvis"], bool):
+            raise ValueError("Usar OpenJarvis deve ser booleano")
         for chave in ("cor_elementos", "voz_motor", "voz_propria", "voz", "elevenlabs_voz", "gemini_voz", "voz_reserva_motor", "voz_reserva_id", "cerebro"):
             if chave in obj and not isinstance(obj[chave], str):
                 raise ValueError("O ajuste deve ser texto")
@@ -246,7 +248,9 @@ def listar_vozes() -> dict:
 
 
 def listar_habilidades() -> list[dict]:
-    return [h for h in habilidades.ler_habilidades()["habilidades"] if h["ligada"]]
+    """Receitas ligadas do usuário e, depois, capacidades de fábrica personalizadas e ligadas."""
+    cfg = habilidades.ler_habilidades()
+    return [h for h in cfg["habilidades"] if h["ligada"]] + habilidades.fabrica_ligadas(cfg)
 
 
 def cadastrar_habilidade(campos: dict) -> None:
@@ -256,27 +260,59 @@ def cadastrar_habilidade(campos: dict) -> None:
     habilidades.gravar_habilidades(cfg)
 
 
+def _receita(cfg: dict, id: str) -> dict:
+    h = next((h for h in cfg["habilidades"] if h["id"] == id), None)
+    if h is None:
+        raise ValueError("Habilidade não encontrada")
+    return h
+
+
 def editar_habilidade(id: str, campos: dict) -> None:
+    """Receita: atualiza e volta a treinada. Fábrica: guarda o ajuste em "fabrica" e liga/desliga em "desligadas"."""
     if set(campos) - {"nome", "quando", "instrucoes", "ligada"}:
         raise ValueError("Edite nome, exemplos, instruções ou ligada")
     cfg = habilidades.ler_habilidades()
-    h = next(h for h in cfg["habilidades"] if h["id"] == id)
+    if id in habilidades.IDS_FABRICA:
+        textos = {k: v for k, v in campos.items() if k != "ligada"}
+        if textos:
+            cfg.setdefault("fabrica", {}).setdefault(id, {}).update(textos)
+        if "ligada" in campos:
+            ligada = campos["ligada"]
+            if not isinstance(ligada, bool):
+                raise ValueError("Informe ligada como verdadeiro ou falso")
+            cfg["desligadas"] = [d for d in cfg["desligadas"] if d != id] + ([] if ligada else [id])
+        habilidades.gravar_habilidades(cfg)
+        return
+    h = _receita(cfg, id)
     h.update(campos)
     h.update(situacao="treinada", validada_em=None)
     habilidades.gravar_habilidades(cfg)
 
 
-def excluir_habilidade(id: str) -> None:
+def restaurar_habilidade(id: str) -> None:
+    """Apaga os ajustes de uma capacidade de fábrica; ligada/desligada continua como está."""
+    if id not in habilidades.IDS_FABRICA:
+        raise ValueError("Só habilidades de fábrica voltam ao padrão; receitas do usuário se editam ou excluem")
     cfg = habilidades.ler_habilidades()
-    if not any(h["id"] == id for h in cfg["habilidades"]):
-        raise ValueError("Habilidade não encontrada")
+    fabrica = cfg.get("fabrica", {})
+    fabrica.pop(id, None)
+    if not fabrica:
+        cfg.pop("fabrica", None)
+    habilidades.gravar_habilidades(cfg)
+
+
+def excluir_habilidade(id: str) -> None:
+    if id in habilidades.IDS_FABRICA:
+        raise ValueError("Habilidades de fábrica não se excluem; use restaurar_habilidade para voltar ao padrão ou editar_habilidade com ligada=false para desligar")
+    cfg = habilidades.ler_habilidades()
+    _receita(cfg, id)
     cfg["habilidades"] = [h for h in cfg["habilidades"] if h["id"] != id]
     habilidades.gravar_habilidades(cfg)
 
 
 def marcar_habilidade_validada(id: str) -> None:
     cfg = habilidades.ler_habilidades()
-    h = next(h for h in cfg["habilidades"] if h["id"] == id)
+    h = _receita(cfg, id)
     h.update(situacao="validada", validada_em=datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z"))
     habilidades.gravar_habilidades(cfg)
 

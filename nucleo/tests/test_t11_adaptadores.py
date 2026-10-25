@@ -275,3 +275,62 @@ def _logon_temporario(tmp_path, monkeypatch):
     copia = tmp_path / "tarefa-logon.ps1"
     shutil.copyfile(SCRIPT_LOGON, copia)
     monkeypatch.setattr(sys.modules[__name__], "SCRIPT_LOGON", copia)
+
+
+# ------------------------------------------------------------------ 0.9.7: bandeja antiga não volta
+# Com supervisor:true a bandeja é a nativa do vard.exe. Nem o vard-modo.ps1 (caminho legado do
+# iniciar/voltar, que roda quando a caixa IPC não tem app.json) nem a bandeja.py podem subir a antiga.
+
+DUBLE_SUBIR = (
+    '\nfunction Subir($nome, $exe, $argumentos, $dir) { Add-Content -Path (Join-Path $Pasta "subidos.txt") -Value $nome }\n'
+)
+
+
+def _iniciar_registrando(tmp_path: Path, script: Path, supervisor: bool) -> list[str]:
+    """Roda `iniciar` com Subir dublado (só anota o nome). Sem as variáveis de usuário, o Iniciar para
+    logo depois da bandeja (Falhar): nada de LM Studio, OpenJarvis ou serviço de verdade."""
+    texto = script.read_text(encoding="utf-8-sig")
+    texto = texto.replace("\nif (PublicarNaCaixa $Verbo)", DUBLE_SUBIR + "\nif (PublicarNaCaixa $Verbo)")
+    alvo = tmp_path / "vard-modo-subir.ps1"
+    alvo.write_text(texto, encoding="utf-8-sig")
+    local = _preparar_localappdata(tmp_path, supervisor=supervisor, com_app=False)
+    env = {**os.environ, "LOCALAPPDATA": str(local)}
+    for n in ("OPENJARVIS_HOME", "VLLM_API_KEY", "LMSTUDIO_API_KEY", "VARD_INSTALACAO", "VARD_DADOS"):
+        env.pop(n, None)
+    r = subprocess.run(
+        ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", str(alvo), "iniciar"],
+        capture_output=True, text=True, encoding="utf-8", errors="replace", env=env, timeout=60,
+    )
+    assert "faltam vari" in (r.stderr + r.stdout), f"stdout={r.stdout} stderr={r.stderr}"  # a página de código do console varia
+    subidos = local / "rdl-vard" / "subidos.txt"
+    return subidos.read_text(encoding="utf-8-sig").split() if subidos.exists() else []
+
+
+def test_vard_modo_nao_sobe_a_bandeja_python_com_supervisor(tmp_path: Path) -> None:
+    assert "bandeja" not in _iniciar_registrando(tmp_path, SCRIPT_MODO, supervisor=True)
+
+
+def test_vard_modo_sobe_a_bandeja_python_no_legado(tmp_path: Path) -> None:
+    assert "bandeja" in _iniciar_registrando(tmp_path, SCRIPT_MODO, supervisor=False)
+
+
+def test_bandeja_py_nao_inicia_com_supervisor_mesmo_sem_app_json(tmp_path: Path) -> None:
+    """O app.json da caixa IPC pode faltar; a flag da instalação basta para a bandeja antiga ficar quieta."""
+    _criar_instalacao(tmp_path, supervisor=True)   # sem ciclo/app.json
+    guarda = TestBandejaGuardaSupervisor()
+    codigo = guarda._codigo_supervisor_check(REPO, tmp_path, True)
+    r = subprocess.run([guarda._python_do_venv(), "-c", codigo], capture_output=True, text=True, timeout=15,
+                       env={**os.environ, "VARD_DADOS": str(tmp_path), "VARD_INSTALACAO": str(tmp_path / "instalacao.json")})
+    assert r.returncode == 0, f"falha: {r.stderr}"
+
+
+def test_supervisor_ativo_le_so_a_flag_da_instalacao(tmp_path: Path) -> None:
+    from vard import instalacao
+    arq = tmp_path / "instalacao.json"
+    assert instalacao.supervisor_ativo(arq) is False            # sem arquivo
+    arq.write_text("{", encoding="utf-8")
+    assert instalacao.supervisor_ativo(arq) is False            # ilegível
+    arq.write_text('﻿{"supervisor": true}', encoding="utf-8")
+    assert instalacao.supervisor_ativo(arq) is True             # com BOM, como o PowerShell grava
+    arq.write_text('{"supervisor": "sim"}', encoding="utf-8")
+    assert instalacao.supervisor_ativo(arq) is False            # só true de verdade

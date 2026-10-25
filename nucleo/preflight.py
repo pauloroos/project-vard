@@ -144,7 +144,7 @@ def omniroute_responde() -> Check:
         return (True, "AVISO: OmniRouter não configurado ([omniroute] url no segredos.toml)")
     chave = segredos.chave_omniroute()
     r = httpx.post(f"{url}/v1/chat/completions", headers={"Authorization": f"Bearer {chave}", "User-Agent": "curl/8.0"},
-                   json={"model": "combo/t1-work", "messages": [{"role": "user", "content": "Responda só: pong"}], "max_tokens": 64}, timeout=60)
+                   json={"model": "combo/equipe", "messages": [{"role": "user", "content": "Responda só: pong"}], "max_tokens": 64}, timeout=60)
     msg = r.json()["choices"][0]["message"] if r.status_code == 200 else {}
     txt = msg.get("content") or msg.get("reasoning_content") or ""
     return (r.status_code == 200 and bool(txt.strip()), f"HTTP {r.status_code}; {txt.strip()[:30]}")

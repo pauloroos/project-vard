@@ -1,4 +1,9 @@
 [
+  {"arquivo":"hud","valor":{"usar_openjarvis":false},"valido":true},
+  {"arquivo":"hud","valor":{"usar_openjarvis":true},"valido":true},
+  {"arquivo":"hud","valor":{"usar_openjarvis":"true"},"valido":false},
+  {"arquivo":"hud","valor":{"usar_openjarvis":1},"valido":false},
+  {"arquivo":"hud","valor":{"usar_openjarvis":null},"valido":false},
   {"arquivo":"hud","valor":{"cor_elementos":"#aA1122","opacidade_elementos":0.2},"valido":true},
   {"arquivo":"hud","valor":{"cor_elementos":"","opacidade_elementos":1,"futuro":3},"valido":true},
   {"arquivo":"hud","valor":{"cor_elementos":"vermelho"},"valido":false},

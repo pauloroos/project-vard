@@ -71,6 +71,13 @@ def test_saude_antes_do_aquecimento():
     assert d["pronta"] is False and d["voz"] == "Suad Qasim" and d["aquecida"] is False
 
 
+def test_saude_identifica_processo_mesmo_sem_modelo_carregado():
+    import os
+    d = cliente(MotorFalso(pronta=False)).get("/saude").json()
+    assert d["ok"] is True and d["pid"] == os.getpid()
+    assert isinstance(d["versao"], str) and d["versao"]
+
+
 def test_falar_aquecendo_503():
     r = cliente(MotorFalso(pronta=False)).post("/falar", json={"texto": "Oi."})
     assert r.status_code == 503 and r.json() == {"erro": "aquecendo"}
@@ -141,7 +148,10 @@ def test_motor_recebe_texto_normalizado_wav_e_pcm():
 def test_vozes_lista_e_atual():
     # motor_kokoro=None isola o comportamento XTTS-only; com Kokoro ativo a lista inclui vozes Kokoro.
     r = cliente(MotorFalso(), motor_kokoro=None, motor_edge=None, motor_piper=None).get("/vozes")
-    assert r.status_code == 200 and r.json() == {"vozes": ["Suad Qasim", "Ana Florence"], "atual": "Suad Qasim"}
+    assert r.status_code == 200 and r.json() == {
+        "vozes": ["Suad Qasim", "Ana Florence"], "atual": "Suad Qasim",
+        "por_motor": {"xtts": ["Suad Qasim", "Ana Florence"]},
+    }
 
 
 def test_vozes_xtts_instalado_mas_nao_pronto_retorna_200():
@@ -188,11 +198,59 @@ def test_transcribe_stt_indisponivel_503():
     assert r.status_code == 503 and r.json()["erro"] == "stt_indisponivel"
 
 
-def test_transcribe_stt_nao_carregado_503():
-    """MotorSTT existe mas não está pronto → 503."""
-    stt = STTFalso(pronta=False)
-    r = cliente(MotorFalso(), stt=stt).post("/v1/speech/transcribe", content=b"\x00" * 10)
+def test_transcribe_carrega_o_modelo_no_primeiro_pedido():
+    """MotorSTT criado mas não carregado: o primeiro pedido carrega e responde (antes ficava 503 para sempre)."""
+    class STTPreguicoso(STTFalso):
+        def __init__(self):
+            super().__init__(pronta=False, texto="oi")
+            self.cargas = 0
+        def carregar(self):
+            self.cargas += 1
+            self.pronta = True
+    stt = STTPreguicoso()
+    c = cliente(MotorFalso(), stt=stt)
+    r = c.post("/v1/speech/transcribe", content=b"\x00" * 10)
+    assert r.status_code == 200 and r.json()["text"] == "oi"
+    c.post("/v1/speech/transcribe", content=b"\x00" * 10)
+    assert stt.cargas == 1
+
+
+def test_stt_carrega_na_abertura_em_segundo_plano():
+    import time
+    class STTContador(STTFalso):
+        def __init__(self):
+            super().__init__(pronta=False)
+            self.cargas = 0
+        def carregar(self):
+            self.cargas += 1
+            self.pronta = True
+    stt = STTContador()
+    app = criar_app(MotorFalso(), stt=stt, carregar_em_thread=True)
+    with TestClient(app, base_url="http://127.0.0.1:4710"):
+        fim = time.time() + 3
+        while stt.cargas == 0 and time.time() < fim:
+            time.sleep(0.02)
+    assert stt.cargas == 1
+
+
+def test_transcribe_carga_que_falha_503():
+    """Se carregar o modelo falhar (pacote ausente, GPU), responde 503 stt_indisponivel."""
+    class STTSemPacote(STTFalso):
+        def carregar(self):
+            raise RuntimeError("faster-whisper não instalado")
+    r = cliente(MotorFalso(), stt=STTSemPacote(pronta=False)).post("/v1/speech/transcribe", content=b"\x00" * 10)
     assert r.status_code == 503 and r.json()["erro"] == "stt_indisponivel"
+
+
+def test_transcribe_repassa_o_idioma_do_formulario():
+    class STTIdioma(STTFalso):
+        def transcrever_bytes(self, audio, idioma=None):
+            self.idioma = idioma
+            return "ok", 0.9
+    stt = STTIdioma()
+    r = cliente(MotorFalso(), stt=stt).post(
+        "/v1/speech/transcribe", files={"file": ("fala.wav", b"\x00" * 10, "audio/wav")}, data={"language": "pt"})
+    assert r.status_code == 200 and stt.idioma == "pt"
 
 
 def test_transcribe_audio_vazio_400():

@@ -23,8 +23,9 @@ import { criarFonteDeVoz, type ProvedorVoz } from "./conectores/voz/escolher";
 import type { FonteDeVoz } from "./conectores/voz/fonte";
 import { Conversa, type Estado } from "./fala/conversa";
 import { processarTextoOuvido } from "./fala/textoOuvido";
-import { criarMaquinaConversaAberta } from "./conversa/aberta";
+import { criarMaquinaConversaAberta, processamentoConcluido } from "./conversa/aberta";
 import { FALAS, saudacaoPara } from "./fala/falas";
+import { criarMemoriaSaude, sondarCerebro } from "./fala/saude-cerebro";
 import { Adiador } from "./ui/dock";
 import { Hud } from "./ui/hud";
 import { Invisibilidade } from "./ui/invisivel";
@@ -147,10 +148,7 @@ window.addEventListener("DOMContentLoaded", async () => {
     },
     audio: {
       config: cfg,
-      transcrever: async (wav: ArrayBuffer, sinal: AbortSignal) => {
-        const texto = await oj.transcrever(wav, cfg.idioma, sinal);
-        return texto;
-      },
+      transcrever: (wav: ArrayBuffer, sinal: AbortSignal) => transcreverFala(wav, sinal),
       suspenderEscuta: async () => {
         const estavaMudo = estaMudo();
         if (!estavaMudo) definirMudo(true);
@@ -178,8 +176,23 @@ window.addEventListener("DOMContentLoaded", async () => {
   }).catch(() => {});
 
   // No `tauri dev` a origem do webview (localhost:1420) é recusada pelo CORS do OpenJarvis; o Vite faz a ponte em /oj.
+  // Quando o cérebro é próprio e o toggle "Usar OpenJarvis" está desligado, o cliente OJ fica nulo:
+  // nenhuma chamada ao OpenJarvis deve acontecer nesse modo (sem-openjarvis.md).
+  const deveUsarOj = () => cfg.cerebro === "openjarvis" || cfg.usar_openjarvis;
   const base = import.meta.env.DEV ? `${location.origin}/oj` : cfg.openjarvis_url;
-  const oj = new OpenJarvis(base, cfg.modelo);
+  const clienteOj = new OpenJarvis(base, cfg.modelo, deveUsarOj);
+  let oj: OpenJarvis | null = deveUsarOj() ? clienteOj : null;
+
+/** Transcrição pelo serviço de voz do Vard (mesmo formato /v1/speech/transcribe); o OpenJarvis é só reserva. */
+async function transcreverFala(wav: ArrayBuffer, sinal?: AbortSignal): Promise<string> {
+  const voz = cfg.voz_url?.trim();
+  if (voz) {
+    try { return await new OpenJarvis(voz).transcrever(wav, cfg.idioma, sinal); }
+    catch (erro) { if (!oj || sinal?.aborted) throw erro; console.warn("transcrição no serviço de voz falhou; tentando o OpenJarvis", erro); }
+  }
+  if (!oj) throw new Error("Sem transcrição: o serviço de voz não respondeu e o OpenJarvis está desligado.");
+  return oj.transcrever(wav, cfg.idioma, sinal);
+}
   // Voz própria opcional (docs/voz-propria.md). Vazio desliga: a voz fica sempre a do OpenJarvis.
   let voz: FonteDeVoz | null = criarFonteDeVoz(cfg);
   // Voz de reserva configurada pelo usuário; usada automaticamente quando a principal falhar.
@@ -189,6 +202,7 @@ window.addEventListener("DOMContentLoaded", async () => {
         voz_url: cfg.voz_url,
         voz_motor: cfg.voz_reserva_motor ?? "",
         voz_propria: cfg.voz_reserva_id ?? "",
+        voz: cfg.voz_reserva_id ?? "", // reserva antiga pelo OpenJarvis: o ID Kokoro vai para o serviço de voz
         elevenlabs_chave: cfg.elevenlabs_chave,
         elevenlabs_voz: cfg.voz_reserva_provedor === "elevenlabs" ? (cfg.voz_reserva_id ?? "") : "",
         gemini_chave: cfg.gemini_chave,
@@ -317,7 +331,11 @@ window.addEventListener("DOMContentLoaded", async () => {
       // Prazo curto: uma voz pendurada não segura "Oi." por 8 s antes da reserva. O aquecimento, que não tem pressa, usa o prazo normal.
       fontes.push({ origem: "voz", voz: fonteAtual.nome, sintetizar: () => fonteAtual.falarWav(t, cfg.velocidade, rapido ? PRAZO_FALA_FIXA_MS : undefined) });
     }
-    fontes.push({ origem: "oj", voz: cfg.voz, sintetizar: () => oj.sintetizar(t, cfg.voz, cfg.velocidade) });
+    // OpenJarvis só entra como reserva de fala quando está ativo; com cerebro=proprio e toggle desligado, oj é null.
+    const ojAtual = oj;
+    if (ojAtual) {
+      fontes.push({ origem: "oj", voz: cfg.voz, sintetizar: () => ojAtual.sintetizar(t, cfg.voz, cfg.velocidade) });
+    }
     return falaFixa(t, fontes);
   };
   // Aviso falado (só com "falar avisos" ligado): o resumo que a ponte mandou, pela mesma rota das frases fixas.
@@ -337,7 +355,7 @@ window.addEventListener("DOMContentLoaded", async () => {
 
   let sessaoVozId = crypto.randomUUID();
   const conversa = new Conversa({
-    oj, boca, config: cfg,
+    get oj() { return oj; }, boca, config: cfg,
     get voz() { return voz ?? undefined; },
     get vozReserva() { return vozReserva ?? undefined; },
     falas: fixa,
@@ -378,6 +396,10 @@ window.addEventListener("DOMContentLoaded", async () => {
     },
     aoLigarConversaAberta: () => {
       if (conversaAberta.estado === "desligado") alternarConversaAberta();
+    },
+    aoProcessamentoConcluido: () => {
+      processamentoConcluido(conversaAberta);
+      rearmarTimerSilencioAberta();
     },
   });
   olharTela = () => { void conversa.aoTextoTranscrito("olha a tela", true); };
@@ -463,9 +485,10 @@ window.addEventListener("DOMContentLoaded", async () => {
       try { await fixa(t, false); } catch { aquecido = false; } // uma de cada vez: não disputa a GPU com a conversa
     }
   };
+  const memoriaSaude = criarMemoriaSaude();
   const checarSaude = async () => {
-    const ok = await oj.saude();
-    const falaOk = ok && (await oj.fala());
+    // Com cerebro=proprio e toggle desligado, oj é null: quem responde é o núcleo (a /saude da ponte).
+    const { ok, falaOk } = await sondarCerebro(oj, ponte, memoriaSaude);
     await conversa.aoHealth(ok, falaOk);
     if (voz) {
       const pronta = await voz.saude();
@@ -517,7 +540,7 @@ window.addEventListener("DOMContentLoaded", async () => {
       const wav = pcmParaWav(reamostrar(tudo, taxaAtual(), 16000), 16000);
       let texto: string;
       try {
-        texto = await oj.transcrever(wav, cfg.idioma);
+        texto = await transcreverFala(wav);
       } catch (erro) {
         if (ciclo !== cicloVoz || estaMudo() || reuniaoAtiva) return;
         console.warn("transcrição falhou", erro);
@@ -798,6 +821,7 @@ window.addEventListener("DOMContentLoaded", async () => {
     if (!novo) { console.warn("config-salva ignorada: payload inválido"); return; }
     const antes = { tamanho: cfg.tamanho, tamanho_px: cfg.tamanho_px };
     const mudou = aplicarAoVivo(cfg, novo);
+    if (mudou.includes("cerebro") || mudou.includes("usar_openjarvis")) oj = deveUsarOj() ? clienteOj : null;
     if (aplicarVozAoVivo(cfg, recebido)) { voz = criarFonteDeVoz(cfg); vozReserva = criarReserva(); }
     if (ladoMudou(antes, cfg)) await aplicarTamanho(); // só quando o lado de fato mudou
     if (mudou.includes("compacto")) hud.setCompacto(cfg.compacto);
@@ -810,7 +834,7 @@ window.addEventListener("DOMContentLoaded", async () => {
       invisibilidade.definirModo(cfg.invisivel);
       void invoke("marcar_invisivel_na_bandeja", { ligado: cfg.invisivel }).catch(() => {});
     }
-    if (mudou.includes("modelo")) oj.definirModelo(cfg.modelo);
+    if (mudou.includes("modelo")) clienteOj.definirModelo(cfg.modelo);
     if (mudou.includes("usuario")) void fixa(saudacaoPara(cfg.usuario), false).catch(() => {}); // aquece a saudação nova
     if (mudou.includes("nao_ouvir")) await aplicarNaoOuvir(cfg.nao_ouvir, false); // o painel já gravou
     if (mudou.includes("nao_falar")) await aplicarNaoFalar(cfg.nao_falar, false);

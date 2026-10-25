@@ -1,5 +1,17 @@
-/** Instalações de Quem responde: confirmação, progresso e cadastro pelo modal existente. */
+/** Instalações do Núcleo: confirmação, progresso e cadastro pelo modal existente. */
 import { abrirModal, desenharCards, type Card } from "./componentes";
+
+/** O que basta do cadastro para saber se um instalável já virou provedor. */
+export interface ProvedorCadastrado { id: string; tipo: string }
+
+/**
+ * Já configurado: há provedor do mesmo tipo (o id nasce do nome digitado, ex.: "lm-studio") ou de id igual.
+ * O OpenJarvis instalado conta como configurado: ele tem card fixo nas opções avançadas.
+ */
+export function jaConfigurado(item: Pick<Instalavel, "id" | "tipo_provedor" | "instalado">, cadastrados: ProvedorCadastrado[]): boolean {
+  if (item.id === "openjarvis") return item.instalado;
+  return cadastrados.some(p => p.id === item.id || (!!item.tipo_provedor && p.tipo === item.tipo_provedor));
+}
 
 export interface AndamentoInstalacao {
   id: string;
@@ -26,11 +38,13 @@ const ESTADOS: Record<AndamentoInstalacao["estado"], string> = {
 
 export class InstalaveisProvedores {
   private itens: Instalavel[] = [];
+  /** Estado da última leitura: a aba pode redesenhar e reanexar antes de a lista chegar. */
+  private situacao: "carregando" | "pronto" | "indisponivel" = "carregando";
   constructor(
     private raiz: HTMLElement,
     private base: string,
     private cadastrar: (item: Instalavel) => void | Promise<void>,
-    private idsCadastrados: () => string[] = () => [],
+    private cadastrados: () => ProvedorCadastrado[] = () => [],
   ) {}
 
   private async requisitar(caminho: string, corpo?: object): Promise<unknown> {
@@ -45,26 +59,53 @@ export class InstalaveisProvedores {
   }
 
   async carregar(): Promise<void> {
+    if (this.situacao !== "pronto") this.mostrar();
     try {
       const corpo = await this.requisitar("") as { itens?: Instalavel[] };
       this.itens = Array.isArray(corpo.itens) ? corpo.itens : [];
-      this.desenhar();
+      this.situacao = "pronto";
     } catch {
-      this.raiz.textContent = "Instalações indisponíveis. Ligue os serviços do Vard e reabra esta aba.";
+      this.situacao = "indisponivel";
     }
+    this.mostrar();
+  }
+
+  /** Passa a desenhar em outro contêiner (a aba redesenhou) com o que já tem, sem consultar o núcleo de novo. */
+  anexar(raiz: HTMLElement): void {
+    this.raiz = raiz;
+    this.mostrar();
+  }
+
+  private mostrar() {
+    if (this.situacao === "pronto") { this.desenhar(); return; }
+    this.raiz.replaceChildren();
+    const p = document.createElement("p");
+    p.className = "nucleo-ajuda";
+    p.textContent = this.situacao === "carregando"
+      ? "Carregando instalações…"
+      : "Instalações indisponíveis. Ligue os serviços do Vard e reabra esta aba.";
+    this.raiz.append(p);
   }
 
   private desenhar() {
     this.raiz.replaceChildren();
-    const titulo = document.createElement("h3"); titulo.textContent = "Instalar ou conectar";
+    const ferramentas = document.createElement("div"); ferramentas.className = "nucleo-ferramentas";
+    const ajuda = document.createElement("p"); ajuda.className = "nucleo-ajuda";
+    ajuda.textContent = "Só o que ainda não está instalado ou cadastrado.";
     const atualizar = document.createElement("button"); atualizar.type = "button"; atualizar.textContent = "Atualizar instalações";
     atualizar.addEventListener("click", () => { void this.carregar(); });
+    ferramentas.append(ajuda, atualizar);
     const lista = document.createElement("div");
-    this.raiz.append(titulo, atualizar, lista);
-    const cards: Card[] = this.itens.map(item => {
+    this.raiz.append(ferramentas, lista);
+    const cadastrados = this.cadastrados();
+    const emAndamento = (item: Instalavel) => item.estado === "instalando" || (item.estado === "aguardando" && item.linhas.length > 0);
+    // Já configurado sai da lista; fica só se ainda falta entrar na conta (ou se a instalação está correndo).
+    const visiveis = this.itens.filter(item => emAndamento(item) || !jaConfigurado(item, cadastrados)
+      || (item.instalado && item.login === "ausente"));
+    const cards: Card[] = visiveis.map(item => {
       const acoes: Card["acoes"] = [];
-      const emAndamento = item.estado === "instalando" || (item.estado === "aguardando" && item.linhas.length > 0);
-      if (emAndamento) acoes.push({ rotulo: "Ver andamento", aoClicar: () => this.acompanhar(item) });
+      const configurado = jaConfigurado(item, cadastrados);
+      if (emAndamento(item)) acoes.push({ rotulo: "Ver andamento", aoClicar: () => this.acompanhar(item) });
       else if (!item.instalado) acoes.push({
         rotulo: item.manual ? "Instruções de instalação" : "Instalar", primaria: !item.manual,
         aoClicar: () => this.confirmar(item),
@@ -73,24 +114,22 @@ export class InstalaveisProvedores {
         if (item.login !== "dispensado" && item.login !== "conectado") {
           acoes.push({ rotulo: "Entrar na conta", aoClicar: () => { void this.login(item); } });
         }
-        const jaCadastrado = this.idsCadastrados().some(id => id === item.id || id === item.tipo_provedor);
-        if (item.tipo_provedor || item.id === "openjarvis") {
-          if (jaCadastrado) {
-            acoes.push({ rotulo: "Já cadastrado", aoClicar: () => {} });
-          } else {
-            acoes.push({ rotulo: "Cadastrar provedor", aoClicar: () => { void this.cadastrar(item); } });
-          }
-        } else {
+        // Já é provedor: nada a cadastrar de novo.
+        if (!configurado && (item.tipo_provedor || item.id === "openjarvis")) {
+          acoes.push({ rotulo: "Cadastrar provedor", aoClicar: () => { void this.cadastrar(item); } });
+        } else if (!configurado) {
           acoes.push({ rotulo: "Instruções de conexão", aoClicar: () => this.confirmar(item, true) });
         }
       }
-      const situacao = emAndamento ? "Instalando" : !item.instalado ? "Não instalado"
+      const situacao = emAndamento(item) ? "Instalando" : !item.instalado ? "Não instalado"
         : item.login === "ausente" ? "Falta entrar na conta"
         : item.login === "nao_verificado" ? "Instalado; confira o login" : "Instalado";
       return { id: `instalar-${item.id}`, titulo: item.nome, detalhes: [item.descricao],
         selos: [{ texto: situacao, tom: item.instalado && item.login !== "ausente" ? "ok" : "aviso" }], acoes };
     });
-    desenharCards(lista, cards, { vazio: "Nenhuma instalação disponível." });
+    desenharCards(lista, cards, { vazio: this.itens.length
+      ? "Nada a sugerir: tudo o que o Vard sabe instalar já está instalado e cadastrado."
+      : "Nenhuma instalação disponível." });
   }
 
   private confirmar(item: Instalavel, soInstrucoes = false) {

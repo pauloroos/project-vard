@@ -3,7 +3,7 @@ import { readFileSync, mkdtempSync, existsSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { invoke } from "@tauri-apps/api/core";
-import { validarHabilidades, lerHabilidades, gravarHabilidades, HABILIDADES_PADRAO } from "../src/config/habilidades";
+import { validarHabilidades, lerHabilidades, gravarHabilidades, temHabilidadesLigadas, HABILIDADES_PADRAO } from "../src/config/habilidades";
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }));
 const casos = JSON.parse(readFileSync("tests/fixtures/habilidades/contrato.json", "utf8")) as { nome: string; valido: boolean; valor: unknown; erro?: string }[];
@@ -13,6 +13,17 @@ describe("contrato compartilhado de habilidades", () => {
     if (caso.valido) expect(() => validarHabilidades(caso.valor)).not.toThrow();
     else if (caso.erro) expect(() => validarHabilidades(caso.valor)).toThrow(caso.erro);
     else expect(() => validarHabilidades(caso.valor)).toThrow();
+  });
+});
+
+describe("habilidades que o agente deve consultar", () => {
+  const receita = { id: "rotina", nome: "Rotina", quando: ["bom dia"], instrucoes: "Consultar agenda.", ligada: true, situacao: "treinada" as const, criada_em: "2026-10-17T12:00:00Z", validada_em: null };
+  it("conta receita ligada e fábrica personalizada ligada, nunca desligadas", () => {
+    expect(temHabilidadesLigadas(HABILIDADES_PADRAO)).toBe(false);
+    expect(temHabilidadesLigadas({ ...HABILIDADES_PADRAO, habilidades: [receita] })).toBe(true);
+    expect(temHabilidadesLigadas({ ...HABILIDADES_PADRAO, habilidades: [{ ...receita, ligada: false }] })).toBe(false);
+    expect(temHabilidadesLigadas({ ...HABILIDADES_PADRAO, fabrica: { conversa: { instrucoes: "Responda curto." } } })).toBe(true);
+    expect(temHabilidadesLigadas({ ...HABILIDADES_PADRAO, desligadas: ["conversa"], fabrica: { conversa: { instrucoes: "Responda curto." } } })).toBe(false);
   });
 });
 

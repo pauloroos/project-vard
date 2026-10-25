@@ -25,6 +25,16 @@ def arquivo() -> Path:
     return Path(valor) if valor else _config.pasta_dados() / "instalacao.json"
 
 
+def supervisor_ativo(caminho: Path | None = None) -> bool:
+    """supervisor:true no instalacao.json (app único: o vard.exe cuida dos serviços e da bandeja)."""
+    arq = Path(caminho) if caminho is not None else arquivo()
+    try:
+        dados = json.loads(arq.read_text(encoding="utf-8-sig"))
+    except (OSError, ValueError):
+        return False
+    return isinstance(dados, dict) and dados.get("supervisor") is True
+
+
 def ler(caminho: Path | None = None) -> dict:
     """Lê o instalacao.json; arquivo ausente ou JSON inválido devolve defaults neutros."""
     arq = Path(caminho) if caminho is not None else arquivo()

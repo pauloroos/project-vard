@@ -7,6 +7,8 @@ Regras:
 - Staging separado da instalação ativa.
 - Cancelamento limpa apenas staging; interrupção permite reiniciar.
 - Promoção atômica: renomeia staging → ativo somente após health check.
+- Dependências que são requisitos Python (não ids de pacote) vão para o ambiente do serviço de voz
+  antes da promoção (estado "bibliotecas"); falha deixa o pacote não instalado, com erro claro.
 - Rollback conserva versão anterior em caso de falha na promoção.
 - SSE informa bytes/estado/erro saneado (sem caminhos absolutos).
 - Não inicia GPU ao listar pacotes.
@@ -27,6 +29,7 @@ from typing import AsyncIterator, Callable
 
 import httpx
 
+from . import bibliotecas as _bibliotecas
 from .manifesto import PacoteInfo
 
 log = logging.getLogger("vard.pacotes")
@@ -58,7 +61,7 @@ CHUNK_SIZE = 64 * 1024  # 64 KB
 class ProgressoInstalacao:
     """Estado de uma instalação em andamento."""
     pacote_id: str
-    estado: str  # "baixando" | "verificando" | "instalando" | "concluido" | "falhou" | "cancelado"
+    estado: str  # "baixando" | "verificando" | "instalando" | "bibliotecas" | "concluido" | "falhou" | "cancelado"
     bytes_baixados: int = 0
     bytes_total: int = 0
     erro: str | None = None
@@ -77,6 +80,16 @@ class ProgressoInstalacao:
         }
 
 
+def _ids_do_manifesto() -> set[str]:
+    """Ids dos pacotes do manifesto (para separar dependência de pacote de requisito Python)."""
+    try:
+        from .manifesto import carregar_todos_manifestos
+
+        return set(carregar_todos_manifestos())
+    except Exception:  # noqa: BLE001 - manifesto ilegível: nenhum id conhecido
+        return set()
+
+
 class InstaladorPacotes:
     """Gerencia download, verificação e instalação de pacotes opcionais."""
 
@@ -84,6 +97,9 @@ class InstaladorPacotes:
         self,
         raiz_pacotes: Path | None = None,
         cliente_http: httpx.AsyncClient | None = None,
+        python_voz: Callable[[], Path | None] | None = None,
+        executar_bibliotecas: _bibliotecas.Executar | None = None,
+        ids_pacotes: Callable[[], set[str]] | None = None,
     ) -> None:
         self._raiz = raiz_pacotes or RAIZ_PACOTES
         self._staging = self._raiz / "staging"
@@ -92,6 +108,9 @@ class InstaladorPacotes:
         self._cliente_externo = cliente_http is not None
         self._cliente = cliente_http
         self._cancelamentos: set[str] = set()
+        self._python_voz = python_voz or _bibliotecas.python_da_voz
+        self._executar_bibliotecas = executar_bibliotecas
+        self._ids_pacotes = ids_pacotes or _ids_do_manifesto
 
     async def _get_cliente(self) -> httpx.AsyncClient:
         if self._cliente is None:
@@ -448,6 +467,27 @@ class InstaladorPacotes:
             if not self._verificar_hash(arquivo_extra, extra.sha256):
                 progresso.estado = "falhou"
                 progresso.erro = f"hash SHA-256 nao confere para {extra.nome}"
+                notificar()
+                shutil.rmtree(dir_staging, ignore_errors=True)
+                return progresso
+
+        # Bibliotecas Python do pacote no ambiente do serviço de voz (antes de promover: falha não instala nada)
+        deps = _bibliotecas.dependencias_python(pacote.dependencias, self._ids_pacotes())
+        if deps:
+            if self._foi_cancelado(pacote.id):
+                progresso.estado = "cancelado"
+                notificar()
+                shutil.rmtree(dir_staging, ignore_errors=True)
+                self._limpar_cancelamento(pacote.id)
+                return progresso
+            progresso.estado = "bibliotecas"
+            notificar()
+            erro = await asyncio.to_thread(
+                _bibliotecas.instalar_bibliotecas, deps, self._python_voz(), self._executar_bibliotecas,
+            )
+            if erro:
+                progresso.estado = "falhou"
+                progresso.erro = erro
                 notificar()
                 shutil.rmtree(dir_staging, ignore_errors=True)
                 return progresso

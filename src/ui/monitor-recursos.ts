@@ -21,9 +21,17 @@ export interface DepsMonitorRecursos {
   urlNucleo: () => string;
 }
 
+/** Intervalo entre leituras com a aba Geral aberta. */
+export const INTERVALO_RECURSOS_MS = 5000;
+/** Prazo de uma leitura: o /recursos leva ~1 s (amostra de CPU + sondas curtas); folga para o núcleo ocupado. */
+export const PRAZO_RECURSOS_MS = 8000;
+
 export class MonitorRecursos {
   private timer: ReturnType<typeof setInterval> | null = null;
   private conteudo!: HTMLElement;
+  /** Uma leitura por vez: o intervalo não empilha consultas enquanto a anterior não volta. */
+  private lendo = false;
+  private temDados = false;
 
   constructor(private raiz: HTMLElement, private deps: DepsMonitorRecursos) {}
 
@@ -40,7 +48,7 @@ export class MonitorRecursos {
   ativar(): void {
     if (this.timer !== null) return;
     void this.atualizar();
-    this.timer = setInterval(() => void this.atualizar(), 5000);
+    this.timer = setInterval(() => void this.atualizar(), INTERVALO_RECURSOS_MS);
   }
 
   desativar(): void {
@@ -51,14 +59,28 @@ export class MonitorRecursos {
   }
 
   private async atualizar(): Promise<void> {
+    if (this.lendo) return;
+    this.lendo = true;
     try {
       const url = `${this.deps.urlNucleo().replace(/\/+$/, "")}/recursos`;
-      const r = await fetch(url, { signal: AbortSignal.timeout(4000) });
+      const r = await fetch(url, { signal: AbortSignal.timeout(PRAZO_RECURSOS_MS) });
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
       const dados = (await r.json()) as RecursosResposta;
       this.renderizar(dados);
+      this.temDados = true;
     } catch (erro) {
-      this.conteudo.innerHTML = `<p class="aviso">Não consegui ler os recursos: ${String(erro)}</p>`;
+      if (this.temDados) {
+        // Mantém a última tabela; só avisa que esta leitura falhou.
+        this.conteudo.querySelector(".aviso")?.remove();
+        const aviso = document.createElement("p");
+        aviso.className = "aviso";
+        aviso.textContent = `Não consegui atualizar os recursos: ${String(erro)}`;
+        this.conteudo.append(aviso);
+      } else {
+        this.conteudo.innerHTML = `<p class="aviso">Não consegui ler os recursos: ${esc(String(erro))}</p>`;
+      }
+    } finally {
+      this.lendo = false;
     }
   }
 

@@ -114,7 +114,8 @@ describe("listas de seleção principal e reserva (0.9.4)", () => {
     const { raiz } = await abrir();
     const principal = raiz.querySelector<HTMLSelectElement>("#cfg-voz-principal")!;
     const reserva = raiz.querySelector<HTMLSelectElement>("#cfg-voz-reserva")!;
-    expect([...principal.options].some((o) => o.value.startsWith("openjarvis:"))).toBe(true);
+    // Kokoro vem do serviço de voz (não do OpenJarvis): sem a lista dele, ficam as vozes Kokoro conhecidas.
+    expect([...principal.options].some((o) => o.value.startsWith("propria:kokoro:"))).toBe(true);
     expect([...reserva.options].some((o) => o.value === "")).toBe(true);
     estado.vozes = VOZES_XTTS;
   });
@@ -150,27 +151,30 @@ describe("listas de seleção principal e reserva (0.9.4)", () => {
     expect(lido.voz_propria).toBe("Suad Qasim");
   });
 
-  it("escolher_openjarvis_no_select_principal_grava_voz_e_provedor", async () => {
+  it("escolher_kokoro_no_select_principal_grava_voz_do_servico_de_voz", async () => {
     const { raiz, aba } = await abrir();
     const sel = raiz.querySelector<HTMLSelectElement>("#cfg-voz-principal")!;
-    const opcao = [...sel.options].find((o) => o.value.startsWith("openjarvis:pm_alex"));
+    expect([...sel.options].some((o) => o.value.startsWith("openjarvis:"))).toBe(false);
+    const opcao = [...sel.options].find((o) => o.value === "propria:kokoro:pm_alex");
     expect(opcao).toBeTruthy();
     sel.value = opcao!.value;
     sel.dispatchEvent(new Event("change"));
     const lido = aba.ler();
-    expect(lido.voz_provedor).toBe("openjarvis");
-    expect(lido.voz).toBe("pm_alex");
+    expect(lido.voz_provedor).toBe("propria");
+    expect(lido.voz_motor).toBe("kokoro");
+    expect(lido.voz_propria).toBe("pm_alex");
   });
 
   it("escolher_reserva_grava_campos_de_reserva_na_config", async () => {
     const { raiz, aba } = await abrir();
     const sel = raiz.querySelector<HTMLSelectElement>("#cfg-voz-reserva")!;
-    const opcao = [...sel.options].find((o) => o.value.startsWith("openjarvis:pf_dora"));
+    const opcao = [...sel.options].find((o) => o.value === "propria:kokoro:pf_dora");
     expect(opcao).toBeTruthy();
     sel.value = opcao!.value;
     sel.dispatchEvent(new Event("change"));
     const lido = aba.ler();
-    expect(lido.voz_reserva_provedor).toBe("openjarvis");
+    expect(lido.voz_reserva_provedor).toBe("propria");
+    expect(lido.voz_reserva_motor).toBe("kokoro");
     expect(lido.voz_reserva_id).toBe("pf_dora");
   });
 
@@ -226,19 +230,22 @@ describe("blocos de serviço (0.9.4)", () => {
     expect(input.value).toBe("http://127.0.0.1:4710");
   });
 
-  it("bloco_elevenlabs_tem_chave_e_botao_carregar", async () => {
+  it("bloco_elevenlabs_cadastra_a_chave_em_modal_e_tem_botao_carregar", async () => {
     const { raiz } = await abrir();
     const bloco = raiz.querySelector<HTMLElement>("#cfg-voz-servicos")!;
     expect(bloco.textContent).toContain("ElevenLabs");
-    expect(bloco.querySelector("#cfg-elevenlabs_chave")).toBeTruthy();
+    expect(bloco.querySelector("#cfg-elevenlabs_chave")).toBeNull();
+    expect(bloco.querySelector("#cfg-voz-chave-elevenlabs")?.textContent).toContain("Cadastrar chave");
     expect(bloco.querySelector("#cfg-voz-carregar-elevenlabs")).toBeTruthy();
   });
 
-  it("bloco_gemini_tem_chave", async () => {
+  it("bloco_gemini_cadastra_a_chave_em_modal", async () => {
     const { raiz } = await abrir();
     const bloco = raiz.querySelector<HTMLElement>("#cfg-voz-servicos")!;
     expect(bloco.textContent).toContain("Gemini");
-    expect(bloco.querySelector("#cfg-gemini_chave")).toBeTruthy();
+    expect(bloco.querySelector("#cfg-gemini_chave")).toBeNull();
+    bloco.querySelector<HTMLButtonElement>("#cfg-voz-chave-gemini")!.click();
+    expect(document.querySelector('.modal input[type="password"]')).toBeTruthy();
   });
 
   it("servico_fora_mostra_aviso_no_topo", async () => {

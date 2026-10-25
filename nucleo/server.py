@@ -11,8 +11,11 @@ import json
 import logging
 import os
 import re
+import time
+import uuid
 from pathlib import Path
 
+import anyio.from_thread
 import httpx
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
@@ -27,6 +30,11 @@ from vard.cerebro import cli_capacidade, cli_deteccao, contratos as cerebro_cont
 from vard.primeiro_uso import deteccao as primeiro_uso_deteccao, estado as primeiro_uso_estado
 from vard.seguro import Frase
 from vard import telegram as telegram_mod
+from vard import sondas
+from vard import aceite_windows
+
+# Cliente que desiste antes do aceite não pode fechar a escuta do núcleo (ver vard/aceite_windows.py).
+aceite_windows.instalar()
 from vard.instalaveis import GerenciadorInstalaveis
 
 _instalaveis = GerenciadorInstalaveis()
@@ -51,7 +59,7 @@ português, manchete primeiro, em até três frases, sobre o que está na tela. 
 estiver pequeno ou ilegível, diga isso em vez de chutar."""
 
 MODELO_LOCAL = "gemma-4-12b-it-qat@q4_k_xl"
-MODELO_NUVEM = "combo/t1-work"
+MODELO_NUVEM = "combo/equipe"
 OPENJARVIS = os.environ.get("VARD_OPENJARVIS_URL", "http://127.0.0.1:8000")
 LMSTUDIO = os.environ.get("VARD_LMSTUDIO_URL", "http://127.0.0.1:1234")
 REUNIAO = "http://127.0.0.1:4720"
@@ -219,6 +227,51 @@ async def _executar_pedido_cerebro(pedido, emitir):
         gerenciador_ferramentas=_ferramentas_cerebro if not tipo_provedor.startswith("cli-") else None)
 
 
+# Poller do Telegram: um por núcleo, religado quando a configuração muda (tela, assistente, migração).
+_telegram: dict = {"tarefa": None, "chave": None}
+
+
+async def _parar_telegram() -> None:
+    tarefa, _telegram["tarefa"], _telegram["chave"] = _telegram["tarefa"], None, None
+    if tarefa is None:
+        return
+    tarefa.cancel()
+    try:
+        await tarefa
+    except asyncio.CancelledError:
+        pass
+    log.info("telegram poller parado")
+
+
+async def _sincronizar_telegram() -> bool:
+    """Liga, religa ou desliga o poller conforme telegram.toml e o cofre. True = poller rodando."""
+    cfg = telegram_mod._ler_config_telegram()
+    token = telegram_mod._token_seguro(cfg) if telegram_mod.deve_iniciar_poller() else ""
+    chats = telegram_mod._chats_permitidos(cfg)
+    base_url = str(cfg.get("base_url", "https://api.telegram.org"))
+    chave = (token, frozenset(chats), base_url) if token and chats else None
+    tarefa = _telegram["tarefa"]
+    if chave is not None and chave == _telegram["chave"] and tarefa is not None and not tarefa.done():
+        return True
+    await _parar_telegram()
+    if chave is None:
+        log.info("telegram sem ligar/token/chat; poller nao iniciado")
+        return False
+    poller = telegram_mod.TelegramPoller(token=token, chats_permitidos=chats, base_url=base_url)
+
+    async def _loop():
+        while True:
+            try:
+                await poller.processar_updates()
+            except Exception:  # noqa: BLE001
+                log.warning("erro no loop do telegram poller")
+            await asyncio.sleep(telegram_mod.ESPERA_CONFLITO_S if poller.conflito else telegram_mod.POLL_INTERVAL_PADRAO)
+
+    _telegram["tarefa"], _telegram["chave"] = asyncio.create_task(_loop()), chave
+    log.info("telegram poller iniciado (chats=%d)", len(chats))
+    return True
+
+
 @asynccontextmanager
 async def lifespan(app):
     """Ciclo de vida: inicia/para o TelegramPoller condicional (T11) e o SupervisorCli (T16)."""
@@ -247,27 +300,8 @@ async def lifespan(app):
             pass
     cerebro_pedidos.configurar_emissor(_emissor_sse)
 
-    poller = None
-    tarefa_poller = None
-    if telegram_mod.deve_iniciar_poller():
-        cfg = telegram_mod._ler_config_telegram()
-        token = telegram_mod._token_seguro(cfg)
-        chats = telegram_mod._chats_permitidos(cfg)
-        if token and chats:
-            poller = telegram_mod.TelegramPoller(token=token, chats_permitidos=chats)
-            async def _loop():
-                while True:
-                    try:
-                        await poller.processar_updates()
-                    except Exception:  # noqa: BLE001
-                        log.warning("erro no loop do telegram poller")
-                    await asyncio.sleep(telegram_mod.POLL_INTERVAL_PADRAO)
-            tarefa_poller = asyncio.create_task(_loop())
-            log.info("telegram poller iniciado (chats=%d)", len(chats))
-        else:
-            log.info("telegram habilitado mas sem token/chats; poller nao iniciado")
-    else:
-        log.info("telegram desabilitado; poller nao iniciado")
+    # Telegram próprio: sobe com o núcleo pelo telegram.toml + cofre, sem depender do OpenJarvis.
+    await _sincronizar_telegram()
     try:
         yield
     finally:
@@ -281,16 +315,18 @@ async def lifespan(app):
                 log.info("SupervisorCli: processos encerrados na saída")
             except Exception:  # noqa: BLE001
                 log.warning("SupervisorCli: erro ao encerrar processos na saída")
-        if tarefa_poller is not None:
-            tarefa_poller.cancel()
-            try:
-                await tarefa_poller
-            except asyncio.CancelledError:
-                pass
-            log.info("telegram poller parado")
+        await _parar_telegram()
 
 
 app = FastAPI(title="Vard", lifespan=lifespan)
+
+
+@app.get("/saude")
+async def saude_supervisor():
+    # Assíncrona de propósito: responde no laço de eventos, sem esperar vaga no pool de threads
+    # que as rotas síncronas lentas (/recursos, /cli/detectar) ocupam.
+    from vard import __version__
+    return {"ok": True, "versao": __version__, "pid": os.getpid()}
 
 
 def _erro(exc: modelos.ErroModelo) -> JSONResponse:
@@ -408,12 +444,81 @@ def ask(corpo: dict):
     return {"resposta": resposta}
 
 
+def _visao_local() -> tuple[str, str]:
+    """Endereço e modelo da visão local: VARD_LMSTUDIO_URL manda; senão o LM Studio cadastrado no Núcleo; senão o padrão."""
+    if os.environ.get("VARD_LMSTUDIO_URL"):
+        return LMSTUDIO, MODELO_LOCAL
+    try:
+        dados = json.loads(config.arquivo_config("paineis.json").read_text(encoding="utf-8-sig"))
+    except (OSError, ValueError):
+        return LMSTUDIO, MODELO_LOCAL
+    for p in dados.get("provedores", []) if isinstance(dados, dict) else []:
+        if isinstance(p, dict) and p.get("tipo") == "lmstudio" and str(p.get("url_base") or "").strip():
+            base = str(p["url_base"]).strip().rstrip("/").removesuffix("/v1")
+            return base, str(p.get("modelo") or "").strip() or MODELO_LOCAL
+    return LMSTUDIO, MODELO_LOCAL
+
+
+PRAZO_VER_CEREBRO = 85.0  # o widget desiste do /see em 90 s
+
+
+async def _perguntar_cerebro(texto: str, sessao_id: str) -> str:
+    """Admite um pedido no cérebro próprio e espera a resposta final (para quem precisa dela de uma vez, como o /see)."""
+    pedido = cerebro_contratos.Pedido(
+        pedido_id=f"ver-{uuid.uuid4().hex}", sessao_id=sessao_id, origem=cerebro_contratos.Origem.VOZ, texto=texto,
+    )
+    cerebro_pedidos.admitir(pedido)
+    limite = time.monotonic() + PRAZO_VER_CEREBRO
+    while time.monotonic() < limite:
+        await asyncio.sleep(0.3)
+        info = cerebro_pedidos.consultar(pedido.pedido_id)
+        if info is None:
+            continue
+        estado = info.estado.value
+        if estado == "concluido":
+            return (info.resposta or "").strip()
+        if estado in ("falhou", "cancelado"):
+            raise _ErroCerebro(info.erro or "cerebro_erro")
+    cerebro_pedidos.cancelar(pedido.pedido_id)
+    raise _ErroCerebro("cli_tempo")
+
+
+# Sessão da visão quando o widget não manda a da voz: estável, para não abrir uma CLI por pedido.
+SESSAO_VISAO_PADRAO = "voz"
+
+
+def _ver_pela_cli(jpeg: bytes, pergunta: str, sessao_id: str = SESSAO_VISAO_PADRAO) -> JSONResponse | dict:
+    """Núcleo numa CLI: a captura vai para ela num arquivo temporário (a CLI abre a imagem); o arquivo some ao fim."""
+    pasta = config.pasta_dados() / "capturas"
+    pasta.mkdir(parents=True, exist_ok=True)
+    arquivo = pasta / f"tela-{uuid.uuid4().hex}.jpg"
+    arquivo.write_bytes(jpeg)
+    texto = (
+        f"{pergunta}\n\nA captura da minha tela está no arquivo: {arquivo}\n"
+        "Abra essa imagem e responda olhando para ela, em poucas frases faladas."
+    )
+    try:
+        # Mesma sessão da conversa por voz: a visão não abre um segundo processo de CLI.
+        resposta = anyio.from_thread.run(_perguntar_cerebro, texto, sessao_id)
+    except _ErroCerebro as exc:
+        log.warning("visão pela CLI falhou: %s", exc.codigo)
+        return JSONResponse({"erro": exc.codigo}, status_code=503)
+    finally:
+        arquivo.unlink(missing_ok=True)
+    if not resposta:
+        return JSONResponse({"erro": "modelo_vazio"}, status_code=503)
+    return {"resposta": resposta, "nuvem": False}
+
+
 @app.post("/see")
-def see(imagem: UploadFile = File(...), pergunta: str = Form("O que está na tela?")):
+def see(imagem: UploadFile = File(...), pergunta: str = Form("O que está na tela?"), sessao_id: str = Form("")):
     if imagem.content_type != "image/jpeg":
         raise HTTPException(422, "mande image/jpeg")
-    b64 = base64.b64encode(imagem.file.read()).decode()
+    jpeg = imagem.file.read()
     cuidado = "com mais cuidado" in pergunta.lower()
+    if not cuidado and _ler_provedor_ativo().get("tipo", "").startswith("cli-"):
+        return _ver_pela_cli(jpeg, pergunta, sessao_id.strip()[:128] or SESSAO_VISAO_PADRAO)
+    b64 = base64.b64encode(jpeg).decode()
     try:
         if cuidado:
             url = segredos.url_omniroute()
@@ -424,13 +529,17 @@ def see(imagem: UploadFile = File(...), pergunta: str = Form("O que está na tel
                 chave=segredos.chave_omniroute(),
             )
         else:
+            base, modelo = _visao_local()
             resposta = modelos.ver_imagem(
-                b64, pergunta, base=LMSTUDIO, modelo=MODELO_LOCAL, instrucao=INSTRUCAO_VISAO,
+                b64, pergunta, base=base, modelo=modelo, instrucao=INSTRUCAO_VISAO,
                 chave=CHAVE_LMSTUDIO,
             )
     except FileNotFoundError:
         return _erro(modelos.ErroModelo("segredos", "segredos.toml não encontrado"))
     except modelos.ErroModelo as exc:
+        # Servidor de visão fora: código próprio, para a fala não dizer que o núcleo caiu.
+        if exc.codigo == "modelo_fora":
+            exc = modelos.ErroModelo("visao_fora", exc.detalhe)
         return _erro(exc)
     return {"resposta": resposta, "nuvem": cuidado}
 
@@ -450,10 +559,15 @@ def _reuniao_ativa() -> bool:
         return False
 
 
+def _prazo_sonda(url: str) -> httpx.Timeout:
+    """Porta fechada no loopback do Windows leva ~2 s para recusar: conexão curta, leitura de 2 s."""
+    return sondas.prazo(url)
+
+
 async def _sondar_reuniao() -> str:
-    """Sonda assíncrona ao serviço de reunião com timeout de 2 s."""
+    """Sonda assíncrona ao serviço de reunião (leitura 2 s, conexão curta)."""
     try:
-        async with httpx.AsyncClient(timeout=2, trust_env=False) as client:
+        async with httpx.AsyncClient(timeout=_prazo_sonda(REUNIAO), trust_env=False) as client:
             r = await client.get(f"{REUNIAO}/status")
             return "ativa" if r.json().get("ativa") else "inativa"
     except (httpx.HTTPError, ValueError, AttributeError):
@@ -461,9 +575,9 @@ async def _sondar_reuniao() -> str:
 
 
 async def _sondar_openjarvis() -> bool:
-    """Sonda assíncrona ao OpenJarvis com timeout de 2 s."""
+    """Sonda assíncrona ao OpenJarvis (leitura 2 s, conexão curta)."""
     try:
-        async with httpx.AsyncClient(timeout=2, trust_env=False) as client:
+        async with httpx.AsyncClient(timeout=_prazo_sonda(OPENJARVIS), trust_env=False) as client:
             r = await client.get(f"{OPENJARVIS}/health")
             return r.status_code == 200
     except httpx.HTTPError:
@@ -471,10 +585,10 @@ async def _sondar_openjarvis() -> bool:
 
 
 async def _sondar_lmstudio() -> tuple[bool, list[str], str]:
-    """Sonda assíncrona ao LM Studio com timeout de 2 s; devolve (ok, ids, modelo)."""
+    """Sonda assíncrona ao LM Studio (leitura 2 s, conexão curta); devolve (ok, ids, modelo)."""
     try:
         cab = {"Authorization": f"Bearer {CHAVE_LMSTUDIO}"} if CHAVE_LMSTUDIO else {}
-        async with httpx.AsyncClient(timeout=2, trust_env=False) as client:
+        async with httpx.AsyncClient(timeout=_prazo_sonda(LMSTUDIO), trust_env=False) as client:
             r = await client.get(f"{LMSTUDIO}/v1/models", headers=cab)
             if r.status_code != 200:
                 return False, [], ""
@@ -1174,7 +1288,112 @@ async def pacote_remover(pacote_id: str):
 def recursos():
     """Monitor de recursos do Vard (0.9.4 leve): memória e CPU por componente."""
     from vard import recursos as mod_recursos
-    return mod_recursos.coletar_recursos()
+    supervisor = _supervisor_cli
+    try:
+        cli_pids = list(supervisor.pids()) if supervisor is not None else []
+    except Exception:  # noqa: BLE001
+        cli_pids = []
+    return mod_recursos.coletar_recursos(cli_pids=cli_pids)
+
+
+# --------------------------------------------------------------------------- TELEGRAM (T9 tela)
+# Endpoints para a seção Telegram da aba Sistema. Token nunca passa por aqui: a tela grava
+# no cofre do Windows (cofre_gravar canal/telegram) e a migração do OpenJarvis grava direto no cofre.
+
+@app.get("/telegram")
+async def telegram_estado():
+    """Estado da seção Telegram e o que há para trazer do OpenJarvis; nunca o token."""
+    from vard import telegram_migracao
+    return {**telegram_mod.estado(), "rodando": _telegram["tarefa"] is not None,
+            "openjarvis": telegram_migracao.previa()}
+
+
+@app.post("/telegram/configurar")
+async def telegram_configurar(request: Request):
+    """Liga/desliga e define o chat permitido; o token vai pelo cofre (tela) ou pela migração."""
+    try:
+        corpo = await request.json()
+    except ValueError:
+        corpo = None
+    if not isinstance(corpo, dict) or not isinstance(corpo.get("ligado"), bool):
+        raise HTTPException(422, "ligado precisa ser verdadeiro ou falso")
+    telegram_mod.configurar(corpo["ligado"], str(corpo.get("chat", "") or ""))
+    return {"ok": True, "rodando": await _sincronizar_telegram()}
+
+
+@app.post("/telegram/sincronizar")
+async def telegram_sincronizar():
+    """Relê telegram.toml e o cofre (depois de gravar o token pela tela ou pelo assistente)."""
+    return {"ok": True, "rodando": await _sincronizar_telegram()}
+
+
+@app.post("/telegram/trazer_openjarvis")
+async def telegram_trazer_openjarvis(request: Request):
+    """Traz token (cofre) e chats do OpenJarvis; um Telegram já configurado só sai com substituir=true."""
+    from vard import telegram_migracao
+    try:
+        corpo = await request.json()
+    except ValueError:
+        corpo = {}
+    substituir = isinstance(corpo, dict) and corpo.get("substituir") is True
+    resultado = await asyncio.to_thread(telegram_migracao.trazer, substituir)
+    if resultado.get("ok"):
+        resultado["rodando"] = await _sincronizar_telegram()
+    return resultado
+
+
+@app.get("/telegram/descobrir_chat")
+async def telegram_descobrir_chat():
+    """Lê o último update pendente do bot e retorna o chat_id do /start mais recente."""
+    cfg = telegram_mod._ler_config_telegram()
+    token = telegram_mod._token_seguro(cfg)
+    if not token:
+        return {"ok": False, "detalhe": "Token não configurado."}
+    base_url = str(cfg.get("base_url", "https://api.telegram.org")).rstrip("/")
+    try:
+        async with httpx.AsyncClient(timeout=10, trust_env=False) as client:
+            r = await client.get(f"{base_url}/bot{token}/getUpdates", params={"limit": 5})
+            if r.status_code != 200 or not r.json().get("ok"):
+                return {"ok": False, "detalhe": "Falha ao consultar updates."}
+            results = r.json().get("result", [])
+            # Busca o último update com /start
+            for update in reversed(results):
+                msg = update.get("message")
+                if not isinstance(msg, dict):
+                    continue
+                texto = str(msg.get("text", "")).strip()
+                if texto.startswith("/start"):
+                    chat = msg.get("chat")
+                    if isinstance(chat, dict):
+                        return {"ok": True, "chat_id": str(chat.get("id", ""))}
+            return {"ok": False, "detalhe": "Nenhum /start pendente."}
+    except httpx.HTTPError:
+        return {"ok": False, "detalhe": "Erro de rede."}
+
+
+@app.post("/telegram/testar")
+async def telegram_testar():
+    """Envia mensagem de teste ao primeiro chat permitido configurado."""
+    cfg = telegram_mod._ler_config_telegram()
+    token = telegram_mod._token_seguro(cfg)
+    chats = telegram_mod._chats_permitidos(cfg)
+    if not token:
+        return {"ok": False, "detalhe": "Token não configurado."}
+    if not chats:
+        return {"ok": False, "detalhe": "Nenhum chat permitido configurado."}
+    chat_id = next(iter(chats))
+    base_url = str(cfg.get("base_url", "https://api.telegram.org")).rstrip("/")
+    try:
+        async with httpx.AsyncClient(timeout=10, trust_env=False) as client:
+            r = await client.post(
+                f"{base_url}/bot{token}/sendMessage",
+                json={"chat_id": chat_id, "text": "Teste do Vard: conexão OK."},
+            )
+            if r.status_code == 200 and r.json().get("ok"):
+                return {"ok": True}
+            return {"ok": False, "detalhe": f"Falha ao enviar: HTTP {r.status_code}"}
+    except httpx.HTTPError:
+        return {"ok": False, "detalhe": "Erro de rede."}
 
 
 app.mount("/viewer", StaticFiles(directory=VIEWER), name="viewer")

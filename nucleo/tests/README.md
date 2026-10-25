@@ -6,8 +6,9 @@ portas 1234, 8000, 4700, 4710 e 4720 falham antes do acesso ao sistema.
 `httpx` com transporte simulado, `respx` e `TestClient` continuam funcionando;
 servidores falsos usam portas livres e encerram threads, sockets e filhos no `finally`.
 
-CLIs de agentes, SSH, GitHub CLI, LM Studio, PowerShell, taskkill e sondas do
-Windows exigem dublês. A fixture `powershell_isolado` permite apenas `-File`
+CLIs de agentes, SSH, GitHub CLI, LM Studio, PowerShell, taskkill, navegadores e sondas do
+Windows exigem dublês. O envio de teclado/mouse (`teclado_mouse._enviar`, `_posicionar_cursor`)
+e a mudança de janelas (`janelas._colocar`, `_mostrar`) também falham sem dublê. A fixture `powershell_isolado` permite apenas `-File`
 sob o diretório temporário do teste. Ela serve a harnesses revisados que extraem
 funções via AST ou executam cópias com caminhos e sondas substituídos.
 Não basta copiar um script arbitrário para obter isolamento: revise seus efeitos,

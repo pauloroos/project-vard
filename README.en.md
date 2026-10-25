@@ -22,7 +22,7 @@ Independent project, not affiliated with OpenJarvis or Stanford.
 - Full screen ("sala") on a monitor of your choice: a large vortex, what you said, the answer in large type and a clock.
 - Pick the model among the ones OpenJarvis exposes.
 - Conversation mode: after an answer it keeps listening without the wake word for 20 s (adjustable); "pode parar de me ouvir" or "vou entrar em reunião" mute the microphone until you turn it back on.
-- Choice of voice: your own voice (XTTS, with the service's voice list), OpenJarvis' (Kokoro) or, if you want and with your own key, ElevenLabs and Gemini TTS; a Ouvir button plays a sample sentence.
+- Choice of voice: the Vard voice service (XTTS, Kokoro, Edge or Piper, with the service's voice list; Kokoro and XTTS install from the Voz tab, no OpenJarvis needed) or, if you want and with your own key, ElevenLabs and Gemini TTS; a Ouvir button plays a sample sentence.
 - Invisible mode: the widget disappears and only shows while a conversation lasts.
 - The button bar opens on the side away from the monitor edge (above when the widget is at the bottom).
 - Atualização tab: checks GitHub for the newest release only when you ask and installs from there.
@@ -41,8 +41,8 @@ Independent project, not affiliated with OpenJarvis or Stanford.
 
 Download the installer from the releases page and run one of them:
 
-- `Vard_0.9.5_x64-setup.exe` (NSIS): per-user, no administrator needed. Silent: `Vard_0.9.5_x64-setup.exe /S`. Installs to `%LOCALAPPDATA%\Vard\`.
-- `Vard_0.9.5_x64_en-US.msi` (WiX): per-machine, needs administrator. Silent: `msiexec /i Vard_0.9.5_x64_en-US.msi /qn`.
+- `Vard_0.9.6_x64-setup.exe` (NSIS): per-user, no administrator needed. Silent: `Vard_0.9.6_x64-setup.exe /S`. Installs to `%LOCALAPPDATA%\Vard\`.
+- `Vard_0.9.6_x64_en-US.msi` (WiX): per-machine, needs administrator. Silent: `msiexec /i Vard_0.9.6_x64_en-US.msi /qn`.
 
 To build it yourself: `npm install` and `npm run tauri build` (installers land in `src-tauri/target/release/bundle/`).
 
@@ -62,7 +62,8 @@ Only one instance runs at a time: opening Vard again brings the window to the fr
 - **Meeting:** a "Meeting" tab (start, stop, make minutes, last meeting); while a meeting runs the widget stays quiet and shows "meeting".
 - **Panel:** recognition language as a list and the **Oficina** (Workshop) tab.
 
-In **Oficina**, built-in skills are labeled **Capaz** (Capable) and can be switched off. Choose **Nova habilidade**
+In **Oficina**, built-in skills are labeled **Capaz** (Capable) and can be switched off or edited (name, phrases and
+extra guidance, in the same modal); **Restaurar padrão** (Restore default) undoes the edit, since they cannot be deleted. Choose **Nova habilidade**
 (New skill) to teach a recipe with example phrases and instructions; it starts as **Treinada** (Trained) and can
 be marked **Validada** (Validated) after it works. Creation and editing use a modal; deletion requires confirmation.
 Search and status filters help find recipes. `habilidades.json` lives beside `paineis.json` in the user's configuration
@@ -122,7 +123,7 @@ Use the gear, **Configurações** in the tray menu or `Ctrl+Alt+P`. The panel op
 | `atalhos` | see above | Global shortcuts: `falar`, `parar`, `mostrar`, `config`, `escuta`, `sala` |
 | `instrucao_formato` | short answers | Instruction sent with every question |
 
-URLs outside `127.0.0.1` or `localhost` raise a warning (the HUD sends what you say and, with the bridge, images of your screen; keep everything on your own machine). **Iniciar com o Windows** creates or removes `Vard.lnk` in your user Startup folder. **Testar OpenJarvis** checks the server and speech.
+URLs outside `127.0.0.1` or `localhost` raise a warning (the HUD sends what you say and, with the bridge, images of your screen; keep everything on your own machine). **Iniciar com o Windows** creates or removes `Vard.lnk` in your user Startup folder. The OpenJarvis address, text interface and model are in **Núcleo → Editar OpenJarvis**; **Testar** on its card sends the server a short question.
 
 ## Full screen (sala)
 
@@ -180,7 +181,7 @@ nothing changes on screen. The full contract is in [docs/voz-propria.md](docs/vo
 
 ### Other voice providers
 
-In the Voz tab the provider can be `propria`, `openjarvis` (Kokoro, OpenJarvis' voice), `elevenlabs` or `gemini`. The last two are optional and in the cloud: they are only called when chosen as the provider and a key is set (password fields; the key never goes to the log), and the text of the spoken lines goes to the vendor. For ElevenLabs also set the voice id; Gemini's default voice is `Kore` and it ignores the speed. The **Ouvir** button plays a sample sentence with the chosen provider.
+In the Voz tab the provider can be `propria` (the Vard voice service: XTTS, Kokoro, Edge or Piper), `elevenlabs` or `gemini`; `openjarvis` only remains in old configs (with a Kokoro voice, the same voice now comes from the voice service's Kokoro, see [docs/voz-propria.md](docs/voz-propria.md)). The last two are optional and in the cloud: they are only called when chosen as the provider and a key is set (password fields; the key never goes to the log), and the text of the spoken lines goes to the vendor. For ElevenLabs also set the voice id; Gemini's default voice is `Kore` and it ignores the speed. The **Ouvir** button plays a sample sentence with the chosen provider.
 
 With a cloud provider on, the fixed phrases ("Voltei." and the others) are synthesized on it once at startup to warm the cache; that sends those short texts to the vendor. With `propria` or `openjarvis` nothing leaves your machine.
 
@@ -202,7 +203,8 @@ Vard talks to assistants through connectors. Today there is only one, OpenJarvis
 
 ## Core (bridge, MCPs and services)
 
-The Python core, the optional voice and meeting services and the Windows scripts live in this repository (`nucleo/`, `voz/`, `reuniao/`, `scripts/`). User configuration and data stay outside it (`%LOCALAPPDATA%dl-vard`, or `VARD_CONFIG` and `VARD_DADOS`). Layout, tests and the switch-over with rollback are described in [docs/fusao.md](docs/fusao.md) (in Portuguese).
+The Python core, the optional voice and meeting services and the Windows scripts live in this repository (`nucleo/`, `voz/`, `reuniao/`, `scripts/`). User configuration and data stay outside it (`%LOCALAPPDATA%
+dl-vard`, or `VARD_CONFIG` and `VARD_DADOS`). Layout, tests and the switch-over with rollback are described in [docs/fusao.md](docs/fusao.md) (in Portuguese).
 
 ## Development
 

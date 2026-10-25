@@ -56,6 +56,27 @@ impl Default for InstalacaoConfig {
     }
 }
 
+/// Decide se o serviço OpenJarvis deve subir.
+///
+/// Regra: sobe apenas quando `servicos.openjarvis` é true E
+/// (`cerebro == "openjarvis"` OU `usar_openjarvis == true`) no hud.config.json.
+/// A pasta registrada no setup vem de app_config_dir (identifier deste build).
+/// Sem HUD/campo, conserva o cérebro histórico: OpenJarvis; opção extra desligada.
+pub fn deve_subir_openjarvis(config: &InstalacaoConfig) -> bool {
+    if !config.servicos.openjarvis {
+        return false;
+    }
+    let pasta = crate::nucleo::pasta_hud().map(Path::to_path_buf).or_else(|| {
+        std::env::var_os("VARD_HUD_CONFIG_DIR").filter(|p| !p.is_empty()).map(PathBuf::from)
+    });
+    let hud = pasta
+        .and_then(|p| std::fs::read_to_string(crate::comandos::caminho_em(&p)).ok())
+        .and_then(|texto| serde_json::from_str::<serde_json::Value>(&texto).ok())
+        .unwrap_or_default();
+    let cerebro = hud.get("cerebro").and_then(|v| v.as_str()).unwrap_or("openjarvis");
+    cerebro == "openjarvis" || hud.get("usar_openjarvis").and_then(|v| v.as_bool()) == Some(true)
+}
+
 /// Resolve o caminho do arquivo `instalacao.json` seguindo o contrato do Python:
 /// 1. Se `VARD_INSTALACAO` estiver definida, é o caminho direto do arquivo.
 /// 2. Senão, usa `<pasta_dados()>/instalacao.json` (VARD_DADOS ou %LOCALAPPDATA%/rdl-vard).
@@ -97,8 +118,12 @@ pub fn resolver_raiz(recursos: &Path) -> PathBuf {
 pub struct ServicosConfig {
     /// Voz habilitada.
     pub voz: bool,
+    /// Intérprete externo; sua presença também habilita a voz.
+    pub voz_python: String,
     /// Reunião habilitada.
     pub reuniao: bool,
+    /// Intérprete externo; sua presença também habilita a reunião.
+    pub reuniao_python: String,
     /// OpenJarvis habilitado.
     pub openjarvis: bool,
     /// Porta do núcleo (sobrescreve padrão se > 0).
@@ -118,9 +143,44 @@ pub const PORTA_VOZ_PADRAO: u16 = 4710;
 pub const PORTA_REUNIAO_PADRAO: u16 = 4720;
 
 /// Prazos de arranque por serviço (segundos).
-pub const PRAZO_NUCLEO_S: u64 = 15;
+pub const PRAZO_NUCLEO_S: u64 = 60;
 pub const PRAZO_OPENJARVIS_S: u64 = 120;
 pub const PRAZO_OPCIONAIS_S: u64 = 120;
+
+fn ambiente_instalacao(dados: &Path) -> Vec<(String, String)> {
+    let configurada = std::env::var("VARD_CONFIG").ok();
+    let arquivo = std::env::var_os("VARD_INSTALACAO").filter(|v| !v.is_empty())
+        .map(PathBuf::from).unwrap_or_else(|| dados.join("instalacao.json"));
+    vec![
+        ("VARD_CONFIG".into(), crate::nucleo::resolver_pasta_config(dados, configurada.as_deref()).to_string_lossy().into_owned()),
+        ("VARD_INSTALACAO".into(), arquivo.to_string_lossy().into_owned()),
+        ("PYTHONUTF8".into(), "1".into()),
+        ("VARD_MARCA_TELEGRAM".into(), dados.join("ultimo-telegram.json").to_string_lossy().into_owned()),
+    ]
+}
+
+/// Pré-checagem sem lançar processo: executável, módulo e cwd devem existir.
+pub fn preparar_nucleo(dev: bool, recursos: &Path, repo: &Path, config: &InstalacaoConfig, dados: &Path, versao: &str) -> Result<DescritorServico, String> {
+    let mut desc = descritor_nucleo(dev, recursos, repo, config, dados, versao);
+    if desc.comando.0 == Path::new("uv") {
+        desc.comando.0 = std::env::var_os("PATH").and_then(|p| std::env::split_paths(&p)
+            .map(|p| p.join(if cfg!(windows) { "uv.exe" } else { "uv" })).find(|p| p.is_file()))
+            .ok_or("núcleo: uv não encontrado")?;
+    }
+    if !desc.comando.0.is_file() { return Err("núcleo: intérprete não encontrado".into()); }
+    let pasta = desc.pasta_trabalho.as_ref().ok_or("núcleo: pasta de trabalho ausente")?;
+    if !pasta.is_dir() { return Err("núcleo: pasta de trabalho não encontrada".into()); }
+    if desc.comando.1.iter().any(|a| a == "server:app") && !pasta.join("server.py").is_file() {
+        return Err("núcleo: módulo server.py não encontrado".into());
+    }
+    Ok(desc)
+}
+
+/// Log persistente também em builds sem console. Nunca registra o ambiente.
+pub fn registrar_setup(dados: &Path, mensagem: &str) {
+    let mut log = crate::supervisor::Log::abrir(dados.join("logs/setup.log"));
+    log.linha(&crate::supervisor::redigir(mensagem));
+}
 
 /// Valida um vetor de argumentos de comando.
 /// Lista vazia é Ok (nada a rodar). O executável não pode ser `.cmd`, `.bat` nem `.ps1`;
@@ -170,8 +230,8 @@ pub fn exibir_comando(args: &[String]) -> String {
 }
 
 /// Constrói o descritor de serviço para o núcleo Python.
-/// Em dev usa `uv run --project nucleo --frozen python -X utf8 -m vard servir`;
-/// em release usa o Python embutido em `build/nucleo/python/python.exe`.
+/// Prefere o pacote no release; sem pacote usa `raiz_codigo`, como o script.
+/// Sem raiz configurada em dev, preserva a execução por uv no checkout.
 pub fn descritor_nucleo(
     dev: bool,
     recursos: &Path,
@@ -187,8 +247,25 @@ pub fn descritor_nucleo(
     };
     let configurada = std::env::var("VARD_CONFIG").ok();
     let pasta_config = crate::nucleo::resolver_pasta_config(dados, configurada.as_deref());
-    let desc_nucleo = crate::nucleo::descritor_nucleo(dev, recursos, repo, porta, dados, &pasta_config, versao);
-    desc_nucleo
+    let empacotado = recursos.join("nucleo/python/python.exe").is_file();
+    let mut desc = crate::nucleo::descritor_nucleo(dev && config.raiz_codigo.trim().is_empty(), recursos, repo, porta, dados, &pasta_config, versao);
+    if (dev || !empacotado) && !config.raiz_codigo.trim().is_empty() {
+        let raiz = Path::new(&config.raiz_codigo);
+        let pasta = if raiz.join("nucleo/server.py").is_file() { raiz.join("nucleo") } else { raiz.to_path_buf() };
+        desc.comando = (pasta.join(".venv/Scripts/python.exe"), vec![
+            "-X".into(), "utf8".into(), "-m".into(), "uvicorn".into(), "server:app".into(),
+            "--host".into(), "127.0.0.1".into(), "--port".into(), porta.to_string(),
+            "--timeout-graceful-shutdown".into(), "2".into(),
+        ]);
+        desc.pasta_trabalho = Some(pasta);
+    }
+    desc.envs.extend(ambiente_instalacao(dados));
+    desc
+}
+
+/// Pasta do hud.config.json (VARD_HUD_CONFIG_DIR) para um serviço filho; sem pasta registrada, nada.
+fn variavel_pasta_hud(pasta: Option<&Path>) -> Option<(String, String)> {
+    pasta.map(|p| ("VARD_HUD_CONFIG_DIR".into(), p.to_string_lossy().into_owned()))
 }
 
 /// Constrói o descritor de serviço para a voz (opcional).
@@ -197,11 +274,13 @@ pub fn descritor_voz(
     config: &InstalacaoConfig,
     dados: &Path,
 ) -> Option<DescritorServico> {
-    if !config.servicos.voz {
+    if !config.servicos.voz && config.servicos.voz_python.trim().is_empty() {
         return None;
     }
     let raiz = Path::new(&config.raiz_codigo);
-    let venv_python = raiz.join("voz").join(".venv").join("Scripts").join("python.exe");
+    let venv_python = if config.servicos.voz_python.trim().is_empty() {
+        raiz.join("voz/.venv/Scripts/python.exe")
+    } else { PathBuf::from(&config.servicos.voz_python) };
     if !venv_python.exists() {
         return None;
     }
@@ -210,23 +289,25 @@ pub fn descritor_voz(
     } else {
         PORTA_VOZ_PADRAO
     };
-    let _cwd = raiz.join("voz");
+    let pasta_trabalho = Some(raiz.join("voz"));
     let args = vec![
         "-X".into(),
         "utf8".into(),
         "-m".into(),
         "vard_voz".into(),
     ];
-    let envs = vec![
+    let mut envs = vec![
         ("VARD_VOZ_PORT".into(), porta.to_string()),
         ("VARD_DADOS".into(), dados.to_string_lossy().into_owned()),
-        ("VARD_CONFIG".into(), dados.join("config").to_string_lossy().into_owned()),
-        ("VARD_INSTALACAO".into(), dados.to_string_lossy().into_owned()),
     ];
+    // A voz lê a escolha da aba Transcrição (stt_modelo, stt_dispositivo) no hud.config.json desta pasta.
+    envs.extend(variavel_pasta_hud(crate::nucleo::pasta_hud()));
+    envs.extend(ambiente_instalacao(dados));
     Some(DescritorServico {
         id: "voz".into(),
         porta,
         comando: (venv_python, args),
+        pasta_trabalho,
         envs,
         caminho_log: dados.join("logs").join("voz.log"),
     })
@@ -238,15 +319,13 @@ pub fn descritor_reuniao(
     config: &InstalacaoConfig,
     dados: &Path,
 ) -> Option<DescritorServico> {
-    if !config.servicos.reuniao {
+    if !config.servicos.reuniao && config.servicos.reuniao_python.trim().is_empty() {
         return None;
     }
     let raiz = Path::new(&config.raiz_codigo);
-    let venv_python = raiz
-        .join("reuniao")
-        .join(".venv")
-        .join("Scripts")
-        .join("python.exe");
+    let venv_python = if config.servicos.reuniao_python.trim().is_empty() {
+        raiz.join("reuniao/.venv/Scripts/python.exe")
+    } else { PathBuf::from(&config.servicos.reuniao_python) };
     if !venv_python.exists() {
         return None;
     }
@@ -255,25 +334,25 @@ pub fn descritor_reuniao(
     } else {
         PORTA_REUNIAO_PADRAO
     };
-    let _cwd = raiz.join("reuniao");
+    let pasta_trabalho = Some(raiz.join("reuniao"));
     let args = vec![
         "-X".into(),
         "utf8".into(),
         "-m".into(),
         "vard_reuniao".into(),
     ];
-    let envs = vec![
+    let mut envs = vec![
         ("VARD_REUNIAO_PORT".into(), porta.to_string()),
         ("VARD_DADOS".into(), dados.to_string_lossy().into_owned()),
-        ("VARD_CONFIG".into(), dados.join("config").to_string_lossy().into_owned()),
-        ("VARD_INSTALACAO".into(), dados.to_string_lossy().into_owned()),
         ("HF_HUB_OFFLINE".into(), "1".into()),
         ("PYANNOTE_METRICS_ENABLED".into(), "0".into()),
     ];
+    envs.extend(ambiente_instalacao(dados));
     Some(DescritorServico {
         id: "reuniao".into(),
         porta,
         comando: (venv_python, args),
+        pasta_trabalho,
         envs,
         caminho_log: dados.join("logs").join("reuniao.log"),
     })
@@ -285,7 +364,7 @@ pub fn descritor_openjarvis(
     config: &InstalacaoConfig,
     dados: &Path,
 ) -> Option<DescritorServico> {
-    if !config.servicos.openjarvis {
+    if !deve_subir_openjarvis(config) {
         return None;
     }
     let src = Path::new(&config.openjarvis_src);
@@ -299,9 +378,9 @@ pub fn descritor_openjarvis(
     };
     // O entrypoint do OpenJarvis é `jarvis serve --agent orchestrator` dentro do venv/source.
     let jarvis = if cfg!(windows) {
-        src.join("Scripts").join("jarvis.exe")
+        src.join(".venv/Scripts/jarvis.exe")
     } else {
-        src.join("bin").join("jarvis")
+        src.join(".venv/bin/jarvis")
     };
     if !jarvis.exists() {
         return None;
@@ -310,22 +389,29 @@ pub fn descritor_openjarvis(
         "serve".into(),
         "--agent".into(),
         "orchestrator".into(),
-        "--home".into(),
-        home.to_string_lossy().into_owned(),
     ];
     let mut envs = vec![
         ("OPENJARVIS_HOME".into(), home.to_string_lossy().into_owned()),
         ("VARD_DADOS".into(), dados.to_string_lossy().into_owned()),
-        ("VARD_CONFIG".into(), dados.join("config").to_string_lossy().into_owned()),
-        ("VARD_INSTALACAO".into(), dados.to_string_lossy().into_owned()),
     ];
+    // Mesmas DLLs CUDA usadas pelo vard-modo; só altera o PATH do filho.
+    let mut caminhos: Vec<PathBuf> = ["cudnn", "cublas"].iter()
+        .map(|sub| src.join(format!(".venv/Lib/site-packages/nvidia/{sub}/bin")))
+        .filter(|p| p.is_dir()).collect();
+    if !caminhos.is_empty() {
+        if let Some(path) = std::env::var_os("PATH") { caminhos.extend(std::env::split_paths(&path)); }
+        if let Ok(path) = std::env::join_paths(caminhos) { envs.push(("PATH".into(), path.to_string_lossy().into_owned())); }
+    }
+    envs.push(("OPENJARVIS_CHAT_EXTRA".into(), std::env::var("OPENJARVIS_CHAT_EXTRA").unwrap_or_else(|_| r#"{"reasoning_effort":"none"}"#.into())));
     if let Some(pasta) = crate::nucleo::pasta_hud() {
         envs.push(("VARD_HUD_CONFIG_DIR".into(), pasta.to_string_lossy().into_owned()));
     }
+    envs.extend(ambiente_instalacao(dados));
     Some(DescritorServico {
         id: "openjarvis".into(),
-        porta: 0,
+        porta: 8000,
         comando: (jarvis, args),
+        pasta_trabalho: Some(src.to_path_buf()),
         envs,
         caminho_log: dados.join("logs").join("openjarvis.log"),
     })
@@ -349,7 +435,7 @@ pub fn iniciar_servicos(
     }
 
     // Núcleo sempre inicia quando supervisor está ligado
-    let desc_nucleo = descritor_nucleo(
+    let desc_nucleo = preparar_nucleo(
         cfg!(debug_assertions),
         recursos,
         repo,
@@ -357,7 +443,7 @@ pub fn iniciar_servicos(
         dados,
         versao,
     );
-    match crate::servicos::iniciar(desc_nucleo) {
+    match desc_nucleo.and_then(crate::servicos::iniciar) {
         Ok(()) => iniciados.push("nucleo".into()),
         Err(e) => avisos.push(format!("nucleo: {e}")),
     }
@@ -368,7 +454,7 @@ pub fn iniciar_servicos(
             Ok(()) => iniciados.push("voz".into()),
             Err(e) => avisos.push(format!("voz: {e}")),
         },
-        None if config.servicos.voz => {
+        None if config.servicos.voz || !config.servicos.voz_python.trim().is_empty() => {
             avisos.push("voz: venv ausente ou desabilitada".into());
         }
         _ => {}
@@ -380,7 +466,7 @@ pub fn iniciar_servicos(
             Ok(()) => iniciados.push("reuniao".into()),
             Err(e) => avisos.push(format!("reuniao: {e}")),
         },
-        None if config.servicos.reuniao => {
+        None if config.servicos.reuniao || !config.servicos.reuniao_python.trim().is_empty() => {
             avisos.push("reuniao: venv ausente ou desabilitada".into());
         }
         _ => {}
@@ -392,12 +478,14 @@ pub fn iniciar_servicos(
             Ok(()) => iniciados.push("openjarvis".into()),
             Err(e) => avisos.push(format!("openjarvis: {e}")),
         },
-        None if config.servicos.openjarvis => {
+        None if deve_subir_openjarvis(config) => {
             avisos.push("openjarvis: fonte ou executável ausente".into());
         }
         _ => {}
     }
 
+    for id in &iniciados { registrar_setup(dados, &format!("setup: serviço {id} registrado para arranque")); }
+    for aviso in &avisos { registrar_setup(dados, &format!("setup: aviso: {aviso}")); }
     (iniciados, avisos)
 }
 
@@ -557,6 +645,16 @@ mod testes {
     }
 
     #[test]
+    fn variavel_pasta_hud_so_com_pasta_registrada() {
+        let pasta = Path::new("pasta-ficticia");
+        assert_eq!(
+            variavel_pasta_hud(Some(pasta)),
+            Some(("VARD_HUD_CONFIG_DIR".to_string(), "pasta-ficticia".to_string()))
+        );
+        assert_eq!(variavel_pasta_hud(None), None);
+    }
+
+    #[test]
     fn descritor_voz_usa_porta_sobrescrita() {
         let dir = tempfile::tempdir().unwrap();
         let venv_dir = dir.path().join("voz").join(".venv").join("Scripts");
@@ -697,6 +795,47 @@ mod testes {
         unsafe { std::env::remove_var("VARD_INSTALACAO") };
         unsafe { std::env::remove_var("VARD_DADOS") };
         assert_eq!(resultado, dados.join("instalacao.json"));
+    }
+
+    // ----------------------------------------------------------------------------------------------
+    // deve_subir_openjarvis: OpenJarvis só sobe quando cerebro=openjarvis ou usar_openjarvis=true
+    // ----------------------------------------------------------------------------------------------
+
+    #[test]
+    fn deve_subir_openjarvis_le_hud_config_e_ignora_campos_da_instalacao() {
+        let _ambiente = crate::ciclo::testes::ambiente_isolado();
+        let dir = tempfile::tempdir().unwrap();
+        unsafe { std::env::set_var("VARD_HUD_CONFIG_DIR", dir.path()) };
+        let caminho = dir.path().join("hud.config.json");
+        let config: InstalacaoConfig = serde_json::from_str(
+            r#"{"servicos":{"openjarvis":true},"cerebro":"proprio","usar_openjarvis":false}"#,
+        ).unwrap();
+        for (hud, esperado) in [
+            (None, true),
+            (Some("{}"), true),
+            (Some(r#"{"cerebro":"openjarvis"}"#), true),
+            (Some(r#"{"cerebro":"proprio"}"#), false),
+            (Some(r#"{"cerebro":"proprio","usar_openjarvis":false}"#), false),
+            (Some(r#"{"cerebro":"proprio","usar_openjarvis":true}"#), true),
+            (Some(r#"{"cerebro":"proprio","usar_openjarvis":"true"}"#), false),
+            (Some("{invalido"), true),
+        ] {
+            if let Some(texto) = hud { std::fs::write(&caminho, texto).unwrap(); }
+            else { let _ = std::fs::remove_file(&caminho); }
+            assert_eq!(deve_subir_openjarvis(&config), esperado, "hud: {hud:?}");
+        }
+        let config: InstalacaoConfig = serde_json::from_str(
+            r#"{"servicos":{"openjarvis":true},"cerebro":"openjarvis","usar_openjarvis":true}"#,
+        ).unwrap();
+        std::fs::write(&caminho, r#"{"cerebro":"proprio"}"#).unwrap();
+        assert!(!deve_subir_openjarvis(&config));
+    }
+
+    #[test]
+    fn deve_subir_openjarvis_falso_quando_servico_desabilitado() {
+        let mut c = InstalacaoConfig::default();
+        c.servicos.openjarvis = false;
+        assert!(!super::deve_subir_openjarvis(&c));
     }
 
     /// Prova de que o valor de CARGO_MANIFEST_DIR não vazou para o binário de release.

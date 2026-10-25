@@ -1,7 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { emitTo } from "@tauri-apps/api/event";
 import type { Config } from "../config/config";
-import { avisosDeUrl, limitarLado, mudancasQueExigemReinicio, salvarConfig, urlLocal } from "../config/config";
+import { atualizarConfig, avisosDeUrl, limitarLado, mudancasQueExigemReinicio, salvarConfig, urlLocal } from "../config/config";
 import { ACOES_ATALHO, ROTULOS_ATALHO, avisoAltGr, validarAtalhos, type AcaoAtalho, type FalhaAtalho } from "../config/atalhos";
 import { campoIdioma } from "../config/idiomas";
 import { gravarPerfil, lerPerfil, previaPersona } from "../config/perfil";
@@ -19,6 +19,7 @@ import { AbaPaineisMcps } from "./paineis-mcps";
 import { AbaReuniao, type PonteReuniao } from "./aba-reuniao";
 import { AbaOficina } from "./aba-oficina";
 import { AbaSistema } from "./aba-sistema";
+import { AbaTranscricao } from "./aba-transcricao";
 import { AbaVoz } from "./aba-voz";
 import { InstaladorVozes } from "./instalador-vozes";
 import { MonitorRecursos } from "./monitor-recursos";
@@ -44,9 +45,9 @@ export interface DepsConfiguracoes {
 /** Monitor como o comando listar_monitores devolve (pixels físicos). */
 export interface MonitorInfo { nome: string; x: number; y: number; largura: number; altura: number; escala: number; principal: boolean }
 
-export type Aba = "geral" | "perfil" | "voz" | "atalhos" | "oficina" | "modelos" | "paineis-mcps" | "sistema" | "reuniao" | "avisos" | "diagnostico";
+export type Aba = "geral" | "perfil" | "voz" | "transcricao" | "atalhos" | "oficina" | "modelos" | "paineis-mcps" | "sistema" | "reuniao" | "avisos" | "diagnostico";
 const ABAS: [Aba, string][] = [
-  ["geral", "Geral"], ["perfil", "Perfil"], ["voz", "Voz"], ["atalhos", "Atalhos"], ["oficina", "Oficina"], ["modelos", "Quem responde"],
+  ["geral", "Geral"], ["perfil", "Perfil"], ["voz", "Voz"], ["transcricao", "Transcrição"], ["atalhos", "Atalhos"], ["oficina", "Oficina"], ["modelos", "Núcleo"],
   ["paineis-mcps", "Ferramentas (MCP)"],
   ["sistema", "Sistema"], ["reuniao", "Reunião"], ["avisos", "Avisos"], ["diagnostico", "Diagnóstico"],
 ];
@@ -68,6 +69,7 @@ export class Configuracoes {
   private reuniao: AbaReuniao | null = null;
   private avisos: AbaAvisos | null = null;
   private oficina: AbaOficina | null = null;
+  private transcricao: AbaTranscricao | null = null;
   private atualizacao: AbaAtualizacao | null = null;
   private diagnostico: AbaDiagnostico | null = null;
   private monitorRecursos: MonitorRecursos | null = null;
@@ -98,24 +100,35 @@ export class Configuracoes {
         baseUrl: this.cfg.ponte_url.replace(/\/$/, ""),
         notificar: (msg, erro) => this.dizer(msg, erro),
         aoMudar: (id, instalado) => {
-          if (id === "xtts-v2") this.abaVoz.definirPacoteXttsInstalado(instalado);
+          this.abaVoz.definirPacoteInstalado(id, instalado);
           return this.abaVoz.atualizar();
         },
       });
-      const pronto = instalador.montar().then(() => this.abaVoz.definirPacoteXttsInstalado(instalador.estaInstalado("xtts-v2")));
-      this.abaVoz.definirInstalador(async (id) => {
+      const pronto = instalador.montar().then(() => {
+        for (const id of ["xtts-v2", "kokoro"]) this.abaVoz.definirPacoteInstalado(id, instalador.estaInstalado(id));
+      });
+      this.abaVoz.definirInstalador(async (id, op) => {
         await pronto;
         raizInstalador.scrollIntoView?.({ block: "nearest" });
-        await instalador.instalar(id);
-      });
+        return instalador.instalar(id, op);
+      }, async (id) => { await pronto; return instalador.pacote(id); });
     }
     this.marcarUrl("voz_url");
+    this.transcricao = new AbaTranscricao(this.raiz.querySelector<HTMLElement>("#cfg-transcricao")!, {
+      vozUrl: () => this.cfg.voz_url,
+      config: this.cfg,
+      salvar: (parcial) => atualizarConfig(parcial),
+      dizer: (t, ruim) => this.dizer(t, ruim),
+    });
+    this.transcricao.montar();
     this.modelos = new AbaModelos(this.raiz.querySelector<HTMLElement>("#cfg-modelos")!, {
       criarOj: (modelo) => this.deps.criarOj(this.cfg.openjarvis_url, modelo),
       statusPonte: () => this.deps.statusPonte(this.cfg.ponte_url),
       ponteUrl: this.cfg.ponte_url,
       config: this.cfg,
       aoMudarCerebro: (cerebro) => { this.cfg.cerebro = cerebro; void salvarConfig(this.cfg); },
+      aoMudarUsoOpenJarvis: () => { this.deps.aoSalvar?.(this.cfg); },
+      dizer: (t, ruim) => this.dizer(t, ruim),
     });
     void this.modelos.carregar();
     this.paineisMcps = new AbaPaineisMcps(this.raiz.querySelector<HTMLElement>("#cfg-paineis-mcps")!);
@@ -160,6 +173,7 @@ export class Configuracoes {
     this.oficina = new AbaOficina(this.raiz.querySelector<HTMLElement>("#cfg-oficina")!, {
       statusPonte: () => this.deps.statusPonte(urlPonte()),
       nome: () => this.cfg.nome,
+      abrirAba: (aba) => this.abrirAba(aba),
     });
     this.oficina.montar();
     // Atualização embutida na aba Geral (sem aba própria no menu).
@@ -210,6 +224,7 @@ export class Configuracoes {
     if (aba === "reuniao") this.reuniao?.ativar(); else this.reuniao?.desativar();
     if (aba === "avisos") this.avisos?.ativar(); else this.avisos?.desativar();
     if (aba === "oficina") void this.oficina?.ativar(); else this.oficina?.desativar();
+    if (aba === "transcricao") this.transcricao?.ativar(); else this.transcricao?.desativar();
     if (aba === "geral" && this.cfg.atualizacao_ao_abrir) this.atualizacao?.aoAbrir();
   }
 
@@ -287,9 +302,9 @@ export class Configuracoes {
     // Grupos do menu lateral (ordem visual)
     const GRUPOS: [string, Aba[]][] = [
       ["Conversa", ["geral", "perfil"]],
-      ["Voz e áudio", ["voz", "atalhos"]],
-      ["Cérebro", ["oficina", "modelos", "paineis-mcps"]],
-            ["Sistema", ["sistema", "reuniao", "avisos", "diagnostico"]],
+      ["Voz e áudio", ["voz", "transcricao"]],
+      ["Configurações", ["modelos", "oficina", "paineis-mcps", "atalhos"]],
+      ["Sistema", ["sistema", "reuniao", "avisos", "diagnostico"]],
     ];
     const mapaRotulo = new Map(ABAS);
     const navHtml = GRUPOS.map(([titulo, ids]) =>
@@ -302,11 +317,6 @@ export class Configuracoes {
       <div class="conteudo">
         <div id="cfg-titulo-secao" class="conteudo-titulo"></div>
         <section data-aba="geral">
-          <fieldset><legend>OpenJarvis</legend>
-            ${this.campo("openjarvis_url", "Endereço", c.openjarvis_url)}
-            ${this.campo("gui_url", "Interface de texto", c.gui_url)}
-            <button id="cfg-testar" type="button">Testar</button>
-          </fieldset>
           <fieldset><legend>Idioma</legend>
             ${campoIdioma(c.idioma)}
           </fieldset>
@@ -367,6 +377,7 @@ export class Configuracoes {
           </div>
           <div id="cfg-instalador-vozes"></div>
         </section>
+        <section data-aba="transcricao"><div id="cfg-transcricao"></div></section>
         <section data-aba="atalhos">
           <p class="nota">Clique num atalho e pressione a nova combinação (Ctrl, Alt ou Win mais uma tecla). Esc cancela. Valem depois de reiniciar o Vard.</p>
           <div id="cfg-atalhos"></div>
@@ -374,6 +385,7 @@ export class Configuracoes {
         <section data-aba="sistema">
           ${this.campo("ponte_url", "Ponte do Vard (opcional; vazio desliga)", c.ponte_url)}
           <div id="cfg-sistema"></div>
+          <div id="cfg-telegram"></div>
           <div id="cfg-importacao"></div>
         </section>
         <section data-aba="reuniao"><div id="cfg-reuniao"></div></section>
@@ -391,12 +403,11 @@ export class Configuracoes {
     for (const b of this.raiz.querySelectorAll<HTMLButtonElement>("nav button")) b.addEventListener("click", () => this.abrirAba(b.dataset.aba as Aba));
     this.raiz.querySelector("#cfg-fechar")!.addEventListener("click", () => this.deps.fechar?.());
     this.raiz.querySelector("#cfg-salvar")!.addEventListener("click", () => { void this.salvar(); });
-    this.raiz.querySelector("#cfg-testar")!.addEventListener("click", () => { void this.testar(); });
     this.raiz.querySelector("#cfg-primeiro-uso")?.addEventListener("click", () => {
       void emitTo("main", "reabrir-primeiro-uso").catch(() => {});
     });
     this.montarAtalhos(this.raiz.querySelector<HTMLElement>("#cfg-atalhos")!);
-    for (const id of ["openjarvis_url", "gui_url", "ponte_url"]) this.marcarUrl(id);
+    this.marcarUrl("ponte_url");
   }
 
   /** Marca em aviso o campo de endereço que não é local; nos opcionais (ponte, voz) vazio desliga e não é aviso. */
@@ -511,7 +522,8 @@ export class Configuracoes {
     const cor = this.el("cor-elementos")?.value || c.cor_elementos;
     return {
       ...c,
-      openjarvis_url: txt("openjarvis_url", c.openjarvis_url), gui_url: txt("gui_url", c.gui_url), ponte_url: opc("ponte_url"),
+      // Endereço e interface de texto do OpenJarvis ficam no modal do Núcleo, que já os grava em this.cfg.
+      ponte_url: opc("ponte_url"),
       ...this.abaVoz.ler(), voz_url: this.abaVoz.vozUrl(),
       nome: c.nome, usuario: c.usuario, variantes: c.variantes,
       idioma: this.sel("idioma").value,
@@ -568,16 +580,5 @@ export class Configuracoes {
     if (reiniciar.length) partes.push(`Reinicie o Vard para aplicar: ${reiniciar.join(", ")}.`);
     if (avisos.length) partes.push(`Atenção: ${avisos.join("; ")}.`);
     this.dizer(partes.join(" "), avisos.length > 0 || falhouLogon || erroPerfil !== "");
-  }
-
-  private async testar() {
-    const url = this.el("openjarvis_url").value.trim();
-    this.dizer("Testando...");
-    try {
-      const oj = this.deps.criarOj(url);
-      if (!(await oj.saude())) { this.dizer("OpenJarvis não respondeu nesse endereço.", true); return; }
-      if (!(await oj.fala())) { this.dizer("OpenJarvis no ar, mas a fala está desligada. Veja docs/ligar-a-fala.md.", true); return; }
-      this.dizer("OpenJarvis no ar e a fala está ligada.");
-    } catch (erro) { this.dizer(`Falha no teste: ${String(erro)}`, true); }
   }
 }

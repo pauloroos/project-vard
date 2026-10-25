@@ -2,6 +2,10 @@
  * Seção Voz (0.9.4): lista de seleção para voz principal e reserva com botão Ouvir amostra,
  * blocos de serviço claros (local, ElevenLabs, Gemini) e cadastro em modal.
  * Reserva automática: se a principal falhar, o Vard fala pela reserva configurada.
+ * 0.9.7: escolher voz de nuvem sem chave abre o modal da chave na hora; escolher motor que falta
+ * pergunta se instala, instala pelo instalador de pacotes e já deixa a voz escolhida.
+ * 0.9.7: o Kokoro é motor do serviço de voz do Vard (pacote "kokoro" do instalador), sem OpenJarvis; a lista de vozes
+ * vem do serviço. Config antiga com Kokoro pelo OpenJarvis passa ao Kokoro do serviço quando ele está instalado.
  */
 import type { Config } from "../config/config";
 import { PAINEIS_PADRAO, gravarPaineis, lerPaineis, type PaineisConfig } from "../config/paineis";
@@ -9,10 +13,11 @@ import type { OpenJarvis } from "../conectores/openjarvis/cliente";
 import { ElevenLabs } from "../conectores/nuvem/elevenlabs";
 import { VOZES_GEMINI } from "../conectores/nuvem/gemini";
 import { Voz } from "../conectores/voz/cliente";
-import { FRASE_AMOSTRA, type ProvedorVoz } from "../conectores/voz/escolher";
+import { FRASE_AMOSTRA, idKokoro, type ProvedorVoz } from "../conectores/voz/escolher";
 import { VOZES_KOKORO, VOZES_EDGE_PT_BR, VOZES_PIPER_PT_BR } from "../conectores/voz/kokoro";
 import { listarDispositivos, definirPreferencia, obterPreferencia } from "../audio/dispositivos";
-import { abrirModalVoz, motorDoTipo, vozesCadastradas, type CamposVozCadastrada, type VozCadastrada } from "./paineis-vozes";
+import { abrirModalVoz, motorDoTipo, pedirChaveDeVoz, vozesCadastradas, type CamposVozCadastrada, type VozCadastrada } from "./paineis-vozes";
+import { perguntarInstalacao, type PerguntaInstalacao } from "./instalador-vozes";
 import "./estilos/voz.css";
 
 export interface DepsAbaVoz {
@@ -42,6 +47,27 @@ export const VOZES_POR_MOTOR: Record<string, readonly { id: string; rotulo: stri
   edge: VOZES_EDGE_PT_BR,
   piper: VOZES_PIPER_PT_BR,
 };
+
+/** Serviços de nuvem cuja voz só fala com chave; outro provedor de nuvem entra aqui. */
+const CHAVES_NUVEM = {
+  elevenlabs: { nome: "ElevenLabs", campo: "elevenlabs_chave", desc: "Vozes em nuvem sintetizadas na sua conta ElevenLabs." },
+  gemini: { nome: "Gemini", campo: "gemini_chave", desc: "Vozes sintetizadas pelo Google Gemini." },
+} as const;
+type ServicoComChave = keyof typeof CHAVES_NUVEM;
+const servicoComChave = (provedor: string): ServicoComChave | null =>
+  Object.prototype.hasOwnProperty.call(CHAVES_NUVEM, provedor) ? provedor as ServicoComChave : null;
+
+/** Motores que vêm de pacote opcional do instalador (manifesto do núcleo). */
+const PACOTE_DO_MOTOR: Record<string, string> = { xtts: "xtts-v2", kokoro: "kokoro" };
+
+/** Rótulo legível de uma voz Kokoro (config/vozes.json); ID desconhecido aparece como veio do serviço. */
+const rotuloKokoro = (id: string) => VOZES_KOKORO.find((v) => v.id === id)?.rotulo ?? id;
+
+/** Instala pelo instalador de pacotes; true só quando terminou instalado. */
+export type InstalarPacote = (id: string, op: { licencaAceita: boolean }) => boolean | void | Promise<boolean | void>;
+type ResumoPacote = PerguntaInstalacao["pacote"];
+/** Nome, tamanho e licença do pacote para a pergunta de instalar. */
+export type DescreverPacote = (id: string) => ResumoPacote | undefined | Promise<ResumoPacote | undefined>;
 
 const AVISO_SERVICOS = "Os serviços do Vard estão desligados — abra pelo atalho do Vard ou ligue em Sistema.";
 type EstadoServico = "no-ar" | "fora" | "desligado";
@@ -117,6 +143,8 @@ export class AbaVoz {
   private estado: EstadoServico = "fora";
   private motores = { xtts: false, kokoro: false, edge: false, piper: false };
   private vozesServico: string[] = [];
+  /** De que motor é cada voz, quando o serviço informa (`por_motor` do /vozes). */
+  private vozesPorMotor: Record<string, string[]> = {};
   private vozesElevenLabs: { id: string; nome: string }[] = [];
   private aviso!: HTMLElement;
   private avisoDetalhe!: HTMLElement;
@@ -124,8 +152,11 @@ export class AbaVoz {
   private selReserva!: HTMLSelectElement;
   private btnAmostraPrincipal!: HTMLButtonElement;
   private btnAmostraReserva!: HTMLButtonElement;
-  private instalar?: (id: string) => void | Promise<void>;
-  private pacoteXttsInstalado = false;
+  private instalar?: InstalarPacote;
+  private descreverPacote?: DescreverPacote;
+  private pacotesInstalados = new Set<string>();
+  /** Motor sendo instalado agora (o card mostra o andamento). */
+  private instalando: string | null = null;
 
   constructor(private raiz: HTMLElement, private cfg: Config, private deps: DepsAbaVoz) {
     this.cfg = { ...cfg };
@@ -184,8 +215,8 @@ export class AbaVoz {
     this.btnAmostraPrincipal = this.raiz.querySelector("#cfg-voz-amostra-principal")!;
     this.btnAmostraReserva = this.raiz.querySelector("#cfg-voz-amostra-reserva")!;
 
-    this.selPrincipal.addEventListener("change", () => { this.aplicarSelecaoPrincipal(); this.desenharMotores(); });
-    this.selReserva.addEventListener("change", () => { this.aplicarSelecaoReserva(); });
+    this.selPrincipal.addEventListener("change", () => { void this.mudarSelecao("principal"); });
+    this.selReserva.addEventListener("change", () => { void this.mudarSelecao("reserva"); });
     this.btnAmostraPrincipal.addEventListener("click", () => { void this.amostraSelecionada("principal"); });
     this.btnAmostraReserva.addEventListener("click", () => { void this.amostraSelecionada("reserva"); });
     this.preencherListas(); // já com o que não depende do serviço; atualizar() completa
@@ -194,13 +225,20 @@ export class AbaVoz {
     this.desenharMotores();
   }
 
-  /** Reaproveita o instalador de pacotes do painel, incluindo licença e cancelamento. */
-  definirInstalador(instalar: (id: string) => void | Promise<void>) { this.instalar = instalar; }
+  /** Reaproveita o instalador de pacotes do painel, incluindo licença, progresso e cancelamento. */
+  definirInstalador(instalar: InstalarPacote, descrever?: DescreverPacote) {
+    this.instalar = instalar;
+    this.descreverPacote = descrever;
+  }
 
-  definirPacoteXttsInstalado(instalado: boolean) {
-    this.pacoteXttsInstalado = instalado;
+  /** Pacote do instalador já instalado (o card não oferece instalar de novo). */
+  definirPacoteInstalado(id: string, instalado: boolean) {
+    if (instalado) this.pacotesInstalados.add(id);
+    else this.pacotesInstalados.delete(id);
     this.desenharMotores();
   }
+
+  definirPacoteXttsInstalado(instalado: boolean) { this.definirPacoteInstalado("xtts-v2", instalado); }
 
   private motorAtual(): string {
     if (this.cfg.voz_provedor === "openjarvis") return "kokoro";
@@ -226,14 +264,17 @@ export class AbaVoz {
       btn.dataset.motor = id;
       btn.setAttribute("aria-pressed", String(id === atual));
       const local = id in this.motores;
-      const disponivel = id === "kokoro" || (local && this.motores[id as keyof typeof this.motores]);
-      const nuvem = id === "elevenlabs" || id === "gemini";
-      const semChave = nuvem && !this.el(`${id}_chave`)?.value.trim();
+      const disponivel = local && this.motores[id as keyof typeof this.motores];
+      const servico = servicoComChave(id);
+      const semChave = servico !== null && !this.temChave(servico);
       const cadastrada = vozesCadastradas(this.cfgPaineis).some((p) => motorDoTipo(p.tipo).toLowerCase() === id);
-      const situacao = semChave ? "Falta a chave · cadastrar" : id === "xtts" && !disponivel && !cadastrada
-        ? this.pacoteXttsInstalado ? "Instalado · ligue o serviço de voz" : "Instalar"
+      const pacote = PACOTE_DO_MOTOR[id];
+      const falta = pacote !== undefined && !disponivel && !cadastrada;
+      const faltaInstalar = falta && !this.pacotesInstalados.has(pacote);
+      const situacao = semChave ? "Falta a chave · cadastrar" : falta
+        ? this.instalando === id ? "Instalando… veja o progresso abaixo" : faltaInstalar ? "Instalar" : "Instalado · ligue o serviço de voz"
         : id === "fish" && !cadastrada ? "Cadastrar voz"
-        : local ? id === "kokoro" && !this.motores.kokoro ? "Via OpenJarvis" : disponivel ? "Disponível · serviço de voz" : "Indisponível · vem do serviço de voz"
+        : local ? disponivel ? "Disponível · serviço de voz" : "Indisponível · vem do serviço de voz"
         : "Nuvem";
       const titulo = document.createElement("strong");
       titulo.textContent = nome;
@@ -246,22 +287,96 @@ export class AbaVoz {
         ativo.textContent = "Fala agora";
         btn.append(ativo);
       }
-      btn.addEventListener("click", () => {
-        if (semChave) {
-          this.deps.dizer(`Falta a chave do ${nome}; cadastre em Serviços e chaves.`, true);
-          this.el(`${id}_chave`).focus();
-          return;
-        }
-        if (id === "xtts" && !disponivel && !cadastrada && !this.pacoteXttsInstalado) {
-          if (this.instalar) void this.instalar("xtts-v2");
-          else this.deps.dizer("Abra o instalador de pacotes de voz abaixo.", true);
-          return;
-        }
-        if (id === "fish" && !cadastrada) { this.abrirCadastro(undefined, "fish"); return; }
-        this.escolherMotor(id);
-      });
+      btn.addEventListener("click", () => { void this.clicarMotor(id, nome, { semChave, faltaInstalar, cadastrada }); });
       alvo.append(btn);
     }
+  }
+
+  /** Card de motor: falta chave → modal da chave; falta pacote → pergunta e instala; senão escolhe. */
+  private async clicarMotor(id: string, nome: string, c: { semChave: boolean; faltaInstalar: boolean; cadastrada: boolean }) {
+    const servico = servicoComChave(id);
+    if (servico && c.semChave) {
+      if (!(await this.garantirChave(servico))) return; // cancelou: fica a voz de antes
+    } else if (c.faltaInstalar) {
+      await this.oferecerInstalacao(id, nome);
+      return;
+    } else if (id === "fish" && !c.cadastrada) {
+      this.abrirCadastro(undefined, "fish");
+      return;
+    }
+    if (id === "elevenlabs" && !this.vozesElevenLabs.length) await this.carregarElevenLabs();
+    this.escolherMotor(id);
+  }
+
+  /** Pergunta se instala o motor que falta; confirmado, instala pelo instalador e já escolhe a voz. */
+  private async oferecerInstalacao(motor: string, nome: string) {
+    const pacote = PACOTE_DO_MOTOR[motor];
+    if (!this.instalar) { this.deps.dizer("Abra o instalador de pacotes de voz abaixo.", true); return; }
+    if (this.instalando) { this.deps.dizer("Já há uma instalação em andamento; aguarde terminar.", true); return; }
+    const info = await this.descreverPacote?.(pacote);
+    if (!(await perguntarInstalacao({ nome, pacote: info }))) {
+      this.deps.dizer(`${nome} não foi instalado; a voz continua a mesma.`);
+      return;
+    }
+    this.instalando = motor;
+    this.desenharMotores();
+    let instalado = false;
+    try {
+      // A pergunta já mostrou a licença: o instalador não repete a confirmação.
+      instalado = (await this.instalar(pacote, { licencaAceita: Boolean(info?.licenca_url) })) === true;
+    } catch (erro) {
+      this.deps.dizer(`Não consegui instalar ${nome}: ${erro instanceof Error ? erro.message : "falha"}`, true);
+    } finally {
+      this.instalando = null;
+    }
+    if (!instalado) { this.desenharMotores(); return; } // licença recusada, falha ou cancelada: o instalador já avisou
+    this.pacotesInstalados.add(pacote);
+    await this.atualizar();
+    this.usarMotorInstalado(motor, nome);
+  }
+
+  private usarMotorInstalado(motor: string, nome: string) {
+    if (this.opcoesDisponiveis().some((op) => this.motorDaOpcao(op) === motor)) {
+      this.escolherMotor(motor);
+      this.deps.dizer(`${nome} instalado e escolhido. Salve para aplicar.`);
+      return;
+    }
+    // Serviço de voz ainda sem o motor: a escolha fica e a voz padrão dele vale até listar as vozes.
+    this.cfg.voz_provedor = "propria";
+    this.cfg.voz_motor = motor;
+    this.cfg.voz_propria = "";
+    this.preencherListas();
+    this.desenharCadastradas();
+    this.desenharMotores();
+    this.deps.dizer(`${nome} instalado e escolhido. Salve; as vozes aparecem quando o serviço de voz carregar o motor.`);
+  }
+
+  private temChave(s: ServicoComChave): boolean { return this.cfg[CHAVES_NUVEM[s].campo].trim() !== ""; }
+
+  /** Garante a chave do serviço: se falta (ou `trocar`), abre o modal. True quando há chave para seguir. */
+  private async garantirChave(s: ServicoComChave, trocar = false): Promise<boolean> {
+    if (!trocar && this.temChave(s)) return true;
+    const { nome, campo } = CHAVES_NUVEM[s];
+    const chave = await pedirChaveDeVoz({ servico: nome, trocar: this.temChave(s) });
+    if (chave === null) return false;
+    this.cfg[campo] = chave;
+    this.desenharChaves();
+    this.desenharMotores();
+    if (s === "elevenlabs") await this.carregarElevenLabs();
+    return true;
+  }
+
+  /** Troca no select: voz de nuvem sem chave pede a chave antes; cancelar volta à anterior. */
+  private async mudarSelecao(qual: "principal" | "reserva") {
+    const sel = qual === "principal" ? this.selPrincipal : this.selReserva;
+    const valor = sel.value;
+    const servico = servicoComChave(this.parseValor(valor)?.provedor ?? "");
+    if (servico && !this.temChave(servico)) {
+      if (!(await this.garantirChave(servico))) { this.preencherListas(); return; }
+      sel.value = valor; // carregar vozes redesenha as listas
+    }
+    if (qual === "principal") { this.aplicarSelecaoPrincipal(); this.desenharMotores(); }
+    else this.aplicarSelecaoReserva();
   }
 
   private escolherMotor(motor: string) {
@@ -301,6 +416,7 @@ export class AbaVoz {
       this.estado = "desligado";
       this.motores = { xtts: false, kokoro: false, edge: false, piper: false };
       this.vozesServico = [];
+      this.vozesPorMotor = {};
     } else {
       const base = url.replace(/\/+$/, "");
       const saude = await buscarJson<{ xtts?: unknown; xtts_carregado?: unknown; kokoro?: unknown; edge?: unknown; piper?: unknown }>(`${base}/saude`, 3000);
@@ -308,23 +424,53 @@ export class AbaVoz {
         this.estado = "fora";
         this.motores = { xtts: false, kokoro: false, edge: false, piper: false };
         this.vozesServico = [];
+        this.vozesPorMotor = {};
       } else {
         this.estado = "no-ar";
         this.motores = { xtts: saude.xtts === true, kokoro: saude.kokoro === true, edge: saude.edge === true, piper: saude.piper === true };
         this.motorAutomatico = saude.xtts_carregado === true ? "xtts" : this.motores.kokoro ? "kokoro" : this.motores.edge ? "edge" : this.motores.piper ? "piper" : "xtts";
         // Lista de vozes falhando não pode esvaziar a tela: sem ela, as listas ficam com o que não depende do serviço.
-        try { this.vozesServico = (await new Voz(url).vozes()).vozes; } catch { this.vozesServico = []; }
+        try {
+          const lista = await new Voz(url).vozes();
+          this.vozesServico = lista.vozes;
+          this.vozesPorMotor = lista.porMotor ?? {};
+        } catch { this.vozesServico = []; this.vozesPorMotor = {}; }
       }
     }
+    if (this.motores.kokoro) this.migrarKokoroDoOpenJarvis();
     try { this.cfgPaineis = await lerPaineis(); } catch { this.cfgPaineis = paineisEmBranco(); }
     this.cfg.voz_url = this.vozUrl();
-    this.cfg.elevenlabs_chave = this.el("elevenlabs_chave").value;
-    this.cfg.gemini_chave = this.el("gemini_chave").value;
     this.atualizarAviso();
     this.preencherListas();
     this.desenharServicos();
     this.desenharCadastradas();
     this.desenharMotores();
+  }
+
+  /** Config antiga com Kokoro pelo OpenJarvis: com o Kokoro no serviço de voz, a mesma voz passa a sair dele. */
+  private migrarKokoroDoOpenJarvis() {
+    const principal = this.cfg.voz_provedor === "openjarvis" ? idKokoro(this.cfg.voz) : null;
+    if (principal) {
+      this.cfg.voz_provedor = "propria";
+      this.cfg.voz_motor = "kokoro";
+      this.cfg.voz_propria = principal;
+    }
+    const reserva = this.cfg.voz_reserva_provedor === "openjarvis" ? idKokoro(this.cfg.voz_reserva_id) : null;
+    if (reserva) {
+      this.cfg.voz_reserva_provedor = "propria";
+      this.cfg.voz_reserva_motor = "kokoro";
+      this.cfg.voz_reserva_id = reserva;
+    }
+    if (principal || reserva) this.deps.dizer("O Kokoro agora vem do serviço de voz do Vard, sem OpenJarvis. Salve para aplicar.");
+  }
+
+  /** Vozes Kokoro que o serviço tem: o `por_motor` dele; serviço antigo, as conhecidas que ele lista (ou todas). */
+  private vozesKokoro(): string[] {
+    const doServico = this.vozesPorMotor.kokoro;
+    if (doServico) return doServico;
+    const conhecidas = VOZES_KOKORO.map((v) => v.id);
+    const listadas = conhecidas.filter((id) => this.vozesServico.includes(id));
+    return listadas.length ? listadas : conhecidas;
   }
 
   private atualizarAviso() {
@@ -346,19 +492,26 @@ export class AbaVoz {
   private opcoesDisponiveis(): OpcaoVoz[] {
     const ops: OpcaoVoz[] = [];
     const fora = this.estado !== "no-ar";
-    for (const v of VOZES_KOKORO) {
-      ops.push({ valor: `openjarvis:${v.id}`, rotulo: `${v.rotulo} (OpenJarvis)`, grupo: "Kokoro · OpenJarvis", provedor: "openjarvis" });
+    // Config antiga com Kokoro pelo OpenJarvis enquanto o Kokoro não está no serviço: a voz salva fica visível.
+    const antigas = new Set<string>();
+    const principalAntiga = this.cfg.voz_provedor === "openjarvis" ? idKokoro(this.cfg.voz) : null;
+    if (principalAntiga) antigas.add(principalAntiga);
+    const reservaAntiga = this.cfg.voz_reserva_provedor === "openjarvis" ? idKokoro(this.cfg.voz_reserva_id) : null;
+    if (reservaAntiga) antigas.add(reservaAntiga);
+    for (const id of antigas) {
+      ops.push({ valor: `openjarvis:${id}`, rotulo: `${rotuloKokoro(id)} (OpenJarvis, até instalar o Kokoro)`, grupo: "Kokoro · config antiga", provedor: "openjarvis" });
     }
     if (!fora) {
       if (this.motores.xtts) {
         const outrosIds = new Set(Object.values(VOZES_POR_MOTOR).flat().map((v) => v.id));
-        for (const nome of this.vozesServico.filter((v) => !outrosIds.has(v))) {
+        const xtts = this.vozesPorMotor.xtts ?? this.vozesServico.filter((v) => !outrosIds.has(v));
+        for (const nome of xtts) {
           ops.push({ valor: `propria:xtts:${nome}`, rotulo: `${nome} (XTTS, neste PC)`, grupo: "XTTS · neste PC", provedor: "propria", motor: "xtts" });
         }
       }
       if (this.motores.kokoro) {
-        for (const v of VOZES_KOKORO) {
-          ops.push({ valor: `propria:kokoro:${v.id}`, rotulo: `${v.rotulo} (Kokoro, neste PC)`, grupo: "Kokoro · neste PC", provedor: "propria", motor: "kokoro" });
+        for (const id of this.vozesKokoro()) {
+          ops.push({ valor: `propria:kokoro:${id}`, rotulo: `${rotuloKokoro(id)} (Kokoro, neste PC)`, grupo: "Kokoro · neste PC", provedor: "propria", motor: "kokoro" });
         }
       }
       if (this.motores.edge) {
@@ -474,21 +627,19 @@ export class AbaVoz {
     if (!val) { this.deps.dizer("Escolha uma voz primeiro.", true); return; }
     const parsed = this.parseValor(val);
     if (!parsed) return;
+    const servico = servicoComChave(parsed.provedor);
+    if (servico && !(await this.garantirChave(servico))) return;
     this.deps.dizer("Sintetizando...");
     try {
       let wav: ArrayBuffer;
       if (parsed.provedor === "openjarvis") {
         wav = await this.deps.criarOj().sintetizar(FRASE_AMOSTRA, parsed.id ?? this.cfg.voz, this.deps.velocidade());
       } else if (parsed.provedor === "elevenlabs") {
-        const chave = this.el("elevenlabs_chave").value.trim();
-        if (!chave) { this.deps.dizer("Informe a chave do ElevenLabs para ouvir esta voz.", true); return; }
-        const fonte = new ElevenLabs(chave, parsed.id ?? "");
+        const fonte = new ElevenLabs(this.cfg.elevenlabs_chave.trim(), parsed.id ?? "");
         wav = await fonte.falarWav(FRASE_AMOSTRA, this.deps.velocidade(), 20000);
       } else if (parsed.provedor === "gemini") {
-        const chave = this.el("gemini_chave").value.trim();
-        if (!chave) { this.deps.dizer("Informe a chave do Gemini para ouvir esta voz.", true); return; }
         const { Gemini } = await import("../conectores/nuvem/gemini");
-        const fonte = new Gemini(chave, parsed.id ?? "Kore");
+        const fonte = new Gemini(this.cfg.gemini_chave.trim(), parsed.id ?? "Kore");
         wav = await fonte.falarWav(FRASE_AMOSTRA, this.deps.velocidade(), 20000);
       } else {
         const url = this.cfg.voz_url?.trim();
@@ -511,7 +662,7 @@ export class AbaVoz {
     bloco.innerHTML = `
       <div class="voz-bloco-servico">
         <h4>Serviço de voz deste PC</h4>
-        <p class="voz-servico-desc">Endereço do serviço local que roda XTTS, Kokoro, Edge ou Piper. As vozes locais aparecem na lista quando o serviço está no ar.</p>
+        <p class="voz-servico-desc">Endereço do serviço local que roda XTTS, Kokoro, Edge ou Piper (sem OpenJarvis). As vozes locais aparecem na lista quando o serviço está no ar.</p>
         <label class="campo-modal">
           <span class="campo-modal-rotulo">Endereço do serviço de voz</span>
           <input type="text" id="cfg-voz_url" value="${esc(url)}" placeholder="http://127.0.0.1:4710">
@@ -519,34 +670,52 @@ export class AbaVoz {
         </label>
         <button type="button" id="cfg-voz-atualizar" class="voz-btn-secundario">Atualizar motores e vozes</button>
       </div>
-      <div class="voz-bloco-servico">
-        <h4>ElevenLabs</h4>
-        <p class="voz-servico-desc">Vozes em nuvem sintetizadas na sua conta ElevenLabs. Informe a chave e carregue as vozes.</p>
-        <label class="campo-modal">
-          <span class="campo-modal-rotulo">Chave da API ElevenLabs</span>
-          <input type="password" id="cfg-elevenlabs_chave" value="${esc(this.cfg.elevenlabs_chave)}">
-        </label>
-        <button type="button" id="cfg-voz-carregar-elevenlabs" class="voz-btn-secundario">Carregar vozes do ElevenLabs</button>
-      </div>
-      <div class="voz-bloco-servico">
-        <h4>Gemini</h4>
-        <p class="voz-servico-desc">Vozes sintetizadas pelo Google Gemini. Informe a chave para usar.</p>
-        <label class="campo-modal">
-          <span class="campo-modal-rotulo">Chave da API Gemini</span>
-          <input type="password" id="cfg-gemini_chave" value="${esc(this.cfg.gemini_chave)}">
-        </label>
-      </div>
+      <div id="cfg-voz-chaves"></div>
     `;
-    bloco.querySelector("#cfg-voz-carregar-elevenlabs")?.addEventListener("click", () => { void this.carregarElevenLabs(); });
     bloco.querySelector("#cfg-voz-atualizar")?.addEventListener("click", () => { void this.atualizar(); });
-    for (const id of ["elevenlabs_chave", "gemini_chave"]) this.el(id).addEventListener("input", () => { this.desenharMotores(); });
+    this.desenharChaves();
+  }
+
+  /** Chaves de nuvem: só a situação e o botão; o preenchimento é sempre no modal (a chave não volta à tela). */
+  private desenharChaves() {
+    const alvo = this.raiz.querySelector<HTMLElement>("#cfg-voz-chaves");
+    if (!alvo) return;
+    alvo.replaceChildren();
+    for (const s of Object.keys(CHAVES_NUVEM) as ServicoComChave[]) {
+      const { nome, desc } = CHAVES_NUVEM[s];
+      const tem = this.temChave(s);
+      const bloco = document.createElement("div");
+      bloco.className = "voz-bloco-servico";
+      const titulo = document.createElement("h4");
+      titulo.textContent = nome;
+      const texto = document.createElement("p");
+      texto.className = "voz-servico-desc";
+      texto.textContent = `${desc} ${tem ? "Chave cadastrada." : "Sem chave: ela é pedida quando você escolher esta voz."}`;
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.id = `cfg-voz-chave-${s}`;
+      btn.className = "voz-btn-secundario";
+      btn.textContent = tem ? "Trocar chave" : "Cadastrar chave";
+      btn.addEventListener("click", () => { void this.garantirChave(s, true); });
+      bloco.append(titulo, texto, btn);
+      if (s === "elevenlabs") {
+        const carregar = document.createElement("button");
+        carregar.type = "button";
+        carregar.id = "cfg-voz-carregar-elevenlabs";
+        carregar.className = "voz-btn-secundario";
+        carregar.textContent = "Carregar vozes do ElevenLabs";
+        carregar.addEventListener("click", () => { void this.carregarElevenLabs(); });
+        bloco.append(carregar);
+      }
+      alvo.append(bloco);
+    }
   }
 
   private async carregarElevenLabs() {
-    const chave = this.el("elevenlabs_chave").value.trim();
-    if (!chave) { this.deps.dizer("Informe a chave do ElevenLabs para carregar as vozes.", true); return; }
+    // Sem chave, pede no modal; ao salvar, garantirChave volta aqui e carrega.
+    if (!this.temChave("elevenlabs")) { await this.garantirChave("elevenlabs"); return; }
     try {
-      const lista = await new ElevenLabs(chave, "x").vozes();
+      const lista = await new ElevenLabs(this.cfg.elevenlabs_chave.trim(), "x").vozes();
       this.vozesElevenLabs = lista;
       this.preencherListas();
       this.desenharMotores();
@@ -682,9 +851,9 @@ export class AbaVoz {
       voz_motor: this.cfg.voz_motor,
       voz_propria: this.cfg.voz_propria,
       voz: this.cfg.voz,
-      elevenlabs_chave: this.el("elevenlabs_chave").value.trim(),
+      elevenlabs_chave: this.cfg.elevenlabs_chave.trim(),
       elevenlabs_voz: this.cfg.elevenlabs_voz,
-      gemini_chave: this.el("gemini_chave").value.trim(),
+      gemini_chave: this.cfg.gemini_chave.trim(),
       gemini_voz: this.cfg.gemini_voz,
       voz_reserva_provedor: this.cfg.voz_reserva_provedor,
       voz_reserva_motor: this.cfg.voz_reserva_motor,
@@ -695,9 +864,10 @@ export class AbaVoz {
 
   erro(): string | null {
     const p = problemaDeVoz(this.ler());
-    const marcar = (id: string, el: HTMLElement | null | undefined) => el?.classList.toggle("aviso", p?.campos.includes(id) ?? false);
-    marcar("elevenlabs_chave", this.raiz.querySelector("#cfg-elevenlabs_chave"));
-    marcar("gemini_chave", this.raiz.querySelector("#cfg-gemini_chave"));
+    // A chave não tem mais campo na aba: o botão de cadastrar do serviço fica marcado.
+    for (const s of Object.keys(CHAVES_NUVEM) as ServicoComChave[]) {
+      this.raiz.querySelector(`#cfg-voz-chave-${s}`)?.classList.toggle("aviso", p?.campos.includes(CHAVES_NUVEM[s].campo) ?? false);
+    }
     return p ? p.texto : null;
   }
 

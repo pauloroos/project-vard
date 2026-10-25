@@ -21,18 +21,24 @@ export class OpenJarvis implements Conector {
   private modelo: string | null = null;
   private base: string;
 
-  constructor(base: string, private preferido = "") { this.base = base.replace(/\/+$/, ""); }
+  constructor(base: string, private preferido = "", private habilitado: () => boolean = () => true) { this.base = base.replace(/\/+$/, ""); }
+
+  /** Consulta a configuração viva antes de cada requisição, inclusive após esperas. */
+  private buscar(url: string, opcoes?: RequestInit): Promise<Response> {
+    if (!this.habilitado()) throw new Error("OpenJarvis desligado. Ative-o em Núcleo (opções avançadas) e reinicie os serviços.");
+    return fetch(url, opcoes);
+  }
 
   async saude(): Promise<boolean> {
     try {
-      const r = await comTimeout(3000, (signal) => fetch(`${this.base}/health`, { signal }));
+      const r = await comTimeout(3000, (signal) => this.buscar(`${this.base}/health`, { signal }));
       return r.ok;
     } catch { return false; }
   }
 
   async fala(): Promise<boolean> {
     try {
-      const r = await comTimeout(3000, (signal) => fetch(`${this.base}/v1/speech/health`, { signal }));
+      const r = await comTimeout(3000, (signal) => this.buscar(`${this.base}/v1/speech/health`, { signal }));
       if (!r.ok) return false;
       return (await r.json()).available === true;
     } catch { return false; }
@@ -43,7 +49,7 @@ export class OpenJarvis implements Conector {
     form.append("file", new Blob([wav], { type: "audio/wav" }), "fala.wav");
     if (idioma) form.append("language", idioma);
     return comTimeout(30000, async (signal) => {
-      const r = await fetch(`${this.base}/v1/speech/transcribe`, { method: "POST", body: form, signal });
+      const r = await this.buscar(`${this.base}/v1/speech/transcribe`, { method: "POST", body: form, signal });
       if (!r.ok) throw new Error(`transcrever HTTP ${r.status}`);
       const j = await r.json();
       return String(j.text ?? "").trim();
@@ -51,7 +57,7 @@ export class OpenJarvis implements Conector {
   }
 
   async modelos(): Promise<string[]> {
-    const r = await comTimeout(5000, (signal) => fetch(`${this.base}/v1/models`, { signal }));
+    const r = await comTimeout(5000, (signal) => this.buscar(`${this.base}/v1/models`, { signal }));
     if (!r.ok) throw new Error(`modelos HTTP ${r.status}`);
     const j = await r.json();
     return Array.isArray(j?.data) ? j.data.map((m: { id?: unknown }) => String(m?.id ?? "")).filter(Boolean) : [];
@@ -73,7 +79,7 @@ export class OpenJarvis implements Conector {
   async perguntar(mensagens: Mensagem[], externo?: AbortSignal): Promise<string> {
     const model = await this.idModelo();
     return comTimeout(90000, async (signal) => {
-      const r = await fetch(`${this.base}/v1/chat/completions`, {
+      const r = await this.buscar(`${this.base}/v1/chat/completions`, {
         method: "POST", headers: { "Content-Type": "application/json" }, signal,
         body: JSON.stringify({ model, messages: mensagens, stream: false }),
       });
@@ -85,7 +91,7 @@ export class OpenJarvis implements Conector {
 
   async sintetizar(texto: string, voz: string, velocidade: number, externo?: AbortSignal): Promise<ArrayBuffer> {
     return comTimeout(30000, async (signal) => {
-      const r = await fetch(`${this.base}/v1/speech/synthesize`, {
+      const r = await this.buscar(`${this.base}/v1/speech/synthesize`, {
         method: "POST", headers: { "Content-Type": "application/json" }, signal,
         body: JSON.stringify({ text: texto, voice_id: voz, speed: velocidade }),
       });

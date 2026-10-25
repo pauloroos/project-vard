@@ -3,6 +3,53 @@
 Este arquivo segue o [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) em português do Brasil.
 Os instaladores de cada versão ficam na página de [releases](https://github.com/pauloroos/project-vard/releases).
 
+## [0.9.7] — 2026-10-17
+
+### Adicionado/Feito
+
+- Configurações reorganizadas: "Voz e áudio" (Voz, Transcrição), "Configurações" (Núcleo, Oficina, Ferramentas,
+  Atalhos) e "Sistema". "Quem responde" passa a se chamar Núcleo.
+- Aba Transcrição: modelos de transcrição em cards (tamanho, idioma, velocidade e precisão), com baixar, usar e
+  excluir, e escolha do dispositivo. A troca acontece em segundo plano, sem derrubar o serviço de voz.
+- Núcleo em blocos: quem responde agora, provedores cadastrados, o que falta instalar e opções avançadas recolhidas.
+- Voz: escolher uma voz que precisa de chave abre o cadastro da chave na hora; escolher uma voz não instalada
+  pergunta se quer instalar e já deixa a voz em uso ao terminar.
+- Kokoro sem OpenJarvis: o Kokoro passa a ser motor do serviço de voz do Vard (kokoro-onnx, CPU ou GPU), instalável
+  pela aba Voz ("Instalar e usar" baixa o modelo e instala a biblioteca no serviço de voz, sem reiniciar); as vozes
+  vêm do serviço. Quem usava o Kokoro pelo OpenJarvis passa ao do serviço de voz quando ele
+  estiver instalado.
+- Oficina: as habilidades de fábrica podem ser editadas e restauradas ao padrão.
+- Telegram: "Trazer do OpenJarvis" na aba Sistema (e pelo assistente) copia o bot e os chats permitidos
+  do OpenJarvis para o Vard, com o token direto no cofre, sem mexer no OpenJarvis e sem substituir um
+  Telegram já configurado sem confirmação. Com o Telegram no Vard, o OpenJarvis fica desligado.
+
+### Corrigido
+
+- Sem o OpenJarvis, o widget mostrava "sem conexão com o núcleo" com o núcleo no ar.
+- O LM Studio cadastrado como provedor ainda aparecia como sugestão de instalação.
+- Desligar Resumo da manhã, Pesquisa ou Agente remoto gravava um arquivo de habilidades que não era aceito.
+- A seção Telegram da aba Sistema não aparecia na tela; o token digitado agora vai de fato para o cofre e
+  o bot liga, religa ou desliga na hora, sem reiniciar o núcleo.
+
+## [0.9.6] — 2026-10-17
+
+### Adicionado/Feito
+
+- Um único aplicativo: o Vard cuida dos serviços sozinho e a bandeja do Windows tem tudo — modo jogo, voltar,
+  gravar/encerrar reunião, ouvir/falar, sala, configurações e log. A instalação existente migra sozinha, com
+  backup e volta possível.
+- O OpenJarvis deixa de ser necessário: só sobe se for quem responde ou se a opção "Manter o OpenJarvis ligado"
+  estiver marcada. A transcrição da voz passa a ser feita pelo serviço de voz do Vard.
+- Telegram em uma tela simples (Sistema): ligar, token guardado no cofre, "Descobrir meu chat" e "Enviar teste";
+  também configurável pelo assistente, sem o token passar por ele.
+- Oficina: Resumo da manhã, Pesquisa e Agente remoto como habilidades de fábrica, com o que falta para funcionar.
+- Conversa aberta volta a ouvir sozinha depois de cada resposta.
+
+### Corrigido
+
+- Um pedido cancelado deixava a resposta na fila da ferramenta de linha de comando e ela saía no pedido seguinte.
+- O encerramento da bandeja antiga confere PID e horário de início antes de agir.
+
 ## [0.9.5] — 2026-10-17
 
 ### Adicionado/Feito

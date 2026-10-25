@@ -1,10 +1,10 @@
-# Telegram próprio do cérebro: DESLIGADO por padrão.
-# Copie para %LOCALAPPDATA%\rdl-vard\config\telegram.toml e preencha.
-# O poller só sobe quando habilitado=true; nunca disputa o token com OpenJarvis/Liv (409).
-# Veja .coordenacao/0.8-telegram-como-trocar.md para o corte seguro.
+# Telegram próprio do Vard: DESLIGADO por padrão. Configure pela aba Sistema (ou pelo assistente).
+# O arquivo fica em %LOCALAPPDATA%\rdl-vard\config\telegram.toml.
+# O token do bot NÃO fica aqui: vai para o cofre do Windows (alvo vard:canal:telegram), pela tela
+# ou pelo botão "Trazer do OpenJarvis". Um `token = "..."` antigo neste arquivo ainda é lido
+# quando o cofre está vazio. Veja docs/telegram.md.
+# O poller só sobe com habilitado=true, token e chat permitido. Com o Telegram no Vard, deixe o
+# OpenJarvis desligado: dois programas no mesmo bot brigam pelo getUpdates (HTTP 409).
 
-habilitado = false          # true = liga o long polling do cérebro
-token = ""                  # token do bot (mesmo de segredos.toml ou outro dedicado)
-chats_permitidos = []       # lista de chat_id autorizados (string); demais são ignorados
-poll_interval_s = 1         # intervalo entre getUpdates (segundos)
-timeout_s = 30              # timeout do long polling
+habilitado = false          # true = liga o long polling do núcleo
+chats_permitidos = []       # lista de chat_id autorizados (texto); demais são ignorados

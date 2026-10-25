@@ -1,5 +1,5 @@
 // Cliente da ponte opcional do Vard (127.0.0.1:4700). Sem ponte o HUD funciona igual: tudo aqui falha em silêncio.
-export interface StatusPonte { ok: boolean; modo: string; detalhe?: string; reserva?: string; tarefas_abertas?: number; modelos_lmstudio?: string[]; reuniao?: "ativa" | "inativa" | "ausente" }
+export interface StatusPonte { ok: boolean; modo: string; detalhe?: string; reserva?: string; tarefas_abertas?: number; modelos_lmstudio?: string[]; reuniao?: "ativa" | "inativa" | "ausente"; cerebro_proprio?: boolean }
 
 /** Estado da reunião segundo o /reuniao/status da ponte. */
 export interface StatusReuniao { ativa: boolean; pasta?: string; inicio?: string; duracao_s?: number; falas?: number }
@@ -137,9 +137,29 @@ export interface ResultadoReversaoImportacao {
   hud_anterior?: Record<string, unknown> | null;
 }
 
+/** O que o núcleo achou do Telegram no OpenJarvis (nunca o token). */
+export interface TelegramDoOpenJarvis { disponivel: boolean; vard_configurado: boolean; ja_migrado: boolean; pode_trazer: boolean; fonte?: string; chats?: number; ligado?: boolean }
+/** GET /telegram: estado da seção Telegram; `token_configurado` diz só se há token guardado. */
+export interface EstadoTelegram { ligado: boolean; chat_permitido: string; token_configurado?: boolean; rodando?: boolean; openjarvis?: TelegramDoOpenJarvis }
+/** POST /telegram/trazer_openjarvis: `motivo` ja_configurado pede confirmação para substituir. */
+export interface ResultadoTrazerTelegram { ok: boolean; mudou?: boolean; motivo?: string; detalhe?: string; aviso?: string; chats?: number; ligado?: boolean; rodando?: boolean }
+
 export class Ponte {
   private base: string;
   constructor(base: string) { this.base = base.replace(/\/+$/, ""); }
+
+  /** O núcleo está vivo? GET /saude (não consulta LM Studio nem OpenJarvis): false se não responder em 3 s. */
+  async saude(): Promise<boolean> {
+    if (!this.base) return false; // ponte_url vazio = ponte desligada
+    try {
+      return await comTimeout(3000, async (signal) => {
+        const r = await fetch(`${this.base}/saude`, { signal });
+        if (!r.ok) return false;
+        const j = await r.json().catch(() => null);
+        return (j as { ok?: unknown } | null)?.ok === true;
+      });
+    } catch { return false; }
+  }
 
   /** null = ponte ausente (não respondeu em 5 s). `ok` = OpenJarvis e LM Studio no ar. */
   async status(): Promise<StatusPonte | null> {
@@ -159,11 +179,15 @@ export class Ponte {
     } catch { return null; }
   }
 
-  /** Manda o quadro (JPEG em base64) e a pergunta; devolve a resposta. 503 vira ErroPonte(codigo). */
-  async ver(jpegB64: string, pergunta: string): Promise<string> {
+  /**
+   * Manda o quadro (JPEG em base64) e a pergunta; devolve a resposta. 503 vira ErroPonte(codigo).
+   * `sessaoId`: a sessão da conversa por voz; com o núcleo numa CLI, a visão usa a mesma sessão (e o mesmo processo).
+   */
+  async ver(jpegB64: string, pergunta: string, sessaoId?: string): Promise<string> {
     const form = new FormData();
     form.append("imagem", paraBlob(jpegB64), "tela.jpg");
     form.append("pergunta", pergunta);
+    if (sessaoId) form.append("sessao_id", sessaoId);
     return comTimeout(90000, async (signal) => {
       let r: Response;
       try { r = await fetch(`${this.base}/see`, { method: "POST", body: form, signal }); }
@@ -499,4 +523,33 @@ export class Ponte {
       });
     } catch { return null; }
   }
+
+  /** JSON do núcleo; rede fora, HTTP de erro ou corpo inválido viram ErroPonte. */
+  private async json<T>(rota: string, corpo?: unknown, ms = 15000): Promise<T> {
+    if (!this.base) throw new ErroPonte("sem_ponte");
+    return comTimeout(ms, async (signal) => {
+      let r: Response;
+      try {
+        r = await fetch(`${this.base}${rota}`, corpo === undefined ? { signal } : {
+          method: "POST", headers: { "Content-Type": "application/json" }, signal, body: JSON.stringify(corpo),
+        });
+      } catch { throw new ErroPonte("rede"); }
+      const j = await r.json().catch(() => null);
+      if (!r.ok || !j || typeof j !== "object") throw new ErroPonte(String((j as { erro?: unknown } | null)?.erro ?? "http"));
+      return j as T;
+    });
+  }
+
+  /** Estado do Telegram do Vard e o que há para trazer do OpenJarvis. */
+  telegramEstado(): Promise<EstadoTelegram> { return this.json<EstadoTelegram>("/telegram"); }
+  /** Liga/desliga e define o chat permitido; o núcleo religa o poller na hora. */
+  telegramConfigurar(ligado: boolean, chat: string): Promise<{ ok: boolean; rodando?: boolean }> { return this.json("/telegram/configurar", { ligado, chat }); }
+  /** chat_id do último /start mandado ao bot. */
+  telegramDescobrirChat(): Promise<{ ok: boolean; chat_id?: string; detalhe?: string }> { return this.json("/telegram/descobrir_chat"); }
+  /** Mensagem de teste ao chat permitido. */
+  telegramTestar(): Promise<{ ok: boolean; detalhe?: string }> { return this.json("/telegram/testar", {}); }
+  /** Depois de gravar o token no cofre: o núcleo relê a configuração. */
+  telegramSincronizar(): Promise<{ ok: boolean; rodando?: boolean }> { return this.json("/telegram/sincronizar", {}); }
+  /** Traz o Telegram do OpenJarvis (o token vai do núcleo direto ao cofre; não passa pela tela). */
+  telegramTrazerOpenJarvis(substituir = false): Promise<ResultadoTrazerTelegram> { return this.json("/telegram/trazer_openjarvis", { substituir }, 30000); }
 }

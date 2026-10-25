@@ -1,6 +1,7 @@
 """API do vard-voz. Só 127.0.0.1; guardas de Host/Origin iguais às da ponte (server.py)."""
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 import threading
@@ -13,6 +14,7 @@ from fastapi.responses import JSONResponse, StreamingResponse
 
 from .motor import VOZ
 from .normalizar import normalizar
+from .modelos_stt import COMPUTE_POR_DISPOSITIVO, DISPOSITIVOS, GerenciadorModelos, configuracao_stt, ler_escolha_hud
 from .transcricao import MotorSTT, LIMITE_BYTES
 
 log = logging.getLogger("vard_voz")
@@ -65,6 +67,7 @@ def criar_app(
     motor_piper=_NAO_FORNECIDO,
     stt=None,
     carregar_em_thread: bool = True,
+    modelos_stt: GerenciadorModelos | None = None,
 ) -> FastAPI:
     if motor is None:
         # XTTS só é instanciado se estiver disponível; sem ele, um motor vazio (não pronto)
@@ -84,7 +87,7 @@ def criar_app(
     if motor_kokoro is _NAO_FORNECIDO:
         try:
             from .kokoro import MotorKokoro
-            motor_kokoro = MotorKokoro(os.environ.get("VARD_VOZ_DEVICE", "cpu"))
+            motor_kokoro = MotorKokoro(os.environ.get("VARD_KOKORO_DEVICE") or os.environ.get("VARD_VOZ_DEVICE", "cpu"))
         except Exception:
             log.warning("kokoro indisponivel")
             motor_kokoro = None
@@ -102,17 +105,33 @@ def criar_app(
         except Exception:
             log.warning("piper-tts indisponivel")
             motor_piper = None
+    # Escolha da aba Transcrição (hud.config.json) com prioridade; VARD_STT_* ficam de reserva.
+    escolha = configuracao_stt(ler_escolha_hud(), os.environ)
     if stt is None:
         # STT é opcional: só instancia se o extra estiver instalado. Sem ele, /transcribe devolve 503.
         try:
-            stt = MotorSTT(
-                modelo=os.environ.get("VARD_STT_MODEL", "base"),
-                device=os.environ.get("VARD_STT_DEVICE", "cpu"),
-                compute_type=os.environ.get("VARD_STT_COMPUTE", "int8"),
-            )
+            stt = MotorSTT(modelo=escolha["modelo"], device=escolha["device"], compute_type=escolha["compute"])
         except Exception:
             log.warning("MotorSTT indisponível; /transcribe retornará 503 até instalação do extra stt")
             stt = None
+    else:
+        escolha["dispositivo"] = getattr(stt, "device", "")
+    if modelos_stt is None:
+        modelos_stt = GerenciadorModelos()
+    # Estado da troca de modelo pedida pela tela (a carga roda em segundo plano).
+    troca_stt = {"dispositivo": escolha["dispositivo"], "carregando": False, "erro": None}
+
+    def _kokoro_instalado() -> bool:
+        """Kokoro carregado, ou instalado (biblioteca + arquivos do modelo) e pronto para carregar sob demanda."""
+        if motor_kokoro is None:
+            return False
+        if motor_kokoro.pronta:
+            return True
+        instalado = getattr(motor_kokoro, "instalado", None)
+        try:
+            return bool(instalado()) if callable(instalado) else False
+        except Exception:
+            return False
 
     # Lista de motores opcionais na ordem de prioridade de reserva.
     motores_opcionais = [
@@ -135,9 +154,16 @@ def criar_app(
                             m.carregar()
                         except Exception:
                             log.exception("falha ao carregar o motor %s", nome)
+                # Transcrição também já na abertura: a primeira fala não espera a carga do modelo (~15 s na GPU).
+                if stt is not None and not stt.pronta:
+                    try:
+                        stt.carregar()
+                    except Exception:
+                        log.exception("falha ao carregar o STT; a rota tenta de novo no primeiro pedido")
             threading.Thread(target=_carga, daemon=True, name="carga-motor").start()
         yield
 
+    trava_stt = asyncio.Lock()
     app = FastAPI(title="vard-voz", lifespan=vida)
 
     @app.middleware("http")
@@ -183,12 +209,17 @@ def criar_app(
             device = motor.device
         return {
             "pronta": pronta,
+            "ok": True,
+            "pid": os.getpid(),
+            "versao": "0.1.0",
             "voz": voz_atual,
             "device": device,
             "aquecida": pronta,
             "xtts": xtts_instalado,
             "xtts_carregado": xtts_carregado,
-            "kokoro": kokoro_ok,
+            # Como o XTTS: kokoro=true é instalado (carrega sob demanda); kokoro_carregado diz se está na memória.
+            "kokoro": kokoro_ok or _kokoro_instalado(),
+            "kokoro_carregado": kokoro_ok,
             "edge": edge_ok,
             "piper": piper_ok,
         }
@@ -198,14 +229,17 @@ def criar_app(
         # 0.9.4 leve rodada 2: lista vozes do XTTS mesmo descarregado (ele está instalado
         # e pode ser recarregado sob demanda). Só devolve 503 se nenhum motor estiver disponível.
         xtts_instalado = not isinstance(motor, _MotorAusente)
-        algum_motor_pronto = motor.pronta or any(m is not None and m.pronta for _, m in motores_opcionais)
+        kokoro_instalado = _kokoro_instalado()
+        algum_motor_pronto = motor.pronta or kokoro_instalado or any(m is not None and m.pronta for _, m in motores_opcionais)
         if not xtts_instalado and not algum_motor_pronto:
             return JSONResponse({"erro": "aquecendo"}, status_code=503)
         # Lista vozes do XTTS (mesmo descarregado, motor.vozes() devolve pelo menos VOZ)
         lista = list(motor.vozes()) if xtts_instalado else []
+        por_motor: dict[str, list[str]] = {"xtts": list(lista)} if xtts_instalado else {}
         for nome, m in motores_opcionais:
-            if m is not None and m.pronta:
-                for v in m.vozes():
+            if m is not None and (m.pronta or (nome == "kokoro" and kokoro_instalado)):
+                por_motor[nome] = list(m.vozes())
+                for v in por_motor[nome]:
                     if v not in lista:
                         lista.append(v)
         if motor.pronta:
@@ -221,7 +255,8 @@ def criar_app(
             atual = next(iter(VOZES_PIPER_PT_BR), "")
         else:
             atual = ""
-        return {"vozes": lista, "atual": atual}
+        # por_motor: de que motor é cada voz (a aba Voz monta a lista de cada card com ela).
+        return {"vozes": lista, "atual": atual, "por_motor": por_motor}
 
     def _xtts_utilizavel() -> bool:
         """XTTS carregado agora, ou descarregado por ociosidade (já carregou antes): falar() recarrega sozinho."""
@@ -261,8 +296,18 @@ def criar_app(
     @app.post("/v1/speech/transcribe")
     async def transcrever(request: Request):
         """Transcrição STT própria (compatível com OpenJarvis). Requer extra 'stt' instalado."""
-        if stt is None or not stt.pronta:
+        if stt is None:
             return JSONResponse({"erro": "stt_indisponivel"}, status_code=503)
+        if not stt.pronta:
+            # O modelo de transcrição não entra na carga da abertura: carrega no primeiro pedido (uma vez só).
+            async with trava_stt:
+                if not stt.pronta:
+                    try:
+                        await run_in_threadpool(stt.carregar)
+                    except Exception:
+                        log.exception("falha ao carregar o STT")
+                        return JSONResponse({"erro": "stt_indisponivel"}, status_code=503)
+        idioma = None
         ct = request.headers.get("content-type", "")
         if "multipart/form-data" in ct:
             form = await request.form()
@@ -270,6 +315,7 @@ def criar_app(
             if arquivo is None or not hasattr(arquivo, "read"):
                 return JSONResponse({"erro": "arquivo_ausente"}, status_code=400)
             audio = await arquivo.read()
+            idioma = str(form.get("language") or "").strip() or None
         else:
             audio = await request.body()
         if not audio:
@@ -277,13 +323,98 @@ def criar_app(
         if len(audio) > LIMITE_UPLOAD_STT:
             return JSONResponse({"erro": "audio_grande_demais"}, status_code=413)
         try:
-            texto, confianca = await run_in_threadpool(stt.transcrever_bytes, audio)
+            texto, confianca = await run_in_threadpool(stt.transcrever_bytes, audio, idioma)
         except ValueError as exc:
             return JSONResponse({"erro": str(exc)}, status_code=400)
         except RuntimeError as exc:
             log.warning("transcrever falhou: %s", exc)
             return JSONResponse({"erro": "stt_falhou"}, status_code=503)
         return {"text": texto, "confidence": confianca}
+
+    def _stt_ativo() -> str:
+        return modelos_stt.normalizar(getattr(stt, "modelo_nome", "")) if stt is not None else ""
+
+    @app.get("/v1/stt/modelos")
+    def stt_modelos():
+        """Catálogo da aba Transcrição: estado no cache, o ativo e a troca em andamento."""
+        ativo = _stt_ativo()
+        return {
+            "modelos": [{**m, "ativo": m["id"] == ativo} for m in modelos_stt.listar()],
+            "ativo": ativo,
+            "dispositivo": troca_stt["dispositivo"],
+            "device": getattr(stt, "device", "") if stt is not None else "",
+            "pronta": bool(stt is not None and stt.pronta),
+            "carregando": troca_stt["carregando"],
+            "erro": troca_stt["erro"],
+        }
+
+    @app.post("/v1/stt/modelos/{modelo}/baixar")
+    def stt_baixar(modelo: str):
+        try:
+            return JSONResponse(modelos_stt.baixar(modelo), status_code=202)
+        except KeyError:
+            return JSONResponse({"erro": "modelo_desconhecido"}, status_code=404)
+
+    @app.get("/v1/stt/modelos/{modelo}/progresso")
+    def stt_progresso(modelo: str):
+        try:
+            return modelos_stt.progresso(modelo)
+        except KeyError:
+            return JSONResponse({"erro": "modelo_desconhecido"}, status_code=404)
+
+    @app.post("/v1/stt/modelos/{modelo}/apagar")
+    def stt_apagar(modelo: str):
+        try:
+            if modelos_stt.normalizar(modelo) == _stt_ativo():
+                return JSONResponse({"erro": "modelo_em_uso"}, status_code=409)
+            modelos_stt.apagar(modelo)
+        except KeyError:
+            return JSONResponse({"erro": "modelo_desconhecido"}, status_code=404)
+        except RuntimeError:
+            return JSONResponse({"erro": "modelo_baixando"}, status_code=409)
+        return {"ok": True}
+
+    @app.post("/v1/stt/ativar")
+    def stt_ativar(corpo: dict):
+        """Troca o modelo e/ou o dispositivo em segundo plano; o serviço segue no ar durante a carga."""
+        if stt is None:
+            return JSONResponse({"erro": "stt_indisponivel"}, status_code=503)
+        if troca_stt["carregando"]:
+            return JSONResponse({"erro": "trocando"}, status_code=409)
+        nome = str(corpo.get("modelo") or "").strip()
+        if nome:
+            try:
+                nome = modelos_stt.normalizar(nome)
+                if not modelos_stt.baixado(nome):
+                    return JSONResponse({"erro": "modelo_nao_baixado"}, status_code=409)
+            except KeyError:
+                return JSONResponse({"erro": "modelo_desconhecido"}, status_code=404)
+        else:
+            nome = stt.modelo_nome
+        disp = corpo.get("dispositivo")
+        if disp is None or disp == "":
+            disp, device, compute = troca_stt["dispositivo"], stt.device, stt.compute_type
+        elif disp in DISPOSITIVOS:
+            device, compute = disp, COMPUTE_POR_DISPOSITIVO[disp]
+        else:
+            return JSONResponse({"erro": "dispositivo_invalido"}, status_code=400)
+        troca_stt.update(carregando=True, erro=None)
+
+        def _trocar():
+            try:
+                stt.trocar(nome, device, compute)
+                troca_stt["dispositivo"] = disp
+            except Exception as exc:
+                log.warning("troca do modelo de transcrição falhou: %s", exc)
+                troca_stt["erro"] = str(exc) or type(exc).__name__
+            finally:
+                troca_stt["carregando"] = False
+
+        if carregar_em_thread:
+            threading.Thread(target=_trocar, daemon=True, name="troca-stt").start()
+        else:
+            _trocar()
+        return JSONResponse({"ok": True, "carregando": troca_stt["carregando"]}, status_code=202)
 
     @app.post("/falar")
     async def falar(corpo: dict, request: Request, fluxo: int = 0):
@@ -295,6 +426,11 @@ def criar_app(
         except (TypeError, ValueError):
             return JSONResponse({"erro": "velocidade_invalida"}, status_code=400)
         voz = str(corpo.get("voz", "") or "").strip() or None
+        if voz is not None and motor_kokoro is not None and not motor_kokoro.pronta:
+            from .kokoro import VOZES_KOKORO
+            if voz in VOZES_KOKORO and _kokoro_instalado():
+                # Instalado depois que o serviço subiu (ou carga da abertura ainda não chegou nele): carrega agora.
+                await run_in_threadpool(motor_kokoro.carregar)
         alvo = _motor_para_voz(voz)
         if alvo is None:
             return JSONResponse({"erro": "aquecendo"}, status_code=503)

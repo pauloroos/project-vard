@@ -98,10 +98,11 @@ def _registrar(msg: str) -> None:
 
 
 def _supervisor_ativo() -> bool:
-    """Verifica se o supervisor está habilitado e o app novo está vivo."""
+    """supervisor:true na instalação (app único): a bandeja nativa do vard.exe assume.
+    Só a flag basta; o app.json da caixa IPC pode nem existir (0.9.7)."""
     try:
-        app = modo._app_vivo()
-        return app is not None
+        from vard import instalacao
+        return instalacao.supervisor_ativo() or modo._app_vivo() is not None
     except Exception:
         return False
 

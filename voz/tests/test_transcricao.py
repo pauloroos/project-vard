@@ -72,7 +72,8 @@ def test_importacao_sem_gpu_nem_download():
     import sys
 
     # Remove do cache se já foi importado
-    mods_remover = [k for k in sys.modules if k.startswith("vard_voz.transcricao")]
+    # (o faster-whisper também: com o extra instalado, outro teste pode tê-lo importado antes)
+    mods_remover = [k for k in sys.modules if k.startswith(("vard_voz.transcricao", "faster_whisper"))]
     for k in mods_remover:
         del sys.modules[k]
 

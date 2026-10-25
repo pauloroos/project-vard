@@ -5,6 +5,8 @@
  *   "situacao": "treinada", "criada_em": "2026-10-17T12:00:00Z", "validada_em": null }],
  *   "desligadas": ["computador"] }
  * Só receitas do usuário são persistidas; fábrica fica no código. desligadas é opcional na leitura.
+ * "fabrica" (opcional) guarda, por ID de fábrica, os ajustes { nome?, quando?, instrucoes? } que a tela ou o MCP
+ * fizeram; restaurar o padrão apaga a entrada. Cada campo presente segue os mesmos limites das receitas.
  * IDs: letras minúsculas ASCII/números separados por hífen, únicos e distintos dos IDs de fábrica.
  * Datas: UTC ISO 8601, segundos ou milissegundos; treinada exige null, validada exige data.
  * Campos desconhecidos são preservados. Leitura inválida falha sem sobrescrever o arquivo.
@@ -13,7 +15,7 @@
  */
 import { invoke } from "@tauri-apps/api/core";
 
-export const IDS_FABRICA = ["conversa", "computador", "oficina", "consultas", "memoria", "reuniao", "sistema"] as const;
+export const IDS_FABRICA = ["conversa", "computador", "oficina", "consultas", "memoria", "reuniao", "sistema", "resumo-manha", "pesquisa", "agente-remoto"] as const;
 export type SituacaoHabilidade = "treinada" | "validada";
 export interface Habilidade {
   id: string;
@@ -25,7 +27,8 @@ export interface Habilidade {
   criada_em: string;
   validada_em: string | null;
 }
-export interface HabilidadesConfig { versao: 1; habilidades: Habilidade[]; desligadas: string[] }
+export interface AjusteFabrica { nome?: string; quando?: string[]; instrucoes?: string }
+export interface HabilidadesConfig { versao: 1; habilidades: Habilidade[]; desligadas: string[]; fabrica?: Record<string, AjusteFabrica> }
 export const HABILIDADES_PADRAO: HabilidadesConfig = { versao: 1, habilidades: [], desligadas: [] };
 export const LIMITES_HABILIDADES = { habilidades: 200, nome: 80, frases: 10, frase: 200, instrucoes: 4000 } as const;
 export const INSTRUCAO_HABILIDADES = "Há habilidades cadastradas pelo usuário; antes de agir num pedido, consulte listar_habilidades do MCP de configurações, se a ferramenta estiver disponível.";
@@ -43,6 +46,17 @@ function data(valor: unknown): boolean {
   return Number.isFinite(n) && new Date(n).toISOString() === (valor.includes(".") ? valor : valor.replace("Z", ".000Z"));
 }
 
+/** Nome, quando e instrucoes: obrigatórios nas receitas; nos ajustes de fábrica, só os presentes são conferidos. */
+function validarTextos(h: Record<string, unknown>, exigir: boolean) {
+  const presente = (campo: string) => exigir || campo in h;
+  if ((presente("nome") && !texto(h.nome)) || (presente("instrucoes") && !texto(h.instrucoes))
+    || (presente("quando") && (!Array.isArray(h.quando) || h.quando.length === 0 || !h.quando.every(texto)))) throw new Error("Preencha nome, frases de exemplo e instruções");
+  if (typeof h.nome === "string" && h.nome.length > LIMITES_HABILIDADES.nome) throw new Error("Nome deve ter até 80 caracteres");
+  if (Array.isArray(h.quando) && h.quando.length > LIMITES_HABILIDADES.frases) throw new Error("Use até 10 frases de exemplo");
+  if (Array.isArray(h.quando) && h.quando.some((f: string) => f.length > LIMITES_HABILIDADES.frase)) throw new Error("Cada frase deve ter até 200 caracteres");
+  if (typeof h.instrucoes === "string" && h.instrucoes.length > LIMITES_HABILIDADES.instrucoes) throw new Error("Instruções devem ter até 4000 caracteres");
+}
+
 export function validarHabilidades(raw: unknown): HabilidadesConfig {
   const obj = objeto(raw, ["versao", "habilidades", "desligadas"]);
   if (obj.versao !== 1 || !Array.isArray(obj.habilidades)) throw new Error("Versão ou lista de habilidades inválida");
@@ -56,15 +70,21 @@ export function validarHabilidades(raw: unknown): HabilidadesConfig {
     const h = objeto(bruto, ["id", "nome", "quando", "instrucoes", "ligada", "situacao", "criada_em", "validada_em"]);
     if (typeof h.id !== "string" || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(h.id) || ids.has(h.id)) throw new Error("ID de habilidade inválido ou repetido");
     ids.add(h.id);
-    if (!texto(h.nome) || !texto(h.instrucoes) || !Array.isArray(h.quando) || h.quando.length === 0 || !h.quando.every(texto)) throw new Error("Preencha nome, frases de exemplo e instruções");
-    if (h.nome.length > LIMITES_HABILIDADES.nome) throw new Error("Nome deve ter até 80 caracteres");
-    if (h.quando.length > LIMITES_HABILIDADES.frases) throw new Error("Use até 10 frases de exemplo");
-    if (h.quando.some((f) => f.length > LIMITES_HABILIDADES.frase)) throw new Error("Cada frase deve ter até 200 caracteres");
-    if (h.instrucoes.length > LIMITES_HABILIDADES.instrucoes) throw new Error("Instruções devem ter até 4000 caracteres");
+    validarTextos(h, true);
     if (typeof h.ligada !== "boolean" || !["treinada", "validada"].includes(h.situacao as string) || !data(h.criada_em)) throw new Error("Estado ou data de criação inválidos");
     if (h.situacao === "treinada" ? h.validada_em !== null : !data(h.validada_em)) throw new Error("Data de validação incompatível com a situação");
   }
+  if ("fabrica" in obj) {
+    const fabrica = obj.fabrica;
+    const valido = (v: unknown): v is Record<string, unknown> => !!v && typeof v === "object" && !Array.isArray(v);
+    if (!valido(fabrica) || Object.entries(fabrica).some(([id, a]) => !(IDS_FABRICA as readonly string[]).includes(id) || !valido(a))) throw new Error("Ajustes de fábrica inválidos");
+    for (const ajuste of Object.values(fabrica)) validarTextos(ajuste as Record<string, unknown>, false);
+  }
   return structuredClone({ ...obj, desligadas }) as unknown as HabilidadesConfig;
+}
+/** Há algo que o agente deve consultar: receita do usuário ligada ou fábrica personalizada e ligada. */
+export function temHabilidadesLigadas(cfg: HabilidadesConfig): boolean {
+  return cfg.habilidades.some((h) => h.ligada) || Object.keys(cfg.fabrica ?? {}).some((id) => !cfg.desligadas.includes(id));
 }
 export async function lerHabilidades(): Promise<HabilidadesConfig> {
   const raw = await invoke<unknown>("ler_habilidades");

@@ -8,7 +8,7 @@ import pytest
 
 CONFIG = Path(__file__).resolve().parent.parent.parent / "config" / "examples" / "openjarvis.example.toml"
 # MCP -> quantas ferramentas. Cada tarefa que cria ferramenta atualiza aqui.
-MCPS = {"mesa": 7, "oficina": 7, "consulta": 7, "memoria": 3, "reuniao": 6}
+MCPS = {"mesa": 15, "oficina": 7, "consulta": 7, "memoria": 3, "reuniao": 6}
 
 
 def _allowlist() -> set[str]:

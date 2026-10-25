@@ -60,6 +60,12 @@ describe("segredos (cofre generalizado)", () => {
       });
     });
 
+    it("aceita o canal do Telegram (mesmo alvo vard:canal:telegram do núcleo)", async () => {
+      mockInvoke.mockResolvedValue(undefined);
+      await cofreGravar("canal", "telegram", "123:ficticio");
+      expect(mockInvoke).toHaveBeenCalledWith("cofre_gravar", { tipo: "canal", id: "telegram", valor: "123:ficticio" });
+    });
+
     it("recusa tipo desconhecido", async () => {
       await expect(cofreGravar("agente", "claude", "v")).rejects.toThrow("tipo de credencial desconhecido");
       expect(mockInvoke).not.toHaveBeenCalled();

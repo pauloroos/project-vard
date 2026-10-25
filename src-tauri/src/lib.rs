@@ -10,6 +10,7 @@ pub mod servicos;
 pub mod nucleo;
 pub mod instalacao;
 pub mod ciclo;
+mod migracao;
 
 use serde_json::Value;
 #[cfg(not(test))]
@@ -199,7 +200,8 @@ fn criar_bandeja(app: &AppHandle, no_topo: bool, invisivel_ligado: bool, nao_ouv
 #[cfg(not(test))]
 fn criar_bandeja_supervisor(app: &AppHandle, no_topo: bool, invisivel_ligado: bool, nao_ouvir_ligado: bool, nao_falar_ligado: bool) -> tauri::Result<()> {
     let foto_inicial = ciclo::ciclo_info(true);
-    let itens = bandeja::itens_menu(&foto_inicial, nao_ouvir_ligado, nao_falar_ligado, no_topo, invisivel_ligado);
+    let reuniao_ativa = foto_inicial.reuniao_ativa;
+    let itens = bandeja::itens_menu(&foto_inicial, nao_ouvir_ligado, nao_falar_ligado, no_topo, invisivel_ligado, reuniao_ativa);
     let menu = montar_menu_supervisor(app, &itens)?;
 
     // Guarda referências dos checks para sincronização externa (busca por ID via get + downcast)
@@ -316,6 +318,23 @@ fn dispatch_menu_supervisor(app: &AppHandle, id: &str) {
             let _ = app.emit_to(JANELA, "invisivel", ligado);
             let _ = app.emit_to(janelas::CONFIG, "invisivel", ligado);
         }
+        "reuniao_gravar" | "reuniao_encerrar" => {
+            // Dispara gravação ou encerramento de reunião via ponte (mesmo caminho do widget).
+            let rota = if id == "reuniao_gravar" { "iniciar" } else { "encerrar" };
+            let url = format!("http://127.0.0.1:{}/reuniao/{}", crate::instalacao::PORTA_NUCLEO_PADRAO, rota);
+            std::thread::spawn(move || {
+                if let Ok(client) = reqwest::blocking::Client::builder().timeout(std::time::Duration::from_secs(10)).build() {
+                    match client.post(&url).send() {
+                        Ok(resp) => {
+                            if !resp.status().is_success() {
+                                eprintln!("bandeja: reuniao {}: HTTP {}", rota, resp.status());
+                            }
+                        }
+                        Err(e) => eprintln!("bandeja: reuniao {}: {}", rota, e),
+                    }
+                }
+            });
+        }
         "log" => {
             // Abre log do serviço com falha ou ciclo.log como fallback
             let dados = ciclo::pasta_dados();
@@ -350,7 +369,8 @@ pub fn reconstruir_menu_bandeja(app: &AppHandle, foto: &ciclo::FotoCiclo) {
     let topo = cfg.get("sempre_no_topo").and_then(|v| v.as_bool()).unwrap_or(true);
     let invisivel = cfg.get("invisivel").and_then(|v| v.as_bool()).unwrap_or(false);
 
-    let itens = bandeja::itens_menu(foto, nao_ouvir, nao_falar, topo, invisivel);
+    let reuniao_ativa = foto.reuniao_ativa;
+    let itens = bandeja::itens_menu(foto, nao_ouvir, nao_falar, topo, invisivel, reuniao_ativa);
     if let Ok(menu) = montar_menu_supervisor(app, &itens) {
         let _ = icone.set_menu(Some(menu));
     }
@@ -439,17 +459,50 @@ pub fn run() {
             let raiz = instalacao::resolver_raiz(&recursos);
             let dados = ciclo::pasta_dados();
             let arquivo = instalacao::arquivo_instalacao();
-            let config_instalacao = instalacao::ler_instalacao(&arquivo).unwrap_or_default();
+            let mut config_instalacao = instalacao::ler_instalacao(&arquivo).unwrap_or_else(|_| {
+                instalacao::registrar_setup(&dados, "setup: instalacao.json inválido; supervisor não ativado");
+                Default::default()
+            });
+            let mut migrou = false;
+            let atalho = migracao::atalho_startup();
+            // Pré-checagem antes de mudar configuração, atalho ou processos.
+            if !config_instalacao.supervisor {
+                let exe_atual = std::env::current_exe().unwrap_or_default();
+                let nucleo = instalacao::preparar_nucleo(cfg!(debug_assertions), &recursos, &raiz, &config_instalacao, &dados, env!("CARGO_PKG_VERSION"));
+                let resultado = atalho.as_ref().map_err(Clone::clone).and_then(|atalho| {
+                    migracao::migrar_se_necessario(&arquivo, &dados, &exe_atual, nucleo, atalho)
+                });
+                match resultado {
+                    Ok(true) => {
+                        instalacao::registrar_setup(&dados, "setup: migração gravada; aguardando núcleo próprio por até 60 s");
+                        config_instalacao.supervisor = true;
+                        migrou = true;
+                    }
+                    Ok(false) => {} // já era supervisor ou não aplicável
+                    Err(e) => instalacao::registrar_setup(&dados, &format!("setup: migração não realizada: {e}")),
+                }
+            }
             {
-                let (_iniciados, avisos) = instalacao::iniciar_servicos(
+                let (iniciados, _avisos) = instalacao::iniciar_servicos(
                     &config_instalacao,
                     &recursos,
                     &raiz,
                     &dados,
                     env!("CARGO_PKG_VERSION"),
                 );
-                for aviso in &avisos {
-                    eprintln!("instalacao: {aviso}");
+                if migrou {
+                    let respondeu = iniciados.iter().any(|id| id == "nucleo") && migracao::aguardar_saude(std::time::Duration::from_secs(60), || {
+                        servicos::foto("nucleo").is_ok_and(|f| f.estado == supervisor::EstadoServico::Ok)
+                    });
+                    let resultado = atalho.as_ref().map_err(Clone::clone).and_then(|atalho| {
+                        migracao::concluir_ou_reverter(&arquivo, &dados, atalho, respondeu,
+                            || servicos::parar_e_aguardar(&iniciados, std::time::Duration::from_secs(5)),
+                            || migracao::iniciar_legado(&config_instalacao, &arquivo, &dados))
+                    });
+                    config_instalacao.supervisor = resultado.as_ref().is_ok_and(|confirmada| *confirmada);
+                    if let Err(e) = resultado {
+                        instalacao::registrar_setup(&dados, &format!("setup: retorno ao caminho antigo falhou: {e}"));
+                    }
                 }
             }
 

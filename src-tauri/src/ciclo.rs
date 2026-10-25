@@ -267,6 +267,8 @@ pub struct FotoCiclo {
     pub detalhe: Option<String>,
     pub servicos_ligados: Vec<String>,
     pub supervisor_ativo: bool,
+    pub reuniao_ativa: bool,
+    pub reuniao_pasta: Option<String>,
 }
 
 /// Estado interno da fila serial.
@@ -363,6 +365,8 @@ pub fn ciclo_info(supervisor_ativo: bool) -> FotoCiclo {
         detalhe: estado.detalhe,
         servicos_ligados: foto.servicos_ligados,
         supervisor_ativo,
+        reuniao_ativa: foto.reuniao_ativa,
+        reuniao_pasta: foto.reuniao_pasta.clone(),
     }
 }
 
@@ -453,6 +457,7 @@ fn executar_tentar() -> Result<ModoCiclo, String> {
     crate::servicos::repetir_desistidos();
     Ok(ModoCiclo::Ligado)
 }
+
 
 /// Lê `ponte_url` do hud.config.json sem AppHandle (a thread executora não tem acesso ao app).
 /// Retorna None se o arquivo não existir ou o campo estiver ausente/vazio.
@@ -832,7 +837,7 @@ pub(crate) mod testes {
     pub(crate) fn ambiente_isolado() -> AmbienteTeste {
         let lock = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let pasta = tempfile::tempdir().unwrap();
-        let nomes = ["LOCALAPPDATA", "APPDATA", "HOME", "VARD_DADOS", "VARD_INSTALACAO", "VARD_RAIZ_DEV"];
+        let nomes = ["LOCALAPPDATA", "APPDATA", "HOME", "VARD_DADOS", "VARD_INSTALACAO", "VARD_RAIZ_DEV", "VARD_HUD_CONFIG_DIR"];
         let anteriores = nomes.iter().map(|&n| (n, std::env::var_os(n))).collect();
         for nome in nomes {
             unsafe { std::env::set_var(nome, pasta.path().join(nome)) };

@@ -1,6 +1,7 @@
 # Instalação dos provedores
 
-Em **Quem responde → Instalar ou conectar**, o Vard lista os provedores disponíveis.
+Em **Núcleo → Instalar ou conectar**, o Vard lista os provedores que ainda não estão
+instalados ou cadastrados; um provedor já cadastrado (do mesmo tipo) não volta como sugestão.
 Antes de instalar, mostra o comando, os requisitos e o tamanho aproximado quando o
 fornecedor o informa. Modelos são baixados separadamente. A instalação começa apenas
 depois de **Confirmar instalação** e o núcleo aceita uma por vez.

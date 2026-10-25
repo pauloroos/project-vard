@@ -1,5 +1,5 @@
 import { gatilhos, type Config } from "../config/config";
-import { INSTRUCAO_HABILIDADES, lerHabilidades } from "../config/habilidades";
+import { INSTRUCAO_HABILIDADES, lerHabilidades, temHabilidadesLigadas } from "../config/habilidades";
 import { fluxoParaWav } from "../audio/wav";
 import { FALAS, saudacaoPara } from "./falas";
 import { cortarEmFrases } from "./frases";
@@ -21,10 +21,11 @@ function descartar(som: Som | null | undefined): void {
 }
 
 export interface DepsConversa {
+  /** null quando cerebro=proprio e toggle usar_openjarvis está desligado (sem-openjarvis.md). */
   oj: {
     perguntar(mensagens: Mensagem[], sinal?: AbortSignal): Promise<string>;
     sintetizar(texto: string, voz: string, velocidade: number): Promise<ArrayBuffer>;
-  };
+  } | null;
   boca: {
     falando: boolean;
     tocar(wav: ArrayBuffer): Promise<void>;
@@ -48,7 +49,7 @@ export interface DepsConversa {
   config: Pick<Config, "nome" | "variantes" | "voz" | "velocidade" | "instrucao_formato" | "conversa_ms"> & Partial<Pick<Config, "usuario">>;
   /** Ponte opcional do Vard: olhos na tela e modo jogo. */
   ponte?: {
-    ver(jpegB64: string, pergunta: string): Promise<string>;
+    ver(jpegB64: string, pergunta: string, sessaoId?: string): Promise<string>;
     modo(verbo: string): Promise<boolean>;
     /** Cérebro próprio: admite um pedido e devolve o estado inicial. */
     pedir?(texto: string, sessaoId: string): Promise<{ pedido_id: string; sessao_id: string; estado: string }>;
@@ -82,6 +83,8 @@ export interface DepsConversa {
   aoDesligarConversaAberta?: () => void;
   /** Liga a máquina ConversaAberta sem duplicar: chamado por "fica me ouvindo". */
   aoLigarConversaAberta?: () => void;
+  /** Chamado quando a resposta foi entregue (fim da fala): a conversa aberta volta a ouvir. */
+  aoProcessamentoConcluido?: () => void;
   /** Reunião em andamento (a ponte avisa): o widget não fala nada enquanto durar. */
   reuniaoAtiva?: () => boolean;
 }
@@ -196,6 +199,8 @@ export class Conversa {
           console.warn("reserva pela voz própria falhou", erro);
         }
       }
+      // Com cerebro=proprio e toggle desligado, d.oj pode ser null: não há OpenJarvis como reserva.
+      if (!d.oj) throw new Error("Sem voz disponível (OpenJarvis desligado e nenhuma voz própria/reserva configurada)");
       return d.oj.sintetizar(frase, d.config.voz, d.config.velocidade);
     };
     let caiuNoMeio = false; // a voz caiu no meio de uma frase: o resto da resposta nem tenta a voz
@@ -326,7 +331,8 @@ export class Conversa {
           if (ac.signal.aborted) return;
           jpeg = await this.d.capturar();
         } finally { this.d.depoisDaCaptura?.(); }
-        resposta = (await this.d.ponte.ver(jpeg, comando)).trim();
+        const sessao = this.d.sessaoVoz?.(); // a visão entra na mesma sessão da voz (uma CLI só)
+        resposta = (await (sessao ? this.d.ponte.ver(jpeg, comando, sessao) : this.d.ponte.ver(jpeg, comando))).trim();
       } else if (this.d.cerebro === "proprio" && this.d.ponte?.pedir && this.d.sessaoVoz) {
         // Cérebro próprio: admite pedido e espera texto via EventoPedido (SSE).
         const sessaoId = this.d.sessaoVoz();
@@ -395,9 +401,11 @@ export class Conversa {
         let instrucao = this.d.config.instrucao_formato;
         try {
           const cfg = await lerHabilidades();
-          if (cfg.habilidades.some((h) => h.ligada)) instrucao += `\n${INSTRUCAO_HABILIDADES}`;
+          if (temHabilidadesLigadas(cfg)) instrucao += `\n${INSTRUCAO_HABILIDADES}`;
         } catch { /* Arquivo ilegível não impede conversar nem afirma receitas inexistentes. */ }
         if (ac.signal.aborted || this.emJogo()) return;
+        // Com cerebro=proprio e toggle desligado, d.oj é null: não há OpenJarvis para perguntar.
+        if (!this.d.oj) throw new Error("OpenJarvis desligado e nenhum provedor próprio configurado para responder.");
         resposta = (await this.d.oj.perguntar([
           { role: "system", content: instrucao },
           ...this.historico,
@@ -425,7 +433,7 @@ export class Conversa {
     if (this.emJogo()) return;
     await this.falarEmFrases(resposta, ac.signal);
     if (this.pergunta === ac) this.pergunta = null;
-    if (!ac.signal.aborted && !this.emJogo()) { this.abrirCanal(); this.mudar("repouso"); }
+    if (!ac.signal.aborted && !this.emJogo()) { this.abrirCanal(); this.d.aoProcessamentoConcluido?.(); this.mudar("repouso"); }
   }
 
   private async ativarJogo(): Promise<void> {

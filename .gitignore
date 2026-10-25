@@ -17,3 +17,5 @@ segredos.toml
 .worktrees/
 .coordenacao/
 build/
+# saída local do vitest (traz caminhos da máquina)
+.vitest/

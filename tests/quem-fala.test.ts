@@ -41,12 +41,15 @@ describe("Quem fala", () => {
     expect(aba.ler().voz_motor).toBe("edge");
   });
 
-  it("atualizar disponibilidade não apaga uma chave digitada durante a consulta", async () => {
+  it("atualizar disponibilidade não apaga uma chave cadastrada durante a consulta", async () => {
     const { raiz, aba } = await abrir();
     let responder!: (r: Response) => void;
     buscar.mockImplementationOnce(() => new Promise<Response>((ok) => { responder = ok; }));
     const atualizando = aba.atualizar();
-    raiz.querySelector<HTMLInputElement>("#cfg-gemini_chave")!.value = "credencial-ficticia";
+    raiz.querySelector<HTMLButtonElement>("#cfg-voz-chave-gemini")!.click();
+    document.querySelector<HTMLInputElement>('.modal input[type="password"]')!.value = "credencial-ficticia";
+    [...document.querySelectorAll<HTMLButtonElement>(".modal-acoes button")].find((b) => b.textContent === "Salvar")!.click();
+    await new Promise((r) => setTimeout(r, 0));
     responder(new Response(JSON.stringify({ xtts: true, edge: true })));
     await atualizando;
     expect(aba.ler().gemini_chave).toBe("credencial-ficticia");
@@ -109,24 +112,24 @@ describe("Quem fala", () => {
     const card = raiz.querySelector<HTMLButtonElement>('[data-motor="xtts"]')!;
     expect(card.textContent).toContain("Instalar");
     card.click();
-    expect(instalar).toHaveBeenCalledWith("xtts-v2");
+    expect(instalar).not.toHaveBeenCalled(); // primeiro pergunta
+    await vi.waitFor(() => expect(document.querySelector(".modal")).toBeTruthy());
+    [...document.querySelectorAll<HTMLButtonElement>(".modal-acoes button")].find((b) => b.textContent === "Instalar e usar")!.click();
+    await vi.waitFor(() => expect(instalar).toHaveBeenCalledWith("xtts-v2", expect.anything()));
     expect(aba.ler().voz_motor).toBe("edge");
   });
 
-  it("nuvem sem chave avisa e leva ao cadastro sem trocar o ativo", async () => {
+  it("nuvem sem chave abre o modal de chave sem trocar o ativo", async () => {
     const { raiz, aba } = await abrir();
     const card = raiz.querySelector<HTMLButtonElement>('[data-motor="gemini"]')!;
     expect(card.textContent).toContain("Falta a chave");
     card.click();
     expect(aba.ler().voz_motor).toBe("xtts");
-    expect(document.activeElement).toBe(raiz.querySelector("#cfg-gemini_chave"));
+    expect(document.activeElement).toBe(document.querySelector('.modal input[type="password"]'));
   });
 
-  it("troca para Gemini com chave e preserva o valor digitado entre motores", async () => {
-    const { raiz, aba } = await abrir();
-    const campo = raiz.querySelector<HTMLInputElement>("#cfg-gemini_chave")!;
-    campo.value = "credencial-ficticia";
-    campo.dispatchEvent(new Event("input"));
+  it("troca para Gemini com chave e preserva a chave entre motores", async () => {
+    const { raiz, aba } = await abrir({ gemini_chave: "credencial-ficticia" });
     raiz.querySelector<HTMLButtonElement>('[data-motor="gemini"]')!.click();
     expect(aba.ler()).toMatchObject({ voz_provedor: "gemini", gemini_voz: "Kore", gemini_chave: "credencial-ficticia" });
     raiz.querySelector<HTMLButtonElement>('[data-motor="edge"]')!.click();

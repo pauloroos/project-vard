@@ -136,15 +136,82 @@ def test_see_com_mais_cuidado_vai_ao_omniroute(cliente, monkeypatch, tmp_path):
     assert r.status_code == 200 and r.json()["nuvem"] is True
     req = rota.calls[0].request
     assert req.headers["authorization"] == "Bearer chave-teste"
-    assert '"model": "combo/t1-work"' in req.content.decode() or '"model":"combo/t1-work"' in req.content.decode()
+    assert '"model": "combo/equipe"' in req.content.decode() or '"model":"combo/equipe"' in req.content.decode()
     assert "reasoning_effort" not in req.content.decode()
 
 
 @respx.mock
 def test_see_lmstudio_fora_devolve_503(cliente):
+    # A visão fora tem código próprio: a fala não pode dizer que o núcleo caiu.
     respx.post("http://127.0.0.1:1234/v1/chat/completions").mock(side_effect=httpx.ConnectError("x"))
     r = cliente.post("/see", files={"imagem": ("q.jpg", JPEG_1PX, "image/jpeg")}, data={"pergunta": "o que vê?"})
-    assert r.status_code == 503 and r.json()["erro"] == "modelo_fora"
+    assert r.status_code == 503 and r.json()["erro"] == "visao_fora"
+
+
+def test_see_com_nucleo_cli_manda_a_captura_para_a_cli(cliente, monkeypatch):
+    # Núcleo numa CLI: a imagem vai para ela (num arquivo que ela abre), nunca para o LM Studio.
+    monkeypatch.setattr(server, "_ler_provedor_ativo", lambda: {"tipo": "cli-claude", "modelo": "m"})
+    vistos = {}
+
+    async def _perguntar(texto, sessao_id):
+        caminho = texto.split("arquivo: ")[1].split("\n")[0].strip()
+        from pathlib import Path
+        vistos.update(texto=texto, sessao=sessao_id, existia=Path(caminho).read_bytes() == JPEG_1PX, caminho=caminho)
+        return "Vejo o editor aberto."
+
+    monkeypatch.setattr(server, "_perguntar_cerebro", _perguntar)
+    r = cliente.post("/see", files={"imagem": ("q.jpg", JPEG_1PX, "image/jpeg")}, data={"pergunta": "o que vê?"})
+    assert r.status_code == 200 and r.json()["resposta"] == "Vejo o editor aberto."
+    assert "o que vê?" in vistos["texto"] and vistos["existia"]
+    from pathlib import Path
+    assert not Path(vistos["caminho"]).exists()  # a captura não fica no disco
+
+
+def test_see_com_nucleo_cli_usa_a_sessao_da_voz(cliente, monkeypatch):
+    """A visão entra na mesma sessão (e no mesmo processo de CLI) da conversa por voz, não numa sessão própria."""
+    monkeypatch.setattr(server, "_ler_provedor_ativo", lambda: {"tipo": "cli-claude", "modelo": "m"})
+    sessoes = []
+
+    async def _perguntar(texto, sessao_id):
+        sessoes.append(sessao_id)
+        return "ok"
+
+    monkeypatch.setattr(server, "_perguntar_cerebro", _perguntar)
+    arquivos = {"imagem": ("q.jpg", JPEG_1PX, "image/jpeg")}
+    cliente.post("/see", files=arquivos, data={"pergunta": "o que vê?", "sessao_id": "sessao-voz-ficticia"})
+    cliente.post("/see", files={"imagem": ("q.jpg", JPEG_1PX, "image/jpeg")}, data={"pergunta": "o que vê?"})
+    assert sessoes == ["sessao-voz-ficticia", server.SESSAO_VISAO_PADRAO]
+    assert server.SESSAO_VISAO_PADRAO == "voz"
+
+
+def test_see_com_nucleo_cli_erro_vira_codigo(cliente, monkeypatch):
+    monkeypatch.setattr(server, "_ler_provedor_ativo", lambda: {"tipo": "cli-claude", "modelo": "m"})
+
+    async def _falha(texto, sessao_id):
+        raise server._ErroCerebro("cli_tempo")
+
+    monkeypatch.setattr(server, "_perguntar_cerebro", _falha)
+    r = cliente.post("/see", files={"imagem": ("q.jpg", JPEG_1PX, "image/jpeg")}, data={"pergunta": "o que vê?"})
+    assert r.status_code == 503 and r.json()["erro"] == "cli_tempo"
+
+
+@respx.mock
+def test_see_usa_o_lmstudio_cadastrado_no_nucleo(cliente, monkeypatch):
+    from vard import config as vconfig
+    monkeypatch.delenv("VARD_LMSTUDIO_URL", raising=False)
+    vconfig.arquivo_config("paineis.json").parent.mkdir(parents=True, exist_ok=True)
+    vconfig.arquivo_config("paineis.json").write_text(
+        '{"versao": 1, "ativo": "lm", "provedores": ['
+        '{"id": "cli", "tipo": "cli-claude", "modelo": "m"},'
+        '{"id": "lm", "tipo": "lmstudio", "url_base": "http://192.0.2.10:1234/v1", "modelo": "visao-ficticia"}]}',
+        encoding="utf-8",
+    )
+    rota = respx.post("http://192.0.2.10:1234/v1/chat/completions").mock(
+        return_value=httpx.Response(200, json={"choices": [{"message": {"content": "Vejo a planilha."}}]})
+    )
+    r = cliente.post("/see", files={"imagem": ("q.jpg", JPEG_1PX, "image/jpeg")}, data={"pergunta": "o que vê?"})
+    assert r.status_code == 200 and "planilha" in r.json()["resposta"]
+    assert '"model":"visao-ficticia"' in rota.calls[0].request.content.decode().replace(" ", "")
 
 
 @respx.mock

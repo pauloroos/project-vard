@@ -57,11 +57,20 @@ export interface Config {
   falar_avisos: boolean;
   /** Cérebro ativo: 'openjarvis' (padrão, nada muda) ou 'proprio' (usa rotas /pedidos do núcleo). */
   cerebro: Cerebro;
+  /** Mantém o OpenJarvis ligado mesmo com cérebro próprio; serviços mudam após reiniciar. */
+  usar_openjarvis: boolean;
   /** Cor dos elementos do widget (hex com #); vazio = ciano padrão. */
   cor_elementos: string;
   /** Opacidade dos elementos do widget (0.2 a 1); 1 = opaco. */
   opacidade_elementos: number;
+  /** Modelo de transcrição escolhido na aba Transcrição; vazio = o do serviço de voz (VARD_STT_MODEL). */
+  stt_modelo: string;
+  /** Onde a transcrição roda; vazio = o do serviço de voz (VARD_STT_DEVICE). */
+  stt_dispositivo: DispositivoStt | "";
 }
+
+export const DISPOSITIVOS_STT = ["auto", "cuda", "cpu"] as const;
+export type DispositivoStt = (typeof DISPOSITIVOS_STT)[number];
 
 export const CONFIG_PADRAO: Config = {
   openjarvis_url: "http://127.0.0.1:8000", gui_url: "http://127.0.0.1:5173", ponte_url: "http://127.0.0.1:4700",
@@ -84,8 +93,10 @@ export const CONFIG_PADRAO: Config = {
   atualizacao_ao_abrir: false,
   nao_ouvir: false, nao_falar: false, falar_avisos: false,
   cerebro: CEREBRO_PADRAO,
+  usar_openjarvis: false,
   microfone_id: "", microfone_rotulo: "", saida_id: "", saida_rotulo: "",
   cor_elementos: "", opacidade_elementos: 1,
+  stt_modelo: "", stt_dispositivo: "",
 };
 
 /** Mescla o salvo com o padrão descartando o que tem tipo errado (arquivo editado à mão). */
@@ -129,6 +140,8 @@ export function normalizarConfig(salvo: unknown): Config {
       if (typeof v === "string" && (/^#[0-9a-fA-F]{6}$/.test(v) || v === "")) saida[k] = v;
     } else if (k === "opacidade_elementos") {
       if (typeof v === "number" && Number.isFinite(v) && v >= 0.2 && v <= 1) saida[k] = v;
+    } else if (k === "stt_dispositivo") {
+      if (v === "" || (DISPOSITIVOS_STT as readonly unknown[]).includes(v)) saida[k] = v;
     } else if (k === "conversa_ms") {
       if (typeof v === "number" && Number.isFinite(v) && v >= 0) saida[k] = Math.round(v);
     } else if (typeof v === typeof padrao) {
@@ -184,7 +197,7 @@ export function avisosDeUrl(c: Pick<Config, "openjarvis_url" | "gui_url" | "pont
 }
 
 /** Chaves que o widget aplica na hora (evento config-salva). O resto só vale depois de reiniciar. */
-export const CHAVES_AO_VIVO = ["tamanho", "tamanho_px", "compacto", "sempre_no_topo", "click_through", "invisivel", "usuario", "modelo", "conversa_ms", "nao_ouvir", "nao_falar", "falar_avisos", "cerebro", "cor_elementos", "opacidade_elementos"] as const satisfies readonly (keyof Config)[];
+export const CHAVES_AO_VIVO = ["tamanho", "tamanho_px", "compacto", "sempre_no_topo", "click_through", "invisivel", "usuario", "modelo", "conversa_ms", "nao_ouvir", "nao_falar", "falar_avisos", "cerebro", "usar_openjarvis", "cor_elementos", "opacidade_elementos"] as const satisfies readonly (keyof Config)[];
 export type ChaveAoVivo = (typeof CHAVES_AO_VIVO)[number];
 
 /** Copia para a config viva do widget só as chaves ao vivo; devolve as que mudaram. */
@@ -242,9 +255,11 @@ export function lerConfigAoVivo(x: unknown): Pick<Config, ChaveAoVivo> | null {
   if (typeof o.conversa_ms !== "number" || !Number.isFinite(o.conversa_ms) || o.conversa_ms < 0) return null;
   if (typeof o.nao_ouvir !== "boolean" || typeof o.nao_falar !== "boolean" || typeof o.falar_avisos !== "boolean") return null;
   const cerebro = ehCerebro(o.cerebro) ? o.cerebro : CEREBRO_PADRAO;
+  if (o.usar_openjarvis !== undefined && typeof o.usar_openjarvis !== "boolean") return null;
+  const usar_openjarvis = o.usar_openjarvis === true;
   const cor = typeof o.cor_elementos === "string" && (/^#[0-9a-fA-F]{6}$/.test(o.cor_elementos) || o.cor_elementos === "") ? o.cor_elementos : "";
   const opacidade = typeof o.opacidade_elementos === "number" && Number.isFinite(o.opacidade_elementos) && o.opacidade_elementos >= 0.2 && o.opacidade_elementos <= 1 ? o.opacidade_elementos : 1;
-  return { tamanho: o.tamanho as Config["tamanho"], tamanho_px: limitarLado(px), compacto: o.compacto, sempre_no_topo: o.sempre_no_topo, click_through: o.click_through, invisivel: o.invisivel, usuario: o.usuario, modelo: o.modelo, conversa_ms: Math.round(o.conversa_ms), nao_ouvir: o.nao_ouvir, nao_falar: o.nao_falar, falar_avisos: o.falar_avisos, cerebro, cor_elementos: cor, opacidade_elementos: opacidade };
+  return { tamanho: o.tamanho as Config["tamanho"], tamanho_px: limitarLado(px), compacto: o.compacto, sempre_no_topo: o.sempre_no_topo, click_through: o.click_through, invisivel: o.invisivel, usuario: o.usuario, modelo: o.modelo, conversa_ms: Math.round(o.conversa_ms), nao_ouvir: o.nao_ouvir, nao_falar: o.nao_falar, falar_avisos: o.falar_avisos, cerebro, usar_openjarvis, cor_elementos: cor, opacidade_elementos: opacidade };
 }
 
 /** Valida o payload de config-mudou-no-widget (topo e compacto); inválido devolve null. */
