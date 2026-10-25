@@ -6,7 +6,7 @@ import { cortarEmFrases } from "./frases";
 import { ehEncerramento } from "./encerramento";
 import { aPartirDoGatilho, classificar, ehConfirmacao, ehInterrupcao, extrairComando } from "./rotas";
 import type { Cerebro } from "../config/cerebro";
-import type { EventoPedidoSSE } from "../conectores/ponte/cliente";
+import { ErroPonte, type EventoPedidoSSE } from "../conectores/ponte/cliente";
 
 export type Estado = "repouso" | "ouvindo" | "pensando" | "falando" | "jogo" | "erro" | "fora";
 export interface Mensagem { role: "system" | "user" | "assistant"; content: string }
@@ -91,6 +91,8 @@ export interface DepsConversa {
 
 const MAX_MENSAGENS = 20; // 10 trocas
 const PRAZO_CONFIRMACAO_MS = 15000;
+const PRAZO_SEM_PROGRESSO_MS = 90000;
+const INTERVALO_CONSULTA_PEDIDO_MS = 3000;
 
 export class Conversa {
   estado: Estado = "repouso";
@@ -348,51 +350,136 @@ export class Conversa {
         ac.signal.addEventListener("abort", cancelarPedido, { once: true });
         if (ac.signal.aborted || this.emJogo()) { cancelarPedido(); return; }
         let ultimoSeq = -1;
+        let ultimoEstado = estado.estado ?? "na_fila";
         let textoAcumulado = "";
-        let jaTerminou = false;
+        let snapInicial: { resposta?: string | null; estado: string; ultimo_seq?: number; erro?: string | null } | null = null;
         // Reconciliação inicial: consulta estado atual para pegar texto já produzido antes do SSE.
         try {
           const snap = await this.d.ponte.consultarPedido?.(pedidoId);
-          if (snap && typeof snap.resposta === "string") {
-            textoAcumulado = snap.resposta;
+          if (snap) {
+            snapInicial = snap;
+            if (typeof snap.resposta === "string") textoAcumulado = snap.resposta;
             ultimoSeq = Number((snap as { ultimo_seq?: number }).ultimo_seq ?? 0);
+            if (snap.estado) ultimoEstado = snap.estado;
           }
-          // O "fim" pode ter saído antes desta consulta: com o pedido encerrado, nenhum evento novo vai chegar.
-          jaTerminou = !!snap && ["concluido", "falhou", "cancelado"].includes(snap.estado);
         } catch { /* segue com SSE */ }
-        // Escuta eventos SSE da sessão até fim/erro/cancelamento ou abort.
+        // O "fim" pode ter saído antes desta consulta: com o pedido encerrado, nenhum evento novo vai chegar.
+        const jaTerminou = !!snapInicial && ["concluido", "falhou", "cancelado"].includes(snapInicial.estado);
         if (ac.signal.aborted || this.emJogo()) return;
-        const esperarFim = jaTerminou ? Promise.resolve(textoAcumulado.trim()) : new Promise<string>((resolve, reject) => {
+        const promessaInicial = () => {
+          if (!snapInicial || snapInicial.estado === "concluido") return Promise.resolve(textoAcumulado.trim());
+          if (snapInicial.estado === "falhou") return Promise.reject(new ErroPonte(snapInicial.erro ?? "modelo_http"));
+          return Promise.reject(new Error("cancelado"));
+        };
+        const esperarFim = jaTerminou ? promessaInicial() : new Promise<string>((resolve, reject) => {
+          let resolvido = false;
+          let timerPrazo: ReturnType<typeof setTimeout> | null = null;
+          let timerIntervalo: ReturnType<typeof setInterval> | null = null;
+
+          const estourarPrazo = () => {
+            if (resolvido || ac.signal.aborted) return;
+            resolvido = true;
+            cleanup();
+            cancelarPedido();
+            this.d.depoisDaCaptura?.();
+            this.mudar("erro", FALAS.erros.modelo_demorou);
+            reject(new ErroPonte("modelo_demorou"));
+          };
+
+          const rearmarPrazo = () => {
+            if (timerPrazo) clearTimeout(timerPrazo);
+            timerPrazo = setTimeout(estourarPrazo, PRAZO_SEM_PROGRESSO_MS);
+          };
+
+          const consultar = async () => {
+            if (resolvido || ac.signal.aborted) return;
+            try {
+              const snap = await this.d.ponte?.consultarPedido?.(pedidoId);
+              if (!snap || resolvido || ac.signal.aborted) return;
+              const snapSeq = Number((snap as { ultimo_seq?: number }).ultimo_seq ?? ultimoSeq);
+              const snapEstado = snap.estado;
+              let progresso = false;
+              if (snapSeq > ultimoSeq) {
+                ultimoSeq = snapSeq;
+                progresso = true;
+              }
+              if (snapEstado !== ultimoEstado) {
+                ultimoEstado = snapEstado;
+                progresso = true;
+              }
+              if (typeof snap.resposta === "string" && snap.resposta.length > textoAcumulado.length) {
+                textoAcumulado = snap.resposta;
+                progresso = true;
+              }
+              if (progresso) rearmarPrazo();
+              if (snapEstado === "concluido") {
+                resolvido = true;
+                cleanup();
+                resolve(textoAcumulado.trim());
+              } else if (snapEstado === "falhou") {
+                resolvido = true;
+                cleanup();
+                reject(new ErroPonte(snap.erro ?? "modelo_http"));
+              } else if (snapEstado === "cancelado") {
+                resolvido = true;
+                cleanup();
+                reject(new Error("cancelado"));
+              }
+            } catch {
+              /* segue aguardando próximo ciclo ou evento */
+            }
+          };
+
           const onEvento = (ev: Event) => {
-            if (ac.signal.aborted) return;
+            if (resolvido || ac.signal.aborted) return;
             const msg = (ev as MessageEvent).data;
             if (typeof msg !== "string") return;
             let obj: EventoPedidoSSE | null = null;
             try { obj = JSON.parse(msg) as EventoPedidoSSE; } catch { return; }
             if (!obj || obj.tipo !== "pedido" || obj.sessao_id !== sessaoId || obj.pedido_id !== pedidoId) return;
+            // Qualquer evento válido do pedido indica progresso
+            rearmarPrazo();
             if (obj.seq <= ultimoSeq) return; // ignora repetido
             ultimoSeq = obj.seq;
             if (obj.evento_tipo === "texto" && typeof obj.dados.texto === "string") {
               textoAcumulado += obj.dados.texto;
-            } else if (obj.evento_tipo === "fim" || obj.evento_tipo === "erro") {
+            } else if (obj.evento_tipo === "fim") {
+              resolvido = true;
               cleanup();
               resolve(textoAcumulado.trim());
+            } else if (obj.evento_tipo === "erro") {
+              resolvido = true;
+              cleanup();
+              const erroCod = typeof obj.dados?.erro === "string" ? obj.dados.erro : "modelo_http";
+              reject(new ErroPonte(erroCod));
             }
           };
+
+          const onReconectou = () => { void consultar(); };
           const onError = () => { cleanup(); reject(new Error("sse_erro")); };
+
           const cleanup = () => {
+            if (timerPrazo) { clearTimeout(timerPrazo); timerPrazo = null; }
+            if (timerIntervalo) { clearInterval(timerIntervalo); timerIntervalo = null; }
             window.removeEventListener("vard-evento-pedido", onEvento as unknown as EventListener);
+            window.removeEventListener("vard-sse-reconectou", onReconectou);
             window.removeEventListener("error", onError);
           };
+
           window.addEventListener("vard-evento-pedido", onEvento as unknown as EventListener);
+          window.addEventListener("vard-sse-reconectou", onReconectou);
           window.addEventListener("error", onError);
           ac.signal.addEventListener("abort", () => { cleanup(); reject(new Error("abortado")); });
+
+          rearmarPrazo();
+          timerIntervalo = setInterval(() => { void consultar(); }, INTERVALO_CONSULTA_PEDIDO_MS);
         });
         try {
           resposta = await esperarFim;
         } catch (erro) {
           // Cancela pedido se a fala foi cortada (abort) ou houve erro.
           cancelarPedido();
+          this.d.depoisDaCaptura?.();
           if (ac.signal.aborted || this.emJogo()) return;
           throw erro;
         }
@@ -420,6 +507,7 @@ export class Conversa {
       console.warn(ver ? "olhos falharam" : "agente falhou", erro);
       const codigo = (erro as { codigo?: string } | null)?.codigo;
       const fala = (codigo && (FALAS.erros as Record<string, string>)[codigo]) || FALAS.erroModelo;
+      this.mudar("erro", fala);
       await this.falarFixa(fala);
       this.abrirCanal();
       if (this.estado !== "repouso") this.mudar("repouso");
