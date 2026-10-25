@@ -3,6 +3,15 @@
 Este arquivo segue o [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) em português do Brasil.
 Os instaladores de cada versão ficam na página de [releases](https://github.com/pauloroos/project-vard/releases).
 
+## [0.9.8] — 2026-10-24
+
+### Corrigido
+
+- Ao abrir, a voz era reiniciada no meio do carregamento do modelo na GPU (uma falha isolada da checagem de saúde
+  derrubava o serviço). Agora só duas falhas seguidas reiniciam.
+- Depois de Sair, o Vard reabria preso no estado "saindo": a aba Sistema desativava o Modo jogo e os pedidos de
+  modo do núcleo não chegavam ao app. Agora a abertura registra a sessão e grava o estado ligado.
+
 ## [0.9.7] — 2026-10-17
 
 ### Adicionado/Feito
