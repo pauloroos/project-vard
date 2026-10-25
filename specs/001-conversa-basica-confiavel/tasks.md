@@ -12,7 +12,7 @@ Sem tarefas.
 - [ ] T003 [P] [US1] Gravar o par pergunta/resposta no histórico da sessão em nucleo/vard/cerebro/laco.py e nucleo/vard/cerebro/sessoes.py, com teste em nucleo/tests/test_cerebro_historico.py (FR-003)
 - [ ] T004 [P] [US1] Interromper cancela a transcrição em andamento em src/main.ts com a lógica num módulo testável src/fala/ciclo-voz.ts, com teste em tests/ciclo-voz-cancelamento.test.ts (FR-004)
 - [ ] T005 [US1] Aplicar no widget a troca de microfone e saída salva nas configurações, ou avisar reinício, em src/main.ts, src/config/config.ts, src/audio/microfone.ts e src/audio/boca.ts, com teste em tests/dispositivos-ao-vivo.test.ts, depends on T004 (FR-005)
-- [ ] T006 [P] [US1] Separar parada definitiva de reinício no supervisor em src-tauri/src/servicos.rs (cópia de DescritorServico no handle, repetir recria thread, parada definitiva remove registro) e fazer recarregar chamar só repetir em src-tauri/src/ciclo.rs, com testes Rust no próprio arquivo (FR-006)
+- [X] T006 [P] [US1] Separar parada definitiva de reinício no supervisor em src-tauri/src/servicos.rs (cópia de DescritorServico no handle, repetir recria thread, parada definitiva remove registro) e fazer recarregar chamar só repetir em src-tauri/src/ciclo.rs, com testes Rust no próprio arquivo (FR-006)
 
 ## Phase 4: User Stories 2 e 3 (P2) — andamento visível e promessas honestas
 - [ ] T007 [US2] Mostrar etapas transcrevendo, pensando e falando e os erros de transcrição, resposta e síntese na interface em src/fala/conversa.ts e src/main.ts, com teste em tests/etapas-visiveis.test.ts (FR-007)
