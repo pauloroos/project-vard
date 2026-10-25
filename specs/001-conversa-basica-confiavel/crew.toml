@@ -1,0 +1,132 @@
+spec_dir = "specs/001-conversa-basica-confiavel"
+job = "20261025-1952-fix-conversa-basica-confiavel-issue-6"
+global_constraints = [
+  "Leia AGENTS.md e CONTRIBUTING.md antes de editar. Código, comentários e textos da interface em português do Brasil; UTF-8 sem BOM; imite o estilo e a densidade de comentários do arquivo.",
+  "Sem nomes pessoais, caminhos absolutos pessoais, letras de unidade, segredos ou dados reais em código, testes ou fixtures; exemplos fictícios.",
+  "Nunca injete teclado/mouse nem dispare atalhos globais; não abra o app, serviços reais nem portas 1234, 8000, 4700, 4710, 4720.",
+  "Toda correção de comportamento vem com teste que FALHA antes da correção e passa depois: escreva o teste primeiro, rode e veja falhar, depois corrija.",
+  "Testes Python: cd nucleo && \"$VARD_PY\" -m pytest -q -p no:cacheprovider <arquivos>. Testes JS: se node_modules não existir, crie o link (test -e node_modules || ln -s \"$VARD_NM\" node_modules; node_modules está no .gitignore), depois npx vitest run <arquivos>; tipos com npx tsc --noEmit e npx tsc -p tsconfig.test.json.",
+  "Não altere arquivos fora da lista de files da tarefa sem necessidade; não refatore o que não é pedido; não apague funcionalidades periféricas.",
+  "Commit único no estilo tipo(escopo): resumo em português, sem rodapé de coautoria e sem menção a IA.",
+]
+
+[tasks.T001]
+task = "Garantir evento terminal em todos os caminhos do despachante em nucleo/vard/cerebro/pedidos.py, com teste em nucleo/tests/test_cerebro_pedidos_terminal.py (FR-001)"
+type = "code"
+risk = "medium"
+accept = ["FR-001", "US1"]
+files = ["nucleo/vard/cerebro/pedidos.py", "nucleo/tests/test_cerebro_pedidos_terminal.py"]
+proof = "cd nucleo && \"$VARD_PY\" -m pytest -q -p no:cacheprovider tests/test_cerebro_pedidos_terminal.py tests/test_cerebro_pedidos.py tests/test_cerebro_laco.py"
+expect = "passed"
+depends = []
+interfaces = {}
+
+[tasks.T002]
+task = "Reconsultar o pedido ao reconectar o SSE e periodicamente, com prazo de 90 s sem progresso, cancelando no servidor e exibindo erro visível, em src/fala/conversa.ts, com teste em tests/conversa-pedido-terminal.test.ts (FR-002)"
+type = "code"
+risk = "medium"
+accept = ["FR-002", "US1"]
+files = ["src/fala/conversa.ts", "src/conectores/ponte/cliente.ts", "tests/conversa-pedido-terminal.test.ts"]
+proof = "(test -e node_modules || ln -s \"$VARD_NM\" node_modules) && npx vitest run tests/conversa-pedido-terminal.test.ts tests/conversa-cerebro.test.ts tests/conversa.test.ts && npx tsc --noEmit && npx tsc -p tsconfig.test.json"
+expect = "passed"
+depends = []
+interfaces = {}
+
+[tasks.T003]
+task = "Gravar o par pergunta/resposta no histórico da sessão em nucleo/vard/cerebro/laco.py e nucleo/vard/cerebro/sessoes.py, com teste em nucleo/tests/test_cerebro_historico.py (FR-003)"
+type = "code"
+risk = "medium"
+accept = ["FR-003", "US1"]
+files = ["nucleo/vard/cerebro/laco.py", "nucleo/vard/cerebro/sessoes.py", "nucleo/tests/test_cerebro_historico.py"]
+proof = "cd nucleo && \"$VARD_PY\" -m pytest -q -p no:cacheprovider tests/test_cerebro_historico.py tests/test_cerebro_laco.py tests/test_cerebro_laco_persona.py tests/test_cerebro_pedidos.py"
+expect = "passed"
+depends = []
+interfaces = {}
+
+[tasks.T004]
+task = "Interromper cancela a transcrição em andamento em src/main.ts com a lógica num módulo testável src/fala/ciclo-voz.ts, com teste em tests/ciclo-voz-cancelamento.test.ts (FR-004)"
+type = "code"
+risk = "medium"
+accept = ["FR-004", "US1"]
+files = ["src/main.ts", "src/fala/ciclo-voz.ts", "tests/ciclo-voz-cancelamento.test.ts"]
+proof = "(test -e node_modules || ln -s \"$VARD_NM\" node_modules) && npx vitest run tests/ciclo-voz-cancelamento.test.ts && npx tsc --noEmit && npx tsc -p tsconfig.test.json"
+expect = "passed"
+depends = []
+interfaces = {}
+
+[tasks.T005]
+task = "Aplicar no widget a troca de microfone e saída salva nas configurações, ou avisar reinício, em src/main.ts, src/config/config.ts, src/audio/microfone.ts e src/audio/boca.ts, com teste em tests/dispositivos-ao-vivo.test.ts, depends on T004 (FR-005)"
+type = "code"
+risk = "medium"
+accept = ["FR-005", "US1"]
+files = ["src/main.ts", "src/config/config.ts", "src/audio/microfone.ts", "src/audio/boca.ts", "src/ui/aba-voz.ts", "tests/dispositivos-ao-vivo.test.ts"]
+proof = "(test -e node_modules || ln -s \"$VARD_NM\" node_modules) && npx vitest run tests/dispositivos-ao-vivo.test.ts tests/dispositivos.test.ts tests/config.test.ts tests/microfone.test.ts tests/aba-voz.test.ts && npx tsc --noEmit && npx tsc -p tsconfig.test.json"
+expect = "passed"
+depends = ["T004"]
+interfaces = {}
+
+[tasks.T006]
+task = "Separar parada definitiva de reinício no supervisor em src-tauri/src/servicos.rs (cópia de DescritorServico no handle, repetir recria thread, parada definitiva remove registro) e fazer recarregar chamar só repetir em src-tauri/src/ciclo.rs, com testes Rust no próprio arquivo (FR-006)"
+type = "code"
+risk = "high"
+accept = ["FR-006", "US1"]
+files = ["src-tauri/src/servicos.rs", "src-tauri/src/ciclo.rs"]
+proof = ""
+expect = ""
+depends = []
+interfaces = {}
+
+[tasks.T007]
+task = "Mostrar etapas transcrevendo, pensando e falando e os erros de transcrição, resposta e síntese na interface em src/fala/conversa.ts e src/main.ts, com teste em tests/etapas-visiveis.test.ts (FR-007)"
+type = "code"
+risk = "medium"
+accept = ["FR-007", "US2"]
+files = ["src/fala/conversa.ts", "src/main.ts", "src/ui/hud.ts", "tests/etapas-visiveis.test.ts"]
+proof = "(test -e node_modules || ln -s \"$VARD_NM\" node_modules) && npx vitest run tests/etapas-visiveis.test.ts tests/conversa.test.ts tests/conversa-cerebro.test.ts && npx tsc --noEmit && npx tsc -p tsconfig.test.json"
+expect = "passed"
+depends = []
+interfaces = {}
+
+[tasks.T008]
+task = "Emitir texto progressivo no núcleo e acumular o parcial no estado do pedido em nucleo/vard/cerebro/laco.py e nucleo/vard/cerebro/pedidos.py, e falar frase por frase sem repetir na reconciliação em src/fala/conversa.ts, com testes em nucleo/tests/test_cerebro_texto_progressivo.py e tests/fala-por-frase.test.ts, depends on T007 (FR-008)"
+type = "code"
+risk = "high"
+accept = ["FR-008", "US2"]
+files = ["nucleo/vard/cerebro/laco.py", "nucleo/vard/cerebro/pedidos.py", "src/fala/conversa.ts", "nucleo/tests/test_cerebro_texto_progressivo.py", "tests/fala-por-frase.test.ts"]
+proof = "(cd nucleo && \"$VARD_PY\" -m pytest -q -p no:cacheprovider tests/test_cerebro_texto_progressivo.py tests/test_cerebro_laco.py tests/test_cerebro_pedidos.py tests/test_cerebro_historico.py tests/test_cerebro_pedidos_terminal.py) && (test -e node_modules || ln -s \"$VARD_NM\" node_modules) && npx vitest run tests/fala-por-frase.test.ts tests/conversa-cerebro.test.ts tests/conversa.test.ts tests/conversa-pedido-terminal.test.ts && npx tsc --noEmit && npx tsc -p tsconfig.test.json"
+expect = "passed"
+depends = ["T007"]
+interfaces = {}
+
+[tasks.T009]
+task = "Corrigir modo jogo e volta com executor único em src-tauri/src/ciclo.rs (pasta de configuração, contrato de /pedidos, sem sucesso falso, sem chamar /modo do Python na ida nem na volta, invertendo o teste executar_jogo_sem_ponte_retorna_modo_jogo), com testes Rust no próprio arquivo (FR-009)"
+type = "code"
+risk = "high"
+accept = ["FR-009", "US3"]
+files = ["src-tauri/src/ciclo.rs"]
+proof = ""
+expect = ""
+depends = []
+interfaces = {}
+
+[tasks.T010]
+task = "Formato interno único de ferramenta convertido nos adaptadores compatível, Anthropic e Gemini, e argumentos acumulados até o fim da chamada, em nucleo/vard/cerebro/provedores.py, com teste em nucleo/tests/test_cerebro_ferramentas_contrato.py (FR-010)"
+type = "code"
+risk = "medium"
+accept = ["FR-010", "US3"]
+files = ["nucleo/vard/cerebro/provedores.py", "nucleo/tests/test_cerebro_ferramentas_contrato.py"]
+proof = "cd nucleo && \"$VARD_PY\" -m pytest -q -p no:cacheprovider tests/test_cerebro_ferramentas_contrato.py tests/test_cerebro_provedores.py tests/test_cerebro_laco.py tests/test_cerebro_ferramentas.py"
+expect = "passed"
+depends = []
+interfaces = {}
+
+[tasks.T011]
+task = "Reescrever README.md e README.en.md com a configuração mínima recomendada e as periféricas congeladas (FR-011)"
+type = "docs"
+risk = "low"
+accept = ["FR-011", "US4"]
+files = ["README.md", "README.en.md"]
+proof = "node scripts/busca-vazamento.mjs"
+expect = "vazamento: OK"
+depends = []
+interfaces = {}

@@ -6,5 +6,358 @@
   "distributed": true,
   "reason": "",
   "issue_ref": "pauloroos/project-vard#6",
-  "pieces": []
+  "pieces": [
+    {
+      "n": 1,
+      "title": "Escrever spec, plano e tarefas (specs/001)",
+      "type": "docs",
+      "risk": "low",
+      "attempts": [
+        {
+          "n": 1,
+          "executor": "opencode:omni/agy/gemini-3.8-flash-tiered",
+          "role": "exec",
+          "cost": "included",
+          "started": "2026-10-25T19:58:48.845275+00:00",
+          "duration_s": 290.3,
+          "status": "ok",
+          "reported_model": null,
+          "model_mismatch": false,
+          "note": "A elaboração da especificação, do plano de implementação e das tarefas foi concluída com sucesso.\n\n### Arquivos atualizados\n- `specs/001-conversa-basica-confiavel/spec.md`: contexto da issue #6, quatro histórias de usuário (US1 a US4) com critérios de aceite Given/When/Then, casos de borda e dúvidas abertas, requisitos funcionais FR-001 a FR-011 e critérios de sucesso SC-001 a SC-003.\n- `specs/001-conversa-basica-confiavel/plan.md`: resumo técnico, contexto de execução (TypeScript, Python 3.13, Rust), estrutura de arquivos mapeada por tarefa e decisões D1 a D11 fundamentadas.\n- `specs/001-conversa-basica-confiavel/tasks.md`: fases com as tarefas T001 a T011 estruturadas exatamente conforme orientado, sem marcadores pendentes de template.\n\n### Commit\n- Hash: `9d2fa44`\n- Mensagem: `docs(spec): spec, plano e tarefas da conversa básica confiável` (sem menções ou atribuições a IA, com autor GitHub noreply verificado).",
+          "diffstat": [
+            {
+              "file": "specs/001-conversa-basica-confiavel/plan.md",
+              "added": 50,
+              "deleted": 7
+            },
+            {
+              "file": "specs/001-conversa-basica-confiavel/spec.md",
+              "added": 54,
+              "deleted": 8
+            },
+            {
+              "file": "specs/001-conversa-basica-confiavel/tasks.md",
+              "added": 17,
+              "deleted": 9
+            }
+          ],
+          "destructive_suspect": [],
+          "outside_writes": [],
+          "branch": "crew/20261025-1952-fix-conversa-basica-confiavel-issue-6-1-1",
+          "worktree": "/home/orca/work/project-vard.crew/20261025-1952-fix-conversa-basica-confiavel-issue-6-1-1",
+          "base": null,
+          "steps": 24,
+          "tokens_in": 859206,
+          "tokens_out": 7725,
+          "tokens_total": 866931,
+          "tokens_estimated": false,
+          "cost_usd": 0.0,
+          "cost_known": true,
+          "start_sha": "64c19634a4e5ade42ef12dbf3fb9e9a6ec86c2ed",
+          "end_sha": "9d2fa440e4690d86113eb0979c7110458ed70197"
+        },
+        {
+          "n": 2,
+          "executor": "codex:gpt-6.1-sol",
+          "role": "review",
+          "cost": "included",
+          "started": "2026-10-25T20:03:54.488443+00:00",
+          "duration_s": 21.5,
+          "status": "ok",
+          "reported_model": null,
+          "model_mismatch": false,
+          "note": "Não consegui ler `.crew-chief-brief.md`: o ambiente bloqueou a execução de leitura com o erro `bwrap: No permissions to create a new namespace`.\n\nNenhum arquivo foi modificado e nenhum agente foi delegado. A revisão permanece pendente; cole o briefing e os trechos a revisar ou restaure o acesso de leitura ao workspace.\n",
+          "diffstat": [],
+          "destructive_suspect": [],
+          "outside_writes": [],
+          "branch": null,
+          "worktree": null,
+          "base": null,
+          "steps": null,
+          "tokens_in": null,
+          "tokens_out": null,
+          "tokens_total": 19970,
+          "tokens_estimated": false,
+          "cost_usd": null,
+          "cost_known": false
+        },
+        {
+          "n": 3,
+          "executor": "claude:opus",
+          "role": "review",
+          "cost": "included",
+          "started": "2026-10-25T20:04:44.010673+00:00",
+          "duration_s": 164.6,
+          "status": "ok",
+          "reported_model": "claude-opus-5-5",
+          "model_mismatch": false,
+          "note": "em conversão em `corpo[\"tools\"]`.\n- O laço manda o formato plano `{name, description, parameters}` (`laco.py:134-141`), e a API OpenAI exige `{\"type\":\"function\",\"function\":{...}}`.\n- FR-010 diz \"convertido em cada adaptador\", mas D10 só cita Anthropic e o acúmulo de argumentos. A tarefa deve cobrir os três adaptadores, incluindo o Gemini em `provedores.py:592`, que já aceita os dois formatos.\n\n**Q4. O laço Rust → Python → Rust também existe em `voltar`.**\n- `executar_voltar` (`ciclo.rs:607`) chama `ponte_modo(\"voltar\")`, com o mesmo efeito.\n- FR-009 e T009 só tratam `jogo`. Corrigir só a ida deixa a volta republicando o pedido e sem recarregar o modelo.\n\n**Q5. D2 e D8 interagem, e o plano não trata isso.**\n- `_emissor` (`pedidos.py:216`) só grava `resposta` no `fim`.\n- A reconciliação (`conversa.ts:355-358`) substitui `textoAcumulado` por `snap.resposta`.\n- Com texto progressivo, uma reconexão no meio do fluxo perde fragmentos, já que o servidor não reproduz eventos. Ou a fala repete frases já ditas quando chega o `fim`.\n- O plano precisa definir uma de duas saídas:\n  - o despachante acumula o texto parcial no estado;\n  - ou o widget fala só o restante não falado, a partir da `resposta` final.\n\n**Q6. D6 está incompleto no supervisor.**\n- `ServicoHandle` não guarda o `DescritorServico`: o descritor é movido para a thread em `servicos.rs:40-41`.\n- Por isso `repetir` não consegue recriar a thread encerrada sem passar a guardar o descritor no registro. D6 e T006 deveriam dizer isso.\n- Detalhe: com o `pedir_reinicio` atual, `recarregar` funciona sem `parar` antes. Basta retirar o `parar` de `ciclo.rs:442-444`.\n\n**Q7. O prazo fixo de 120 s em D2 pode abortar pedidos legítimos.**\n- Exemplos: modelo local lento, ou até 8 turnos com ferramentas.\n- O prazo deveria contar desde o último progresso (evento ou estado `executando` na consulta periódica).\n- Ao estourar, deveria também cancelar o pedido no servidor.\n\n## Minor\n\n- **Q8.** T005 lista `main.ts` e `config.ts`, mas reabrir a entrada e mudar a saída passa por `src/audio/microfone.ts` (`definirMicrofonePreferido`), `src/audio/boca.ts` (o `setSinkId` é no `AudioContext`, não num elemento, ao contrário do caso-limite da spec) e possivelmente `src/ui/aba-voz.ts:846`.\n- **Q9.** T009 precisa inverter o teste existente `executar_jogo_sem_ponte_retorna_modo_jogo` (`ciclo.rs:1392`), que hoje garante justamente o sucesso falso.\n- **Q10.** SC-002 usa `npx tsc --noEmit`, mas o contrato do repositório é `npm run check`, que também roda `tsc -p tsconfig.test.json`. Os testes novos ficariam sem checagem de tipos.\n- **Q11.** A spec descreve o ambiente do executor (\"servidor Linux ARM64 sem `cargo`, sem GPU\") num documento público. Isso não é documentação do produto. Basta dizer \"testes Rust validados pelo dono com `cargo test` no Windows\".\n- **Q12.** Prioridade: os bugs 4 e 5 (Alta) ficam na fase 4, depois de dois bugs de gravidade Média (6 e 7). Isso segue a numeração do plano da revisão (itens 8 e 9), então é defensável, mas convém declarar a escolha.\n- **Q13.** Os títulos usam \"basica\" sem acento, e o nível de acentuação está inconsistente com o resto em PT-BR.\n\n**Pontos verificados sem problema:**\n- Todos os caminhos citados existem, exceto `src/fala/ciclo-voz.ts` e os testes novos, que são criados pelas próprias tarefas.\n- Dependências entre tarefas:\n  - mesma fase: T005 depende de T004 (`main.ts`) e T008 depende de T007 (`conversa.ts`);\n  - fases diferentes: T006 e T009 em `ciclo.rs`, T003 e T008 em `laco.py`.\n- Sem dados pessoais, caminhos absolutos ou menção a IA.\n- Corretas frente ao código:\n  - D1: os caminhos sem evento terminal são `pedidos.py:188-192`, `:240-249`, e o `CancelledError` que `laco.py:291` repassa;\n  - D3: `laco.py:278` grava só a resposta, e `sessoes.py` conta trocas;\n  - D9;\n  - D11;\n  - a leitura de `/pedidos` como `{\"pedidos\": [...]}` (`server.py:716` contra `ciclo.rs:545`) e da pasta de configuração (`ciclo.rs:466` contra `pasta_config()` em `:34`).\n\nVEREDITO: CORRIGIR",
+          "diffstat": [],
+          "destructive_suspect": [],
+          "outside_writes": [],
+          "branch": null,
+          "worktree": null,
+          "base": null,
+          "steps": 35,
+          "tokens_in": 1690285,
+          "tokens_out": 15415,
+          "tokens_total": 1705700,
+          "tokens_estimated": false,
+          "cost_usd": 1.3849968,
+          "cost_known": true
+        },
+        {
+          "n": 4,
+          "executor": "opencode:omni/agy/gemini-3.8-flash-tiered",
+          "role": "exec",
+          "cost": "included",
+          "started": "2026-10-25T20:08:09.777203+00:00",
+          "duration_s": 447.5,
+          "status": "ok",
+          "reported_model": null,
+          "model_mismatch": false,
+          "note": "Os ajustes da revisão da spec 001 foram aplicados com sucesso em `specs/001-conversa-basica-confiavel/spec.md`, `plan.md` e `tasks.md`:\n\n1. **Acentuação**: Título corrigido para \"Conversa básica confiável\" nos três arquivos e revisão de acentuação em PT-BR.\n2. **FR-010, D10 e T010**: Especificada a conversão nos três adaptadores (compatível OpenAI → `{\"type\":\"function\",\"function\":{name,description,parameters}}`, Anthropic → `{name, description, input_schema}`, Gemini aceitando o formato interno), com acúmulo de argumentos por índice no compatível.\n3. **FR-009, D7 e T009**: Incluída a volta (`executar_voltar`) sem chamar `/modo` do Python na ida nem na volta, religamento de núcleo, OpenJarvis e fotografia via reinício de serviços, carregamento sob demanda do provedor e inversão do teste de sucesso falso.\n4. **D2/D8 e T008**: Acúmulo do texto parcial no estado do pedido em `pedidos.py` e controle de texto no widget para síntese frase por frase sem repetição na reconciliação.\n5. **D6 e T006**: Cópia de `DescritorServico` no handle para `repetir` recriar threads concluídas, `recarregar` chamando apenas `repetir` e remoção do registro na parada definitiva.\n6. **D2 e FR-002**: Prazo de 90 s sem progresso cancelando o pedido no servidor e exibindo o erro na interface.\n7. **T005 e D5**: Troca de microfone via `src/audio/microfone.ts` (`definirMicrofonePreferido`) e saída via `src/audio/boca.ts` (`setSinkId` do `AudioContext`, não de elemento).\n8. **SC-002**: Referência atualizada para `npm run check` (tipos de src e dos testes).\n9. **Ambiente**: Removida a descrição de ambiente executor (ARM64/cargo/GPU), mantendo os testes Rust validados pelo dono com `cargo test` no Windows e o teste de aceite como checklist do dono no Windows.\n10. **Prioridade no plano**: Declarada a alocação dos bugs Alta 4 e 5 na Fase 4 conforme a numeração da issue.\n\nCommit realizado: `docs(spec): ajustes da revisão na spec 001`.",
+          "diffstat": [
+            {
+              "file": "specs/001-conversa-basica-confiavel/plan.md",
+              "added": 19,
+              "deleted": 15
+            },
+            {
+              "file": "specs/001-conversa-basica-confiavel/spec.md",
+              "added": 17,
+              "deleted": 17
+            },
+            {
+              "file": "specs/001-conversa-basica-confiavel/tasks.md",
+              "added": 7,
+              "deleted": 7
+            }
+          ],
+          "destructive_suspect": [],
+          "outside_writes": [],
+          "branch": "crew/20261025-1952-fix-conversa-basica-confiavel-issue-6-1-4",
+          "worktree": "/home/orca/work/project-vard.crew/20261025-1952-fix-conversa-basica-confiavel-issue-6-1-4",
+          "base": {
+            "attempt": 1,
+            "branch": "crew/20261025-1952-fix-conversa-basica-confiavel-issue-6-1-1"
+          },
+          "steps": 34,
+          "tokens_in": 2309160,
+          "tokens_out": 42310,
+          "tokens_total": 2351470,
+          "tokens_estimated": false,
+          "cost_usd": 0.0,
+          "cost_known": true,
+          "start_sha": "9d2fa440e4690d86113eb0979c7110458ed70197",
+          "end_sha": "b2bdfa39f6c6e280e453446e7acbc93146e6df04"
+        },
+        {
+          "n": 5,
+          "executor": "claude:opus",
+          "role": "review",
+          "cost": "included",
+          "started": "2026-10-25T20:15:57.123394+00:00",
+          "duration_s": 63.0,
+          "status": "ok",
+          "reported_model": "claude-opus-5-5",
+          "model_mismatch": false,
+          "note": "HEAD confirmado: `b2bdfa3`, ref `crew/20261025-1952-fix-conversa-basica-confiavel-issue-6-1-4`. Sem Bash nesta sessão, conferi pelo arquivo do ref, não por `git rev-parse`.\n\n**Spec: bugs**\n- B1 pedido preso em \"pensando\": done (FR-001, FR-002, T001/T002; 90 s sem progresso e cancelamento no servidor)\n- B2 histórico perde a pergunta: done (FR-003/T003; falhos e cancelados não gravam)\n- B3 parar impede retomada: done (FR-006/T006; descritor no handle, `recarregar` só chama `repetir`)\n- B4 modo jogo com sucesso falso: done (FR-009/T009; pasta de config, `{\"pedidos\": [...]}`, sem `/modo` na ida nem na volta, teste invertido)\n- B5 contrato de ferramentas: done (FR-010/T010; compatível, Anthropic e Gemini, argumentos acumulados por índice)\n- B6 Interromper não cancela STT: done (FR-004/T004; `AbortController`, resultados tardios descartados, push-to-talk liberado)\n- B7 troca de dispositivo: done (FR-005/T005; os arquivos de áudio estão na lista, com aviso de reinício)\n\n**Spec: plano**\n- P1 término e recuperação: done\n- P2 histórico: done\n- P3 Interromper: done\n- P4 microfone e saída: done\n- P5 recuperar serviços: done\n- P6 estados separados: parcial. FR-007 cobre transcrevendo, pensando e falando, mas não o estado de **preparação** na abertura que a revisão pede (\"abrir… mostrar se está pronto\").\n- P7 texto progressivo e fala por frase: done (parcial acumulado em `resposta`, reconciliação sem repetir)\n- P8 modo jogo: done\n- P9 ferramentas: done por outro caminho. A revisão pedia suspender; D9 corrige o contrato em vez disso, e a escolha está declarada.\n- P10 README e primeiro uso: parcial. FR-011 cobre só o README; o **primeiro uso** (tirar sala, invisibilidade e personalização avançada) ficou de fora sem justificativa.\n\nOs pedidos da revisão anterior foram todos atendidos: T010 nos três adaptadores; T009 com `voltar` sem `/modo` e o teste invertido; T008 com acúmulo e reconciliação; T006 com descritor e `repetir`; T002 com 90 s e cancelamento; arquivos de áudio em T005; `npm run check` no SC-002; a escolha de prioridade em D12. A nota de ambiente (cargo e aceite pelo dono no Windows) é sobre quem verifica, não descreve o ambiente do executor.\n\n**Quality**\nNenhum achado Critical. Nenhum Important que impeça começar.\n\nConferi os nomes citados contra o código e todos existem:\n- `definirMicrofonePreferido` em `src/audio/microfone.ts:66`\n- `aplicarSaidaNoContexto` com `setSinkId` no `AudioContext` em `src/audio/boca.ts:5`\n- `config-salva` em `src/main.ts:845`\n- `executar_jogo_sem_ponte_retorna_modo_jogo` em `src-tauri/src/ciclo.rs:1392`\n- `ultimo_seq` e `resposta` em `pedidos.py:90`\n- o Gemini já aceita o formato interno em `provedores.py:597`\n\nMinor:\n- P6 e P10 são lacunas parciais. Ou entram em FR-007 e FR-011, ou ficam registradas como adiadas, por exemplo para a 0.8 (primeiro uso).\n- \"Sem ponte configurada retorna erro\" (FR-009) entra em tensão com a ponte ser opcional. A spec também não diz o que acontece com `executar_voltar_sem_ponte_retorna_ligado` (`ciclo.rs:1411`).\n- `src/audio/dispositivos.ts:106` (`aplicarSaida`, em elemento de áudio) continua sendo um segundo caminho de saída; vale deixar claro que T005 não usa esse caminho.\n\nVEREDITO: APROVADO",
+          "diffstat": [],
+          "destructive_suspect": [],
+          "outside_writes": [],
+          "branch": null,
+          "worktree": null,
+          "base": null,
+          "steps": 19,
+          "tokens_in": 598967,
+          "tokens_out": 5992,
+          "tokens_total": 604959,
+          "tokens_estimated": false,
+          "cost_usd": 0.6518144,
+          "cost_known": true
+        }
+      ],
+      "corrections": [
+        {
+          "reason": "revisão claude:opus pediu ajustes Q3-Q13 (adaptadores, voltar, texto progressivo x reconexão, descritor no registro, prazo por progresso, arquivos de T005, npm run check, ambiente fora do doc)",
+          "executor": "opencode:omni/agy/gemini-3.8-flash-tiered",
+          "at": "2026-10-25T20:08:07.781115+00:00"
+        }
+      ],
+      "escalations": [],
+      "grades": {
+        "opencode:omni/agy/gemini-3.8-flash-tiered": {
+          "score": 85,
+          "explain": "adherence 3/3 → 100; 1 correction −15; 0 extra; penalties none → 85",
+          "corrections": 1,
+          "done": 3,
+          "missing": 0,
+          "extra": 0,
+          "penalties": [],
+          "executor": "opencode:omni/agy/gemini-3.8-flash-tiered",
+          "graded_at": "2026-10-25T20:17:11.866151+00:00"
+        }
+      },
+      "next_attempt": 6,
+      "accepted": {
+        "attempt": 4,
+        "branch": "crew/20261025-1952-fix-conversa-basica-confiavel-issue-6-1-4",
+        "at": "2026-10-25T20:17:12.048599+00:00"
+      }
+    },
+    {
+      "n": 2,
+      "title": "T001 Garantir evento terminal em todos os caminhos do despachante em nucleo/vard/cerebro/pedidos.py, com teste em nucleo/tests/test_cerebro_pedidos_terminal.py (FR-001)",
+      "type": "tests",
+      "risk": "low",
+      "attempts": [],
+      "corrections": [],
+      "escalations": [],
+      "grades": {},
+      "ref": "T001",
+      "task_text": "Garantir evento terminal em todos os caminhos do despachante em nucleo/vard/cerebro/pedidos.py, com teste em nucleo/tests/test_cerebro_pedidos_terminal.py (FR-001)"
+    },
+    {
+      "n": 3,
+      "title": "T002 Reconsultar o pedido ao reconectar o SSE e periodicamente, com prazo de 90 s sem progresso, cancelando no servidor e exibindo erro visível, em src/fala/conversa.ts, com teste em tests/conversa-pedido-terminal.test.ts (FR-002)",
+      "type": "tests",
+      "risk": "low",
+      "attempts": [],
+      "corrections": [],
+      "escalations": [],
+      "grades": {},
+      "ref": "T002",
+      "task_text": "Reconsultar o pedido ao reconectar o SSE e periodicamente, com prazo de 90 s sem progresso, cancelando no servidor e exibindo erro visível, em src/fala/conversa.ts, com teste em tests/conversa-pedido-terminal.test.ts (FR-002)"
+    },
+    {
+      "n": 4,
+      "title": "T003 Gravar o par pergunta/resposta no histórico da sessão em nucleo/vard/cerebro/laco.py e nucleo/vard/cerebro/sessoes.py, com teste em nucleo/tests/test_cerebro_historico.py (FR-003)",
+      "type": "tests",
+      "risk": "low",
+      "attempts": [],
+      "corrections": [],
+      "escalations": [],
+      "grades": {},
+      "ref": "T003",
+      "task_text": "Gravar o par pergunta/resposta no histórico da sessão em nucleo/vard/cerebro/laco.py e nucleo/vard/cerebro/sessoes.py, com teste em nucleo/tests/test_cerebro_historico.py (FR-003)"
+    },
+    {
+      "n": 5,
+      "title": "T004 Interromper cancela a transcrição em andamento em src/main.ts com a lógica num módulo testável src/fala/ciclo-voz.ts, com teste em tests/ciclo-voz-cancelamento.test.ts (FR-004)",
+      "type": "tests",
+      "risk": "low",
+      "attempts": [],
+      "corrections": [],
+      "escalations": [],
+      "grades": {},
+      "ref": "T004",
+      "task_text": "Interromper cancela a transcrição em andamento em src/main.ts com a lógica num módulo testável src/fala/ciclo-voz.ts, com teste em tests/ciclo-voz-cancelamento.test.ts (FR-004)"
+    },
+    {
+      "n": 6,
+      "title": "T005 Aplicar no widget a troca de microfone e saída salva nas configurações, ou avisar reinício, em src/main.ts, src/config/config.ts, src/audio/microfone.ts e src/audio/boca.ts, com teste em tests/dispositivos-ao-vivo.test.ts, depends on T004 (FR-005)",
+      "type": "tests",
+      "risk": "medium",
+      "attempts": [],
+      "corrections": [],
+      "escalations": [],
+      "grades": {},
+      "ref": "T005",
+      "task_text": "Aplicar no widget a troca de microfone e saída salva nas configurações, ou avisar reinício, em src/main.ts, src/config/config.ts, src/audio/microfone.ts e src/audio/boca.ts, com teste em tests/dispositivos-ao-vivo.test.ts, depends on T004 (FR-005)"
+    },
+    {
+      "n": 7,
+      "title": "T006 Separar parada definitiva de reinício no supervisor em src-tauri/src/servicos.rs (cópia de DescritorServico no handle, repetir recria thread, parada definitiva remove registro) e fazer recarregar chamar só repetir em src-tauri/src/ciclo.rs, com testes Rust no próprio arquivo (FR-006)",
+      "type": "code",
+      "risk": "low",
+      "attempts": [],
+      "corrections": [],
+      "escalations": [],
+      "grades": {},
+      "ref": "T006",
+      "task_text": "Separar parada definitiva de reinício no supervisor em src-tauri/src/servicos.rs (cópia de DescritorServico no handle, repetir recria thread, parada definitiva remove registro) e fazer recarregar chamar só repetir em src-tauri/src/ciclo.rs, com testes Rust no próprio arquivo (FR-006)"
+    },
+    {
+      "n": 8,
+      "title": "T007 Mostrar etapas transcrevendo, pensando e falando e os erros de transcrição, resposta e síntese na interface em src/fala/conversa.ts e src/main.ts, com teste em tests/etapas-visiveis.test.ts (FR-007)",
+      "type": "tests",
+      "risk": "medium",
+      "attempts": [],
+      "corrections": [],
+      "escalations": [],
+      "grades": {},
+      "ref": "T007",
+      "task_text": "Mostrar etapas transcrevendo, pensando e falando e os erros de transcrição, resposta e síntese na interface em src/fala/conversa.ts e src/main.ts, com teste em tests/etapas-visiveis.test.ts (FR-007)"
+    },
+    {
+      "n": 9,
+      "title": "T008 Emitir texto progressivo no núcleo e acumular o parcial no estado do pedido em nucleo/vard/cerebro/laco.py e nucleo/vard/cerebro/pedidos.py, e falar frase por frase sem repetir na reconciliação em src/fala/conversa.ts, com testes em nucleo/tests/test_cerebro_texto_progressivo.py e tests/fala-por-frase.test.ts, depends on T007 (FR-008)",
+      "type": "tests",
+      "risk": "medium",
+      "attempts": [],
+      "corrections": [],
+      "escalations": [],
+      "grades": {},
+      "ref": "T008",
+      "task_text": "Emitir texto progressivo no núcleo e acumular o parcial no estado do pedido em nucleo/vard/cerebro/laco.py e nucleo/vard/cerebro/pedidos.py, e falar frase por frase sem repetir na reconciliação em src/fala/conversa.ts, com testes em nucleo/tests/test_cerebro_texto_progressivo.py e tests/fala-por-frase.test.ts, depends on T007 (FR-008)"
+    },
+    {
+      "n": 10,
+      "title": "T009 Corrigir modo jogo e volta com executor único em src-tauri/src/ciclo.rs (pasta de configuração, contrato de /pedidos, sem sucesso falso, sem chamar /modo do Python na ida nem na volta, invertendo o teste executar_jogo_sem_ponte_retorna_modo_jogo), com testes Rust no próprio arquivo (FR-009)",
+      "type": "code",
+      "risk": "low",
+      "attempts": [],
+      "corrections": [],
+      "escalations": [],
+      "grades": {},
+      "ref": "T009",
+      "task_text": "Corrigir modo jogo e volta com executor único em src-tauri/src/ciclo.rs (pasta de configuração, contrato de /pedidos, sem sucesso falso, sem chamar /modo do Python na ida nem na volta, invertendo o teste executar_jogo_sem_ponte_retorna_modo_jogo), com testes Rust no próprio arquivo (FR-009)"
+    },
+    {
+      "n": 11,
+      "title": "T010 Formato interno único de ferramenta convertido nos adaptadores compatível, Anthropic e Gemini, e argumentos acumulados até o fim da chamada, em nucleo/vard/cerebro/provedores.py, com teste em nucleo/tests/test_cerebro_ferramentas_contrato.py (FR-010)",
+      "type": "tests",
+      "risk": "low",
+      "attempts": [],
+      "corrections": [],
+      "escalations": [],
+      "grades": {},
+      "ref": "T010",
+      "task_text": "Formato interno único de ferramenta convertido nos adaptadores compatível, Anthropic e Gemini, e argumentos acumulados até o fim da chamada, em nucleo/vard/cerebro/provedores.py, com teste em nucleo/tests/test_cerebro_ferramentas_contrato.py (FR-010)"
+    },
+    {
+      "n": 12,
+      "title": "T011 Reescrever README.md e README.en.md com a configuração mínima recomendada e as periféricas congeladas (FR-011)",
+      "type": "docs",
+      "risk": "low",
+      "attempts": [],
+      "corrections": [],
+      "escalations": [],
+      "grades": {},
+      "ref": "T011",
+      "task_text": "Reescrever README.md e README.en.md com a configuração mínima recomendada e as periféricas congeladas (FR-011)"
+    }
+  ],
+  "rulings": [
+    {
+      "n": 1,
+      "text": "Revisor codex:gpt-6.1-sol indisponível neste contêiner: a revisão da peça 1 respondeu exatamente 'Não consegui ler `.crew-chief-brief.md`: o ambiente bloqueou a execução de leitura com o erro `bwrap: No permissions to create a new namespace`.' — portanto o único revisor permitido é claude:opus, e para manter revisor de modelo diferente do executor as peças de código vão para opencode:omni/agy/gemini-3.8-flash-tiered (executor alternativo autorizado) em vez de claude-ghost:claude-opus-5-5 — custo se errado: executor mais fraco em Rust/TS, compensado pela revisão do opus e pelas correções",
+      "at": "2026-10-25T20:04:42.111448+00:00",
+      "promoted": null
+    },
+    {
+      "n": 2,
+      "text": "Spec 001 aceita após 2ª revisão claude:opus, que respondeu 'VEREDITO: APROVADO' e 'Nenhum achado Critical. Nenhum Important que impeça começar.' — os Minor 'P6 e P10 são lacunas parciais' entram nos briefs: T007 inclui o estado de preparação na abertura e T011 registra o primeiro uso mínimo (sala, invisibilidade e personalização avançada fora do primeiro uso) no README — custo se errado: escopo docs um pouco maior",
+      "at": "2026-10-25T20:17:11.597391+00:00",
+      "promoted": null
+    },
+    {
+      "n": 3,
+      "text": "Modo jogo sem ponte configurada: a ponte é opcional, então a falta dela só pula o cancelamento de pedidos; o sucesso continua exigindo a liberação feita pelo Rust (descarregar modelos e parar serviços), atendendo ao Minor do revisor 'Sem ponte configurada retorna erro (FR-009) entra em tensão com a ponte ser opcional' — custo se errado: o dono pode preferir erro explícito sem ponte",
+      "at": "2026-10-25T20:17:11.732960+00:00",
+      "promoted": null
+    }
+  ],
+  "spec_dir": "specs/001-conversa-basica-confiavel"
 }
