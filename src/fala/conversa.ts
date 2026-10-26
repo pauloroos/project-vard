@@ -387,6 +387,10 @@ export class Conversa {
         // O "fim" pode ter saído antes desta consulta: com o pedido encerrado, nenhum evento novo vai chegar.
         const jaTerminou = !!snapInicial && ["concluido", "falhou", "cancelado"].includes(snapInicial.estado);
         if (ac.signal.aborted || this.emJogo()) return;
+        if (!jaTerminou && textoAcumulado) {
+          bufferFala = textoAcumulado;
+          falarFrasesCompletas();
+        }
         const promessaInicial = () => {
           if (!snapInicial || snapInicial.estado === "concluido") return Promise.resolve(textoAcumulado.trim());
           if (snapInicial.estado === "falhou") return Promise.reject(new ErroPonte(snapInicial.erro ?? "modelo_http"));
@@ -429,11 +433,22 @@ export class Conversa {
                 progresso = true;
               }
               if (typeof snap.resposta === "string" && snap.resposta.length > textoAcumulado.length) {
+                const delta = snap.resposta.slice(textoAcumulado.length);
                 textoAcumulado = snap.resposta;
+                // FR-008: reconcilia delta no buffer de fala para que texto recuperado por consulta seja falado
+                bufferFala += delta;
+                falarFrasesCompletas();
                 progresso = true;
               }
               if (progresso) rearmarPrazo();
               if (snapEstado === "concluido") {
+                // FR-008: flush do buffer restante se a conclusão vier por consulta/reconexão
+                const resto = bufferFala.trim();
+                if (resto && this.podeFalar()) {
+                  falouProgressivamente = true;
+                  this.filaFala = this.filaFala.then(() => this.falarEmFrases(resto, ac.signal)).catch(() => {});
+                }
+                bufferFala = "";
                 resolvido = true;
                 cleanup();
                 resolve(textoAcumulado.trim());
@@ -468,6 +483,12 @@ export class Conversa {
               bufferFala += obj.dados.texto;
               falarFrasesCompletas();
             } else if (obj.evento_tipo === "fim") {
+              // FR-008: reconcilia qualquer texto final entregue no evento fim antes do flush
+              if (typeof obj.dados?.resposta === "string" && obj.dados.resposta.length > textoAcumulado.length) {
+                const delta = obj.dados.resposta.slice(textoAcumulado.length);
+                textoAcumulado = obj.dados.resposta;
+                bufferFala += delta;
+              }
               // FR-008: flush do buffer restante como frase final, serializado pela fila
               const resto = bufferFala.trim();
               if (resto && this.podeFalar()) {
