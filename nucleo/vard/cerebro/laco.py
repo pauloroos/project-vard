@@ -265,17 +265,9 @@ async def executar_pedido(
                 continue
 
             # --- Resposta textual final ---
-            texto = "".join(texto_acumulado)
-            if texto:
-                seq += 1
-                emitir(EventoPedido(
-                    pedido_id=pedido.pedido_id,
-                    sessao_id=pedido.sessao_id,
-                    seq=seq,
-                    tipo=TipoEvento.TEXTO,
-                    dados={"texto": texto},
-                ))
-            resposta_final = texto
+            # Não emite TEXTO pós-loop: os fragmentos já foram emitidos durante streaming
+            # e o FIM carrega a resposta completa. Um TEXTO extra duplicaria cur.resposta.
+            resposta_final = "".join(texto_acumulado)
             break
         else:
             erro_final = "limite_turnos_atingido"

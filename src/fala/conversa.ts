@@ -352,6 +352,23 @@ export class Conversa {
         let ultimoSeq = -1;
         let ultimoEstado = estado.estado ?? "na_fila";
         let textoAcumulado = "";
+        // FR-008: buffer para fala incremental — só frases completas (com pontuação) são faladas durante streaming.
+        let bufferFala = "";
+        let posFalada = 0;
+        const falarFrasesCompletas = () => {
+          if (!this.podeFalar()) return;
+          const frases = cortarEmFrases(bufferFala);
+          if (frases.length <= 1) return; // sem frase completa ainda
+          // Fala todas exceto a última (que pode ser parcial)
+          for (let i = 0; i < frases.length - 1; i++) {
+            const frase = frases[i];
+            if (!frase) continue;
+            void this.falarEmFrases(frase, ac.signal).catch(() => {});
+            posFalada += frase.length;
+          }
+          // Mantém o resto no buffer
+          bufferFala = frases[frases.length - 1] ?? "";
+        };
         let snapInicial: { resposta?: string | null; estado: string; ultimo_seq?: number; erro?: string | null } | null = null;
         // Reconciliação inicial: consulta estado atual para pegar texto já produzido antes do SSE.
         try {
@@ -443,7 +460,16 @@ export class Conversa {
             ultimoSeq = obj.seq;
             if (obj.evento_tipo === "texto" && typeof obj.dados.texto === "string") {
               textoAcumulado += obj.dados.texto;
+              // FR-008: fala incremental — só frases completas durante streaming
+              bufferFala += obj.dados.texto;
+              falarFrasesCompletas();
             } else if (obj.evento_tipo === "fim") {
+              // FR-008: flush do buffer restante como frase final
+              const resto = bufferFala.trim();
+              if (resto && this.podeFalar()) {
+                void this.falarEmFrases(resto, ac.signal).catch(() => {});
+              }
+              bufferFala = "";
               resolvido = true;
               cleanup();
               resolve(textoAcumulado.trim());
