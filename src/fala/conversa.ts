@@ -103,6 +103,8 @@ export class Conversa {
   private microfoneFechado = false;
   private erroPonte = false;
   private pergunta: AbortController | null = null;
+  /** Fila de fala progressiva: garante que frases não se sobreponham e que this.pergunta viva até o fim. */
+  private filaFala: Promise<void> = Promise.resolve();
   private canalAte = 0; // instante em que o modo conversa fecha; 0 = fechado
   private relogioCanal: ReturnType<typeof setTimeout> | null = null;
   private entrandoEmJogo = false; // aviso do modo jogo tocando: a sondagem da ponte não mexe no estado
@@ -360,12 +362,12 @@ export class Conversa {
           if (!this.podeFalar()) return;
           const frases = cortarEmFrases(bufferFala);
           if (frases.length <= 1) return; // sem frase completa ainda
-          // Fala todas exceto a última (que pode ser parcial)
+          // Fala todas exceto a última (que pode ser parcial), serializando pela fila
           for (let i = 0; i < frases.length - 1; i++) {
             const frase = frases[i];
             if (!frase) continue;
             falouProgressivamente = true;
-            void this.falarEmFrases(frase, ac.signal).catch(() => {});
+            this.filaFala = this.filaFala.then(() => this.falarEmFrases(frase, ac.signal)).catch(() => {});
             posFalada += frase.length;
           }
           // Mantém o resto no buffer
@@ -466,11 +468,11 @@ export class Conversa {
               bufferFala += obj.dados.texto;
               falarFrasesCompletas();
             } else if (obj.evento_tipo === "fim") {
-              // FR-008: flush do buffer restante como frase final
+              // FR-008: flush do buffer restante como frase final, serializado pela fila
               const resto = bufferFala.trim();
               if (resto && this.podeFalar()) {
                 falouProgressivamente = true;
-                void this.falarEmFrases(resto, ac.signal).catch(() => {});
+                this.filaFala = this.filaFala.then(() => this.falarEmFrases(resto, ac.signal)).catch(() => {});
               }
               bufferFala = "";
               resolvido = true;
@@ -551,6 +553,10 @@ export class Conversa {
     // FR-008: se a fala já ocorreu progressivamente durante streaming, não repete
     if (!falouProgressivamente) {
       await this.falarEmFrases(resposta, ac.signal);
+    } else {
+      // Aguarda a fila de fala progressiva terminar antes de liberar this.pergunta,
+      // para que interromper() ainda possa abortar e cancelar o pedido.
+      try { await this.filaFala; } catch { /* erros de fala já foram tratados dentro de falarEmFrases */ }
     }
     if (this.pergunta === ac) this.pergunta = null;
     if (!ac.signal.aborted && !this.emJogo()) { this.abrirCanal(); this.d.aoProcessamentoConcluido?.(); this.mudar("repouso"); }
