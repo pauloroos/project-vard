@@ -432,13 +432,25 @@ export class Conversa {
                 ultimoEstado = snapEstado;
                 progresso = true;
               }
-              if (typeof snap.resposta === "string" && snap.resposta.length > textoAcumulado.length) {
-                const delta = snap.resposta.slice(textoAcumulado.length);
-                textoAcumulado = snap.resposta;
-                // FR-008: reconcilia delta no buffer de fala para que texto recuperado por consulta seja falado
-                bufferFala += delta;
-                falarFrasesCompletas();
-                progresso = true;
+              if (typeof snap.resposta === "string") {
+                // FR-003/C3-fix: após ferramenta, o snapshot pode conter apenas o turno atual
+                // (menor que textoAcumulado). Se não for extensão direta, trata como novo conteúdo
+                // e concatena para preservar tanto a introdução quanto a resposta final.
+                if (snap.resposta.length > textoAcumulado.length && snap.resposta.startsWith(textoAcumulado)) {
+                  const delta = snap.resposta.slice(textoAcumulado.length);
+                  textoAcumulado = snap.resposta;
+                  bufferFala += delta;
+                  falarFrasesCompletas();
+                  progresso = true;
+                } else if (snap.resposta !== textoAcumulado && !textoAcumulado.endsWith(snap.resposta)) {
+                  // Snapshot tem conteúdo diferente (ex: resposta pós-ferramenta); concatena.
+                  const separador = textoAcumulado ? "\n" : "";
+                  const delta = separador + snap.resposta;
+                  textoAcumulado += delta;
+                  bufferFala += delta;
+                  falarFrasesCompletas();
+                  progresso = true;
+                }
               }
               if (progresso) rearmarPrazo();
               if (snapEstado === "concluido") {

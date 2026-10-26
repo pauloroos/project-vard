@@ -1,6 +1,6 @@
 # Conversa básica confiável
 
-**Created**: 2026-10-25  
+**Created**: 2026-10-25
 **Status**: Draft
 
 ## What the user wants

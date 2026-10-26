@@ -507,7 +507,12 @@ async function transcreverFala(wav: ArrayBuffer, sinal?: AbortSignal): Promise<s
   void checarSaude();
   setInterval(() => { void checarSaude(); }, 5000);
 
-  interromperTudo = () => conversa.interromper();
+  interromperTudo = () => {
+    // FR-003/C3: botão e atalho também cancelam transcrição em andamento.
+    controladorTranscricao?.abort();
+    controladorTranscricao = null;
+    conversa.interromper();
+  };
 
   const guardarAmostras = (a: Float32Array) => {
     if (capturando) { pcm.push(a); return; }
@@ -717,7 +722,12 @@ async function transcreverFala(wav: ArrayBuffer, sinal?: AbortSignal): Promise<s
     if (!ligado || estaMudo() || reuniaoAtiva) return; // reunião: o widget está mudo (sem tocar no mudo do usuário)
     // Apertar para falar corta a resposta em curso (mesmo caminho do botão Interromper) e depois captura.
     const respondendo = boca.falando || ocupado;
-    if (respondendo) conversa.interromper();
+    if (respondendo) {
+      // FR-003/C3: push-to-talk também cancela transcrição em andamento.
+      controladorTranscricao?.abort();
+      controladorTranscricao = null;
+      conversa.interromper();
+    }
     pttSegurado = true;
     if (ocupado) { pttPendente = true; return; } // encerrar() inicia a captura no finally
     if (!capturando) comecarCaptura(); // se o VAD já estava capturando, segue acumulando o mesmo PCM
@@ -728,7 +738,12 @@ async function transcreverFala(wav: ArrayBuffer, sinal?: AbortSignal): Promise<s
     pttPendente = false;
     if (capturando) void encerrar(true);
   });
-  await listen("parar", () => { conversa.interromper(); });
+  await listen("parar", () => {
+    // FR-003/C3: atalho global também cancela transcrição em andamento.
+    controladorTranscricao?.abort();
+    controladorTranscricao = null;
+    conversa.interromper();
+  });
   await listen("alternar-revelacao", () => invisibilidade.alternarRevelacao());
   await listen<unknown>("invisivel", (ev) => {
     if (typeof ev.payload !== "boolean") { console.warn("invisivel ignorado: payload inválido"); return; }

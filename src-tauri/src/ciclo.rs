@@ -601,26 +601,29 @@ fn executar_jogo() -> Result<ModoCiclo, String> {
 fn executar_voltar() -> Result<ModoCiclo, String> {
     // FR-009: Rust é executor único — não chama ponte_modo na volta.
     // 1. Carrega fotografia de retomar.json
-    // 2. Religa núcleo e OpenJarvis via repetir() (mecanismo D6/T006)
-    // 3. Restaura apenas serviços opcionais que estavam ligados na fotografia
-    // 4. Modelo sob demanda é responsabilidade do provedor; sem carregador novo aqui
+    // 2. Reinicia serviços via iniciar_servicos() (parar_e_aguardar removeu os registros)
+    // 3. Modelo sob demanda é responsabilidade do provedor; sem carregador novo aqui
     let foto = carregar_fotografia()?.unwrap_or_default();
 
-    // Religa núcleo/OpenJarvis (serviços base sempre voltam)
-    let _ = crate::servicos::repetir("nucleo");
-    let _ = crate::servicos::repetir("openjarvis");
-
-    // Restaura apenas opcionais que estavam ligados na fotografia
-    for servico in &foto.servicos_ligados {
-        match servico.as_str() {
-            "voz" | "reuniao" => {
-                let _ = crate::servicos::repetir(servico);
-            }
-            _ => {
-                // Serviços desconhecidos na fotografia são ignorados
-                eprintln!("voltar: serviço desconhecido na fotografia: {}", servico);
-            }
-        }
+    // parar_e_aguardar remove os registros do SERVICOS, então repetir() falharia.
+    // Recria todos os serviços habilitados na configuração de instalação.
+    let recursos = std::path::PathBuf::new();
+    let raiz = crate::instalacao::resolver_raiz(&recursos);
+    let dados = pasta_dados();
+    let arquivo = crate::instalacao::arquivo_instalacao();
+    let config = crate::instalacao::ler_instalacao(&arquivo)?;
+    if !config.supervisor {
+        return Err("supervisor desabilitado: não é possível voltar ao modo ligado".into());
+    }
+    let (_iniciados, avisos) = crate::instalacao::iniciar_servicos(
+        &config,
+        &recursos,
+        &raiz,
+        &dados,
+        env!("CARGO_PKG_VERSION"),
+    );
+    for a in &avisos {
+        eprintln!("voltar: {a}");
     }
 
     // Dispositivos de áudio: preferência salva é restaurada pelo frontend
