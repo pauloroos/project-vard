@@ -1175,21 +1175,23 @@ http.server.HTTPServer(('127.0.0.1', {porta}), H).serve_forever()
     fn test_repetir_recria_thread_apos_parada() {
         let id = "teste-repetir-recria";
         let porta = porta_livre();
-        // Descritor com executável que termina rápido (echo).
+        // Descritor com executável de caminho absoluto que termina rápido.
         let desc = DescritorServico {
             id: id.to_string(),
             porta,
             comando: if cfg!(windows) {
-                (PathBuf::from("cmd"), vec!["/c".into(), "exit".into()])
+                (PathBuf::from(r"C:\Windows\System32\cmd.exe"), vec!["/c".into(), "exit".into()])
             } else {
-                (PathBuf::from("echo"), vec!["ok".into()])
+                (PathBuf::from("/bin/echo"), vec!["ok".into()])
             },
             pasta_trabalho: None,
             envs: Vec::new(),
             caminho_log: std::env::temp_dir().join(format!("{id}.log")),
         };
         iniciar(desc).expect("iniciar");
-        // Espera a thread terminar (echo sai imediatamente).
+        // O supervisor não termina sozinho; solicitar parada para que a thread encerre.
+        parar(id).expect("parar");
+        // Espera a thread terminar após o sinal de parada.
         std::thread::sleep(std::time::Duration::from_secs(2));
         let reg = SERVICOS.read().unwrap();
         let handle = reg.get(id).expect("handle existe");
@@ -1200,7 +1202,7 @@ http.server.HTTPServer(('127.0.0.1', {porta}), H).serve_forever()
         // Após repetir, terminou deve estar false (nova thread rodando ou recém-iniciada).
         let reg = SERVICOS.read().unwrap();
         let handle = reg.get(id).expect("handle ainda existe");
-        // A nova thread pode terminar rápido também (echo), mas o importante é que não deu erro.
+        // A nova thread pode terminar rápido também, mas o importante é que não deu erro.
         drop(reg);
         // Limpeza: parar_definitiva remove o registro.
         let _ = parar_definitiva(id);
