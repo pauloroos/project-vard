@@ -89,6 +89,7 @@ async def executar_pedido(
     seq = info.ultimo_seq
     resposta_final: str | None = None
     erro_final: str | None = None
+    texto_emitido = False  # rastreia se algum evento TEXTO foi emitido no laço
 
     try:
         for turno in range(LIMITE_TURNOS):
@@ -158,6 +159,7 @@ async def executar_pedido(
                                 if conteudo:
                                     texto_acumulado.append(conteudo)
                                     # FR-008: emite TEXTO progressivo durante streaming
+                                    texto_emitido = True
                                     seq += 1
                                     emitir(EventoPedido(
                                         pedido_id=pedido.pedido_id,
@@ -274,9 +276,18 @@ async def executar_pedido(
                 continue
 
             # --- Resposta textual final ---
-            # Não emite TEXTO pós-loop: os fragmentos já foram emitidos durante streaming
-            # e o FIM carrega a resposta completa. Um TEXTO extra duplicaria cur.resposta.
             resposta_final = "".join(texto_acumulado)
+            # Se nenhum TEXTO foi emitido via streaming (contrato antigo ou segunda inferência),
+            # emite um evento TEXTO com o conteúdo completo para compatibilidade com o frontend.
+            if resposta_final and not texto_emitido:
+                seq += 1
+                emitir(EventoPedido(
+                    pedido_id=pedido.pedido_id,
+                    sessao_id=pedido.sessao_id,
+                    seq=seq,
+                    tipo=TipoEvento.TEXTO,
+                    dados={"texto": resposta_final},
+                ))
             break
         else:
             erro_final = "limite_turnos_atingido"
