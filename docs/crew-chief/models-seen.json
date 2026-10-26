@@ -1,10 +1,10 @@
 {
-  "last_check": "2026-10-25T19:52:38+00:00",
+  "last_check": "2026-10-25T23:55:42+00:00",
   "models": {
     "claude-ghost:claude-opus-5-5": {
       "cost": "paid",
       "first_seen": "2026-10-25T19:52:24+00:00",
-      "last_seen": "2026-10-25T19:52:38+00:00",
+      "last_seen": "2026-10-25T23:55:42+00:00",
       "present": true,
       "trains": false
     },
@@ -32,140 +32,140 @@
     "codex:gpt-6.1-sol": {
       "cost": "included",
       "first_seen": "2026-10-25T19:52:24+00:00",
-      "last_seen": "2026-10-25T19:52:38+00:00",
+      "last_seen": "2026-10-25T23:55:42+00:00",
       "present": true,
       "trains": false
     },
     "opencode:omni/agy/gemini-3.8-flash-tiered": {
       "cost": "included",
       "first_seen": "2026-10-25T19:52:24+00:00",
-      "last_seen": "2026-10-25T19:52:38+00:00",
+      "last_seen": "2026-10-25T23:55:42+00:00",
       "present": true,
       "trains": false
     },
     "opencode:omni/chefe": {
       "cost": "paid",
       "first_seen": "2026-10-25T19:52:24+00:00",
-      "last_seen": "2026-10-25T19:52:38+00:00",
+      "last_seen": "2026-10-25T23:55:42+00:00",
       "present": true,
       "trains": false
     },
     "opencode:omni/equipe": {
       "cost": "included",
       "first_seen": "2026-10-25T19:52:24+00:00",
-      "last_seen": "2026-10-25T19:52:38+00:00",
+      "last_seen": "2026-10-25T23:55:42+00:00",
       "present": true,
       "trains": false
     },
     "opencode:omni/gratis": {
       "cost": "free",
       "first_seen": "2026-10-25T19:52:24+00:00",
-      "last_seen": "2026-10-25T19:52:38+00:00",
+      "last_seen": "2026-10-25T23:55:42+00:00",
       "present": true,
       "trains": true
     },
     "opencode:opencode-go/beam-free": {
       "cost": "free",
       "first_seen": "2026-10-25T19:52:24+00:00",
-      "last_seen": "2026-10-25T19:52:38+00:00",
+      "last_seen": "2026-10-25T23:55:42+00:00",
       "present": true,
       "trains": false
     },
     "opencode:opencode-go/deepseek-v4.1-flash": {
       "cost": "included",
       "first_seen": "2026-10-25T19:52:24+00:00",
-      "last_seen": "2026-10-25T19:52:38+00:00",
+      "last_seen": "2026-10-25T23:55:42+00:00",
       "present": true,
       "trains": false
     },
     "opencode:opencode-go/iceman-contributor-free": {
       "cost": "free",
       "first_seen": "2026-10-25T19:52:24+00:00",
-      "last_seen": "2026-10-25T19:52:38+00:00",
+      "last_seen": "2026-10-25T23:55:42+00:00",
       "present": true,
       "trains": true
     },
     "opencode:opencode-go/mimo-v2.6-flash": {
       "cost": "included",
       "first_seen": "2026-10-25T19:52:24+00:00",
-      "last_seen": "2026-10-25T19:52:38+00:00",
+      "last_seen": "2026-10-25T23:55:42+00:00",
       "present": true,
       "trains": false
     },
     "opencode:opencode-go/muse-spark-1.2-contributor": {
       "cost": "free",
       "first_seen": "2026-10-25T19:52:24+00:00",
-      "last_seen": "2026-10-25T19:52:38+00:00",
+      "last_seen": "2026-10-25T23:55:42+00:00",
       "present": true,
       "trains": true
     },
     "opencode:opencode-go/muse-spark-1.3-contributor": {
       "cost": "free",
       "first_seen": "2026-10-25T19:52:24+00:00",
-      "last_seen": "2026-10-25T19:52:38+00:00",
+      "last_seen": "2026-10-25T23:55:42+00:00",
       "present": true,
       "trains": true
     },
     "opencode:opencode/beam-free": {
       "cost": "free",
       "first_seen": "2026-10-25T19:52:24+00:00",
-      "last_seen": "2026-10-25T19:52:38+00:00",
+      "last_seen": "2026-10-25T23:55:42+00:00",
       "present": true,
       "trains": false
     },
     "opencode:opencode/big-pickle": {
       "cost": "paid",
       "first_seen": "2026-10-25T19:52:24+00:00",
-      "last_seen": "2026-10-25T19:52:38+00:00",
+      "last_seen": "2026-10-25T23:55:42+00:00",
       "present": true,
       "trains": false
     },
     "opencode:opencode/deepseek-v4.1-flash-free": {
       "cost": "free",
       "first_seen": "2026-10-25T19:52:24+00:00",
-      "last_seen": "2026-10-25T19:52:38+00:00",
+      "last_seen": "2026-10-25T23:55:42+00:00",
       "present": true,
       "trains": false
     },
     "opencode:opencode/flint-40b-free": {
       "cost": "free",
       "first_seen": "2026-10-25T19:52:24+00:00",
-      "last_seen": "2026-10-25T19:52:38+00:00",
+      "last_seen": "2026-10-25T23:55:42+00:00",
       "present": true,
       "trains": false
     },
     "opencode:opencode/glm-5.3-flash-free": {
       "cost": "free",
       "first_seen": "2026-10-25T19:52:24+00:00",
-      "last_seen": "2026-10-25T19:52:38+00:00",
+      "last_seen": "2026-10-25T23:55:42+00:00",
       "present": true,
       "trains": false
     },
     "opencode:opencode/mimo-v2.6-flash-free": {
       "cost": "free",
       "first_seen": "2026-10-25T19:52:24+00:00",
-      "last_seen": "2026-10-25T19:52:38+00:00",
+      "last_seen": "2026-10-25T23:55:42+00:00",
       "present": true,
       "trains": false
     },
     "opencode:opencode/nemotron-3-ultra-free": {
       "cost": "free",
       "first_seen": "2026-10-25T19:52:24+00:00",
-      "last_seen": "2026-10-25T19:52:38+00:00",
+      "last_seen": "2026-10-25T23:55:42+00:00",
       "present": true,
       "trains": false
     },
     "opencode:opencode/nemotron-3.5-lightning-free": {
       "cost": "free",
       "first_seen": "2026-10-25T19:52:24+00:00",
-      "last_seen": "2026-10-25T19:52:38+00:00",
+      "last_seen": "2026-10-25T23:55:42+00:00",
       "present": true,
       "trains": false
     },
     "opencode:opencode/nemotron-3.5-super-vl-free": {
       "cost": "free",
       "first_seen": "2026-10-25T19:52:24+00:00",
-      "last_seen": "2026-10-25T19:52:38+00:00",
+      "last_seen": "2026-10-25T23:55:42+00:00",
       "present": true,
       "trains": false
     }
