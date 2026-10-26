@@ -61,9 +61,23 @@ pub fn parar(id: &str) -> Result<(), String> {
 }
 
 /// Sinaliza reinício manual de um serviço. Se a thread morreu, recria com o descritor guardado.
+/// Se `parar` está ativo mas a thread ainda não terminou, aguarda o término (até 5s) antes de recriar.
 pub fn repetir(id: &str) -> Result<(), String> {
     let reg = SERVICOS.read().map_err(|e| e.to_string())?;
     let handle = reg.get(id).ok_or_else(|| format!("serviço '{id}' não encontrado"))?;
+
+    // Se parar foi pedido mas a thread ainda não terminou, aguarda o término antes de recriar.
+    if handle.parar.load(Ordering::SeqCst) && !handle.terminou.load(Ordering::SeqCst) {
+        let fim = Instant::now() + Duration::from_secs(5);
+        while !handle.terminou.load(Ordering::SeqCst) {
+            if Instant::now() >= fim {
+                return Err(format!(
+                    "serviço '{id}': tempo esgotado ao aguardar término da thread após parada"
+                ));
+            }
+            std::thread::sleep(Duration::from_millis(50));
+        }
+    }
 
     // Se a thread terminou, recria usando o descritor guardado no handle.
     if handle.terminou.load(Ordering::SeqCst) {
@@ -89,7 +103,7 @@ pub fn repetir(id: &str) -> Result<(), String> {
             return Err(format!("falha ao recriar thread do serviço '{id}': {erro}"));
         }
     } else {
-        // Thread ainda viva: sinaliza reinício suave.
+        // Thread ainda viva e sem parada pendente: sinaliza reinício suave.
         handle.pedir_reinicio();
     }
     Ok(())
@@ -1244,6 +1258,53 @@ http.server.HTTPServer(('127.0.0.1', {porta}), H).serve_forever()
         let reg = SERVICOS.read().unwrap();
         assert!(reg.contains_key(id), "registro deve persistir após repetir");
         drop(reg);
+        let _ = parar_definitiva(id);
+    }
+
+    #[test]
+    fn repetir_apos_parar_aguarda_termino_e_recria() {
+        // Prova que repetir() após parar() aguarda a thread terminar antes de recriar,
+        // evitando estado inconsistente onde reiniciar e parar ficam ambos true.
+        let id = "teste-repetir-parar";
+        let porta = porta_livre();
+        let desc = DescritorServico {
+            id: id.to_string(),
+            porta,
+            comando: if cfg!(windows) {
+                (PathBuf::from("cmd"), vec!["/c".into(), "timeout /t 30".into()])
+            } else {
+                (PathBuf::from("sleep"), vec!["30".into()])
+            },
+            pasta_trabalho: None,
+            envs: Vec::new(),
+            caminho_log: std::env::temp_dir().join(format!("{id}.log")),
+        };
+        iniciar(desc).expect("iniciar");
+        std::thread::sleep(Duration::from_millis(300));
+
+        // Sinaliza parada — a thread vai terminar em breve.
+        parar(id).expect("parar");
+
+        // Chama repetir() imediatamente após parar(): deve aguardar o término e recriar.
+        repetir(id).expect("repetir após parar deve aguardar e recriar");
+
+        // Após repetir(), as flags devem estar limpas (nova thread rodando).
+        let reg = SERVICOS.read().unwrap();
+        let handle = reg.get(id).expect("handle deve existir");
+        assert!(
+            !handle.parar.load(Ordering::SeqCst),
+            "parar deve estar false após recriação"
+        );
+        assert!(
+            !handle.reiniciar.load(Ordering::SeqCst),
+            "reiniciar deve estar false após recriação"
+        );
+        assert!(
+            !handle.terminou.load(Ordering::SeqCst),
+            "terminou deve estar false com nova thread ativa"
+        );
+        drop(reg);
+
         let _ = parar_definitiva(id);
     }
 
