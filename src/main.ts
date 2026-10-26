@@ -535,7 +535,7 @@ async function transcreverFala(wav: ArrayBuffer, sinal?: AbortSignal): Promise<s
     }
     const ciclo = ++cicloVoz;
     ocupado = true;
-    mostrarEstado("pensando", "", pushToTalk);
+    mostrarEstado("transcrevendo", "", pushToTalk);
     try {
       const wav = pcmParaWav(reamostrar(tudo, taxaAtual(), 16000), 16000);
       let texto: string;
@@ -544,6 +544,7 @@ async function transcreverFala(wav: ArrayBuffer, sinal?: AbortSignal): Promise<s
       } catch (erro) {
         if (ciclo !== cicloVoz || estaMudo() || reuniaoAtiva) return;
         console.warn("transcrição falhou", erro);
+        mostrarEstado("erro", `transcricao: ${(erro as Error).message || String(erro)}`);
         if (!naoFalar) { try { await boca.tocar(await fixa(FALAS.erroOuvido)); } catch { /* sem voz, fica só no HUD */ } }
         return;
       }
