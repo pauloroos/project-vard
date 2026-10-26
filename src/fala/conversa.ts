@@ -103,6 +103,8 @@ export class Conversa {
   private microfoneFechado = false;
   private erroPonte = false;
   private pergunta: AbortController | null = null;
+  /** Fila de fala progressiva: garante que frases não se sobreponham e que this.pergunta viva até o fim. */
+  private filaFala: Promise<void> = Promise.resolve();
   private canalAte = 0; // instante em que o modo conversa fecha; 0 = fechado
   private relogioCanal: ReturnType<typeof setTimeout> | null = null;
   private entrandoEmJogo = false; // aviso do modo jogo tocando: a sondagem da ponte não mexe no estado
@@ -324,6 +326,7 @@ export class Conversa {
     this.pergunta = ac;
     const ver = rota === "see";
     let resposta: string;
+    let falouProgressivamente = false; // FR-008: evita duplicar fala no fim se já falou durante streaming
     try {
       if (ver) {
         if (!this.d.capturar || !this.d.ponte) throw new Error("sem captura");
@@ -352,6 +355,24 @@ export class Conversa {
         let ultimoSeq = -1;
         let ultimoEstado = estado.estado ?? "na_fila";
         let textoAcumulado = "";
+        // FR-008: buffer para fala incremental — só frases completas (com pontuação) são faladas durante streaming.
+        let bufferFala = "";
+        let posFalada = 0;
+        const falarFrasesCompletas = () => {
+          if (!this.podeFalar()) return;
+          const frases = cortarEmFrases(bufferFala);
+          if (frases.length <= 1) return; // sem frase completa ainda
+          // Fala todas exceto a última (que pode ser parcial), serializando pela fila
+          for (let i = 0; i < frases.length - 1; i++) {
+            const frase = frases[i];
+            if (!frase) continue;
+            falouProgressivamente = true;
+            this.filaFala = this.filaFala.then(() => this.falarEmFrases(frase, ac.signal)).catch(() => {});
+            posFalada += frase.length;
+          }
+          // Mantém o resto no buffer
+          bufferFala = frases[frases.length - 1] ?? "";
+        };
         let snapInicial: { resposta?: string | null; estado: string; ultimo_seq?: number; erro?: string | null } | null = null;
         // Reconciliação inicial: consulta estado atual para pegar texto já produzido antes do SSE.
         try {
@@ -443,7 +464,17 @@ export class Conversa {
             ultimoSeq = obj.seq;
             if (obj.evento_tipo === "texto" && typeof obj.dados.texto === "string") {
               textoAcumulado += obj.dados.texto;
+              // FR-008: fala incremental — só frases completas durante streaming
+              bufferFala += obj.dados.texto;
+              falarFrasesCompletas();
             } else if (obj.evento_tipo === "fim") {
+              // FR-008: flush do buffer restante como frase final, serializado pela fila
+              const resto = bufferFala.trim();
+              if (resto && this.podeFalar()) {
+                falouProgressivamente = true;
+                this.filaFala = this.filaFala.then(() => this.falarEmFrases(resto, ac.signal)).catch(() => {});
+              }
+              bufferFala = "";
               resolvido = true;
               cleanup();
               resolve(textoAcumulado.trim());
@@ -519,7 +550,14 @@ export class Conversa {
     }
     this.d.aoResposta?.(resposta);
     if (this.emJogo()) return;
-    await this.falarEmFrases(resposta, ac.signal);
+    // FR-008: se a fala já ocorreu progressivamente durante streaming, não repete
+    if (!falouProgressivamente) {
+      await this.falarEmFrases(resposta, ac.signal);
+    } else {
+      // Aguarda a fila de fala progressiva terminar antes de liberar this.pergunta,
+      // para que interromper() ainda possa abortar e cancelar o pedido.
+      try { await this.filaFala; } catch { /* erros de fala já foram tratados dentro de falarEmFrases */ }
+    }
     if (this.pergunta === ac) this.pergunta = null;
     if (!ac.signal.aborted && !this.emJogo()) { this.abrirCanal(); this.d.aoProcessamentoConcluido?.(); this.mudar("repouso"); }
   }
