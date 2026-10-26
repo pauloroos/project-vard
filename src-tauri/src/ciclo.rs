@@ -572,22 +572,29 @@ fn cancelar_pedidos_cerebro() {
 
 fn executar_jogo() -> Result<ModoCiclo, String> {
     // FR-009: Rust é executor único — libera recursos diretamente, sem chamar ponte.
-    // 1. Verifica se hud.config.json existe na pasta de configuração.
+    // 1. Verifica se hud.config.json existe e contém configuração válida (não vazia).
     let config_path = pasta_config().join("hud.config.json");
     if !config_path.exists() {
         return Err("configuração não encontrada: hud.config.json ausente".to_string());
+    }
+    let txt = std::fs::read_to_string(&config_path)
+        .map_err(|e| format!("erro ao ler hud.config.json: {}", e))?;
+    let v: serde_json::Value = serde_json::from_str(&txt)
+        .map_err(|e| format!("hud.config.json inválido: {}", e))?;
+    if v.as_object().map(|o| o.is_empty()).unwrap_or(false) {
+        return Err("configuração inválida: hud.config.json está vazio ({})".to_string());
     }
 
     // 2. Cancela pedidos pendentes do cérebro próprio (melhor esforço).
     cancelar_pedidos_cerebro();
 
-    // 3. Para serviços que usam GPU para liberar memória de vídeo.
-    // Falhas individuais não bloqueiam: o serviço pode já estar parado.
-    let _ = crate::servicos::parar("openjarvis");
-    let _ = crate::servicos::parar("voz");
-    let _ = crate::servicos::parar("nucleo");
+    // 3. Para serviços que usam GPU e aguarda término com timeout de 5s.
+    let ids: Vec<String> = ["openjarvis", "voz", "nucleo"]
+        .iter().map(|s| s.to_string()).collect();
+    crate::servicos::parar_e_aguardar(&ids, std::time::Duration::from_secs(5))
+        .map_err(|e| format!("falha ao parar serviços para modo jogo: {}", e))?;
 
-    // 4. Publica estado Jogo apenas após liberação bem-sucedida.
+    // 4. Publica estado Jogo apenas após confirmação de que os processos terminaram.
     Ok(ModoCiclo::Jogo)
 }
 
@@ -1400,8 +1407,8 @@ http.server.HTTPServer(('127.0.0.1', {porta}), H).serve_forever()
     }
 
     #[test]
-    fn executar_jogo_com_configuracao_e_sem_ponte_retorna_jogo() {
-        // FR-009: com hud.config.json presente (mesmo sem ponte_url), jogo libera recursos e retorna Jogo.
+    fn executar_jogo_com_configuracao_vazia_retorna_erro() {
+        // Fix-C1: hud.config.json com objeto vazio ({}) deve retornar erro.
         let _ambiente = ambiente_isolado();
         let dir = tempfile::tempdir().unwrap();
         unsafe { std::env::set_var("VARD_DADOS", dir.path()) };
@@ -1409,35 +1416,36 @@ http.server.HTTPServer(('127.0.0.1', {porta}), H).serve_forever()
         std::fs::create_dir_all(&config_dir).unwrap();
         unsafe { std::env::set_var("VARD_CONFIG", &config_dir) };
 
-        // Cria hud.config.json válido mas sem ponte_url
+        // Configuração vazia: deve ser rejeitada
         let config = serde_json::json!({});
         std::fs::write(config_dir.join("hud.config.json"), config.to_string()).unwrap();
 
-        reset_fila_para_teste("sessao-exec-jogo-ok");
+        reset_fila_para_teste("sessao-exec-jogo-vazio");
         escrever_estado(&ModoCiclo::Ligado, None).unwrap();
 
         let id = uuid::Uuid::new_v4().to_string();
         let modo = executar_verbo(&id, &VerboPedido::Jogo);
 
-        assert_eq!(modo, ModoCiclo::Jogo);
+        assert_eq!(modo, ModoCiclo::Erro);
         let estado = ler_estado().unwrap_or_default();
-        assert_eq!(estado.modo, "jogo");
+        assert_eq!(estado.modo, "erro");
+        assert!(estado.detalhe.as_ref().map(|d| d.contains("vazio")).unwrap_or(false));
         unsafe { std::env::remove_var("VARD_CONFIG") };
         unsafe { std::env::remove_var("VARD_DADOS") };
     }
 
     #[test]
     fn test_executar_jogo_cancela_pedidos_e_para_servicos() {
-        // FR-009: verificar que executar_jogo chama cancelar_pedidos_cerebro e para serviços GPU.
-        // Como não temos mock de HTTP/serviços em teste unitário puro, validamos o fluxo completo:
-        // com config presente, o verbo retorna Jogo (cancelamento e parada são melhor esforço).
+        // Fix-C1: verificar que executar_jogo valida config não-vazia e aguarda parada dos serviços.
+        // Com config válida (não vazia) e sem serviços registrados, parar_e_aguardar retorna Ok
+        // pois não há handles a esperar — o fluxo completa com sucesso.
         let _ambiente = ambiente_isolado();
         let dir = tempfile::tempdir().unwrap();
         unsafe { std::env::set_var("VARD_DADOS", dir.path()) };
         let config_dir = dir.path().join("config");
         std::fs::create_dir_all(&config_dir).unwrap();
         unsafe { std::env::set_var("VARD_CONFIG", &config_dir) };
-        let config = serde_json::json!({"ponte_url": ""});
+        let config = serde_json::json!({"ponte_url": "http://127.0.0.1:9999"});
         std::fs::write(config_dir.join("hud.config.json"), config.to_string()).unwrap();
 
         reset_fila_para_teste("sessao-jogo-cancela");
@@ -1446,7 +1454,7 @@ http.server.HTTPServer(('127.0.0.1', {porta}), H).serve_forever()
         let id = uuid::Uuid::new_v4().to_string();
         let modo = executar_verbo(&id, &VerboPedido::Jogo);
 
-        // Sucesso indica que cancelamento e parada foram executados (melhor esforço)
+        // Config válida + sem serviços registrados = sucesso após parar_e_aguardar
         assert_eq!(modo, ModoCiclo::Jogo);
         unsafe { std::env::remove_var("VARD_CONFIG") };
         unsafe { std::env::remove_var("VARD_DADOS") };
