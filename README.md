@@ -27,7 +27,7 @@ O primeiro uso deve focar apenas na conversa básica; sala (tela cheia), modo in
 - Histórico da sessão (par pergunta/resposta).
 - Indicadores visuais de estado (transcrevendo, pensando, falando) e erros.
 - Recuperação de serviços sem fechar o app.
-- Modo jogo libera GPU (requer configuração válida).
+- Modo jogo para serviços gerenciados (núcleo, voz, OpenJarvis) e libera a GPU usada por eles; modelos externos ou processos fora do supervisor não são afetados. Requer configuração válida.
 
 ## Funcionalidades congeladas
 

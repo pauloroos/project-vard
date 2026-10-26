@@ -243,7 +243,14 @@ export class Conversa {
             try {
               const wav = await reserva(frases[i]);
               if (!sinal.aborted) await d.boca.tocar(wav);
-            } catch (erro2) { console.warn("falha ao falar pela reserva", erro2); }
+            } catch (erro2) {
+              // FR-007/T007: falha persistente (voz própria + reserva) deve chegar à interface.
+              console.warn("falha ao falar pela reserva", erro2);
+              if (!sinal.aborted && this.estado !== "erro") this.mudar("erro");
+            }
+          } else {
+            // WAV (reserva ou OpenJarvis) falhou sem fluxo alternativo: propaga erro à interface.
+            if (!sinal.aborted && this.estado !== "erro") this.mudar("erro");
           }
         }
         if (sinal.aborted) return;
@@ -370,8 +377,15 @@ export class Conversa {
             this.filaFala = this.filaFala.then(() => this.falarEmFrases(frase, ac.signal)).catch(() => {});
             posFalada += frase.length;
           }
-          // Mantém o resto no buffer
-          bufferFala = frases[frases.length - 1] ?? "";
+          // FR-008-fix: preservar o conteúdo original do buffer para o resto incompleto.
+          // cortarEmFrases faz trim em cada fragmento, o que perde espaços finais.
+          // Calcula quantos caracteres foram consumidos (com espaços entre frases) e
+          // mantém o sufixo original do buffer, não o fragmento trimado.
+          let consumido = 0;
+          for (let i = 0; i < frases.length - 1; i++) {
+            consumido += (frases[i]?.length ?? 0) + 1; // +1 pelo espaço entre frases
+          }
+          bufferFala = bufferFala.slice(consumido).trimStart() || (frases[frases.length - 1] ?? "");
         };
         let snapInicial: { resposta?: string | null; estado: string; ultimo_seq?: number; erro?: string | null } | null = null;
         // Reconciliação inicial: consulta estado atual para pegar texto já produzido antes do SSE.
@@ -433,23 +447,41 @@ export class Conversa {
                 progresso = true;
               }
               if (typeof snap.resposta === "string") {
-                // FR-003/C3-fix: após ferramenta, o snapshot pode conter apenas o turno atual
-                // (menor que textoAcumulado). Se não for extensão direta, trata como novo conteúdo
-                // e concatena para preservar tanto a introdução quanto a resposta final.
-                if (snap.resposta.length > textoAcumulado.length && snap.resposta.startsWith(textoAcumulado)) {
-                  const delta = snap.resposta.slice(textoAcumulado.length);
-                  textoAcumulado = snap.resposta;
-                  bufferFala += delta;
-                  falarFrasesCompletas();
-                  progresso = true;
-                } else if (snap.resposta !== textoAcumulado && !textoAcumulado.endsWith(snap.resposta)) {
-                  // Snapshot tem conteúdo diferente (ex: resposta pós-ferramenta); concatena.
-                  const separador = textoAcumulado ? "\n" : "";
-                  const delta = separador + snap.resposta;
-                  textoAcumulado += delta;
-                  bufferFala += delta;
-                  falarFrasesCompletas();
-                  progresso = true;
+                // FR-003/C3-fix: após ferramenta, o snapshot pode conter apenas o turno atual.
+                // Usa ultimo_seq do snapshot para evitar duplicação por consulta atrasada (Finding #4).
+                // Só reconcilia se o snapshot trouxer sequência maior que a já processada.
+                if (snapSeq > ultimoSeq || (snapSeq === ultimoSeq && snap.resposta.length > textoAcumulado.length)) {
+                  if (snap.resposta.length > textoAcumulado.length && snap.resposta.startsWith(textoAcumulado)) {
+                    // Extensão direta do texto já acumulado.
+                    const delta = snap.resposta.slice(textoAcumulado.length);
+                    textoAcumulado = snap.resposta;
+                    bufferFala += delta;
+                    falarFrasesCompletas();
+                    progresso = true;
+                  } else if (snap.resposta !== textoAcumulado) {
+                    // Resposta pós-ferramenta ou conteúdo diferente: substitui se o snapshot
+                    // for claramente mais recente (seq maior), senão concatena com separador.
+                    if (snapSeq > ultimoSeq) {
+                      // Snapshot mais recente que eventos SSE já vistos: usa como nova base.
+                      // Preserva texto anterior se não estiver contido no snapshot.
+                      if (!snap.resposta.includes(textoAcumulado) && textoAcumulado) {
+                        const separador = "\n";
+                        textoAcumulado = textoAcumulado + separador + snap.resposta;
+                        bufferFala += separador + snap.resposta;
+                      } else {
+                        textoAcumulado = snap.resposta;
+                        bufferFala = snap.resposta;
+                      }
+                    } else {
+                      // Mesma seq mas conteúdo diferente: concatena para não perder nada.
+                      const separador = textoAcumulado ? "\n" : "";
+                      const delta = separador + snap.resposta;
+                      textoAcumulado += delta;
+                      bufferFala += delta;
+                    }
+                    falarFrasesCompletas();
+                    progresso = true;
+                  }
                 }
               }
               if (progresso) rearmarPrazo();

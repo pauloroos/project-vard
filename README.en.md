@@ -27,7 +27,7 @@ First-time use should focus only on basic conversation; full screen (sala), invi
 - Session history (question/answer pair).
 - Visual status indicators (transcribing, thinking, speaking) and errors.
 - Service recovery without closing the app.
-- Game mode frees GPU (requires valid configuration).
+- Game mode stops managed services (core, voice, OpenJarvis) and frees the GPU they use; external models or processes outside the supervisor are not affected. Requires valid configuration.
 
 ## Frozen features
 
