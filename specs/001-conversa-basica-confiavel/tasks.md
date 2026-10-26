@@ -21,4 +21,4 @@ Sem tarefas.
 - [X] T010 [P] [US3] Formato interno único de ferramenta convertido nos adaptadores compatível, Anthropic e Gemini, e argumentos acumulados até o fim da chamada, em nucleo/vard/cerebro/provedores.py, com teste em nucleo/tests/test_cerebro_ferramentas_contrato.py (FR-010)
 
 ## Phase 5: Polish (P3)
-- [ ] T011 [P] [US4] Reescrever README.md e README.en.md com a configuração mínima recomendada e as periféricas congeladas (FR-011)
+- [X] T011 [P] [US4] Reescrever README.md e README.en.md com a configuração mínima recomendada e as periféricas congeladas (FR-011)
