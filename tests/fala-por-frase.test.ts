@@ -191,6 +191,120 @@ describe("Conversa: fala progressiva sem duplicação (FR-008)", () => {
     // não o dobro. Com 2 frases ("Olá, tudo bem com você?" e "Vamos começar."), espera-se ~2 chamadas.
     // Tolerância: até 3 (buffer flush pode gerar chamada extra).
     expect(totalChamadas).toBeLessThanOrEqual(4);
+
+    // Asserção de conteúdo: todas as frases devem ter sido faladas na ordem correta
+    const falas = vozFalar.mock.calls.map((c: unknown[]) => c[0] as string);
+    expect(falas).toEqual(["Olá, tudo bem com você?", "Vamos começar."]);
+  });
+
+  it("prefixo recuperado pela consulta inicial deve ser falado", async () => {
+    // Simula consulta inicial trazendo prefixo antes do streaming SSE
+    let consultaCount = 0;
+    (deps.ponte!.consultarPedido as ReturnType<typeof vi.fn>).mockImplementation(async () => {
+      consultaCount++;
+      if (consultaCount === 1) {
+        return {
+          resposta: "Prefixo recuperado pela consulta. ",
+          estado: "executando",
+          ultimo_seq: 1,
+        };
+      }
+      return {
+        resposta: "Prefixo recuperado pela consulta. Continuação do texto via SSE.",
+        estado: "concluido",
+        ultimo_seq: 3,
+      };
+    });
+
+    const promessaTexto = conversa.aoTextoTranscrito("teste", true);
+    await new Promise((r) => setTimeout(r, 10));
+
+    // SSE envia o restante do texto e finaliza
+    const eventos = [
+      { evento_tipo: "texto", dados: { texto: "Continuação do texto via SSE." }, seq: 2 },
+      { evento_tipo: "fim", dados: { resposta: "Prefixo recuperado pela consulta. Continuação do texto via SSE." }, seq: 3 },
+    ];
+    for (const ev of eventos) {
+      window.dispatchEvent(new MessageEvent("vard-evento-pedido", {
+        data: JSON.stringify({
+          tipo: "pedido",
+          pedido_id: "ped-1",
+          sessao_id: "sessao-teste",
+          seq: ev.seq,
+          evento_tipo: ev.evento_tipo,
+          dados: ev.dados,
+        }),
+      }));
+    }
+
+    try {
+      await promessaTexto;
+    } catch {
+      // Ignora término rápido
+    }
+
+    await new Promise((r) => setTimeout(r, 50));
+
+    const vozFalar = deps.voz!.falar as ReturnType<typeof vi.fn>;
+    const falas = vozFalar.mock.calls.map((c: unknown[]) => c[0] as string);
+    // Prefixo da consulta inicial + continuação do SSE devem ter sido ambos falados
+    expect(falas).toEqual([
+      "Prefixo recuperado pela consulta.",
+      "Continuação do texto via SSE.",
+    ]);
+  });
+
+  it("última frase via reconexão deve ser falada", async () => {
+    // SSE envia apenas a primeira frase, depois a conexão cai
+    let consultaCount = 0;
+    (deps.ponte!.consultarPedido as ReturnType<typeof vi.fn>).mockImplementation(async () => {
+      consultaCount++;
+      if (consultaCount === 1) {
+        return { resposta: null, estado: "executando", ultimo_seq: 0 };
+      }
+      // Na reconexão, consulta traz a resposta completa concluída
+      return {
+        resposta: "Primeira frase recebida por streaming. Última frase entregue na reconexão.",
+        estado: "concluido",
+        ultimo_seq: 2,
+      };
+    });
+
+    const promessaTexto = conversa.aoTextoTranscrito("teste", true);
+    await new Promise((r) => setTimeout(r, 10));
+
+    // SSE envia apenas o primeiro fragmento/frase (sem evento fim)
+    window.dispatchEvent(new MessageEvent("vard-evento-pedido", {
+      data: JSON.stringify({
+        tipo: "pedido",
+        pedido_id: "ped-1",
+        sessao_id: "sessao-teste",
+        seq: 1,
+        evento_tipo: "texto",
+        dados: { texto: "Primeira frase recebida por streaming. " },
+      }),
+    }));
+
+    await new Promise((r) => setTimeout(r, 10));
+
+    // Simula reconexão do SSE (dispara evento de reconexão que invoca consultar())
+    window.dispatchEvent(new CustomEvent("vard-sse-reconectou"));
+
+    try {
+      await promessaTexto;
+    } catch {
+      // Ignora término rápido
+    }
+
+    await new Promise((r) => setTimeout(r, 50));
+
+    const vozFalar = deps.voz!.falar as ReturnType<typeof vi.fn>;
+    const falas = vozFalar.mock.calls.map((c: unknown[]) => c[0] as string);
+    // Primeira frase via SSE + última frase recuperada na reconexão devem ter sido faladas
+    expect(falas).toEqual([
+      "Primeira frase recebida por streaming.",
+      "Última frase entregue na reconexão.",
+    ]);
   });
 
   it("sem eventos TEXTO progressivos, fala a resposta completa no fim", async () => {
