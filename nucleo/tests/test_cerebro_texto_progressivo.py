@@ -1,16 +1,18 @@
-"""Teste de texto progressivo: eventos TEXTO durante streaming não duplicam cur.resposta (FR-008).
+"""Teste de texto progressivo: eventos TEXTO durante streaming e acumulação em pedidos (FR-008).
 
 Cobre:
-- Eventos TEXTO emitidos fragmento a fragmento chegam ao despachante e acumulam resposta.
+- laco.py emite TEXTO events durante o loop de streaming do provedor.
+- pedidos._emitir_despachante acumula resposta via TEXTO antes do FIM.
+- pedidos.consultar() reflete texto acumulado ANTES do evento FIM chegar.
 - O evento FIM carrega a resposta completa sem duplicar o que já foi acumulado via TEXTO.
-- O callback do teste delega ao despachante real (_emitir_despachante) para exercitar o fluxo completo.
 """
 from __future__ import annotations
 
 import asyncio
 import sys
 from pathlib import Path
-from typing import Any
+from typing import Any, AsyncIterator
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -19,7 +21,8 @@ if str(NUCLEO_DIR) not in sys.path:
     sys.path.insert(0, str(NUCLEO_DIR))
 
 from vard.cerebro import pedidos as modulo_pedidos
-from vard.cerebro.contratos import EventoPedido, TipoEvento
+from vard.cerebro.contratos import EventoPedido, Pedido, Origem, TipoEvento
+from vard.cerebro.laco import executar_pedido
 
 
 @pytest.fixture(autouse=True)
@@ -33,7 +36,6 @@ def _limpa_pedidos(tmp_path):
 
 
 def _criar_pedido(pedido_id: str = "p1", sessao_id: str = "s1", texto: str = "oi"):
-    from vard.cerebro.contratos import Pedido, Origem
     return Pedido(pedido_id=pedido_id, sessao_id=sessao_id, origem=Origem.PAINEL, texto=texto)
 
 
@@ -46,6 +48,94 @@ def _admitir_e_emitir(pedido):
 
     return emitir
 
+
+# --- Helpers para testes assíncronos sem pytest-asyncio ---
+
+class _EventoStream:
+    """Evento simples simulando o contrato async generator do provedor."""
+    def __init__(self, tipo: str, dados: dict[str, Any]):
+        self.tipo = tipo
+        self.dados = dados
+
+
+async def _provedor_streaming_fragmentos(*_args, **_kwargs) -> AsyncIterator[_EventoStream]:
+    """Provedor falso que yields fragmentos de texto como streaming."""
+    for frag in ["Olá, ", "tudo bem ", "com você?"]:
+        yield _EventoStream("texto", {"conteudo": frag})
+    yield _EventoStream("fim", {})
+
+
+def test_laco_emite_texto_durante_streaming():
+    """laco.py deve emitir eventos TEXTO durante o loop async for do provedor."""
+    pedido = _criar_pedido()
+    modulo_pedidos.admitir(pedido)
+
+    eventos_emitidos: list[EventoPedido] = []
+
+    def capturar(ev: EventoPedido) -> None:
+        eventos_emitidos.append(ev)
+        modulo_pedidos._emitir_despachante(ev)
+
+    adaptador = MagicMock()
+    adaptador.inferir = _provedor_streaming_fragmentos
+    adaptador.nome = "teste"
+
+    asyncio.run(executar_pedido(pedido, adaptador, capturar))
+
+    # Deve haver eventos TEXTO emitidos durante o streaming
+    textos = [ev for ev in eventos_emitidos if ev.tipo == TipoEvento.TEXTO]
+    assert len(textos) == 3, f"Esperava 3 eventos TEXTO, recebeu {len(textos)}"
+    assert textos[0].dados["texto"] == "Olá, "
+    assert textos[1].dados["texto"] == "tudo bem "
+    assert textos[2].dados["texto"] == "com você?"
+
+    # FIM deve carregar a resposta completa
+    fins = [ev for ev in eventos_emitidos if ev.tipo == TipoEvento.FIM]
+    assert len(fins) == 1
+    assert fins[0].dados["resposta"] == "Olá, tudo bem com você?"
+
+
+def test_consultar_reflete_texto_acumulado_antes_do_fim():
+    """pedidos.consultar() deve refletir texto acumulado via TEXTO antes do FIM chegar."""
+    pedido = _criar_pedido(pedido_id="p_consulta")
+    emitir = _admitir_e_emitir(pedido)
+
+    # Emite 2 fragmentos TEXTO (simulando streaming em andamento)
+    emitir(EventoPedido(
+        pedido_id=pedido.pedido_id,
+        sessao_id=pedido.sessao_id,
+        seq=1,
+        tipo=TipoEvento.TEXTO,
+        dados={"texto": "Parte um. "},
+    ))
+    emitir(EventoPedido(
+        pedido_id=pedido.pedido_id,
+        sessao_id=pedido.sessao_id,
+        seq=2,
+        tipo=TipoEvento.TEXTO,
+        dados={"texto": "Parte dois."},
+    ))
+
+    # Consulta ANTES do FIM: deve ter o texto acumulado
+    info = modulo_pedidos.consultar(pedido.pedido_id)
+    assert info is not None
+    assert info.resposta == "Parte um. Parte dois."
+
+    # Agora emite FIM com resposta completa (deve substituir, não duplicar)
+    emitir(EventoPedido(
+        pedido_id=pedido.pedido_id,
+        sessao_id=pedido.sessao_id,
+        seq=3,
+        tipo=TipoEvento.FIM,
+        dados={"resposta": "Parte um. Parte dois."},
+    ))
+
+    info_final = modulo_pedidos.consultar(pedido.pedido_id)
+    assert info_final is not None
+    assert info_final.resposta == "Parte um. Parte dois."
+
+
+# --- Testes originais preservados (regressão) ---
 
 def test_texto_fragmentos_nao_duplicam_resposta():
     """TEXTO por fragmento + FIM com resposta não devem duplicar cur.resposta."""
@@ -62,7 +152,7 @@ def test_texto_fragmentos_nao_duplicam_resposta():
             dados={"texto": frag},
         ))
 
-    # FIM carrega a resposta completa (como laco.py faz após remover o TEXTO pós-loop)
+    # FIM carrega a resposta completa (substitui o acumulado, não duplica)
     resposta_completa = "Olá, tudo bem com você?"
     emitir(EventoPedido(
         pedido_id=pedido.pedido_id,
@@ -74,7 +164,6 @@ def test_texto_fragmentos_nao_duplicam_resposta():
 
     info = modulo_pedidos.consultar(pedido.pedido_id)
     assert info is not None
-    # A resposta deve ser exatamente a do FIM, sem duplicação dos fragmentos TEXTO
     assert info.resposta == resposta_completa
 
 
@@ -101,8 +190,8 @@ def test_fim_sem_resposta_preserva_acumulado():
 
     info = modulo_pedidos.consultar(pedido.pedido_id)
     assert info is not None
-    # Sem resposta no FIM, o campo fica como estava (None ou vazio dependendo da implementação)
-    # O importante é não haver erro nem duplicação
+    # Sem resposta no FIM, o acumulado via TEXTO permanece
+    assert info.resposta == "fragmento único"
 
 
 def test_apenas_fim_com_resposta():

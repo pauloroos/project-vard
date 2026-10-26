@@ -157,6 +157,15 @@ async def executar_pedido(
                                 conteudo = ev.dados.get("conteudo", "")
                                 if conteudo:
                                     texto_acumulado.append(conteudo)
+                                    # FR-008: emite TEXTO progressivo durante streaming
+                                    seq += 1
+                                    emitir(EventoPedido(
+                                        pedido_id=pedido.pedido_id,
+                                        sessao_id=pedido.sessao_id,
+                                        seq=seq,
+                                        tipo=TipoEvento.TEXTO,
+                                        dados={"texto": conteudo},
+                                    ))
                             elif ev.tipo == "chamada":
                                 chamadas_coletadas.append(ev.dados)
                             elif ev.tipo == "fim":

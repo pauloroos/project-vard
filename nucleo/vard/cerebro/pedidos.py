@@ -154,6 +154,9 @@ def _emitir_despachante(ev: EventoPedido) -> None:
         if cur is not None:
             if ev.seq > cur.ultimo_seq:
                 cur.ultimo_seq = ev.seq
+            # FR-008: acumula texto progressivo durante streaming
+            if ev.tipo == TipoEvento.TEXTO and isinstance(ev.dados.get("texto"), str):
+                cur.resposta = (cur.resposta or "") + ev.dados["texto"]
             if ev.tipo == TipoEvento.FIM and ev.dados.get("resposta") is not None:
                 cur.resposta = ev.dados["resposta"]
             if ev.tipo in (TipoEvento.ERRO, TipoEvento.FIM) and ev.dados.get("erro") is not None:

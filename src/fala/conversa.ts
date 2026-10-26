@@ -324,6 +324,7 @@ export class Conversa {
     this.pergunta = ac;
     const ver = rota === "see";
     let resposta: string;
+    let falouProgressivamente = false; // FR-008: evita duplicar fala no fim se já falou durante streaming
     try {
       if (ver) {
         if (!this.d.capturar || !this.d.ponte) throw new Error("sem captura");
@@ -363,6 +364,7 @@ export class Conversa {
           for (let i = 0; i < frases.length - 1; i++) {
             const frase = frases[i];
             if (!frase) continue;
+            falouProgressivamente = true;
             void this.falarEmFrases(frase, ac.signal).catch(() => {});
             posFalada += frase.length;
           }
@@ -467,6 +469,7 @@ export class Conversa {
               // FR-008: flush do buffer restante como frase final
               const resto = bufferFala.trim();
               if (resto && this.podeFalar()) {
+                falouProgressivamente = true;
                 void this.falarEmFrases(resto, ac.signal).catch(() => {});
               }
               bufferFala = "";
@@ -545,7 +548,10 @@ export class Conversa {
     }
     this.d.aoResposta?.(resposta);
     if (this.emJogo()) return;
-    await this.falarEmFrases(resposta, ac.signal);
+    // FR-008: se a fala já ocorreu progressivamente durante streaming, não repete
+    if (!falouProgressivamente) {
+      await this.falarEmFrases(resposta, ac.signal);
+    }
     if (this.pergunta === ac) this.pergunta = null;
     if (!ac.signal.aborted && !this.emJogo()) { this.abrirCanal(); this.d.aoProcessamentoConcluido?.(); this.mudar("repouso"); }
   }
