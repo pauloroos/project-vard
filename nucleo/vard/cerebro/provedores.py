@@ -79,6 +79,28 @@ def _verificar_cancelamento(cancelamento: Optional[asyncio.Event]) -> None:
         raise asyncio.CancelledError()
 
 
+def _converter_ferramentas_openai(
+    ferramentas: List[Dict[str, Any]],
+) -> List[Dict[str, Any]]:
+    """Converte formato interno {name, description, parameters} para OpenAI tools."""
+    tools_oai: List[Dict[str, Any]] = []
+    for t in ferramentas:
+        # Formato interno: {name, description, parameters}
+        # Se já vier no formato OpenAI {type, function}, repassa direto.
+        if "type" in t and "function" in t:
+            tools_oai.append(t)
+        else:
+            tools_oai.append({
+                "type": "function",
+                "function": {
+                    "name": t.get("name", ""),
+                    "description": t.get("description", ""),
+                    "parameters": t.get("parameters", {"type": "object", "properties": {}}),
+                },
+            })
+    return tools_oai
+
+
 async def _stream_http(
     metodo: str,
     url: str,
@@ -157,7 +179,7 @@ class AdaptadorOpenAICompat(AdaptadorProvedor):
         url = f"{self._base}/v1/chat/completions"
         corpo: Dict[str, Any] = {"model": self._modelo, "messages": mensagens, "stream": True}
         if ferramentas:
-            corpo["tools"] = ferramentas
+            corpo["tools"] = _converter_ferramentas_openai(ferramentas)
 
         cabecalhos: Dict[str, str] = {"Content-Type": "application/json"}
         if self._chave:
@@ -214,35 +236,28 @@ class AdaptadorOpenAICompat(AdaptadorProvedor):
                     if fn.get("arguments"):
                         parcial["argumentos"] += fn["arguments"]
 
-            # Emite chamadas completas somente se argumentos forem JSON valido
-            # e ainda nao foram emitidas (evita duplicacao a cada chunk)
-            for idx in sorted(chamadas_parciais.keys()):
-                if idx in chamadas_emitidas:
-                    continue
-                parcial = chamadas_parciais[idx]
-                args_str = parcial["argumentos"]
-                try:
-                    args = json.loads(args_str) if args_str else {}
-                except json.JSONDecodeError:
-                    continue
-                chamadas_emitidas.add(idx)
-                yield EventoInferencia("chamada", {
-                    "id": parcial["id"],
-                    "nome": parcial["nome"],
-                    "argumentos": args,
-                })
+            # Nao emitir chamadas durante o streaming: argumentos podem estar
+            # fragmentados e JSON parcial valida como {} prematuramente.
+            # A emissao acontece apenas apos o fim do stream (bloco pendente).
 
         if not concluido:
             raise ErroProvedor("sse_interrompido", True, "fluxo sem marcador final")
 
-        # Emite chamadas pendentes que so fecharam apos o fim do stream
+        # Emite chamadas pendentes que so fecharam apos o fim do stream.
+        # Se args_str estiver vazio ou for JSON invalido, ignora (nao emite {}).
         for idx in sorted(chamadas_parciais.keys()):
             if idx in chamadas_emitidas:
                 continue
             parcial = chamadas_parciais[idx]
             args_str = parcial["argumentos"]
+            if not args_str:
+                log.warning(
+                    "Tool call sem argumentos ignorada: id=%s nome=%s",
+                    parcial["id"], parcial["nome"],
+                )
+                continue
             try:
-                args = json.loads(args_str) if args_str else {}
+                args = json.loads(args_str)
             except json.JSONDecodeError:
                 log.warning(
                     "Tool call com argumentos invalidos ignorada: %s",
@@ -367,13 +382,24 @@ class AdaptadorAnthropic(AdaptadorProvedor):
     def _converter_ferramentas(
         ferramentas: List[Dict[str, Any]],
     ) -> List[Dict[str, Any]]:
+        """Converte formato interno {name, description, parameters} para Anthropic tools."""
         tools_ant: List[Dict[str, Any]] = []
         for t in ferramentas:
-            fn = t.get("function", {})
+            # Formato interno: {name, description, parameters}
+            # Se vier no formato OpenAI {type, function}, extrai de function.
+            if "type" in t and "function" in t:
+                fn = t["function"]
+                nome = fn.get("name", "")
+                desc = fn.get("description", "")
+                params = fn.get("parameters", {"type": "object", "properties": {}})
+            else:
+                nome = t.get("name", "")
+                desc = t.get("description", "")
+                params = t.get("parameters", {"type": "object", "properties": {}})
             tools_ant.append({
-                "name": fn.get("name", ""),
-                "description": fn.get("description", ""),
-                "input_schema": fn.get("parameters", {"type": "object", "properties": {}}),
+                "name": nome,
+                "description": desc,
+                "input_schema": params,
             })
         return tools_ant
 
