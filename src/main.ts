@@ -278,6 +278,8 @@ async function transcreverFala(wav: ArrayBuffer, sinal?: AbortSignal): Promise<s
   let pttSegurado = false;
   let cicloVoz = 0;
   let ocupado = false; // transcrevendo ou pensando: ignora novos eventos do VAD
+  // Controlador de aborto da transcrição em andamento; interromper cancela o pedido de STT.
+  let controladorTranscricao: AbortController | null = null;
   let pttPendente = false; // push-to-talk apertado durante a resposta: começa a capturar quando o ciclo terminar
   let estavaFalando = false;
 
@@ -534,14 +536,19 @@ async function transcreverFala(wav: ArrayBuffer, sinal?: AbortSignal): Promise<s
       return;
     }
     const ciclo = ++cicloVoz;
+    // AbortController por ciclo de voz: interromper cancela a transcrição em andamento.
+    const acTranscricao = new AbortController();
+    controladorTranscricao = acTranscricao;
     ocupado = true;
     mostrarEstado("transcrevendo", "", pushToTalk);
     try {
       const wav = pcmParaWav(reamostrar(tudo, taxaAtual(), 16000), 16000);
       let texto: string;
       try {
-        texto = await transcreverFala(wav);
+        texto = await transcreverFala(wav, acTranscricao.signal);
       } catch (erro) {
+        // Interrupção via AbortSignal: sai silenciosamente, sem erro no HUD.
+        if (acTranscricao.signal.aborted) return;
         if (ciclo !== cicloVoz || estaMudo() || reuniaoAtiva) return;
         console.warn("transcrição falhou", erro);
         mostrarEstado("erro", `transcricao: ${(erro as Error).message || String(erro)}`);
@@ -566,6 +573,7 @@ async function transcreverFala(wav: ArrayBuffer, sinal?: AbortSignal): Promise<s
       console.error("ciclo de fala falhou", erro);
     } finally {
       if (ciclo !== cicloVoz) return;
+      controladorTranscricao = null;
       fimDaFala = 0;
       ocupado = false;
       detector.reset();
@@ -578,6 +586,9 @@ async function transcreverFala(wav: ArrayBuffer, sinal?: AbortSignal): Promise<s
   const controleVoz = new ControleCapturaVoz(cfg.interromper_ao_falar, {
     interromper: () => {
       ++cicloVoz;
+      // Cancela a transcrição em andamento antes de interromper a conversa.
+      controladorTranscricao?.abort();
+      controladorTranscricao = null;
       // A transicao de estado limpa a cauda da boca; nesta interrupcao o anel ja contem a nova fala.
       const preRoll = anel; const amostras = anelAmostras;
       conversa.interromper();

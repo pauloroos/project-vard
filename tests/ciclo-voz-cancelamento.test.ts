@@ -77,4 +77,41 @@ describe("FR-004: CicloVoz e cancelamento de transcrição", () => {
 
     expect(aoInterromperExterno).toHaveBeenCalled();
   });
+
+  it("erro de transcrição por abort não propaga e não dispara aoTexto (contrato main.ts)", async () => {
+    // Contrato que main.ts depende: quando o AbortSignal é disparado, a transcrição
+    // rejeita com erro, mas o ciclo descarta silenciosamente (sem aoTexto, sem erro visível).
+    let sinalRecebido: AbortSignal | undefined;
+    const transcrever = vi.fn(
+      (_wav: ArrayBuffer, sinal?: AbortSignal) =>
+        new Promise<string>((_resolve, reject) => {
+          sinalRecebido = sinal;
+          sinal?.addEventListener("abort", () => {
+            reject(new DOMException("The operation was aborted.", "AbortError"));
+          });
+        })
+    );
+    const aoTexto = vi.fn();
+    const aoMudarOcupado = vi.fn();
+    const cicloVoz = new CicloVoz({
+      transcrever,
+      aoTexto,
+      aoMudarOcupado,
+    });
+
+    const wav = new ArrayBuffer(100);
+    const promessa = cicloVoz.executar(wav, false);
+
+    // Sinal deve ter sido passado à função de transcrição.
+    expect(sinalRecebido).toBeDefined();
+    expect(transcrever).toHaveBeenCalledWith(wav, sinalRecebido);
+
+    // Interrompe durante a transcrição.
+    cicloVoz.interromper();
+    await promessa;
+
+    // Texto tardio não inicia resposta; ocupado volta a false.
+    expect(aoTexto).not.toHaveBeenCalled();
+    expect(cicloVoz.ocupado).toBe(false);
+  });
 });
