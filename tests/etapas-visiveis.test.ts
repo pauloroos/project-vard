@@ -1,5 +1,5 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
-import type { DepsConversa } from "../src/fala/conversa";
+import { describe, it, expect, vi, beforeEach, type Mock } from "vitest";
+import type { DepsConversa, Mensagem } from "../src/fala/conversa";
 import { Conversa } from "../src/fala/conversa";
 import { CONFIG_PADRAO } from "../src/config/config";
 import { ROTULO_ESTADO } from "../src/ui/hud";
@@ -9,7 +9,10 @@ vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn().mockResolvedValue(null)
 const WAV = new ArrayBuffer(8);
 
 describe("FR-007 — etapas visíveis e erros tipados", () => {
-  let oj: DepsConversa["oj"];
+  let oj: {
+    perguntar: Mock<(m: Mensagem[], s?: AbortSignal) => Promise<string>>;
+    sintetizar: Mock<(t: string, v: string, x: number) => Promise<ArrayBuffer>>;
+  };
   let boca: DepsConversa["boca"];
   let estados: Array<{ e: string; detalhe: string }>;
   let deps: DepsConversa;
@@ -18,7 +21,7 @@ describe("FR-007 — etapas visíveis e erros tipados", () => {
     oj = {
       perguntar: vi.fn().mockResolvedValue("Resposta."),
       sintetizar: vi.fn().mockResolvedValue(WAV),
-    } as unknown as DepsConversa["oj"];
+    };
     boca = {
       falando: false,
       tocar: vi.fn().mockResolvedValue(undefined),
