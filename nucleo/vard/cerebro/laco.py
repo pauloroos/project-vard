@@ -268,6 +268,7 @@ async def executar_pedido(
                     mensagens.append({
                         "role": "tool",
                         "tool_call_id": chamada.get("id", ""),
+                        "name": nome,
                         "content": _serializar_resultado(res_ferramenta),
                     })
 

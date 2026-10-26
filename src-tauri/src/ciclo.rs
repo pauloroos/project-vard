@@ -6,7 +6,7 @@
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex, OnceLock};
 use serde::{Deserialize, Serialize};
-use tauri::{AppHandle, Emitter};
+use tauri::{AppHandle, Emitter, Manager};
 
 /// Handle global do app para emissão de eventos a partir de threads sem acesso direto ao App.
 static APP_HANDLE: OnceLock<AppHandle> = OnceLock::new();
@@ -443,7 +443,20 @@ fn executar_iniciar() -> Result<ModoCiclo, String> {
 }
 
 fn executar_parar() -> Result<ModoCiclo, String> {
-    crate::servicos::encerrar_todos();
+    // FR-006 / Finding #4 fix: parar deve remover os registros para que iniciar_servicos()
+    // possa recriar as threads depois. encerrar_todos() apenas sinaliza parada sem limpar.
+    let ids: Vec<String> = {
+        if let Ok(reg) = crate::servicos::SERVICOS.read() {
+            reg.keys().cloned().collect()
+        } else {
+            vec![]
+        }
+    };
+    for id in &ids {
+        if let Err(e) = crate::servicos::parar_definitiva(id) {
+            eprintln!("ciclo parar: falha ao remover '{id}': {e}");
+        }
+    }
     Ok(ModoCiclo::Parado)
 }
 
@@ -583,7 +596,16 @@ fn cancelar_pedidos_cerebro() {
 fn executar_jogo() -> Result<ModoCiclo, String> {
     // FR-009: Rust é executor único — libera recursos diretamente, sem chamar ponte.
     // 1. Verifica se hud.config.json existe e contém configuração válida (não vazia).
-    let config_path = pasta_config().join("hud.config.json");
+    // Usa app_config_dir() via APP_HANDLE para alinhar com onde o painel grava (comandos.rs).
+    let config_path = APP_HANDLE
+        .get()
+        .map(|h| {
+            h.path()
+                .app_config_dir()
+                .expect("app_config_dir")
+                .join("hud.config.json")
+        })
+        .unwrap_or_else(|| pasta_config().join("hud.config.json"));
     if !config_path.exists() {
         return Err("configuração não encontrada: hud.config.json ausente".to_string());
     }
@@ -1693,12 +1715,16 @@ http.server.HTTPServer(('127.0.0.1', {porta}), H).serve_forever()
     fn ler_ponte_url_retorna_url_do_config() {
         let _ambiente = ambiente_isolado();
         let dir = tempfile::tempdir().unwrap();
+        // Finding #7 fix: ler_ponte_url usa pasta_config() (VARD_CONFIG ou VARD_DADOS/config).
+        // O teste deve gravar o arquivo no mesmo caminho que a função consulta.
+        let config_dir = dir.path().join("config");
+        std::fs::create_dir_all(&config_dir).unwrap();
         unsafe { std::env::set_var("VARD_DADOS", dir.path()) };
 
         let config = serde_json::json!({
             "ponte_url": "http://127.0.0.1:4700"
         });
-        std::fs::write(dir.path().join("hud.config.json"), config.to_string()).unwrap();
+        std::fs::write(config_dir.join("hud.config.json"), config.to_string()).unwrap();
 
         let url = ler_ponte_url();
         assert_eq!(url, Some("http://127.0.0.1:4700".to_string()));

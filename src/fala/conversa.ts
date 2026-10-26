@@ -447,41 +447,36 @@ export class Conversa {
                 progresso = true;
               }
               if (typeof snap.resposta === "string") {
-                // FR-003/C3-fix: após ferramenta, o snapshot pode conter apenas o turno atual.
-                // Usa ultimo_seq do snapshot para evitar duplicação por consulta atrasada (Finding #4).
-                // Só reconcilia se o snapshot trouxer sequência maior que a já processada.
-                if (snapSeq > ultimoSeq || (snapSeq === ultimoSeq && snap.resposta.length > textoAcumulado.length)) {
-                  if (snap.resposta.length > textoAcumulado.length && snap.resposta.startsWith(textoAcumulado)) {
+                // FR-003/Finding #3 fix: após ferramenta, o snapshot pode trazer a resposta
+                // completa (introdução + resultado). Compara pelo comprimento do texto, não
+                // apenas pela seq, porque a consulta pode atualizar ultimoSeq antes de chegar
+                // aqui e o evento fim exige resposta maior que todo o texto acumulado.
+                if (snap.resposta.length > textoAcumulado.length) {
+                  if (snap.resposta.startsWith(textoAcumulado)) {
                     // Extensão direta do texto já acumulado.
                     const delta = snap.resposta.slice(textoAcumulado.length);
                     textoAcumulado = snap.resposta;
                     bufferFala += delta;
-                    falarFrasesCompletas();
-                    progresso = true;
-                  } else if (snap.resposta !== textoAcumulado) {
-                    // Resposta pós-ferramenta ou conteúdo diferente: substitui se o snapshot
-                    // for claramente mais recente (seq maior), senão concatena com separador.
-                    if (snapSeq > ultimoSeq) {
-                      // Snapshot mais recente que eventos SSE já vistos: usa como nova base.
-                      // Preserva texto anterior se não estiver contido no snapshot.
-                      if (!snap.resposta.includes(textoAcumulado) && textoAcumulado) {
-                        const separador = "\n";
-                        textoAcumulado = textoAcumulado + separador + snap.resposta;
-                        bufferFala += separador + snap.resposta;
-                      } else {
-                        textoAcumulado = snap.resposta;
-                        bufferFala = snap.resposta;
-                      }
+                  } else {
+                    // Resposta pós-ferramenta ou conteúdo diferente: preserva texto anterior
+                    // se não estiver contido no snapshot, senão substitui.
+                    if (!snap.resposta.includes(textoAcumulado) && textoAcumulado) {
+                      const separador = "\n";
+                      textoAcumulado = textoAcumulado + separador + snap.resposta;
+                      bufferFala += separador + snap.resposta;
                     } else {
-                      // Mesma seq mas conteúdo diferente: concatena para não perder nada.
-                      const separador = textoAcumulado ? "\n" : "";
-                      const delta = separador + snap.resposta;
-                      textoAcumulado += delta;
-                      bufferFala += delta;
+                      textoAcumulado = snap.resposta;
+                      bufferFala = snap.resposta;
                     }
-                    falarFrasesCompletas();
-                    progresso = true;
                   }
+                  falarFrasesCompletas();
+                  progresso = true;
+                } else if (snapSeq > ultimoSeq && snap.resposta !== textoAcumulado) {
+                  // Mesma quantidade de texto mas conteúdo diferente e seq maior: aceita.
+                  textoAcumulado = snap.resposta;
+                  bufferFala = snap.resposta;
+                  falarFrasesCompletas();
+                  progresso = true;
                 }
               }
               if (progresso) rearmarPrazo();
@@ -606,7 +601,9 @@ export class Conversa {
       this.mudar("erro", `resposta: ${fala}`);
       await this.falarFixa(fala);
       this.abrirCanal();
-      if (this.estado !== "repouso") this.mudar("repouso");
+      // Finding #8 fix: mantém o estado "erro" visível na interface até a próxima
+      // interação do usuário ou nova pergunta, em vez de apagar imediatamente com "repouso".
+      // O canal já foi reaberto acima para aceitar nova entrada.
       return;
     }
     if (!ver) {
