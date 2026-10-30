@@ -778,8 +778,12 @@ def detectar_clis():
 @app.post("/modo")
 def mudar_modo(corpo: dict):
     verbo = str(corpo.get("modo", "")).strip().lower()
+    if verbo == "jogo":
+        return JSONResponse({"ok": False, "erro": "modo jogo indisponível nesta versão"}, status_code=503)
+    if verbo == "voltar":
+        return {"ok": True, "mensagem": "restauração pendente para próxima versão"}
     if verbo not in modo.VERBOS:
-        raise HTTPException(422, f"modo inválido: {verbo}")
+        raise HTTPException(400, f"modo inválido: {verbo}")
     try:
         resultado = modo.disparar(verbo)
     except FileNotFoundError as exc:

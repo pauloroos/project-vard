@@ -135,3 +135,79 @@ def test_disparar_sobrevive_ao_taskkill_do_pai(tmp_path: Path):
         pai.stdout.close()
     assert not (tmp_path / "marcador.txt").exists(), "o stub deveria ainda estar no Start-Sleep"
     assert _esperar_arquivo(tmp_path / "marcador.txt") == "jogo", "o taskkill do pai matou o script"
+
+
+# ---------------------------------------------------------------- endpoint /modo (HTTP)
+from fastapi.testclient import TestClient
+
+import server
+
+
+@pytest.fixture
+def cliente_modo(monkeypatch, tmp_path):
+    server.HISTORICO.clear()
+    monkeypatch.setattr(server, "_reuniao_ativa", lambda: False)
+    from vard import central
+    monkeypatch.setattr(central, "ARQUIVO", tmp_path / "avisos.jsonl")
+    return TestClient(server.app, base_url="http://127.0.0.1:4700")
+
+
+def test_modo_jogo_retorna_erro_claro(cliente_modo, monkeypatch):
+    from vard import modo
+    chamados = []
+    monkeypatch.setattr(modo, "disparar", lambda verbo: chamados.append(verbo) or 1)
+    r = cliente_modo.post("/modo", json={"modo": "jogo"}, headers={"Origin": "http://127.0.0.1:4700"})
+    assert r.status_code in (503, 400)
+    assert "indispon" in r.text
+
+
+def test_modo_voltar_retorna_sucesso_imediato(cliente_modo, monkeypatch):
+    from vard import modo
+    chamados = []
+    monkeypatch.setattr(modo, "disparar", lambda verbo: chamados.append(verbo) or 1)
+    r = cliente_modo.post("/modo", json={"modo": "voltar"}, headers={"Origin": "http://127.0.0.1:4700"})
+    assert r.status_code == 200
+    assert r.json().get("ok") is True
+
+
+def test_modo_desconhecido_retorna_erro(cliente_modo):
+    r = cliente_modo.post("/modo", json={"modo": "xyz"}, headers={"Origin": "http://127.0.0.1:4700"})
+    assert r.status_code == 400
+
+
+# ---------------------------------------------------------------- endpoint /modo (HTTP)
+from fastapi.testclient import TestClient
+
+import server
+
+
+@pytest.fixture
+def cliente_modo(monkeypatch, tmp_path):
+    server.HISTORICO.clear()
+    monkeypatch.setattr(server, "_reuniao_ativa", lambda: False)
+    from vard import central
+    monkeypatch.setattr(central, "ARQUIVO", tmp_path / "avisos.jsonl")
+    return TestClient(server.app, base_url="http://127.0.0.1:4700")
+
+
+def test_modo_jogo_retorna_erro_claro(cliente_modo, monkeypatch):
+    from vard import modo
+    chamados = []
+    monkeypatch.setattr(modo, "disparar", lambda verbo: chamados.append(verbo) or 1)
+    r = cliente_modo.post("/modo", json={"modo": "jogo"}, headers={"Origin": "http://127.0.0.1:4700"})
+    assert r.status_code in (503, 400)
+    assert "indispon" in r.text
+
+
+def test_modo_voltar_retorna_sucesso_imediato(cliente_modo, monkeypatch):
+    from vard import modo
+    chamados = []
+    monkeypatch.setattr(modo, "disparar", lambda verbo: chamados.append(verbo) or 1)
+    r = cliente_modo.post("/modo", json={"modo": "voltar"}, headers={"Origin": "http://127.0.0.1:4700"})
+    assert r.status_code == 200
+    assert r.json().get("ok") is True
+
+
+def test_modo_desconhecido_retorna_erro(cliente_modo):
+    r = cliente_modo.post("/modo", json={"modo": "xyz"}, headers={"Origin": "http://127.0.0.1:4700"})
+    assert r.status_code == 400
