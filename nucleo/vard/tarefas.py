@@ -9,7 +9,10 @@ from __future__ import annotations
 import contextlib
 import datetime as dt
 import json
-import msvcrt
+try:
+    import msvcrt
+except Exception:
+    msvcrt = None
 import os
 import re
 import time
@@ -110,21 +113,30 @@ def trava(arq: Path | None = None, espera: float = 10.0):
     alvo.parent.mkdir(parents=True, exist_ok=True)
     fd = os.open(alvo, os.O_RDWR | os.O_CREAT)
     try:
-        fim = time.monotonic() + espera
-        while True:
-            os.lseek(fd, 0, os.SEEK_SET)
+        if msvcrt is not None:
+            fim = time.monotonic() + espera
+            while True:
+                os.lseek(fd, 0, os.SEEK_SET)
+                try:
+                    msvcrt.locking(fd, msvcrt.LK_NBLCK, 1)
+                    break
+                except OSError:
+                    if time.monotonic() >= fim:
+                        raise TimeoutError(f"{alvo.name} ocupado há mais de {espera:.0f} s") from None
+                    time.sleep(0.05)
             try:
-                msvcrt.locking(fd, msvcrt.LK_NBLCK, 1)
-                break
-            except OSError:
-                if time.monotonic() >= fim:
-                    raise TimeoutError(f"{alvo.name} ocupado há mais de {espera:.0f} s") from None
-                time.sleep(0.05)
-        try:
-            yield
-        finally:
-            os.lseek(fd, 0, os.SEEK_SET)
-            msvcrt.locking(fd, msvcrt.LK_UNLCK, 1)
+                yield
+            finally:
+                try:
+                    os.lseek(fd, 0, os.SEEK_SET)
+                    msvcrt.locking(fd, msvcrt.LK_UNLCK, 1)
+                except Exception:
+                    pass
+        else:
+            try:
+                yield
+            finally:
+                pass
     finally:
         os.close(fd)
 

@@ -572,24 +572,20 @@ fn cancelar_pedidos_cerebro() {
 }
 
 fn executar_jogo() -> Result<ModoCiclo, String> {
-    // T11: Cancela pedidos pendentes do cérebro próprio antes de entrar em modo jogo.
-    // Isso impede que inferências continuem consumindo GPU durante o jogo.
-    cancelar_pedidos_cerebro();
-
-    // Modo jogo: pede à ponte para descarregar modelo e liberar GPU.
-    // Em dev/teste sem ponte real, aceita como sucesso para permitir teste de fluxo.
-    match ponte_modo("jogo") {
-        Ok(true) => Ok(ModoCiclo::Jogo),
-        Ok(false) => Err("ponte recusou modo jogo".to_string()),
-        Err(e) if e.contains("ponte desligada") => {
-            // Sem ponte: aceita para fluxo de teste (LM Studio falso).
-            Ok(ModoCiclo::Jogo)
-        }
-        Err(e) => Err(e),
-    }
+    // Modo jogo desativado nesta frente (decisão de produto): recusa imediatamente,
+    // sem tocar na ponte, sem cancelar pedidos do cérebro, sem mudar estado para Jogo.
+    Err("modo jogo indisponível nesta versão".to_string())
 }
 
 fn executar_voltar() -> Result<ModoCiclo, String> {
+    // No-op seguro quando não há fotografia ou o modo atual não é Jogo:
+    // não tenta restaurar modelo via ponte nem alterar estado.
+    let foto_existe = carregar_fotografia()?.is_some();
+    let modo_atual = ler_estado().unwrap_or_default().modo;
+    if !foto_existe || modo_atual != "jogo" {
+        return Ok(ModoCiclo::Ligado);
+    }
+
     // T7: Restaurar exatamente o que estava ligado antes do modo jogo.
     // 1. Carrega fotografia de retomar.json
     // 2. Inicia núcleo se não estiver rodando
@@ -1389,7 +1385,7 @@ http.server.HTTPServer(('127.0.0.1', {porta}), H).serve_forever()
     }
 
     #[test]
-    fn executar_jogo_sem_ponte_retorna_modo_jogo() {
+    fn executar_jogo_recusa() {
         let _ambiente = ambiente_isolado();
         let dir = tempfile::tempdir().unwrap();
         unsafe { std::env::set_var("VARD_DADOS", dir.path()) };
@@ -1400,11 +1396,19 @@ http.server.HTTPServer(('127.0.0.1', {porta}), H).serve_forever()
         let id = uuid::Uuid::new_v4().to_string();
         let modo = executar_verbo(&id, &VerboPedido::Jogo);
 
-        // Sem ponte (LM Studio falso): aceita e retorna Jogo
-        assert_eq!(modo, ModoCiclo::Jogo);
+        // Modo jogo desativado nesta frente: recusa com erro claro, sem tocar na ponte.
+        assert_eq!(modo, ModoCiclo::Erro);
         let estado = ler_estado().unwrap_or_default();
-        assert_eq!(estado.modo, "jogo");
+        assert_eq!(estado.modo, "erro");
+        assert!(estado.detalhe.as_deref().unwrap_or("").contains("indispon"));
         unsafe { std::env::remove_var("VARD_DADOS") };
+    }
+
+    #[test]
+    fn executar_jogo_retorna_erro_indisponivel() {
+        // Modo jogo desativado nesta frente: recusa com erro claro, sem tocar na ponte.
+        let err = executar_jogo().err().expect("modo jogo deveria recusar");
+        assert!(err.contains("indisponível"), "mensagem inesperada: {}", err);
     }
 
     #[test]
