@@ -572,24 +572,20 @@ fn cancelar_pedidos_cerebro() {
 }
 
 fn executar_jogo() -> Result<ModoCiclo, String> {
-    // T11: Cancela pedidos pendentes do cérebro próprio antes de entrar em modo jogo.
-    // Isso impede que inferências continuem consumindo GPU durante o jogo.
-    cancelar_pedidos_cerebro();
-
-    // Modo jogo: pede à ponte para descarregar modelo e liberar GPU.
-    // Em dev/teste sem ponte real, aceita como sucesso para permitir teste de fluxo.
-    match ponte_modo("jogo") {
-        Ok(true) => Ok(ModoCiclo::Jogo),
-        Ok(false) => Err("ponte recusou modo jogo".to_string()),
-        Err(e) if e.contains("ponte desligada") => {
-            // Sem ponte: aceita para fluxo de teste (LM Studio falso).
-            Ok(ModoCiclo::Jogo)
-        }
-        Err(e) => Err(e),
-    }
+    // Modo jogo desativado nesta frente (decisão de produto): recusa imediatamente,
+    // sem tocar na ponte, sem cancelar pedidos do cérebro, sem mudar estado para Jogo.
+    Err("modo jogo indisponível nesta versão".to_string())
 }
 
 fn executar_voltar() -> Result<ModoCiclo, String> {
+    // No-op seguro quando não há fotografia ou o modo atual não é Jogo:
+    // não tenta restaurar modelo via ponte nem alterar estado.
+    let foto_existe = carregar_fotografia()?.is_some();
+    let modo_atual = ler_estado().unwrap_or_default().modo;
+    if !foto_existe || modo_atual != "jogo" {
+        return Ok(ModoCiclo::Ligado);
+    }
+
     // T7: Restaurar exatamente o que estava ligado antes do modo jogo.
     // 1. Carrega fotografia de retomar.json
     // 2. Inicia núcleo se não estiver rodando

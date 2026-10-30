@@ -134,13 +134,10 @@ pub fn itens_menu(
     itens.push(ItemMenu::separador());
 
     // Dinâmicos baseados no estado
-    if foto.modo == "ligado" {
-        itens.push(ItemMenu::novo("jogo", "Modo jogo"));
-    }
-    if ["jogo", "parado", "liberando"].contains(&foto.modo.as_str()) {
-        let rotulo = if foto.modo == "liberando" { "Voltando..." } else { "Voltar" };
-        let mut voltar = ItemMenu::novo("voltar", rotulo);
-        if foto.modo == "liberando" { voltar = voltar.desativado(); }
+    // Modo jogo desativado nesta frente: o menu nunca oferece a entrada.
+    if ["parado", "erro"].contains(&foto.modo.as_str()) {
+        let rotulo = "Voltar";
+        let voltar = ItemMenu::novo("voltar", rotulo);
         itens.push(voltar);
     }
     if foto.modo == "erro" {
