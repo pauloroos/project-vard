@@ -7,7 +7,7 @@ import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { aplicarAoVivo, aplicarVozAoVivo, atualizarConfig, carregarConfig, lerConfigAoVivo, normalizarConfig } from "./config/config";
 import type { Config } from "./config/config";
 import type { FalhaAtalho } from "./config/atalhos";
-import { abrirMicrofone, definirMudo, fecharMicrofone, estaMudo, onAmostras, rmsAtual, taxaAtual, definirMicrofonePreferido } from "./audio/microfone";
+import { abrirMicrofone, definirMudo, fecharMicrofone, estaMudo, onAmostras, rmsAtual, taxaAtual, definirMicrofonePreferido, microfoneAberto } from "./audio/microfone";
 import { DetectorSelecionavel, ControleCapturaVoz, pareceEco } from "./audio/vad-selecionavel";
 import { carregarSilero } from "./audio/silero";
 import { pcmParaWav, reamostrar } from "./audio/wav";
@@ -54,9 +54,14 @@ export async function aplicarDispositivosSalvos(
   avisar: (estado: Estado, detalhe: string) => void,
 ): Promise<void> {
   try {
-    if (mudou.microfone) definirMicrofonePreferido(cfg.microfone_id);
+    if (mudou.microfone) {
+      definirMicrofonePreferido(cfg.microfone_id);
+      if (microfoneAberto()) {
+        avisar("erro", "Reinicie para aplicar o microfone");
+      }
+    }
     // Sem contexto a saída ainda não tem onde ser aplicada; ela entra na próxima abertura do microfone.
-    if (mudou.saida && cfg.saida_id && contexto && !(await aplicarSaidaNoContexto(contexto))) {
+    if (mudou.saida && contexto && !(await aplicarSaidaNoContexto(contexto))) {
       throw new Error("a saída escolhida não pôde ser aplicada");
     }
   } catch (erro) {
