@@ -292,12 +292,6 @@ mod testes {
     }
 
     #[test]
-    fn menu_ligado_tem_jogo() {
-        let itens = itens_menu(&foto("ligado"), false, false, true, false, false);
-        assert!(itens.iter().any(|i| i.id == "jogo" && i.ativo));
-    }
-
-    #[test]
     fn menu_ligado_nao_tem_jogo() {
         let itens = itens_menu(&foto("ligado"), false, false, true, false, false);
         assert!(!itens.iter().any(|i| i.id == "jogo"));
@@ -310,9 +304,8 @@ mod testes {
         let sala = itens.iter().find(|i| i.id == "sala").unwrap();
         assert!(!config.ativo);
         assert!(!sala.ativo);
-        // Voltar continua ativo
-        let voltar = itens.iter().find(|i| i.id == "voltar").unwrap();
-        assert!(voltar.ativo);
+        // Modo jogo não oferece voltar (menu só oferece voltar em parado/erro)
+        assert!(itens.iter().find(|i| i.id == "voltar").is_none());
     }
 
     #[test]

@@ -1385,7 +1385,7 @@ http.server.HTTPServer(('127.0.0.1', {porta}), H).serve_forever()
     }
 
     #[test]
-    fn executar_jogo_sem_ponte_retorna_modo_jogo() {
+    fn executar_jogo_recusa() {
         let _ambiente = ambiente_isolado();
         let dir = tempfile::tempdir().unwrap();
         unsafe { std::env::set_var("VARD_DADOS", dir.path()) };
@@ -1396,10 +1396,11 @@ http.server.HTTPServer(('127.0.0.1', {porta}), H).serve_forever()
         let id = uuid::Uuid::new_v4().to_string();
         let modo = executar_verbo(&id, &VerboPedido::Jogo);
 
-        // Sem ponte (LM Studio falso): aceita e retorna Jogo
-        assert_eq!(modo, ModoCiclo::Jogo);
+        // Modo jogo desativado nesta frente: recusa com erro claro, sem tocar na ponte.
+        assert_eq!(modo, ModoCiclo::Erro);
         let estado = ler_estado().unwrap_or_default();
-        assert_eq!(estado.modo, "jogo");
+        assert_eq!(estado.modo, "erro");
+        assert!(estado.detalhe.as_deref().unwrap_or("").contains("indispon"));
         unsafe { std::env::remove_var("VARD_DADOS") };
     }
 

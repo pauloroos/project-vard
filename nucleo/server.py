@@ -783,7 +783,7 @@ def mudar_modo(corpo: dict):
     if verbo == "voltar":
         return {"ok": True, "mensagem": "restauração pendente para próxima versão"}
     if verbo not in modo.VERBOS:
-        raise HTTPException(400, f"modo inválido: {verbo}")
+        raise HTTPException(422, f"modo inválido: {verbo}")
     try:
         resultado = modo.disparar(verbo)
     except FileNotFoundError as exc:
