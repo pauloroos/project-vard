@@ -29,7 +29,7 @@ pub fn iniciar(desc: DescritorServico) -> Result<(), String> {
             return Err(format!("serviço '{id}' já está registrado"));
         }
     }
-    let handle = Arc::new(ServicoHandle::novo(&id, desc.porta));
+    let handle = Arc::new(ServicoHandle::novo(&desc));
     {
         let mut reg = SERVICOS.write().map_err(|e| e.to_string())?;
         reg.insert(id.clone(), handle.clone());
@@ -56,10 +56,16 @@ pub fn parar(id: &str) -> Result<(), String> {
 }
 
 /// Sinaliza reinício manual de um serviço (cancela recuo/arranque em andamento).
+/// Se a thread supervisora já terminou (ex.: após `parar`), recria a thread.
 pub fn repetir(id: &str) -> Result<(), String> {
-    let reg = SERVICOS.read().map_err(|e| e.to_string())?;
-    let handle = reg.get(id).ok_or_else(|| format!("serviço '{id}' não encontrado"))?;
+    let handle = {
+        let reg = SERVICOS.read().map_err(|e| e.to_string())?;
+        reg.get(id)
+            .cloned()
+            .ok_or_else(|| format!("serviço '{id}' não encontrado"))?
+    };
     handle.pedir_reinicio();
+    handle.reanimar_se_morto()?;
     Ok(())
 }
 
@@ -156,21 +162,23 @@ pub struct InfoServico {
 /// Handle de um serviço em execução.
 pub struct ServicoHandle {
     pub info: Arc<Mutex<InfoServico>>,
+    desc: DescritorServico,
     parar: AtomicBool,
     reiniciar: AtomicBool,
     terminou: AtomicBool,
 }
 
 impl ServicoHandle {
-    pub fn novo(id: &str, porta: u16) -> Self {
+    pub fn novo(desc: &DescritorServico) -> Self {
         ServicoHandle {
             info: Arc::new(Mutex::new(InfoServico {
-                id: id.to_string(),
+                id: desc.id.clone(),
                 estado: supervisor::EstadoServico::Ausente,
                 detalhe: String::new(),
                 pid: None,
-                porta,
+                porta: desc.porta,
             })),
+            desc: desc.clone(),
             parar: AtomicBool::new(false),
             reiniciar: AtomicBool::new(false),
             terminou: AtomicBool::new(false),
@@ -185,6 +193,38 @@ impl ServicoHandle {
     /// Sinaliza reinício manual (cancela recuo/arranque).
     pub fn pedir_reinicio(&self) {
         self.reiniciar.store(true, Ordering::SeqCst);
+    }
+
+    /// Recria a thread supervisora se ela já terminou (ex.: após `parar`).
+    /// Se a thread ainda vive, o sinal de `pedir_reinicio` basta e nada é feito.
+    fn reanimar_se_morto(self: &Arc<Self>) -> Result<(), String> {
+        if !self.terminou.load(Ordering::SeqCst) {
+            return Ok(());
+        }
+        // Só um chamador vence a corrida: quem trocar `terminou` de true para false recria.
+        if self
+            .terminou
+            .compare_exchange(true, false, Ordering::SeqCst, Ordering::SeqCst)
+            .is_err()
+        {
+            return Ok(());
+        }
+        self.parar.store(false, Ordering::SeqCst);
+        self.reiniciar.store(false, Ordering::SeqCst);
+        let h = Arc::clone(self);
+        let desc = self.desc.clone();
+        let id = desc.id.clone();
+        if let Err(erro) = std::thread::Builder::new()
+            .name(format!("supervisor-{id}"))
+            .spawn(move || {
+                loop_servico(h.clone(), desc);
+                h.terminou.store(true, Ordering::SeqCst);
+            })
+        {
+            self.terminou.store(true, Ordering::SeqCst);
+            return Err(format!("falha ao recriar thread do serviço '{id}': {erro}"));
+        }
+        Ok(())
     }
 
     fn deve_parar(&self) -> bool {
@@ -551,9 +591,20 @@ mod testes {
             .expect("reservar porta de teste").local_addr().unwrap().port()
     }
 
+    fn desc_falso(id: &str, porta: u16) -> DescritorServico {
+        DescritorServico {
+            id: id.to_string(),
+            porta,
+            comando: (PathBuf::from("echo"), vec![]),
+            pasta_trabalho: None,
+            envs: vec![],
+            caminho_log: std::env::temp_dir().join(format!("{id}.log")),
+        }
+    }
+
     #[test]
     fn handle_parada_sinaliza_corretamente() {
-        let h = ServicoHandle::novo("teste", 9999);
+        let h = ServicoHandle::novo(&desc_falso("teste", 9999));
         assert!(!h.deve_parar());
         h.pedir_parada();
         assert!(h.deve_parar());
@@ -561,7 +612,7 @@ mod testes {
 
     #[test]
     fn handle_reiniciar_consome_sinal() {
-        let h = ServicoHandle::novo("teste", 9999);
+        let h = ServicoHandle::novo(&desc_falso("teste", 9999));
         assert!(!h.deve_reiniciar());
         h.pedir_reinicio();
         assert!(h.deve_reiniciar());
@@ -571,7 +622,7 @@ mod testes {
 
     #[test]
     fn mudar_estado_atualiza_info() {
-        let h = ServicoHandle::novo("nucleo", 4750);
+        let h = ServicoHandle::novo(&desc_falso("nucleo", 4750));
         h.mudar_estado(supervisor::EstadoServico::Ok, "funcionando", Some(1234));
         let info = h.info.lock().unwrap();
         assert_eq!(info.estado, supervisor::EstadoServico::Ok);
@@ -692,7 +743,7 @@ http.server.HTTPServer(('127.0.0.1', {porta}), H).serve_forever()
     fn parar_servico_nao_reinicia_nem_conta_queda() {
         // Parada intencional: sinaliza parada, espera o loop perceber, confirma estado Ausente
         let porta = 19803;
-        let handle = Arc::new(ServicoHandle::novo("teste-parada", porta));
+        let handle = Arc::new(ServicoHandle::novo(&desc_falso("teste-parada", porta)));
         // Simula: filho rodando, depois pedimos parada
         handle.mudar_estado(supervisor::EstadoServico::Ok, "", Some(12345));
         handle.pedir_parada();
@@ -724,7 +775,7 @@ http.server.HTTPServer(('127.0.0.1', {porta}), H).serve_forever()
         // Iniciar deve registrar o serviço
         // Nota: não chamamos iniciar() aqui porque ele lança thread real com cmd.exe
         // Em vez disso, testamos o registro manual e a API de consulta
-        let handle = Arc::new(ServicoHandle::novo("api-teste", 19804));
+        let handle = Arc::new(ServicoHandle::novo(&desc_falso("api-teste", 19804)));
         {
             let mut reg = SERVICOS.write().unwrap();
             reg.insert("api-teste".into(), handle.clone());
@@ -748,8 +799,8 @@ http.server.HTTPServer(('127.0.0.1', {porta}), H).serve_forever()
     #[test]
     fn encerrar_todos_sinaliza_parada_em_todos() {
         // encerrar_todos deve sinalizar parada em todos os serviços registrados
-        let h1 = Arc::new(ServicoHandle::novo("enc1", 19805));
-        let h2 = Arc::new(ServicoHandle::novo("enc2", 19806));
+        let h1 = Arc::new(ServicoHandle::novo(&desc_falso("enc1", 19805)));
+        let h2 = Arc::new(ServicoHandle::novo(&desc_falso("enc2", 19806)));
         {
             let mut reg = SERVICOS.write().unwrap();
             reg.insert("enc1".into(), h1.clone());
@@ -1094,6 +1145,178 @@ http.server.HTTPServer(('127.0.0.1', {porta}), H).serve_forever()
                 .stdout(std::process::Stdio::null()).stderr(std::process::Stdio::null()).status();
         }
         assert!(!ficou_vivo, "o filho sobreviveu ao desenrolamento do teste");
+    }
+
+    #[test]
+    fn repetir_apos_parar_recria_thread_com_novo_pid() {
+        let porta = porta_livre();
+        let id: &'static str = "repetir-recria-thread";
+        if let Ok(mut reg) = SERVICOS.write() {
+            reg.remove(id);
+        }
+        struct LimpaServico(&'static str);
+        impl Drop for LimpaServico {
+            fn drop(&mut self) {
+                let _ = parar(self.0);
+                let fim = Instant::now() + Duration::from_secs(5);
+                while Instant::now() < fim {
+                    let terminou = SERVICOS
+                        .read()
+                        .ok()
+                        .and_then(|r| r.get(self.0).cloned())
+                        .map(|h| h.terminou.load(std::sync::atomic::Ordering::SeqCst))
+                        .unwrap_or(true);
+                    if terminou {
+                        break;
+                    }
+                    std::thread::sleep(Duration::from_millis(100));
+                }
+                if let Ok(mut reg) = SERVICOS.write() {
+                    reg.remove(self.0);
+                }
+            }
+        }
+        let _guarda = LimpaServico(id);
+
+        fn python_absoluto() -> PathBuf {
+            if let Some(paths) = std::env::var_os("PATH") {
+                for p in std::env::split_paths(&paths) {
+                    for nome in ["python3", "python"] {
+                        let cand = p.join(nome);
+                        if cand.is_file() {
+                            return cand;
+                        }
+                    }
+                }
+            }
+            for cand in ["/usr/bin/python3", "/usr/local/bin/python3"] {
+                let pb = PathBuf::from(cand);
+                if pb.is_file() {
+                    return pb;
+                }
+            }
+            PathBuf::from("python3")
+        }
+        let python = python_absoluto();
+        assert!(python.is_file(), "python do sistema não encontrado para o teste");
+
+        let script = format!(
+            r#"
+import http.server, json, os, sys
+class H(http.server.BaseHTTPRequestHandler):
+    def do_GET(self):
+        if self.path == '/saude':
+            body = json.dumps({{"ok": True, "versao": "0.7.0", "pid": os.getpid()}}).encode()
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/json')
+            self.send_header('Content-Length', str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+        else:
+            self.send_response(404)
+            self.end_headers()
+    def log_message(self, *a): pass
+http.server.HTTPServer(('127.0.0.1', {porta}), H).serve_forever()
+"#,
+            porta = porta
+        );
+        let desc = DescritorServico {
+            id: id.to_string(),
+            porta,
+            comando: (python, vec!["-c".into(), script]),
+            pasta_trabalho: None,
+            envs: vec![],
+            caminho_log: std::env::temp_dir().join(format!("{id}-{porta}.log")),
+        };
+        iniciar(desc).expect("iniciar deve registrar o serviço");
+
+        // Espera o serviço subir e captura o PID inicial.
+        let pid1 = {
+            let fim = Instant::now() + Duration::from_secs(20);
+            let mut achado = None;
+            while Instant::now() < fim {
+                if let Ok(f) = foto(id) {
+                    if f.estado == supervisor::EstadoServico::Ok {
+                        if let Some(pid) = f.pid {
+                            achado = Some(pid);
+                            break;
+                        }
+                    }
+                }
+                std::thread::sleep(Duration::from_millis(100));
+            }
+            achado.expect("serviço não subiu para Ok no prazo")
+        };
+        assert!(
+            esperar_saude(porta, pid1, Duration::from_secs(5)),
+            "filho inicial não respondeu /saude"
+        );
+
+        // Para e espera a thread supervisora terminar.
+        parar(id).expect("parar deve funcionar");
+        {
+            let fim = Instant::now() + Duration::from_secs(10);
+            loop {
+                let terminou = SERVICOS
+                    .read()
+                    .ok()
+                    .and_then(|r| r.get(id).cloned())
+                    .map(|h| h.terminou.load(std::sync::atomic::Ordering::SeqCst))
+                    .unwrap_or(true);
+                if terminou {
+                    break;
+                }
+                assert!(Instant::now() < fim, "thread não terminou após parar no prazo");
+                std::thread::sleep(Duration::from_millis(100));
+            }
+        }
+
+        // Repetir deve recriar a thread e subir com novo PID.
+        repetir(id).expect("repetir deve funcionar");
+        let pid2 = {
+            let fim = Instant::now() + Duration::from_secs(20);
+            let mut achado = None;
+            while Instant::now() < fim {
+                if let Ok(f) = foto(id) {
+                    if f.estado == supervisor::EstadoServico::Ok {
+                        if let Some(pid) = f.pid {
+                            if pid != pid1 {
+                                achado = Some(pid);
+                                break;
+                            }
+                        }
+                    }
+                }
+                std::thread::sleep(Duration::from_millis(100));
+            }
+            achado.expect("serviço não voltou com novo PID após repetir")
+        };
+        assert_ne!(pid1, pid2, "PID deveria mudar após recriar a thread");
+        assert!(
+            esperar_saude(porta, pid2, Duration::from_secs(5)),
+            "serviço recriado não respondeu /saude com o novo PID"
+        );
+
+        // Limpeza explícita (a guarda repete por segurança em caso de falha).
+        let _ = parar(id);
+        {
+            let fim = Instant::now() + Duration::from_secs(10);
+            while Instant::now() < fim {
+                let terminou = SERVICOS
+                    .read()
+                    .ok()
+                    .and_then(|r| r.get(id).cloned())
+                    .map(|h| h.terminou.load(std::sync::atomic::Ordering::SeqCst))
+                    .unwrap_or(true);
+                if terminou {
+                    break;
+                }
+                std::thread::sleep(Duration::from_millis(100));
+            }
+        }
+        if let Ok(mut reg) = SERVICOS.write() {
+            reg.remove(id);
+        }
     }
 
 }

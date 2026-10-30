@@ -134,13 +134,10 @@ pub fn itens_menu(
     itens.push(ItemMenu::separador());
 
     // Dinâmicos baseados no estado
-    if foto.modo == "ligado" {
-        itens.push(ItemMenu::novo("jogo", "Modo jogo"));
-    }
-    if ["jogo", "parado", "liberando"].contains(&foto.modo.as_str()) {
-        let rotulo = if foto.modo == "liberando" { "Voltando..." } else { "Voltar" };
-        let mut voltar = ItemMenu::novo("voltar", rotulo);
-        if foto.modo == "liberando" { voltar = voltar.desativado(); }
+    // Modo jogo desativado nesta frente: o menu nunca oferece a entrada.
+    if ["parado", "erro"].contains(&foto.modo.as_str()) {
+        let rotulo = "Voltar";
+        let voltar = ItemMenu::novo("voltar", rotulo);
         itens.push(voltar);
     }
     if foto.modo == "erro" {
@@ -295,9 +292,9 @@ mod testes {
     }
 
     #[test]
-    fn menu_ligado_tem_jogo() {
+    fn menu_ligado_nao_tem_jogo() {
         let itens = itens_menu(&foto("ligado"), false, false, true, false, false);
-        assert!(itens.iter().any(|i| i.id == "jogo" && i.ativo));
+        assert!(!itens.iter().any(|i| i.id == "jogo"));
     }
 
     #[test]
@@ -307,9 +304,8 @@ mod testes {
         let sala = itens.iter().find(|i| i.id == "sala").unwrap();
         assert!(!config.ativo);
         assert!(!sala.ativo);
-        // Voltar continua ativo
-        let voltar = itens.iter().find(|i| i.id == "voltar").unwrap();
-        assert!(voltar.ativo);
+        // Modo jogo não oferece voltar (menu só oferece voltar em parado/erro)
+        assert!(itens.iter().find(|i| i.id == "voltar").is_none());
     }
 
     #[test]
