@@ -2,7 +2,7 @@ import { gatilhos, type Config } from "../config/config";
 import { INSTRUCAO_HABILIDADES, lerHabilidades, temHabilidadesLigadas } from "../config/habilidades";
 import { fluxoParaWav } from "../audio/wav";
 import { FALAS, saudacaoPara } from "./falas";
-import { cortarEmFrases } from "./frases";
+import { cortarEmFrases, extrairFrasesProntas, TIMEOUT_FLUSH_FRASE_MS } from "./frases";
 import { ehEncerramento } from "./encerramento";
 import { aPartirDoGatilho, classificar, ehConfirmacao, ehInterrupcao, extrairComando } from "./rotas";
 import type { Cerebro } from "../config/cerebro";
@@ -258,6 +258,276 @@ export class Conversa {
     if (!sinal.aborted) await boca.tocar(wav);
   }
 
+  /**
+   * Recebe o texto do cérebro próprio via SSE e fala frase por frase sem esperar o `fim`.
+   * Frases completas entram na fila na ordem em que chegam; a reprodução consome a fila
+   * em ordem e espera quando ela esvazia antes do `fim`. O `fim` só encerra depois da
+   * fila drenada. Interrupção (abort) limpa a fila e para a reprodução na hora.
+   */
+  private async receberEFalarEmStreaming(
+    pedidoId: string,
+    sessaoId: string,
+    textoInicial: string,
+    seqInicial: number,
+    terminadoInicial: boolean,
+    ac: AbortController,
+  ): Promise<string> {
+    const d = this.d;
+    const sinal = ac.signal;
+    let ultimoSeq = seqInicial;
+    let completo = textoInicial;
+    let buffer = textoInicial;
+    const fila: string[] = [];
+    const esvaziarBuffer = () => {
+      const e = extrairFrasesProntas(buffer);
+      if (e.prontas.length) fila.push(...e.prontas);
+      buffer = e.resto;
+    };
+    esvaziarBuffer();
+    let terminado = terminadoInicial;
+    let erroSse: Error | null = null;
+    let acordar: (() => void) | null = null;
+    const avisar = () => {
+      const a = acordar;
+      acordar = null;
+      a?.();
+    };
+    let relogioFlush: ReturnType<typeof setTimeout> | null = null;
+    const limparFlush = () => {
+      if (relogioFlush) {
+        clearTimeout(relogioFlush);
+        relogioFlush = null;
+      }
+    };
+    const rearmarFlush = () => {
+      limparFlush();
+      if (terminado || sinal.aborted) return;
+      relogioFlush = setTimeout(() => {
+        relogioFlush = null;
+        if (terminado || sinal.aborted) return;
+        const resto = buffer.trim();
+        if (resto) {
+          buffer = "";
+          fila.push(resto);
+          avisar();
+        }
+      }, TIMEOUT_FLUSH_FRASE_MS);
+    };
+    if (!terminado && buffer.trim()) rearmarFlush();
+
+    const onEvento = (ev: Event) => {
+      if (sinal.aborted) return;
+      const msg = (ev as MessageEvent).data;
+      if (typeof msg !== "string") return;
+      let obj: EventoPedidoSSE | null = null;
+      try {
+        obj = JSON.parse(msg) as EventoPedidoSSE;
+      } catch {
+        return;
+      }
+      if (!obj || obj.tipo !== "pedido" || obj.sessao_id !== sessaoId || obj.pedido_id !== pedidoId) return;
+      if (obj.seq <= ultimoSeq) return;
+      ultimoSeq = obj.seq;
+      if (obj.evento_tipo === "texto" && typeof obj.dados.texto === "string") {
+        if (sinal.aborted) return; // texto tardio depois de interromper é descartado
+        completo += obj.dados.texto;
+        buffer += obj.dados.texto;
+        esvaziarBuffer();
+        rearmarFlush();
+        avisar();
+      } else if (obj.evento_tipo === "fim" || obj.evento_tipo === "erro") {
+        limparFlush();
+        const resto = buffer.trim();
+        if (resto && !sinal.aborted) fila.push(resto);
+        buffer = "";
+        terminado = true;
+        cleanup();
+        avisar();
+      }
+    };
+    const onError = () => {
+      limparFlush();
+      erroSse = new Error("sse_erro");
+      terminado = true;
+      cleanup();
+      avisar();
+    };
+    const onAbort = () => {
+      limparFlush();
+      fila.length = 0; // interromper limpa as frases pendentes
+      buffer = "";
+      cleanup();
+      avisar();
+    };
+    const cleanup = () => {
+      window.removeEventListener("vard-evento-pedido", onEvento as unknown as EventListener);
+      window.removeEventListener("error", onError);
+      sinal.removeEventListener("abort", onAbort);
+    };
+    if (!terminado) {
+      window.addEventListener("vard-evento-pedido", onEvento as unknown as EventListener);
+      window.addEventListener("error", onError);
+      sinal.addEventListener("abort", onAbort, { once: true });
+    } else {
+      // Reconciliação já trouxe o fim: o resto (mesmo curto ou sem ponto) vira a última frase.
+      const resto = buffer.trim();
+      if (resto) {
+        buffer = "";
+        fila.push(resto);
+      }
+    }
+    if (sinal.aborted || this.emJogo()) {
+      cleanup();
+      limparFlush();
+      throw new Error("abortado");
+    }
+
+    // Síntese por frase (mesma rota do falarEmFrases: voz própria, reserva configurada, OpenJarvis).
+    let soReserva = !d.voz;
+    let caiuNoMeio = false;
+    const reserva = async (frase: string): Promise<ArrayBuffer> => {
+      if (d.vozReserva?.falarWav) {
+        try {
+          return await d.vozReserva.falarWav(frase, d.config.velocidade);
+        } catch (erro) {
+          console.warn("reserva configurada falhou", erro);
+        }
+      }
+      if (d.voz?.falarWav) {
+        try {
+          return await d.voz.falarWav(frase, d.config.velocidade);
+        } catch (erro) {
+          console.warn("reserva pela voz própria falhou", erro);
+        }
+      }
+      if (!d.oj) throw new Error("Sem voz disponível (OpenJarvis desligado e nenhuma voz própria/reserva configurada)");
+      return d.oj.sintetizar(frase, d.config.voz, d.config.velocidade);
+    };
+    const sintetizar = async (frase: string): Promise<Som | null> => {
+      if (!soReserva && d.voz) {
+        try {
+          const r = await d.voz.falar(frase, d.config.velocidade, sinal);
+          if (sinal.aborted) {
+            descartar({ fluxo: r.corpo, taxa: r.taxa });
+            return null;
+          }
+          return { fluxo: r.corpo, taxa: r.taxa };
+        } catch (erro) {
+          if (sinal.aborted) return null;
+          if ((erro as { conexao?: unknown } | null)?.conexao === true) soReserva = true;
+          console.warn("voz própria falhou, usei a reserva", erro);
+        }
+      }
+      if (sinal.aborted) return null;
+      return { wav: await reserva(frase) };
+    };
+
+    const t0 = performance.now();
+    let primeiro = true;
+    const pararBoca = () => d.boca.parar();
+    sinal.addEventListener("abort", pararBoca);
+    // A frase seguinte é sintetizada antes da atual começar a tocar (paralelo à reprodução).
+    let proxima: { frase: string; som: Promise<Som | null> } | null = null;
+    const pedirSintese = (frase: string) => ({ frase, som: sintetizar(frase) });
+    try {
+      for (;;) {
+        if (sinal.aborted || this.emJogo()) {
+          if (proxima) void proxima.som.then(descartar, () => {});
+          proxima = null;
+          fila.length = 0;
+          return completo.trim();
+        }
+        if (erroSse) throw erroSse;
+        if (!proxima) {
+          const texto = fila.shift();
+          if (!texto) {
+            if (terminado) break;
+            await new Promise<void>((resolve) => {
+              acordar = resolve;
+              if (sinal.aborted || terminado) {
+                acordar = null;
+                resolve();
+              }
+            });
+            continue;
+          }
+          if (!this.podeFalar()) return completo.trim();
+          proxima = pedirSintese(texto);
+        }
+        const atual = proxima;
+        proxima = null;
+        // Prefetch: a seguinte já é pedida antes da atual tocar.
+        const seguinteTexto = fila.shift();
+        if (seguinteTexto) proxima = pedirSintese(seguinteTexto);
+        let som: Som | null = null;
+        try {
+          som = await atual.som;
+        } catch (erro) {
+          console.warn("falha ao sintetizar a frase", erro);
+        }
+        if (sinal.aborted || this.emJogo()) {
+          descartar(som);
+          if (proxima) void proxima.som.then(descartar, () => {});
+          proxima = null;
+          fila.length = 0;
+          return completo.trim();
+        }
+        // Texto novo pode ter chegado enquanto a síntese rodava: garante o prefetch antes de tocar.
+        if (!proxima) {
+          const textoNovo = fila.shift();
+          if (textoNovo) proxima = pedirSintese(textoNovo);
+        }
+        if (!som) continue;
+        const frase = atual.frase;
+        if (caiuNoMeio && "fluxo" in som) {
+          descartar(som);
+          try {
+            som = { wav: await reserva(frase) };
+          } catch (erro) {
+            console.warn("falha ao sintetizar a frase", erro);
+            continue;
+          }
+          if (sinal.aborted) {
+            if (proxima) void proxima.som.then(descartar, () => {});
+            return completo.trim();
+          }
+        }
+        if (primeiro) {
+          primeiro = false;
+          console.info(`voz: 1º áudio em ${Math.round(performance.now() - t0)} ms após o streaming`);
+        }
+        if (this.estado !== "falando") this.mudar("falando");
+        try {
+          await this.tocarSom(som, sinal);
+        } catch (erro) {
+          if (sinal.aborted) {
+            if (proxima) void proxima.som.then(descartar, () => {});
+            return completo.trim();
+          }
+          console.warn("falha ao falar", erro);
+          if ("fluxo" in som) {
+            soReserva = true;
+            caiuNoMeio = true;
+            try {
+              const wav = await reserva(frase);
+              if (!sinal.aborted) await d.boca.tocar(wav);
+            } catch (erro2) {
+              console.warn("falha ao falar pela reserva", erro2);
+            }
+          }
+        }
+      }
+    } finally {
+      sinal.removeEventListener("abort", pararBoca);
+      limparFlush();
+      cleanup();
+      if (proxima) void proxima.som.then(descartar, () => {});
+    }
+    if (erroSse) throw erroSse;
+    if (!completo.trim()) throw new Error("resposta vazia");
+    return completo.trim();
+  }
+
   async aoTextoTranscrito(texto: string, pushToTalk: boolean): Promise<void> {
     // Entre uma frase e outra a boca fica muda por um instante: o estado "falando" segura a vez.
     if (this.d.boca.falando || this.estado === "falando") return;
@@ -322,6 +592,7 @@ export class Conversa {
     this.pergunta = ac;
     const ver = rota === "see";
     let resposta: string;
+    let respostaFaladaEmStreaming = false;
     try {
       if (ver) {
         if (!this.d.capturar || !this.d.ponte) throw new Error("sem captura");
@@ -334,7 +605,7 @@ export class Conversa {
         const sessao = this.d.sessaoVoz?.(); // a visão entra na mesma sessão da voz (uma CLI só)
         resposta = (await (sessao ? this.d.ponte.ver(jpeg, comando, sessao) : this.d.ponte.ver(jpeg, comando))).trim();
       } else if (this.d.cerebro === "proprio" && this.d.ponte?.pedir && this.d.sessaoVoz) {
-        // Cérebro próprio: admite pedido e espera texto via EventoPedido (SSE).
+        // Cérebro próprio: admite pedido e fala frase por frase via SSE, sem esperar o `fim`.
         const sessaoId = this.d.sessaoVoz();
         const estado = await this.d.ponte.pedir(comando, sessaoId);
         const pedidoId = estado.pedido_id;
@@ -362,41 +633,16 @@ export class Conversa {
         } catch { /* segue com SSE */ }
         // Escuta eventos SSE da sessão até fim/erro/cancelamento ou abort.
         if (ac.signal.aborted || this.emJogo()) return;
-        const esperarFim = jaTerminou ? Promise.resolve(textoAcumulado.trim()) : new Promise<string>((resolve, reject) => {
-          const onEvento = (ev: Event) => {
-            if (ac.signal.aborted) return;
-            const msg = (ev as MessageEvent).data;
-            if (typeof msg !== "string") return;
-            let obj: EventoPedidoSSE | null = null;
-            try { obj = JSON.parse(msg) as EventoPedidoSSE; } catch { return; }
-            if (!obj || obj.tipo !== "pedido" || obj.sessao_id !== sessaoId || obj.pedido_id !== pedidoId) return;
-            if (obj.seq <= ultimoSeq) return; // ignora repetido
-            ultimoSeq = obj.seq;
-            if (obj.evento_tipo === "texto" && typeof obj.dados.texto === "string") {
-              textoAcumulado += obj.dados.texto;
-            } else if (obj.evento_tipo === "fim" || obj.evento_tipo === "erro") {
-              cleanup();
-              resolve(textoAcumulado.trim());
-            }
-          };
-          const onError = () => { cleanup(); reject(new Error("sse_erro")); };
-          const cleanup = () => {
-            window.removeEventListener("vard-evento-pedido", onEvento as unknown as EventListener);
-            window.removeEventListener("error", onError);
-          };
-          window.addEventListener("vard-evento-pedido", onEvento as unknown as EventListener);
-          window.addEventListener("error", onError);
-          ac.signal.addEventListener("abort", () => { cleanup(); reject(new Error("abortado")); });
-        });
         try {
-          resposta = await esperarFim;
+          resposta = await this.receberEFalarEmStreaming(pedidoId, sessaoId, textoAcumulado, ultimoSeq, jaTerminou, ac);
+          respostaFaladaEmStreaming = true;
         } catch (erro) {
           // Cancela pedido se a fala foi cortada (abort) ou houve erro.
           cancelarPedido();
           if (ac.signal.aborted || this.emJogo()) return;
           throw erro;
         }
-        if (!resposta) throw new Error("resposta vazia");
+        if (!resposta && !ac.signal.aborted) throw new Error("resposta vazia");
       } else {
         let instrucao = this.d.config.instrucao_formato;
         try {
@@ -431,7 +677,7 @@ export class Conversa {
     }
     this.d.aoResposta?.(resposta);
     if (this.emJogo()) return;
-    await this.falarEmFrases(resposta, ac.signal);
+    if (!respostaFaladaEmStreaming) await this.falarEmFrases(resposta, ac.signal);
     if (this.pergunta === ac) this.pergunta = null;
     if (!ac.signal.aborted && !this.emJogo()) { this.abrirCanal(); this.d.aoProcessamentoConcluido?.(); this.mudar("repouso"); }
   }
