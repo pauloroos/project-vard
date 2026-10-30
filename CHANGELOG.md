@@ -3,6 +3,11 @@
 Este arquivo segue o [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) em português do Brasil.
 Os instaladores de cada versão ficam na página de [releases](https://github.com/pauloroos/project-vard/releases).
 
+## [Unreleased]
+
+### Fixed
+- cérebro: todo pedido termina, histórico certo, contrato das ferramentas. <!-- crew:20261030-0227-cerebro-todo-pedido-termina-historico-ce -->
+
 ## [0.9.8] — 2026-10-24
 
 ### Corrigido
