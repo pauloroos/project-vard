@@ -301,9 +301,9 @@ Regras:
 
 ## Economy
 
-free work: — of pieces, 100% of recorded tokens · coordinator: not recorded · 1.5 attempts/piece · mean score 36
+free work: — of pieces, 82% of tokens · coordinator: 18% · 1.5 attempts/piece · mean score 36
 
-- Tokens: free 21910109, paid exec 0, coordinator 0
+- Tokens: free 21910109, paid exec 0, coordinator 4836800
 - Time: 115 min
 
 ## Commit message
