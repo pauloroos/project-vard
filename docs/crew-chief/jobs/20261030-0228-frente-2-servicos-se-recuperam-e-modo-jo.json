@@ -113,6 +113,19 @@
           ],
           "executor": "opencode:opencode-go/muse-spark-1.3-contributor",
           "graded_at": "2026-10-30T03:09:20.583646+00:00"
+        },
+        "opencode:omni/gratis": {
+          "score": 0,
+          "explain": "adherence 1/5 → 20; 1 correction −15; 0 extra; penalties outside_write −60 → 0",
+          "corrections": 1,
+          "done": 1,
+          "missing": 4,
+          "extra": 0,
+          "penalties": [
+            "outside_write"
+          ],
+          "executor": "opencode:omni/gratis",
+          "graded_at": "2026-10-30T04:49:19.569049+00:00"
         }
       },
       "picks": [
@@ -127,7 +140,15 @@
           "at": "2026-10-30T02:59:10.013617+00:00"
         }
       ],
-      "next_attempt": 4
+      "next_attempt": 4,
+      "accepted": {
+        "attempt": 3,
+        "branch": "crew/20261030-0228-frente-2-servicos-se-recuperam-e-modo-jo-1-3",
+        "at": "2026-10-30T03:10:01+00:00",
+        "manual_merge": "e30fc7a073bf2975292ccddb867d5ddfaf4e0eed",
+        "original_status": "outside_write",
+        "note": "Integração manual já presente no histórico antes da retomada; status outside_write e penalidades preservados. Não houve nova aceitação automática nem aprovação retroativa."
+      }
     },
     {
       "n": 2,
@@ -180,21 +201,27 @@
           "end_sha": "2fd297ce722cdadad1730906c261b1fcc5b11e40"
         }
       ],
-      "corrections": [],
+      "corrections": [
+        {
+          "reason": "Revisão do maestro encontrou testes antigos esperando jogo funcional e item ativo na bandeja; corrigidos na peça 5.",
+          "executor": "opencode:opencode-go/beam-free",
+          "at": "2026-10-30T04:59:38.963488+00:00"
+        }
+      ],
       "escalations": [],
       "grades": {
         "opencode:opencode-go/beam-free": {
-          "score": 40,
-          "explain": "adherence 5/5 → 100; 0 corrections; 0 extra; penalties outside_write −60 → 40",
-          "corrections": 0,
-          "done": 5,
-          "missing": 0,
+          "score": 5,
+          "explain": "adherence 4/5 → 80; 1 correction −15; 0 extra; penalties outside_write −60 → 5",
+          "corrections": 1,
+          "done": 4,
+          "missing": 1,
           "extra": 0,
           "penalties": [
             "outside_write"
           ],
           "executor": "opencode:opencode-go/beam-free",
-          "graded_at": "2026-10-30T03:44:04.535682+00:00"
+          "graded_at": "2026-10-30T04:59:42.237146+00:00"
         }
       },
       "picks": [
@@ -204,7 +231,15 @@
           "at": "2026-10-30T02:30:08.281787+00:00"
         }
       ],
-      "next_attempt": 2
+      "next_attempt": 2,
+      "accepted": {
+        "attempt": 1,
+        "branch": "crew/20261030-0228-frente-2-servicos-se-recuperam-e-modo-jo-2-1",
+        "at": "2026-10-30T03:44:16+00:00",
+        "manual_merge": "5d51e4729eb973cdcd74f86e1005b8b753dfd76e",
+        "original_status": "outside_write",
+        "note": "Integração manual já presente no histórico antes da retomada; status outside_write e penalidades preservados. Não houve nova aceitação automática nem aprovação retroativa."
+      }
     },
     {
       "n": 3,
@@ -262,21 +297,27 @@
           "end_sha": "3d53caec7f82d251430a89b6a6cc73adfcd42869"
         }
       ],
-      "corrections": [],
+      "corrections": [
+        {
+          "reason": "HTTP 422 de verbo inválido trocado indevidamente por 400; restauração solicitada pelo maestro na peça 5.",
+          "executor": "opencode:opencode-go/iceman-contributor-free",
+          "at": "2026-10-30T04:51:05.321684+00:00"
+        }
+      ],
       "escalations": [],
       "grades": {
         "opencode:opencode-go/iceman-contributor-free": {
-          "score": 40,
-          "explain": "adherence 5/5 → 100; 0 corrections; 0 extra; penalties outside_write −60 → 40",
-          "corrections": 0,
-          "done": 5,
-          "missing": 0,
+          "score": 5,
+          "explain": "adherence 4/5 → 80; 1 correction −15; 0 extra; penalties outside_write −60 → 5",
+          "corrections": 1,
+          "done": 4,
+          "missing": 1,
           "extra": 0,
           "penalties": [
             "outside_write"
           ],
           "executor": "opencode:opencode-go/iceman-contributor-free",
-          "graded_at": "2026-10-30T03:44:04.890483+00:00"
+          "graded_at": "2026-10-30T04:53:00.480432+00:00"
         }
       },
       "picks": [
@@ -286,7 +327,15 @@
           "at": "2026-10-30T02:30:10.375505+00:00"
         }
       ],
-      "next_attempt": 2
+      "next_attempt": 2,
+      "accepted": {
+        "attempt": 1,
+        "branch": "crew/20261030-0228-frente-2-servicos-se-recuperam-e-modo-jo-3-1",
+        "at": "2026-10-30T03:44:16+00:00",
+        "manual_merge": "b9e9f2b0f9eeb94ef6076d85f25174462a5cc205",
+        "original_status": "outside_write",
+        "note": "Integração manual já presente no histórico antes da retomada; status outside_write e penalidades preservados. Não houve nova aceitação automática nem aprovação retroativa."
+      }
     },
     {
       "n": 4,
@@ -395,22 +444,40 @@
           "reason": "destructive: deleted /modo HTTP tests from piece 3 instead of verifying them",
           "executor": "opencode:opencode/deepseek-v4.1-flash-free",
           "at": "2026-10-30T04:08:36.657770+00:00"
+        },
+        {
+          "reason": "Testes novos deixaram dois antigos contraditórios e outra expectativa de Voltar no estado jogo; ajuste solicitado pelo maestro e tratado na peça 5.",
+          "executor": "opencode:opencode/flint-40b-free",
+          "at": "2026-10-30T04:51:05.259128+00:00"
         }
       ],
       "escalations": [],
       "grades": {
         "opencode:opencode/flint-40b-free": {
-          "score": 25,
-          "explain": "adherence 4/4 → 100; 1 correction −15; 0 extra; penalties outside_write −60 → 25",
+          "score": 0,
+          "explain": "adherence 2/4 → 50; 1 correction −15; 0 extra; penalties outside_write −60 → 0",
           "corrections": 1,
-          "done": 4,
-          "missing": 0,
+          "done": 2,
+          "missing": 2,
           "extra": 0,
           "penalties": [
             "outside_write"
           ],
           "executor": "opencode:opencode/flint-40b-free",
-          "graded_at": "2026-10-30T04:24:11.480254+00:00"
+          "graded_at": "2026-10-30T04:53:00.513237+00:00"
+        },
+        "opencode:opencode/deepseek-v4.1-flash-free": {
+          "score": 0,
+          "explain": "adherence 2/4 → 50; 1 correction −15; 0 extra; penalties outside_write −60 → 0",
+          "corrections": 1,
+          "done": 2,
+          "missing": 2,
+          "extra": 0,
+          "penalties": [
+            "outside_write"
+          ],
+          "executor": "opencode:opencode/deepseek-v4.1-flash-free",
+          "graded_at": "2026-10-30T04:49:19.593598+00:00"
         }
       },
       "picks": [
@@ -430,7 +497,196 @@
           "at": "2026-10-30T04:09:05.886206+00:00"
         }
       ],
-      "next_attempt": 3
+      "next_attempt": 3,
+      "accepted": {
+        "attempt": 2,
+        "branch": "crew/20261030-0228-frente-2-servicos-se-recuperam-e-modo-jo-4-2",
+        "at": "2026-10-30T04:24:11+00:00",
+        "manual_merge": "c71f539c9197da122f0e35feab340e24d8170a2a",
+        "original_status": "outside_write",
+        "note": "Integração manual já presente no histórico antes da retomada; status outside_write e penalidades preservados. Não houve nova aceitação automática nem aprovação retroativa."
+      }
+    },
+    {
+      "n": 5,
+      "title": "Corrigir expectativas antigas e remover rascunhos antes do PR",
+      "type": "code",
+      "risk": "low",
+      "attempts": [
+        {
+          "n": 1,
+          "executor": "opencode:opencode-go/beam-free",
+          "role": "exec",
+          "cost": "free",
+          "started": "2026-10-30T04:49:09.055642+00:00",
+          "duration_s": 179.6,
+          "status": "ok",
+          "reported_model": null,
+          "model_mismatch": false,
+          "note": "Ajustes concluídos nos arquivos permitidos.\n\nArquivos alterados:\n- `src-tauri/src/ciclo.rs`: teste `executar_jogo_sem_ponte_retorna_modo_jogo` renomeado para `executar_jogo_recusa`; agora espera `ModoCiclo::Erro`, `estado.modo == \"erro\"` e detalhe contendo `\"indispon\"`.\n- `src-tauri/src/bandeja.rs`: removido `menu_ligado_tem_jogo`; `menu_jogo_desabilita_config_sala` passou a assertar ausência de `voltar` no estado legado `jogo`.\n- `nucleo/server.py`: verbo inválido em `/modo` agora retorna `HTTPException(422, ...)`.\n- `nucleo/tests/test_modo.py`: bloco duplicado removido; `test_modo_desconhecido_retorna_erro` espera `422`; testes `jogo`/`voltar` agora assertam `chamados == []`.\n- Removidos rascunhos da raiz: `.crew-chief-request.md` e `.crew-chief-brief*.md`.\n\nProva: `git diff --check` OK; pytest HTTP `/modo` 3/3 passando; falha pré-existente Linux `test_disparar_lanca_intermediario_sem_janela` (DETACHED_PROCESS) mantida sem alteração; testes Rust não executados por proibição de instalação/libclang.\n\nO que não verifiquei: compilação Rust (cargo) e execução dos testes Rust, conforme orientação do brief.",
+          "diffstat": [
+            {
+              "file": ".crew-chief-brief-p1-corr.md",
+              "added": 0,
+              "deleted": 53
+            },
+            {
+              "file": ".crew-chief-brief-p1.md",
+              "added": 0,
+              "deleted": 41
+            },
+            {
+              "file": ".crew-chief-brief-p2.md",
+              "added": 0,
+              "deleted": 57
+            },
+            {
+              "file": ".crew-chief-brief-p3.md",
+              "added": 0,
+              "deleted": 42
+            },
+            {
+              "file": ".crew-chief-brief-p4-corr.md",
+              "added": 0,
+              "deleted": 27
+            },
+            {
+              "file": ".crew-chief-brief-p4.md",
+              "added": 0,
+              "deleted": 44
+            },
+            {
+              "file": ".crew-chief-request.md",
+              "added": 0,
+              "deleted": 18
+            },
+            {
+              "file": "nucleo/server.py",
+              "added": 1,
+              "deleted": 1
+            },
+            {
+              "file": "nucleo/tests/test_modo.py",
+              "added": 3,
+              "deleted": 39
+            },
+            {
+              "file": "src-tauri/src/bandeja.rs",
+              "added": 2,
+              "deleted": 9
+            },
+            {
+              "file": "src-tauri/src/ciclo.rs",
+              "added": 5,
+              "deleted": 4
+            }
+          ],
+          "destructive_suspect": [
+            ".crew-chief-brief-p1-corr.md",
+            ".crew-chief-brief-p1.md",
+            ".crew-chief-brief-p2.md",
+            ".crew-chief-brief-p3.md",
+            ".crew-chief-brief-p4-corr.md",
+            ".crew-chief-brief-p4.md",
+            ".crew-chief-request.md",
+            "nucleo/tests/test_modo.py"
+          ],
+          "outside_writes": [],
+          "branch": "crew/20261030-0228-frente-2-servicos-se-recuperam-e-modo-jo-5-1",
+          "worktree": "/home/orca/work/project-vard.crew/coord-02-servicos-modo-jogo-5704eaf5.crew/20261030-0228-frente-2-servicos-se-recuperam-e-modo-jo-5-1",
+          "base": null,
+          "steps": 44,
+          "tokens_in": 3160407,
+          "tokens_out": 11427,
+          "tokens_total": 3171834,
+          "tokens_estimated": false,
+          "cost_usd": 0.0,
+          "cost_known": true,
+          "superpowers": {
+            "mode": "off",
+            "skill": null
+          },
+          "start_sha": "742668bee1e85ef0e38b145f77f4cd92a1f6b727",
+          "end_sha": "3b374d3d7920f1d21a8fe4dc7908a487b6cadde7"
+        },
+        {
+          "n": 2,
+          "executor": "antigravity:gemini-3.8-flash-low",
+          "role": "review",
+          "cost": "free",
+          "started": "2026-10-30T04:52:44.282172+00:00",
+          "duration_s": 580.4,
+          "status": "outside_write",
+          "reported_model": null,
+          "model_mismatch": false,
+          "note": "estado legado jogo porque menu só oferece em parado/erro**: **DONE**\n   - Em [`src-tauri/src/bandeja.rs`](file:///home/orca/work/project-vard.crew/coord-02-servicos-modo-jogo-5704eaf5.crew/20261030-0228-frente-2-servicos-se-recuperam-e-modo-jo-5-1/src-tauri/src/bandeja.rs#L306-L308), `menu_modo_jogo_desativa_config_e_sala` agora testa `assert!(itens.iter().find(|i| i.id == \"voltar\").is_none());`.\n\n4. **Restaurar /modo verbo inválido HTTP 422 e expectativas**: **DONE**\n   - Em [`nucleo/server.py`](file:///home/orca/work/project-vard.crew/coord-02-servicos-modo-jogo-5704eaf5.crew/20261030-0228-frente-2-servicos-se-recuperam-e-modo-jo-5-1/nucleo/server.py#L786), `HTTPException(400, ...)` foi corrigida para `HTTPException(422, ...)`.\n   - Em [`nucleo/tests/test_modo.py`](file:///home/orca/work/project-vard.crew/coord-02-servicos-modo-jogo-5704eaf5.crew/20261030-0228-frente-2-servicos-se-recuperam-e-modo-jo-5-1/nucleo/tests/test_modo.py#L173), `test_modo_desconhecido_retorna_erro` agora valida `assert r.status_code == 422`.\n\n5. **Remover apenas cópia idêntica dos testes HTTP preservando três testes**: **DONE**\n   - Em [`nucleo/tests/test_modo.py`](file:///home/orca/work/project-vard.crew/coord-02-servicos-modo-jogo-5704eaf5.crew/20261030-0228-frente-2-servicos-se-recuperam-e-modo-jo-5-1/nucleo/tests/test_modo.py#L158-L174), a duplicata acidental do bloco de testes HTTP ao final do arquivo foi removida, mantendo os 3 testes unitários HTTP (`test_modo_jogo_retorna_erro_claro`, `test_modo_voltar_retorna_sucesso_imediato` e `test_modo_desconhecido_retorna_erro`).\n\n6. **Assert nenhum encaminhamento IPC jogo/voltar**: **DONE**\n   - Em [`nucleo/tests/test_modo.py`](file:///home/orca/work/project-vard.crew/coord-02-servicos-modo-jogo-5704eaf5.crew/20261030-0228-frente-2-servicos-se-recuperam-e-modo-jo-5-1/nucleo/tests/test_modo.py#L162) e [L172](file:///home/orca/work/project-vard.crew/coord-02-servicos-modo-jogo-5704eaf5.crew/20261030-0228-frente-2-servicos-se-recuperam-e-modo-jo-5-1/nucleo/tests/test_modo.py#L172), foram adicionados `assert chamados == []` comprovando que `modo.disparar` não é acionado para \"jogo\" nem para \"voltar\".\n\n7. **Excluir `.crew-chief-request.md` e `.crew-chief-brief-*.md` da raiz**: **DONE**\n   - Foram removidos exatamente `.crew-chief-request.md`, `.crew-chief-brief-p1.md`, `.crew-chief-brief-p1-corr.md`, `.crew-chief-brief-p2.md`, `.crew-chief-brief-p3.md`, `.crew-chief-brief-p4.md` e `.crew-chief-brief-p4-corr.md`.\n\n8. **Nenhum outro arquivo modificado em `src/**` ou `nucleo/vard/cerebro/**`**: **DONE**\n   - Confirmado via `git show --stat`: apenas [`nucleo/server.py`](file:///home/orca/work/project-vard.crew/coord-02-servicos-modo-jogo-5704eaf5.crew/20261030-0228-frente-2-servicos-se-recuperam-e-modo-jo-5-1/nucleo/server.py), [`nucleo/tests/test_modo.py`](file:///home/orca/work/project-vard.crew/coord-02-servicos-modo-jogo-5704eaf5.crew/20261030-0228-frente-2-servicos-se-recuperam-e-modo-jo-5-1/nucleo/tests/test_modo.py), [`src-tauri/src/bandeja.rs`](file:///home/orca/work/project-vard.crew/coord-02-servicos-modo-jogo-5704eaf5.crew/20261030-0228-frente-2-servicos-se-recuperam-e-modo-jo-5-1/src-tauri/src/bandeja.rs) e [`src-tauri/src/ciclo.rs`](file:///home/orca/work/project-vard.crew/coord-02-servicos-modo-jogo-5704eaf5.crew/20261030-0228-frente-2-servicos-se-recuperam-e-modo-jo-5-1/src-tauri/src/ciclo.rs) foram alterados, além dos arquivos de brief excluídos.\n\n---\n\n### Avaliação de Qualidade\n\n- **Critical:** Nenhum.\n- **Important:** Nenhum. Não há abstrações desnecessárias, dependências adicionadas nem dead code/bloat.\n- **Minor:** Nenhum. A solução é estritamente minimalista (ponytail full) e endereça cirurgicamente apenas as falhas de contrato identificadas.\n\n---\n\nO que foi pulado ou não verificado: Não foram executados `cargo test` nem compilação de Rust devido à ausência das ferramentas do ambiente (MSVC / dependências do Linux como libspa/libclang); os testes de Rust foram inspecionados estaticamente.\n",
+          "diffstat": [],
+          "destructive_suspect": [],
+          "outside_writes": [
+            "repo:  M CHANGELOG.md"
+          ],
+          "branch": null,
+          "worktree": null,
+          "base": null,
+          "steps": 1,
+          "tokens_in": 234531,
+          "tokens_out": 2892,
+          "tokens_total": 143183,
+          "tokens_estimated": false,
+          "cost_usd": null,
+          "cost_known": false,
+          "superpowers": {
+            "mode": "off",
+            "skill": null
+          }
+        }
+      ],
+      "corrections": [
+        {
+          "reason": "Resposta de revisão longa foi truncada e não preservou SHA do HEAD; exigir confirmação curta e verificável. outside_write de CHANGELOG foi edição simultânea do coordenador, não atribuída ao revisor.",
+          "executor": "antigravity:gemini-3.8-flash-low",
+          "at": "2026-10-30T05:05:38.234192+00:00"
+        }
+      ],
+      "escalations": [],
+      "grades": {
+        "opencode:opencode-go/beam-free": {
+          "score": 100,
+          "explain": "adherence 6/6 → 100; 0 corrections; 0 extra; penalties none → 100",
+          "corrections": 0,
+          "done": 6,
+          "missing": 0,
+          "extra": 0,
+          "penalties": [],
+          "executor": "opencode:opencode-go/beam-free",
+          "graded_at": "2026-10-30T05:00:29.844857+00:00"
+        },
+        "antigravity:gemini-3.8-flash-low": {
+          "score": 72,
+          "explain": "adherence 7/8 → 87.5; 1 correction −15; 0 extra; penalties none → 72",
+          "corrections": 1,
+          "done": 7,
+          "missing": 1,
+          "extra": 0,
+          "penalties": [],
+          "executor": "antigravity:gemini-3.8-flash-low",
+          "graded_at": "2026-10-30T05:05:42.540738+00:00"
+        }
+      },
+      "picks": [
+        {
+          "pick": "opencode:opencode-go/beam-free",
+          "reason": "best score 40 (opencode:opencode-go/beam-free); tier free",
+          "at": "2026-10-30T04:49:03.870639+00:00"
+        },
+        {
+          "pick": "antigravity:gemini-3.8-flash-low",
+          "reason": "unrated, no history (antigravity:gemini-3.8-flash-low); tier free",
+          "at": "2026-10-30T04:49:21.403391+00:00",
+          "role": "review"
+        }
+      ],
+      "next_attempt": 4
     }
   ],
   "executors": "free_first",
@@ -483,6 +739,20 @@
       "origin": "discovery",
       "at": "2026-10-30T04:09:05.886223+00:00",
       "piece": 4
+    },
+    {
+      "role": "executor",
+      "id": "opencode:opencode-go/beam-free",
+      "origin": "discovery",
+      "at": "2026-10-30T04:49:03.870652+00:00",
+      "piece": 5
+    },
+    {
+      "role": "reviewer",
+      "id": "antigravity:gemini-3.8-flash-low",
+      "origin": "discovery",
+      "at": "2026-10-30T04:49:21.403407+00:00",
+      "piece": 5
     }
   ],
   "job_branch": "maestro/02-servicos-modo-jogo-5704eaf5",
@@ -532,11 +802,40 @@
       "piece": 4,
       "attempt": 2,
       "timestamp": "2026-10-30T04:09:20.194003+00:00"
+    },
+    {
+      "type": "resumed_by_owner",
+      "at": "2026-10-30T04:47:36.828350+00:00",
+      "reason": "Resposta do maestro autoriza peça curta de correção e retomada após falha transitória no gh; PR #10 confirmado aberto. Falha original preservada em result."
+    },
+    {
+      "type": "waiting_for_executor_slot",
+      "reason": "queued for executor slot (max_running=3)",
+      "piece": 5,
+      "attempt": 2,
+      "timestamp": "2026-10-30T04:52:44.306207+00:00"
+    },
+    {
+      "type": "historical_delivery_reconciled",
+      "at": "2026-10-30T04:58:13.513326+00:00",
+      "reason": "Ancestralidade dos quatro end_sha confirmada por git merge-base; campos accepted registram merges manuais existentes. Revisões independentes dessas peças não constavam no registro original; peça 5 possui revisão própria.",
+      "previous_result": {
+        "failed_command": "gh pr create --base main --head maestro/02-servicos-modo-jogo-5704eaf5 --title Job 20261030-0228-frente-2-servicos-se-recuperam-e-modo-jo: Complete --body # Job 20261030-0228-frente-2-servicos-se-recuperam-e-modo-jo - Audit Summary\n\n## Accepted Pieces\n\n## Verification Proofs\n\n- No force pushes used\n- Single PR per job enforced\n",
+        "blocked_error": "pull request create failed: GraphQL: Head sha can't be blank, Base sha can't be blank, No commits between main and maestro/02-servicos-modo-jogo-5704eaf5, Head ref must be a branch (createPullRequest)\n",
+        "summary": "- 1. recarregar recria thread do serviço — opencode:opencode-go/muse-spark-1.3-contributor, score 40\n- 2. esconder modo jogo no ciclo e bandeja — opencode:opencode-go/beam-free, score 40\n- 3. /modo recusa com mensagem clara — opencode:opencode-go/iceman-contributor-free, score 40\n- 4. testes de recarregar e modo escondido — opencode:opencode/flint-40b-free, score 25\n\nRecord: docs/crew-chief/jobs/20261030-0228-frente-2-servicos-se-recuperam-e-modo-jo.md"
+      }
+    },
+    {
+      "type": "waiting_for_executor_slot",
+      "reason": "queued for executor slot (max_running=3)",
+      "piece": 5,
+      "attempt": 3,
+      "timestamp": "2026-10-30T05:05:59.540529+00:00"
     }
   ],
   "commit_type": "fix",
-  "state": "blocked",
-  "status": "blocked",
+  "state": "active",
+  "status": "active",
   "pr_url": null,
   "result": {
     "failed_command": "gh pr create --base main --head maestro/02-servicos-modo-jogo-5704eaf5 --title Job 20261030-0228-frente-2-servicos-se-recuperam-e-modo-jo: Complete --body # Job 20261030-0228-frente-2-servicos-se-recuperam-e-modo-jo - Audit Summary\n\n## Accepted Pieces\n\n## Verification Proofs\n\n- No force pushes used\n- Single PR per job enforced\n",
@@ -561,6 +860,40 @@
       "estimated": false,
       "note": "coordinator opencode:omni/chefe round 2",
       "at": "2026-10-30T04:29:21.953994+00:00"
+    },
+    {
+      "role": "coordinator",
+      "tokens_in": 6035146,
+      "tokens_out": 23174,
+      "tokens_total": 6058320,
+      "estimated": false,
+      "note": "coordinator opencode:omni/chefe round 3",
+      "at": "2026-10-30T05:08:30.415322+00:00"
     }
+  ],
+  "tests": {
+    "python_test_modo": {
+      "passed": 9,
+      "failed": 1,
+      "skipped": 2,
+      "known_failure": "test_disparar_lanca_intermediario_sem_janela: subprocess.DETACHED_PROCESS indisponível no Linux; reproduzido com teste de main"
+    },
+    "handler_isolado": {
+      "passed": 3,
+      "failed": 0,
+      "main_regressoes_reproduzidas": 2
+    },
+    "rust": {
+      "status": "blocked",
+      "reason": "libspa-sys v0.10.1 / bindgen: Unable to find libclang; sem instalação de sistema; aceite Windows pendente"
+    }
+  },
+  "delivery_limits": [
+    "Rust não compilou: libspa-sys/bindgen sem libclang no Linux; nenhuma instalação de sistema. Aceite Windows pendente.",
+    "Helper python_absoluto do teste novo procura python3/python sem extensão .exe; execução Windows precisa ser conferida.",
+    "reanimar_se_morto recria apenas após terminou=true; recarga durante encerramento não recebeu prova e deve ser exercitada no Windows.",
+    "Fallback sem msvcrt em tarefas.py permite importação Linux, mas não oferece trava entre processos.",
+    "Limpeza da oferta de modo jogo em src/** delegada às frentes 3/4; não há prova de recusa por voz no app completo.",
+    "Peças 1–4 foram integradas manualmente antes desta retomada com status outside_write; penalidades preservadas e ausência de revisão registrada explicitada."
   ]
 }

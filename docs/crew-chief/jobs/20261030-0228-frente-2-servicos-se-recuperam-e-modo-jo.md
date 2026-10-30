@@ -92,6 +92,7 @@ Regras:
 **Grades**
 
 - `opencode:opencode-go/muse-spark-1.3-contributor`: score 40 — adherence 5/5 → 100; 0 corrections; 0 extra; penalties outside_write −60 → 40
+- `opencode:omni/gratis`: score 0 — adherence 1/5 → 20; 1 correction −15; 0 extra; penalties outside_write −60 → 0
 
 ### 2. esconder modo jogo no ciclo e bandeja (code, risk low)
 
@@ -112,7 +113,7 @@ Regras:
 
 **Corrections**
 
-- _none_
+- Revisão do maestro encontrou testes antigos esperando jogo funcional e item ativo na bandeja; corrigidos na peça 5. by `opencode:opencode-go/beam-free` (2026-10-30T04:59:38.963488+00:00)
 
 **Escalations**
 
@@ -120,7 +121,7 @@ Regras:
 
 **Grades**
 
-- `opencode:opencode-go/beam-free`: score 40 — adherence 5/5 → 100; 0 corrections; 0 extra; penalties outside_write −60 → 40
+- `opencode:opencode-go/beam-free`: score 5 — adherence 4/5 → 80; 1 correction −15; 0 extra; penalties outside_write −60 → 5
 
 ### 3. /modo recusa com mensagem clara (code, risk low)
 
@@ -168,7 +169,7 @@ Regras:
 
 **Corrections**
 
-- _none_
+- HTTP 422 de verbo inválido trocado indevidamente por 400; restauração solicitada pelo maestro na peça 5. by `opencode:opencode-go/iceman-contributor-free` (2026-10-30T04:51:05.321684+00:00)
 
 **Escalations**
 
@@ -176,7 +177,7 @@ Regras:
 
 **Grades**
 
-- `opencode:opencode-go/iceman-contributor-free`: score 40 — adherence 5/5 → 100; 0 corrections; 0 extra; penalties outside_write −60 → 40
+- `opencode:opencode-go/iceman-contributor-free`: score 5 — adherence 4/5 → 80; 1 correction −15; 0 extra; penalties outside_write −60 → 5
 
 ### 4. testes de recarregar e modo escondido (tests, risk medium)
 
@@ -290,6 +291,7 @@ Regras:
 **Corrections**
 
 - destructive: deleted /modo HTTP tests from piece 3 instead of verifying them by `opencode:opencode/deepseek-v4.1-flash-free` (2026-10-30T04:08:36.657770+00:00)
+- Testes novos deixaram dois antigos contraditórios e outra expectativa de Voltar no estado jogo; ajuste solicitado pelo maestro e tratado na peça 5. by `opencode:opencode/flint-40b-free` (2026-10-30T04:51:05.259128+00:00)
 
 **Escalations**
 
@@ -297,31 +299,105 @@ Regras:
 
 **Grades**
 
-- `opencode:opencode/flint-40b-free`: score 25 — adherence 4/4 → 100; 1 correction −15; 0 extra; penalties outside_write −60 → 25
+- `opencode:opencode/flint-40b-free`: score 0 — adherence 2/4 → 50; 1 correction −15; 0 extra; penalties outside_write −60 → 0
+- `opencode:opencode/deepseek-v4.1-flash-free`: score 0 — adherence 2/4 → 50; 1 correction −15; 0 extra; penalties outside_write −60 → 0
+
+### 5. Corrigir expectativas antigas e remover rascunhos antes do PR (code, risk low)
+
+**Attempts**
+
+- attempt 1: executor `opencode:opencode-go/beam-free`, role exec, status ok, cost free, 179.6s, 44 steps, 3171834 tokens (in 3160407 / out 11427), branch `crew/20261030-0228-frente-2-servicos-se-recuperam-e-modo-jo-5-1`
+  - diffstat: .crew-chief-brief-p1-corr.md +0 -53, .crew-chief-brief-p1.md +0 -41, .crew-chief-brief-p2.md +0 -57, .crew-chief-brief-p3.md +0 -42, .crew-chief-brief-p4-corr.md +0 -27, .crew-chief-brief-p4.md +0 -44, .crew-chief-request.md +0 -18, nucleo/server.py +1 -1, nucleo/tests/test_modo.py +3 -39, src-tauri/src/bandeja.rs +2 -9, src-tauri/src/ciclo.rs +5 -4
+  - destructive suspect: .crew-chief-brief-p1-corr.md, .crew-chief-brief-p1.md, .crew-chief-brief-p2.md, .crew-chief-brief-p3.md, .crew-chief-brief-p4-corr.md, .crew-chief-brief-p4.md, .crew-chief-request.md, nucleo/tests/test_modo.py
+  - note:
+    ```
+    Ajustes concluídos nos arquivos permitidos.
+    
+    Arquivos alterados:
+    - `src-tauri/src/ciclo.rs`: teste `executar_jogo_sem_ponte_retorna_modo_jogo` renomeado para `executar_jogo_recusa`; agora espera `ModoCiclo::Erro`, `estado.modo == "erro"` e detalhe contendo `"indispon"`.
+    - `src-tauri/src/bandeja.rs`: removido `menu_ligado_tem_jogo`; `menu_jogo_desabilita_config_sala` passou a assertar ausência de `voltar` no estado legado `jogo`.
+    - `nucleo/server.py`: verbo inválido em `/modo` agora retorna `HTTPException(422, ...)`.
+    - `nucleo/tests/test_modo.py`: bloco duplicado removido; `test_modo_desconhecido_retorna_erro` espera `422`; testes `jogo`/`voltar` agora assertam `chamados == []`.
+    - Removidos rascunhos da raiz: `.crew-chief-request.md` e `.crew-chief-brief*.md`.
+    
+    Prova: `git diff --check` OK; pytest HTTP `/modo` 3/3 passando; falha pré-existente Linux `test_disparar_lanca_intermediario_sem_janela` (DETACHED_PROCESS) mantida sem alteração; testes Rust não executados por proibição de instalação/libclang.
+    
+    O que não verifiquei: compilação Rust (cargo) e execução dos testes Rust, conforme orientação do brief.
+    ```
+- attempt 2: executor `antigravity:gemini-3.8-flash-low`, role review, status outside_write, cost free, 580.4s, 1 steps, 143183 tokens (in 234531 / out 2892)
+  - outside writes: repo:  M CHANGELOG.md
+  - note:
+    ```
+    estado legado jogo porque menu só oferece em parado/erro**: **DONE**
+       - Em [`src-tauri/src/bandeja.rs`](file:///home/orca/work/project-vard.crew/coord-02-servicos-modo-jogo-5704eaf5.crew/20261030-0228-frente-2-servicos-se-recuperam-e-modo-jo-5-1/src-tauri/src/bandeja.rs#L306-L308), `menu_modo_jogo_desativa_config_e_sala` agora testa `assert!(itens.iter().find(|i| i.id == "voltar").is_none());`.
+    
+    4. **Restaurar /modo verbo inválido HTTP 422 e expectativas**: **DONE**
+       - Em [`nucleo/server.py`](file:///home/orca/work/project-vard.crew/coord-02-servicos-modo-jogo-5704eaf5.crew/20261030-0228-frente-2-servicos-se-recuperam-e-modo-jo-5-1/nucleo/server.py#L786), `HTTPException(400, ...)` foi corrigida para `HTTPException(422, ...)`.
+       - Em [`nucleo/tests/test_modo.py`](file:///home/orca/work/project-vard.crew/coord-02-servicos-modo-jogo-5704eaf5.crew/20261030-0228-frente-2-servicos-se-recuperam-e-modo-jo-5-1/nucleo/tests/test_modo.py#L173), `test_modo_desconhecido_retorna_erro` agora valida `assert r.status_code == 422`.
+    
+    5. **Remover apenas cópia idêntica dos testes HTTP preservando três testes**: **DONE**
+       - Em [`nucleo/tests/test_modo.py`](file:///home/orca/work/project-vard.crew/coord-02-servicos-modo-jogo-5704eaf5.crew/20261030-0228-frente-2-servicos-se-recuperam-e-modo-jo-5-1/nucleo/tests/test_modo.py#L158-L174), a duplicata acidental do bloco de testes HTTP ao final do arquivo foi removida, mantendo os 3 testes unitários HTTP (`test_modo_jogo_retorna_erro_claro`, `test_modo_voltar_retorna_sucesso_imediato` e `test_modo_desconhecido_retorna_erro`).
+    
+    6. **Assert nenhum encaminhamento IPC jogo/voltar**: **DONE**
+       - Em [`nucleo/tests/test_modo.py`](file:///home/orca/work/project-vard.crew/coord-02-servicos-modo-jogo-5704eaf5.crew/20261030-0228-frente-2-servicos-se-recuperam-e-modo-jo-5-1/nucleo/tests/test_modo.py#L162) e [L172](file:///home/orca/work/project-vard.crew/coord-02-servicos-modo-jogo-5704eaf5.crew/20261030-0228-frente-2-servicos-se-recuperam-e-modo-jo-5-1/nucleo/tests/test_modo.py#L172), foram adicionados `assert chamados == []` comprovando que `modo.disparar` não é acionado para "jogo" nem para "voltar".
+    
+    7. **Excluir `.crew-chief-request.md` e `.crew-chief-brief-*.md` da raiz**: **DONE**
+       - Foram removidos exatamente `.crew-chief-request.md`, `.crew-chief-brief-p1.md`, `.crew-chief-brief-p1-corr.md`, `.crew-chief-brief-p2.md`, `.crew-chief-brief-p3.md`, `.crew-chief-brief-p4.md` e `.crew-chief-brief-p4-corr.md`.
+    
+    8. **Nenhum outro arquivo modificado em `src/**` ou `nucleo/vard/cerebro/**`**: **DONE**
+       - Confirmado via `git show --stat`: apenas [`nucleo/server.py`](file:///home/orca/work/project-vard.crew/coord-02-servicos-modo-jogo-5704eaf5.crew/20261030-0228-frente-2-servicos-se-recuperam-e-modo-jo-5-1/nucleo/server.py), [`nucleo/tests/test_modo.py`](file:///home/orca/work/project-vard.crew/coord-02-servicos-modo-jogo-5704eaf5.crew/20261030-0228-frente-2-servicos-se-recuperam-e-modo-jo-5-1/nucleo/tests/test_modo.py), [`src-tauri/src/bandeja.rs`](file:///home/orca/work/project-vard.crew/coord-02-servicos-modo-jogo-5704eaf5.crew/20261030-0228-frente-2-servicos-se-recuperam-e-modo-jo-5-1/src-tauri/src/bandeja.rs) e [`src-tauri/src/ciclo.rs`](file:///home/orca/work/project-vard.crew/coord-02-servicos-modo-jogo-5704eaf5.crew/20261030-0228-frente-2-servicos-se-recuperam-e-modo-jo-5-1/src-tauri/src/ciclo.rs) foram alterados, além dos arquivos de brief excluídos.
+    
+    ---
+    
+    ### Avaliação de Qualidade
+    
+    - **Critical:** Nenhum.
+    - **Important:** Nenhum. Não há abstrações desnecessárias, dependências adicionadas nem dead code/bloat.
+    - **Minor:** Nenhum. A solução é estritamente minimalista (ponytail full) e endereça cirurgicamente apenas as falhas de contrato identificadas.
+    
+    ---
+    
+    O que foi pulado ou não verificado: Não foram executados `cargo test` nem compilação de Rust devido à ausência das ferramentas do ambiente (MSVC / dependências do Linux como libspa/libclang); os testes de Rust foram inspecionados estaticamente.
+    ```
+
+**Corrections**
+
+- Resposta de revisão longa foi truncada e não preservou SHA do HEAD; exigir confirmação curta e verificável. outside_write de CHANGELOG foi edição simultânea do coordenador, não atribuída ao revisor. by `antigravity:gemini-3.8-flash-low` (2026-10-30T05:05:38.234192+00:00)
+
+**Escalations**
+
+- _none_
+
+**Grades**
+
+- `opencode:opencode-go/beam-free`: score 100 — adherence 6/6 → 100; 0 corrections; 0 extra; penalties none → 100
+- `antigravity:gemini-3.8-flash-low`: score 72 — adherence 7/8 → 87.5; 1 correction −15; 0 extra; penalties none → 72
 
 ## Economy
 
-free work: — of pieces, 82% of tokens · coordinator: 18% · 1.5 attempts/piece · mean score 36
+free work: 0% of pieces, 70% of tokens · coordinator: 30% · 1.4 attempts/piece · mean score 28
 
-- Tokens: free 21910109, paid exec 0, coordinator 4836800
-- Time: 115 min
+- Tokens: free 25225126, paid exec 0, coordinator 10895120
+- Time: 154 min
 
 ## Commit message
 
 ```
 fix: Frente 2: serviços se recuperam e modo jogo honesto
 
-- recarregar recria thread do serviço — opencode:opencode-go/muse-spark-1.3-contributor, score 40
-- esconder modo jogo no ciclo e bandeja — opencode:opencode-go/beam-free, score 40
-- /modo recusa com mensagem clara — opencode:opencode-go/iceman-contributor-free, score 40
-- testes de recarregar e modo escondido — opencode:opencode/flint-40b-free, score 25
+- recarregar recria thread do serviço — opencode:opencode-go/muse-spark-1.3-contributor, score 40; also opencode:omni/gratis, score 0
+- esconder modo jogo no ciclo e bandeja — opencode:opencode-go/beam-free, score 5
+- /modo recusa com mensagem clara — opencode:opencode-go/iceman-contributor-free, score 5
+- testes de recarregar e modo escondido — opencode:opencode/flint-40b-free, score 0; also opencode:opencode/deepseek-v4.1-flash-free, score 0
+- Corrigir expectativas antigas e remover rascunhos antes do PR — opencode:opencode-go/beam-free, score 100; also antigravity:gemini-3.8-flash-low, score 72
 ```
 
 ## Issue comment
 
-- 1. recarregar recria thread do serviço — opencode:opencode-go/muse-spark-1.3-contributor, score 40
-- 2. esconder modo jogo no ciclo e bandeja — opencode:opencode-go/beam-free, score 40
-- 3. /modo recusa com mensagem clara — opencode:opencode-go/iceman-contributor-free, score 40
-- 4. testes de recarregar e modo escondido — opencode:opencode/flint-40b-free, score 25
+- 1. recarregar recria thread do serviço — opencode:opencode-go/muse-spark-1.3-contributor, score 40; also opencode:omni/gratis, score 0
+- 2. esconder modo jogo no ciclo e bandeja — opencode:opencode-go/beam-free, score 5
+- 3. /modo recusa com mensagem clara — opencode:opencode-go/iceman-contributor-free, score 5
+- 4. testes de recarregar e modo escondido — opencode:opencode/flint-40b-free, score 0; also opencode:opencode/deepseek-v4.1-flash-free, score 0
+- 5. Corrigir expectativas antigas e remover rascunhos antes do PR — opencode:opencode-go/beam-free, score 100; also antigravity:gemini-3.8-flash-low, score 72
 
 Record: docs/crew-chief/jobs/20261030-0228-frente-2-servicos-se-recuperam-e-modo-jo.md
