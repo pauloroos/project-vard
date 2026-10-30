@@ -124,7 +124,7 @@ window.addEventListener("DOMContentLoaded", async () => {
     if (salaAberta) void emitTo("sala", "sala:espelho", ev).catch(() => {});
   };
   // `revela`: false no "pensando" da transcrição sem push-to-talk; antes do nome ser dito o modo invisível não pode aparecer.
-  const mostrarEstado = (e: Estado, detalhe = "", revela = true) => { if (revela) invisibilidade.definirEstado(e); nucleo.setEstado(e); hud.setEstado(e, detalhe); (app as HTMLElement).dataset.estado = e; paraSala({ tipo: "estado", estado: e, detalhe }); };
+  const mostrarEstado = (e: Estado, detalhe = "", revela = true) => { if (revela) invisibilidade.definirEstado(e); nucleo.setEstado(e); hud.setEstado(e, detalhe); app.dataset.estado = e; paraSala({ tipo: "estado", estado: e, detalhe }); };
   const mostrarOuvido = (t: string) => { hud.setOuvido(t); paraSala({ tipo: "ouvido", texto: t }); };
   const mostrarResposta = (t: string) => { hud.setResposta(t); paraSala({ tipo: "resposta", texto: t }); };
   hud.dica("clique para ligar o ouvido");
@@ -277,7 +277,6 @@ async function transcreverFala(wav: ArrayBuffer, sinal?: AbortSignal): Promise<s
   let capturando = false;
   let pttSegurado = false;
   let cicloVoz = 0;
-  let ctrlTranscricao: AbortController | null = null;
   let ocupado = false; // transcrevendo ou pensando: ignora novos eventos do VAD
   let pttPendente = false; // push-to-talk apertado durante a resposta: começa a capturar quando o ciclo terminar
   let estavaFalando = false;
@@ -506,24 +505,7 @@ async function transcreverFala(wav: ArrayBuffer, sinal?: AbortSignal): Promise<s
   void checarSaude();
   setInterval(() => { void checarSaude(); }, 5000);
 
-  interromperTudo = () => {
-    ++cicloVoz;
-    ctrlTranscricao?.abort();
-    ctrlTranscricao = null;
-    // cancela transcrição e descarta captura ativa
-    capturando = false;
-    pcm = []; anel = []; anelAmostras = 0;
-    ocupado = false;
-    fimDaFala = 0;
-    detector.reset();
-    boca.parar();
-    conversa.interromper();
-    // garante volta ao repouso mesmo se estava transcrevendo
-    if (conversa.estado === "transcrevendo" || conversa.estado === "pensando" || conversa.estado === "falando") {
-      // conversa.interromper já move para repouso; este é fallback
-    }
-    mostrarEstado(conversa.estado, conversa.detalhe);
-  };
+  interromperTudo = () => conversa.interromper();
 
   const guardarAmostras = (a: Float32Array) => {
     if (capturando) { pcm.push(a); return; }
@@ -533,7 +515,7 @@ async function transcreverFala(wav: ArrayBuffer, sinal?: AbortSignal): Promise<s
   };
 
   const comecarCaptura = () => {
-    if (conversa.estado === "erro") return;
+    if (conversa.estado === "erro") return; // não inicia gravação em estado de erro
     pcm = anel; anel = []; anelAmostras = 0; // o pre-roll vira o começo da fala
     capturando = true;
     mostrarEstado("ouvindo");
@@ -548,15 +530,12 @@ async function transcreverFala(wav: ArrayBuffer, sinal?: AbortSignal): Promise<s
     for (const b of pcm) { tudo.set(b, o); o += b.length; }
     pcm = [];
     console.log("fala capturada", tudo.length, "amostras a", taxaAtual(), "Hz");
-    if (conversa.estado === "erro") return;
+    if (conversa.estado === "erro") return; // não inicia gravação em estado de erro
     if (tudo.length < (taxaAtual() * MIN_FALA_MS) / 1000 || conversa.estado === "fora") {
       mostrarEstado(conversa.estado, conversa.detalhe);
       return;
     }
     const ciclo = ++cicloVoz;
-    const ac = new AbortController();
-    ctrlTranscricao = ac;
-    (conversa as unknown as { anotarCiclo?: (c: AbortController) => void }).anotarCiclo?.(ac);
     ocupado = true;
     (conversa as unknown as { notificarInicioTranscricao?: () => boolean }).notificarInicioTranscricao?.();
     mostrarEstado("transcrevendo", "", pushToTalk);
@@ -564,28 +543,27 @@ async function transcreverFala(wav: ArrayBuffer, sinal?: AbortSignal): Promise<s
       if (ciclo === cicloVoz) {
         console.warn("transcrição presa em transcrevendo; timeout");
         ocupado = false;
-        ctrlTranscricao = null;
         mostrarEstado("erro", "tempo de transcrição esgotado");
-        setTimeout(() => { if (ciclo === cicloVoz && conversa.estado === "erro") mostrarEstado("repouso"); }, 3000);
+        // volta ao repouso após exibir erro brevemente
+        setTimeout(() => { if (ciclo === cicloVoz) mostrarEstado(conversa.estado, conversa.detalhe); }, 3000);
       }
     }, 30000);
     try {
       const wav = pcmParaWav(reamostrar(tudo, taxaAtual(), 16000), 16000);
       let texto: string;
       try {
-        texto = await transcreverFala(wav, ac.signal);
+        texto = await transcreverFala(wav);
         if (timerTranscricao) { clearTimeout(timerTranscricao); timerTranscricao = null; }
-        if (ac.signal.aborted || ciclo !== cicloVoz || estaMudo() || reuniaoAtiva) return;
+        if (ciclo !== cicloVoz || estaMudo() || reuniaoAtiva) return;
         (conversa as unknown as { notificarTranscricaoPronta?: () => void }).notificarTranscricaoPronta?.();
         mostrarEstado("pensando", "", pushToTalk);
       } catch (erro) {
-        if (timerTranscricao) { clearTimeout(timerTranscricao); timerTranscricao = null; }
-        if (ac.signal.aborted || ciclo !== cicloVoz || estaMudo() || reuniaoAtiva) return;
+        if (ciclo !== cicloVoz || estaMudo() || reuniaoAtiva) return;
         console.warn("transcrição falhou", erro);
         if (!naoFalar) { try { await boca.tocar(await fixa(FALAS.erroOuvido)); } catch { /* sem voz, fica só no HUD */ } }
         return;
       }
-      if (ac.signal.aborted || ciclo !== cicloVoz || estaMudo() || reuniaoAtiva) return;
+      if (ciclo !== cicloVoz || estaMudo() || reuniaoAtiva) return;
       console.log("ouvi:", texto);
       if (texto) mostrarOuvido(texto);
       // Roteamento único (T14 + T13): fluxo de chamada tem prioridade; nome dispensado quando pushToTalk OU conversa aberta ligada.
@@ -604,7 +582,6 @@ async function transcreverFala(wav: ArrayBuffer, sinal?: AbortSignal): Promise<s
       console.error("ciclo de fala falhou", erro);
     } finally {
       if (timerTranscricao) { clearTimeout(timerTranscricao); timerTranscricao = null; }
-      if (ctrlTranscricao === ac) ctrlTranscricao = null;
       if (ciclo !== cicloVoz) return;
       fimDaFala = 0;
       ocupado = false;
@@ -618,8 +595,6 @@ async function transcreverFala(wav: ArrayBuffer, sinal?: AbortSignal): Promise<s
   const controleVoz = new ControleCapturaVoz(cfg.interromper_ao_falar, {
     interromper: () => {
       ++cicloVoz;
-      ctrlTranscricao?.abort();
-      ctrlTranscricao = null;
       // A transicao de estado limpa a cauda da boca; nesta interrupcao o anel ja contem a nova fala.
       const preRoll = anel; const amostras = anelAmostras;
       conversa.interromper();
@@ -748,7 +723,7 @@ async function transcreverFala(wav: ArrayBuffer, sinal?: AbortSignal): Promise<s
     if (!ligado || estaMudo() || reuniaoAtiva) return; // reunião: o widget está mudo (sem tocar no mudo do usuário)
     // Apertar para falar corta a resposta em curso (mesmo caminho do botão Interromper) e depois captura.
     const respondendo = boca.falando || ocupado;
-    if (respondendo) { ++cicloVoz; ctrlTranscricao?.abort(); ctrlTranscricao = null; conversa.interromper(); }
+    if (respondendo) conversa.interromper();
     pttSegurado = true;
     if (ocupado) { pttPendente = true; return; } // encerrar() inicia a captura no finally
     if (!capturando) comecarCaptura(); // se o VAD já estava capturando, segue acumulando o mesmo PCM
@@ -759,7 +734,7 @@ async function transcreverFala(wav: ArrayBuffer, sinal?: AbortSignal): Promise<s
     pttPendente = false;
     if (capturando) void encerrar(true);
   });
-  await listen("parar", () => { interromperTudo(); });
+  await listen("parar", () => { conversa.interromper(); });
   await listen("alternar-revelacao", () => invisibilidade.alternarRevelacao());
   await listen<unknown>("invisivel", (ev) => {
     if (typeof ev.payload !== "boolean") { console.warn("invisivel ignorado: payload inválido"); return; }

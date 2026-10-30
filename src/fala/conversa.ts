@@ -121,7 +121,6 @@ export class Conversa {
   private microfoneFechado = false;
   private erroPonte = false;
   private pergunta: AbortController | null = null;
-  private controladorCiclo: AbortController | null = null; // ciclo STT em curso: o aborto cancela transcrição e descarta texto tardio
   private canalAte = 0; // instante em que o modo conversa fecha; 0 = fechado
   private relogioCanal: ReturnType<typeof setTimeout> | null = null;
   private entrandoEmJogo = false; // aviso do modo jogo tocando: a sondagem da ponte não mexe no estado
@@ -159,11 +158,13 @@ export class Conversa {
   private podeFalar(): boolean { return !this.mudoPorReuniao() && this.d.falarPermitida?.() !== false; }
 
   private mudar(e: Estado, detalhe = "") {
+    // timeout de preso também cobre transcrevendo: se ficar preso, sai
     if (this.timerTranscrevendo) { clearTimeout(this.timerTranscrevendo); this.timerTranscrevendo = null; }
     if (e === "transcrevendo") {
       this.timerTranscrevendo = setTimeout(() => {
         if (this.estado === "transcrevendo") {
           this.mudar("erro", "tempo de transcrição esgotado");
+          // volta ao repouso após breve exibição, permitindo nova tentativa
           setTimeout(() => { if (this.estado === "erro") this.mudar("repouso"); }, 3000);
         }
       }, 30000);
@@ -180,13 +181,10 @@ export class Conversa {
     return true;
   }
 
-  /** Transcrição pronta: sai de transcrevendo para pensando. */
+  /** Transcrição pronta: sai de transcrevendo para pensando (usado quando a captura foi feita fora da Conversa). */
   notificarTranscricaoPronta(): void {
     if (this.estado === "transcrevendo") this.mudar("pensando");
   }
-
-  /** Anota o controller do ciclo STT em curso (aborto cancela transcrição). */
-  anotarCiclo(ac: AbortController): void { this.controladorCiclo = ac; }
 
   private async tocar(wav: Promise<ArrayBuffer>, mudarEstado = true) {
     try {
@@ -312,7 +310,6 @@ export class Conversa {
     if (this.estado === "fora" || this.emJogo()) return;
     const bruto = texto.trim();
     if (!bruto) return;
-    if (this.controladorCiclo?.signal.aborted) return; // interrompido durante transcrição: descarta texto tardio
     const v = gatilhos(this.d.config);
 
     // Confirmação do modo jogo: vale só a próxima frase; "sim" ou "confirmo" sozinhos (com ou sem o nome).
@@ -404,6 +401,7 @@ export class Conversa {
             textoAcumulado = snap.resposta;
             ultimoSeq = Number((snap as { ultimo_seq?: number }).ultimo_seq ?? 0);
           }
+          // O "fim" pode ter saído antes desta consulta: com o pedido encerrado, nenhum evento novo vai chegar.
           if (snap && snap.estado === "cancelado") {
             this.abrirCanal();
             if (this.estado !== "repouso") this.mudar("repouso");
@@ -417,7 +415,9 @@ export class Conversa {
             resposta = textoAcumulado.trim();
             if (!resposta) throw new Error("resposta vazia");
             if (ac.signal.aborted || this.emJogo()) return;
+            // Segue para falar abaixo sem esperar o SSE.
           } else {
+            // Escuta eventos SSE da sessão até fim/erro/cancelamento, com sondagem e prazo para nunca prender.
             if (ac.signal.aborted || this.emJogo()) return;
             const esperarFim = new Promise<string>((resolve, reject) => {
               let terminado = false;
@@ -428,11 +428,12 @@ export class Conversa {
                 let obj: EventoPedidoSSE | null = null;
                 try { obj = JSON.parse(msg) as EventoPedidoSSE; } catch { return; }
                 if (!obj || obj.tipo !== "pedido" || obj.sessao_id !== sessaoId || obj.pedido_id !== pedidoId) return;
-                if (obj.seq <= ultimoSeq) return;
+                if (obj.seq <= ultimoSeq) return; // ignora repetido
                 ultimoSeq = obj.seq;
                 if (obj.evento_tipo === "texto" && typeof obj.dados.texto === "string") {
                   const antes = textoAcumulado.length;
                   textoAcumulado += obj.dados.texto;
+                  // Primeira parte da resposta: a UI sai de `pensando` para `falando`.
                   if (antes === 0 && textoAcumulado.length > 0 && this.estado === "pensando") this.mudar("falando");
                 } else if (obj.evento_tipo === "fim") {
                   const erroFim = (obj.dados as Record<string, unknown>)?.erro;
@@ -474,7 +475,7 @@ export class Conversa {
                     cleanup();
                     resolve(textoAcumulado.trim());
                   }
-                } catch { /* rede instável */ }
+                } catch { /* rede instável: tenta de novo no próximo ciclo ou no prazo */ }
               };
               const cleanup = () => {
                 if (terminado) return;
@@ -493,6 +494,7 @@ export class Conversa {
             try {
               resposta = await esperarFim;
             } catch (erro) {
+              // Cancela pedido se a fala foi cortada (abort) ou houve erro.
               cancelarPedido();
               if (ac.signal.aborted || this.emJogo()) return;
               throw erro;
@@ -500,6 +502,7 @@ export class Conversa {
             if (!resposta) throw new Error("resposta vazia");
           }
         } catch (erro) {
+          // Interrupção normal (cancelado/abortado): volta ao repouso sem mensagem de erro.
           const msg = erro instanceof Error ? erro.message : String(erro ?? "");
           if (msg === "cancelado" || msg === "abortado" || ac.signal.aborted) {
             this.abrirCanal();
@@ -530,17 +533,19 @@ export class Conversa {
     } catch (erro) {
       if (ac.signal.aborted || this.emJogo()) return;
       const msgErro = erro instanceof Error ? erro.message : String((erro as { codigo?: unknown } | null)?.codigo ?? erro ?? "");
+      // Interrupção normal do cérebro próprio: volta ao repouso sem mensagem de erro.
       if (msgErro === "cancelado" || msgErro === "abortado" || ehCancelamentoPedido(msgErro)) {
         this.abrirCanal();
         if (this.estado !== "repouso") this.mudar("repouso");
         if (this.pergunta === ac) this.pergunta = null;
         return;
       }
+      // Cérebro próprio: `fim`/`erro` com erro real, queda do SSE ou falha da ponte viram estado `erro` visível.
       if (!ver && this.d.cerebro === "proprio") {
         const codigo = (erro as { codigo?: string } | null)?.codigo ?? msgErro;
         const detalhe = mensagemParaErroPedido(codigo);
         console.warn("pedido falhou", erro);
-        try { await this.falarFixa(FALAS.erroModelo, false); } catch { /* sem voz */ }
+        try { await this.falarFixa(FALAS.erroModelo, false); } catch { /* sem voz, o erro fica só no HUD */ }
         this.abrirCanal();
         this.mudar("erro", detalhe);
         if (this.pergunta === ac) this.pergunta = null;
@@ -635,8 +640,6 @@ export class Conversa {
   }
 
   interromper(): void {
-    this.controladorCiclo?.abort();
-    this.controladorCiclo = null;
     this.pergunta?.abort(); // cancela pergunta/síntese em andamento: a resposta tardia não é falada
     this.pergunta = null;
     this.d.boca.parar();
