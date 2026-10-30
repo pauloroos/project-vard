@@ -5,10 +5,13 @@ Os instaladores de cada versão ficam na página de [releases](https://github.co
 
 ## [Unreleased]
 
+### Fixed
+- Frente 2: serviços se recuperam e modo jogo honesto. <!-- crew:20261030-0228-frente-2-servicos-se-recuperam-e-modo-jo -->
+
 ### Corrigido
 
 - `recarregar` volta a subir o serviço: após `parar()` + `repetir()`, a thread supervisora é recriada com novo PID (`servicos.rs`).
-- Modo jogo desativado nesta versão: comando e menu da bandeja recusam com mensagem clara "modo jogo indisponível nesta versão"; endpoint `/modo` retorna 503 para `jogo` e sucesso imediato para `voltar` sem tocar na ponte. Pendente para frentes 3/4: liberação real de GPU, caminho correto de config e quebra do laço Rust↔Python.
+- Modo jogo desativado nesta versão: o Rust recusa com "modo jogo indisponível nesta versão" e a bandeja não oferece a opção. O endpoint `/modo` retorna 503 para `jogo` e sucesso imediato para `voltar`, sem encaminhá-los ao Rust, interrompendo o laço nesse caminho; verbos inválidos mantêm o status 422. A limpeza das ofertas no frontend fica para as frentes 3/4; liberação de GPU e configuração de um modo jogo futuro não foram implementadas.
 
 ## [0.9.8] — 2026-10-24
 
