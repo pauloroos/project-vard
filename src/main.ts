@@ -5,6 +5,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { PhysicalPosition } from "@tauri-apps/api/dpi";
 import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { aplicarAoVivo, aplicarVozAoVivo, atualizarConfig, carregarConfig, lerConfigAoVivo, normalizarConfig } from "./config/config";
+import type { Config } from "./config/config";
 import type { FalhaAtalho } from "./config/atalhos";
 import { abrirMicrofone, definirMudo, fecharMicrofone, estaMudo, onAmostras, rmsAtual, taxaAtual, definirMicrofonePreferido } from "./audio/microfone";
 import { DetectorSelecionavel, ControleCapturaVoz, pareceEco } from "./audio/vad-selecionavel";
@@ -41,6 +42,28 @@ const PRE_ROLL_MS = 300;
 /** Prazo da voz própria numa fala fixa que não está no cache (o aquecimento usa o prazo normal). */
 const PRAZO_FALA_FIXA_MS = 2000;
 const MIN_FALA_MS = 300;
+
+/**
+ * Reaplica no áudio vivo os dispositivos que o painel trocou: microfone para a próxima captura
+ * e saída no AudioContext em uso. Qualquer falha vira estado de erro visível, nunca silêncio.
+ */
+export async function aplicarDispositivosSalvos(
+  cfg: Pick<Config, "microfone_id" | "saida_id">,
+  mudou: { microfone: boolean; saida: boolean },
+  contexto: AudioContext | null,
+  avisar: (estado: Estado, detalhe: string) => void,
+): Promise<void> {
+  try {
+    if (mudou.microfone) definirMicrofonePreferido(cfg.microfone_id);
+    // Sem contexto a saída ainda não tem onde ser aplicada; ela entra na próxima abertura do microfone.
+    if (mudou.saida && cfg.saida_id && contexto && !(await aplicarSaidaNoContexto(contexto))) {
+      throw new Error("a saída escolhida não pôde ser aplicada");
+    }
+  } catch (erro) {
+    console.error("config-salva: dispositivo não aplicado", erro);
+    avisar("erro", "Reinicie para aplicar o dispositivo");
+  }
+}
 
 window.addEventListener("DOMContentLoaded", async () => {
   const cfg = await carregarConfig(); // nunca lança: arquivo ruim cai para o padrão
@@ -218,6 +241,8 @@ async function transcreverFala(wav: ArrayBuffer, sinal?: AbortSignal): Promise<s
 
   // A boca só existe depois que o microfone abre (usa o mesmo AudioContext).
   let bocaReal: Boca | null = null;
+  // O AudioContext em uso (o mesmo da boca), para reaplicar a saída escolhida no painel.
+  let contextoAudio: AudioContext | null = null;
   // "Não falar" ligado: nenhuma síntese nem áudio passa daqui (nem a fala fixa, nem a resposta, nem os avisos).
   let naoFalar = cfg.nao_falar;
   // Latência: do fim da fala do usuário até o começo da reprodução da resposta.
@@ -601,6 +626,7 @@ async function transcreverFala(wav: ArrayBuffer, sinal?: AbortSignal): Promise<s
     detector.fechar(); referenciasSaida.length = 0;
     largarAmostras?.(); largarAmostras = null;
     bocaReal?.parar(); bocaReal = null;
+    contextoAudio = null;
     nucleo.setAnalisadores(null, null);
     analisadorEntrada = null;
     fecharMicrofone();
@@ -622,6 +648,7 @@ async function transcreverFala(wav: ArrayBuffer, sinal?: AbortSignal): Promise<s
       definirMudo(false);
       hud.setMudo(false);
       bocaReal = new Boca(mic.contexto);
+      contextoAudio = mic.contexto;
       void aplicarSaidaNoContexto(mic.contexto).catch(() => {});
       hud.setTaxa(mic.contexto.sampleRate);
       mostrarEstado(conversa.estado, conversa.detalhe);
@@ -670,6 +697,7 @@ async function transcreverFala(wav: ArrayBuffer, sinal?: AbortSignal): Promise<s
         const ctxDev = new AudioContext();
         void aplicarSaidaNoContexto(ctxDev).catch(() => {});
         bocaReal = new Boca(ctxDev);
+        contextoAudio = ctxDev;
         nucleo.setAnalisadores(null, bocaReal.analisador);
       }
       ocupado = true;
@@ -821,6 +849,14 @@ async function transcreverFala(wav: ArrayBuffer, sinal?: AbortSignal): Promise<s
     if (!novo) { console.warn("config-salva ignorada: payload inválido"); return; }
     const antes = { tamanho: cfg.tamanho, tamanho_px: cfg.tamanho_px };
     const mudou = aplicarAoVivo(cfg, novo);
+    // Dispositivos: o painel trocou a escolha; reaplica no áudio vivo e avisa quando não deu.
+    if (recebido.microfone_id !== cfg.microfone_id || recebido.saida_id !== cfg.saida_id) {
+      const mudouDispositivo = { microfone: recebido.microfone_id !== cfg.microfone_id, saida: recebido.saida_id !== cfg.saida_id };
+      restaurarPreferencia(recebido); // a saída e a próxima captura leem a preferência daqui
+      cfg.microfone_id = recebido.microfone_id; cfg.microfone_rotulo = recebido.microfone_rotulo;
+      cfg.saida_id = recebido.saida_id; cfg.saida_rotulo = recebido.saida_rotulo;
+      await aplicarDispositivosSalvos(cfg, mudouDispositivo, contextoAudio, mostrarEstado);
+    }
     if (mudou.includes("cerebro") || mudou.includes("usar_openjarvis")) oj = deveUsarOj() ? clienteOj : null;
     if (aplicarVozAoVivo(cfg, recebido)) { voz = criarFonteDeVoz(cfg); vozReserva = criarReserva(); }
     if (ladoMudou(antes, cfg)) await aplicarTamanho(); // só quando o lado de fato mudou
