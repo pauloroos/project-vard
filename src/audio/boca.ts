@@ -4,15 +4,18 @@ import { obterPreferencia } from "./dispositivos";
 /** Aplica setSinkId no AudioContext quando suportado; retorna true se aplicado. */
 export async function aplicarSaidaNoContexto(ctx: AudioContext): Promise<boolean> {
   const pref = obterPreferencia();
-  if (!pref.saida_id) return false;
   // AudioContext.setSinkId existe no Chromium 110+; tipagem ainda não está no lib.dom.d.ts padrão.
   const anyCtx = ctx as AudioContext & { setSinkId?: (id: string) => Promise<void> };
   if (typeof anyCtx.setSinkId !== "function") return false;
   try {
-    await anyCtx.setSinkId(pref.saida_id);
+    await anyCtx.setSinkId(pref.saida_id ?? "");
     return true;
   } catch {
-    console.warn(`Saída preferida "${pref.saida_rotulo || pref.saida_id}" indisponível; usando padrão.`);
+    if (pref.saida_id) {
+      console.warn(`Saída preferida "${pref.saida_rotulo || pref.saida_id}" indisponível; usando padrão.`);
+    } else {
+      console.warn("Não foi possível aplicar a saída padrão do sistema.");
+    }
     return false;
   }
 }
