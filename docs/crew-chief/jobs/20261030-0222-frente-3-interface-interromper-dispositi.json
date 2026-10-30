@@ -2237,9 +2237,18 @@
       "estimated": false,
       "note": "coordinator opencode:omni/chefe round 3",
       "at": "2026-10-30T08:45:44.670566+00:00"
+    },
+    {
+      "role": "coordinator",
+      "tokens_in": 13487591,
+      "tokens_out": 20044,
+      "tokens_total": 13507635,
+      "estimated": false,
+      "note": "coordinator opencode:omni/chefe round 4",
+      "at": "2026-10-30T10:14:49.377677+00:00"
     }
   ],
-  "state": "blocked",
+  "state": "distributed",
   "status": "blocked",
   "pr_url": null,
   "result": {

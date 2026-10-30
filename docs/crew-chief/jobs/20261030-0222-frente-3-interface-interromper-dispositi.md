@@ -906,9 +906,9 @@ Testes: `npm test` (vitest) e `npx tsc --noEmit`. Rode `npm ci` se precisar.
 
 ## Economy
 
-free work: — of pieces, 72% of tokens · coordinator: 28% · 3.5 attempts/piece · mean score 41
+free work: — of pieces, 61% of tokens · coordinator: 39% · 3.5 attempts/piece · mean score 41
 
-- Tokens: free 55051324, paid exec 0, coordinator 21312006
+- Tokens: free 55051324, paid exec 0, coordinator 34819641
 - Time: 372 min
 
 ## Commit message
