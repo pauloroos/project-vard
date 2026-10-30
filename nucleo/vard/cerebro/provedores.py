@@ -336,6 +336,11 @@ class AdaptadorAnthropic(AdaptadorProvedor):
                 if m.get("tool_calls"):
                     for tc in m["tool_calls"]:
                         fn = tc.get("function", {})
+                        nome = fn.get("name") or ""
+                        if not nome.strip():
+                            # Tool call sem nome e invalida na API Anthropic.
+                            log.warning("tool_call sem nome ignorado no historico")
+                            continue
                         args = fn.get("arguments", "{}")
                         if isinstance(args, str):
                             try:
@@ -345,7 +350,7 @@ class AdaptadorAnthropic(AdaptadorProvedor):
                         content_parts.append({
                             "type": "tool_use",
                             "id": tc.get("id", ""),
-                            "name": fn.get("name", ""),
+                            "name": nome,
                             "input": args,
                         })
                 msgs_ant.append({
@@ -369,9 +374,14 @@ class AdaptadorAnthropic(AdaptadorProvedor):
     ) -> List[Dict[str, Any]]:
         tools_ant: List[Dict[str, Any]] = []
         for t in ferramentas:
-            fn = t.get("function", {})
+            # Aceita schema achatado (como o laço envia) ou no formato OpenAI.
+            fn = t.get("function", t)
+            nome = fn.get("name") or ""
+            if not nome.strip():
+                # A API Anthropic rejeita ferramenta sem nome; falha cedo e claro.
+                raise ValueError(f"ferramenta sem nome: {t}")
             tools_ant.append({
-                "name": fn.get("name", ""),
+                "name": nome,
                 "description": fn.get("description", ""),
                 "input_schema": fn.get("parameters", {"type": "object", "properties": {}}),
             })
@@ -595,8 +605,12 @@ class AdaptadorGoogle(AdaptadorProvedor):
         decls: List[Dict[str, Any]] = []
         for f in ferramentas:
             fn = f.get("function", f)
+            nome = fn.get("name") or ""
+            if not nome.strip():
+                # A API Gemini rejeita functionDeclaration sem nome.
+                raise ValueError(f"ferramenta sem nome: {f}")
             decls.append({
-                "name": fn.get("name", ""),
+                "name": nome,
                 "description": fn.get("description", ""),
                 "parameters": fn.get("parameters", {"type": "object", "properties": {}}),
             })
