@@ -2,6 +2,10 @@
 
 /** Pedaços menores que isto vão junto com a frase anterior ("Pronto!" depois de uma frase longa). */
 const MINIMO = 12;
+/** Tamanho mínimo para liberar uma frase no fluxo contínuo (evita falar "Oi." sozinho antes do resto chegar). */
+export const MINIMO_FRASE_STREAM = 20;
+/** Sem texto novo por este tempo, o resto do buffer é falado mesmo sem pontuação. */
+export const TIMEOUT_FLUSH_FRASE_MS = 500;
 /** Teto do serviço de voz por pedido; pedaço maior é partido numa vírgula ou num espaço. */
 const MAXIMO = 400;
 
@@ -50,4 +54,40 @@ export function cortarEmFrases(texto: string): string[] {
     else frases.push(p);
   }
   return frases;
+}
+
+/**
+ * Extrai do buffer as frases já completas para falar de imediato.
+ * Completa = pontuação terminal seguida de espaço/fim; curtas demais (< 20)
+ * ficam no resto até juntar com a seguinte, o timeout ou o fim.
+ */
+export function extrairFrasesProntas(buffer: string): { prontas: string[]; resto: string } {
+  if (!buffer.trim()) return { prontas: [], resto: buffer };
+  const terminaComPontuacao = /[.!?…]["'”’»)\]]*\s*$/.test(buffer);
+  const pedacos = cortarEmFrases(buffer);
+  if (pedacos.length === 0) return { prontas: [], resto: buffer };
+  let candidatos: string[];
+  let cauda: string;
+  if (terminaComPontuacao) {
+    candidatos = pedacos;
+    cauda = "";
+  } else {
+    candidatos = pedacos.slice(0, -1);
+    cauda = pedacos[pedacos.length - 1] ?? "";
+  }
+  const prontas: string[] = [];
+  let acumulada = "";
+  for (const c of candidatos) {
+    acumulada = acumulada ? `${acumulada} ${c}` : c;
+    if (acumulada.length >= MINIMO_FRASE_STREAM) {
+      prontas.push(acumulada);
+      acumulada = "";
+    }
+  }
+  let resto: string;
+  if (acumulada) resto = cauda ? `${acumulada} ${cauda}` : acumulada;
+  else resto = cauda;
+  // Preserva o espaço de separação entre chunks: "Oi. " + "Tudo..." não pode virar "Oi.Tudo...".
+  if (resto && /\s$/.test(buffer) && !/\s$/.test(resto)) resto += " ";
+  return { prontas, resto };
 }
