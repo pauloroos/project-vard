@@ -12,7 +12,7 @@ from pathlib import Path
 import pytest
 
 from vard.cerebro import pedidos, sessoes
-from vard.cerebro.contratos import EstadoPedido, Origem, Pedido
+from vard.cerebro.contratos import EstadoPedido, Origem, Pedido, TipoEvento
 
 
 @pytest.fixture(autouse=True)
@@ -167,3 +167,58 @@ async def test_cancelar_na_fila():
 
     await pedidos.processar_fila("s")
     assert pedidos.consultar("c1").estado == EstadoPedido.CANCELADO
+
+
+async def test_erro_no_executor_emite_evento_terminal():
+    """Executor que levanta exceção deve emitir evento terminal ERRO visível ao widget."""
+    eventos: list = []
+
+    def capturar(ev):
+        eventos.append(ev)
+
+    pedidos.configurar_emissor(capturar)
+
+    async def rodar(ped: Pedido, emitir):
+        raise RuntimeError("falha simulada")
+
+    pedidos.configurar_executor(rodar)
+    pedidos.admitir(_pedido("e1", "s"))
+
+    t = pedidos._lacos_ativos.get("s")
+    if t is not None:
+        await t
+    else:
+        await pedidos.processar_fila("s")
+
+    assert pedidos.consultar("e1").estado == EstadoPedido.FALHOU
+    assert any(ev.tipo == TipoEvento.ERRO for ev in eventos), "nenhum evento ERRO emitido"
+    # garante que o erro foi propagado
+    assert any("falha simulada" in str(ev.dados.get("erro", "")) for ev in eventos if ev.tipo == TipoEvento.ERRO)
+    pedidos.configurar_emissor(None)
+    pedidos.configurar_executor(lambda *_: None)  # reset
+    # limpa executor para não interferir em próximo teste via fixture já limpa _rodar_fn? garante None
+    pedidos._rodar_fn = None
+
+
+async def test_executor_nao_configurado_emite_evento_terminal():
+    """Sem executor configurado deve emitir evento terminal ERRO com executor_nao_configurado."""
+    eventos: list = []
+
+    def capturar(ev):
+        eventos.append(ev)
+
+    pedidos.configurar_emissor(capturar)
+    pedidos._rodar_fn = None
+
+    pedidos.admitir(_pedido("e2", "s"))
+
+    t = pedidos._lacos_ativos.get("s")
+    if t is not None:
+        await t
+    else:
+        await pedidos.processar_fila("s")
+
+    assert pedidos.consultar("e2").estado == EstadoPedido.FALHOU
+    assert any(ev.tipo == TipoEvento.ERRO for ev in eventos), "nenhum evento ERRO emitido"
+    assert any(ev.dados.get("erro") == "executor_nao_configurado" for ev in eventos if ev.tipo == TipoEvento.ERRO)
+    pedidos.configurar_emissor(None)

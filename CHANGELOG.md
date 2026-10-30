@@ -6,6 +6,7 @@ Os instaladores de cada versão ficam na página de [releases](https://github.co
 ## [Unreleased]
 
 ### Fixed
+- cérebro: todo pedido termina, histórico certo, contrato das ferramentas. <!-- crew:20261030-0227-cerebro-todo-pedido-termina-historico-ce -->
 - Frente 2: serviços se recuperam e modo jogo honesto. <!-- crew:20261030-0228-frente-2-servicos-se-recuperam-e-modo-jo -->
 
 ### Corrigido

@@ -404,6 +404,60 @@ class TestGoogle:
 
 
 # ---------------------------------------------------------------------------
+# Contrato das ferramentas: nome nunca vazio, argumentos preservados
+# ---------------------------------------------------------------------------
+
+class TestContratoFerramentas:
+    @pytest.mark.parametrize("ferramenta", [
+        {"type": "function", "function": {"name": "", "parameters": {}}},
+        {"name": "", "parameters": {}},  # schema achatado, como o laço envia
+    ])
+    def test_anthropic_ferramenta_sem_nome_levanta_erro(self, ferramenta):
+        """A API Anthropic rejeita ferramenta sem nome; falhamos cedo."""
+        with pytest.raises(ValueError, match="ferramenta sem nome"):
+            AdaptadorAnthropic._converter_ferramentas([ferramenta])
+
+    def test_anthropic_tool_call_sem_nome_no_historico_eh_ignorado(self, caplog):
+        """tool_call sem nome não vira tool_use; os demais são preservados."""
+        mensagens = [
+            {"role": "user", "content": "oi"},
+            {"role": "assistant", "content": "", "tool_calls": [
+                {"id": "c1", "type": "function", "function": {"name": "", "arguments": "{}"}},
+                {"id": "c2", "type": "function", "function": {"name": "eco", "arguments": '{"x": 1}'}},
+            ]},
+        ]
+        with caplog.at_level(logging.WARNING, logger="vard.cerebro.provedores"):
+            _, msgs = AdaptadorAnthropic._converter_mensagens(mensagens)
+        usos = [p for p in msgs[-1]["content"] if p.get("type") == "tool_use"]
+        assert [u["name"] for u in usos] == ["eco"]
+        assert usos[0]["input"] == {"x": 1}
+        assert any("sem nome" in r.getMessage() for r in caplog.records)
+
+    @respx.mock
+    async def test_openai_compat_argumentos_validos_nao_viram_dict_vazio(self):
+        """Argumentos reais do stream chegam inteiros, nunca como {}."""
+        chunk = {"choices": [{"delta": {"tool_calls": [{
+            "index": 0, "id": "c1",
+            "function": {"name": "eco", "arguments": '{"x": 1}'},
+        }]}}]}
+        respx.post("http://lm.local/v1/chat/completions").mock(
+            return_value=Response(200, text=_sse_linhas(chunk),
+                                  headers={"content-type": "text/event-stream"})
+        )
+        adp = AdaptadorOpenAICompat("http://lm.local", "m")
+        eventos = await _coletar(adp.inferir([{"role": "user", "content": "oi"}]))
+        chamadas = [e for e in eventos if e.tipo == "chamada"]
+        assert len(chamadas) == 1
+        assert chamadas[0].dados["argumentos"] == {"x": 1}
+
+    def test_google_ferramenta_sem_nome_levanta_erro(self):
+        """Gemini rejeita functionDeclaration sem nome; falhamos cedo."""
+        ferramentas = [{"function": {"name": "", "parameters": {}}}]
+        with pytest.raises(ValueError, match="ferramenta sem nome"):
+            AdaptadorGoogle._converter_ferramentas(ferramentas)
+
+
+# ---------------------------------------------------------------------------
 # Sem retries ocultos
 # ---------------------------------------------------------------------------
 
