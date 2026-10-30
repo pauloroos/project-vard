@@ -3,6 +3,13 @@
 Este arquivo segue o [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) em português do Brasil.
 Os instaladores de cada versão ficam na página de [releases](https://github.com/pauloroos/project-vard/releases).
 
+## [Unreleased]
+
+### Corrigido
+
+- `recarregar` volta a subir o serviço: após `parar()` + `repetir()`, a thread supervisora é recriada com novo PID (`servicos.rs`).
+- Modo jogo desativado nesta versão: comando e menu da bandeja recusam com mensagem clara "modo jogo indisponível nesta versão"; endpoint `/modo` retorna 503 para `jogo` e sucesso imediato para `voltar` sem tocar na ponte. Pendente para frentes 3/4: liberação real de GPU, caminho correto de config e quebra do laço Rust↔Python.
+
 ## [0.9.8] — 2026-10-24
 
 ### Corrigido
