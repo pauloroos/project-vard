@@ -525,3 +525,42 @@ async def test_cancelar_antes_da_ferramenta():
     # Se o laço rodou apesar do cancelamento, a ferramenta pode ter sido chamada;
     # o importante é que o estado final reflita o cancelamento ou falha controlada.
     assert estado.estado in (EstadoPedido.CANCELADO, EstadoPedido.FALHOU, EstadoPedido.CONCLUIDO)
+
+
+async def test_historico_grava_pergunta_do_usuario():
+    """Pergunta do usuário é gravada no histórico antes da resposta."""
+    eventos: list[Any] = []
+    adp = AdaptadorFalso(resposta="resposta ok")
+    ped = _pedido(pid="ph1", sid="sh1", texto="pergunta teste")
+    info, _ = modulo_pedidos.admitir(ped)
+    info.estado = EstadoPedido.EXECUTANDO
+    modulo_pedidos._gravar_info(info)
+
+    await executar_pedido(ped, adp, lambda ev: eventos.append(ev))
+
+    historico = sessoes.obter_historico(ped.sessao_id)
+    assert {"role": "user", "content": "pergunta teste"} in historico
+    assert {"role": "assistant", "content": "resposta ok"} in historico
+    assert historico.index({"role": "user", "content": "pergunta teste"}) < historico.index(
+        {"role": "assistant", "content": "resposta ok"}
+    )
+    sessoes.limpar(ped.sessao_id)
+
+
+async def test_historico_grava_pergunta_mesmo_com_erro():
+    """Pergunta é gravada mesmo quando a inferência falha sem resposta."""
+    eventos: list[Any] = []
+    adp = AdaptadorFalso(falhar=True)
+    ped = _pedido(pid="ph2", sid="sh2", texto="pergunta com erro")
+    info, _ = modulo_pedidos.admitir(ped)
+    info.estado = EstadoPedido.EXECUTANDO
+    modulo_pedidos._gravar_info(info)
+
+    await executar_pedido(ped, adp, lambda ev: eventos.append(ev))
+
+    historico = sessoes.obter_historico(ped.sessao_id)
+    assert {"role": "user", "content": "pergunta com erro"} in historico
+    assert not [m for m in historico if m.get("role") == "assistant"]
+    estado = modulo_pedidos.consultar(ped.pedido_id)
+    assert estado and estado.estado == EstadoPedido.FALHOU
+    sessoes.limpar(ped.sessao_id)
