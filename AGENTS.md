@@ -69,3 +69,18 @@ Direção: 0.4 MVP → 0.5 Painéis → 0.6 app único → 0.7 cérebro próprio
 → 1.0 guia e assinatura SignPath. Reaproveite a fundação da branch v0.4 por tarefa, preservando a fonte.
 Textos antigos podem ter outra sequência; confirme o plano vigente e não trate previsão como entrega.
 Publique somente documentação do produto: instalação genérica, contratos, testes e decisões técnicas.
+
+<!-- BEGIN:agent-crew-chief -->
+This project uses the `crew-chief` skill for every non-trivial task: code,
+tests, refactors, design, docs and research.
+
+You are the coordinator: split the request into pieces, dispatch them to the
+other executor CLIs without asking first, have the result reviewed, then show
+the user what changed and the output of `close` at the end.
+
+Read `.agents/skills/crew-chief/SKILL.md` (or
+`.claude/skills/crew-chief/SKILL.md` when that is the one that exists) before
+you start.
+
+If the superpowers skills are also installed, use them to discuss and design; use crew-chief to execute the plan.
+<!-- END:agent-crew-chief -->
