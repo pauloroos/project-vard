@@ -532,35 +532,6 @@
       "piece": 4,
       "attempt": 2,
       "timestamp": "2026-10-30T04:09:20.194003+00:00"
-    },
-    {
-      "sequence": 6,
-      "type": "blocked",
-      "payload": {
-        "type": "blocked",
-        "timestamp": "2026-10-30T04:24:13.631734+00:00",
-        "command": "gh pr create --base main --head maestro/02-servicos-modo-jogo-5704eaf5 --title Job 20261030-0228-frente-2-servicos-se-recuperam-e-modo-jo: Complete --body # Job 20261030-0228-frente-2-servicos-se-recuperam-e-modo-jo - Audit Summary\n\n## Accepted Pieces\n\n## Verification Proofs\n\n- No force pushes used\n- Single PR per job enforced\n",
-        "error": "pull request create failed: GraphQL: Head sha can't be blank, Base sha can't be blank, No commits between main and maestro/02-servicos-modo-jogo-5704eaf5, Head ref must be a branch (createPullRequest)\n",
-        "failed_command": "gh pr create --base main --head maestro/02-servicos-modo-jogo-5704eaf5 --title Job 20261030-0228-frente-2-servicos-se-recuperam-e-modo-jo: Complete --body # Job 20261030-0228-frente-2-servicos-se-recuperam-e-modo-jo - Audit Summary\n\n## Accepted Pieces\n\n## Verification Proofs\n\n- No force pushes used\n- Single PR per job enforced\n",
-        "blocked_error": "pull request create failed: GraphQL: Head sha can't be blank, Base sha can't be blank, No commits between main and maestro/02-servicos-modo-jogo-5704eaf5, Head ref must be a branch (createPullRequest)\n",
-        "pr_url": null,
-        "result": {
-          "failed_command": "gh pr create --base main --head maestro/02-servicos-modo-jogo-5704eaf5 --title Job 20261030-0228-frente-2-servicos-se-recuperam-e-modo-jo: Complete --body # Job 20261030-0228-frente-2-servicos-se-recuperam-e-modo-jo - Audit Summary\n\n## Accepted Pieces\n\n## Verification Proofs\n\n- No force pushes used\n- Single PR per job enforced\n",
-          "blocked_error": "pull request create failed: GraphQL: Head sha can't be blank, Base sha can't be blank, No commits between main and maestro/02-servicos-modo-jogo-5704eaf5, Head ref must be a branch (createPullRequest)\n",
-          "summary": "- 1. recarregar recria thread do serviço — opencode:opencode-go/muse-spark-1.3-contributor, score 40\n- 2. esconder modo jogo no ciclo e bandeja — opencode:opencode-go/beam-free, score 40\n- 3. /modo recusa com mensagem clara — opencode:opencode-go/iceman-contributor-free, score 40\n- 4. testes de recarregar e modo escondido — opencode:opencode/flint-40b-free, score 25\n\nRecord: docs/crew-chief/jobs/20261030-0228-frente-2-servicos-se-recuperam-e-modo-jo.md"
-        }
-      },
-      "timestamp": "2026-10-30T04:24:13.631734+00:00",
-      "command": "gh pr create --base main --head maestro/02-servicos-modo-jogo-5704eaf5 --title Job 20261030-0228-frente-2-servicos-se-recuperam-e-modo-jo: Complete --body # Job 20261030-0228-frente-2-servicos-se-recuperam-e-modo-jo - Audit Summary\n\n## Accepted Pieces\n\n## Verification Proofs\n\n- No force pushes used\n- Single PR per job enforced\n",
-      "error": "pull request create failed: GraphQL: Head sha can't be blank, Base sha can't be blank, No commits between main and maestro/02-servicos-modo-jogo-5704eaf5, Head ref must be a branch (createPullRequest)\n",
-      "failed_command": "gh pr create --base main --head maestro/02-servicos-modo-jogo-5704eaf5 --title Job 20261030-0228-frente-2-servicos-se-recuperam-e-modo-jo: Complete --body # Job 20261030-0228-frente-2-servicos-se-recuperam-e-modo-jo - Audit Summary\n\n## Accepted Pieces\n\n## Verification Proofs\n\n- No force pushes used\n- Single PR per job enforced\n",
-      "blocked_error": "pull request create failed: GraphQL: Head sha can't be blank, Base sha can't be blank, No commits between main and maestro/02-servicos-modo-jogo-5704eaf5, Head ref must be a branch (createPullRequest)\n",
-      "pr_url": null,
-      "result": {
-        "failed_command": "gh pr create --base main --head maestro/02-servicos-modo-jogo-5704eaf5 --title Job 20261030-0228-frente-2-servicos-se-recuperam-e-modo-jo: Complete --body # Job 20261030-0228-frente-2-servicos-se-recuperam-e-modo-jo - Audit Summary\n\n## Accepted Pieces\n\n## Verification Proofs\n\n- No force pushes used\n- Single PR per job enforced\n",
-        "blocked_error": "pull request create failed: GraphQL: Head sha can't be blank, Base sha can't be blank, No commits between main and maestro/02-servicos-modo-jogo-5704eaf5, Head ref must be a branch (createPullRequest)\n",
-        "summary": "- 1. recarregar recria thread do serviço — opencode:opencode-go/muse-spark-1.3-contributor, score 40\n- 2. esconder modo jogo no ciclo e bandeja — opencode:opencode-go/beam-free, score 40\n- 3. /modo recusa com mensagem clara — opencode:opencode-go/iceman-contributor-free, score 40\n- 4. testes de recarregar e modo escondido — opencode:opencode/flint-40b-free, score 25\n\nRecord: docs/crew-chief/jobs/20261030-0228-frente-2-servicos-se-recuperam-e-modo-jo.md"
-      }
     }
   ],
   "commit_type": "fix",
