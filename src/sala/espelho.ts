@@ -11,7 +11,7 @@ export type EventoEspelho =
 export const ESPELHO_INICIAL: Espelho = { estado: "repouso", detalhe: "", ouvido: "", resposta: "" };
 /** Letra grande na TV: respostas longas são cortadas. */
 export const MAX_TEXTO = 400;
-const ESTADOS: readonly string[] = ["repouso", "ouvindo", "pensando", "falando", "jogo", "erro", "fora"];
+const ESTADOS: readonly string[] = ["repouso", "ouvindo", "transcrevendo", "pensando", "falando", "jogo", "erro", "fora"];
 
 function limitar(t: string): string {
   const s = t.trim();

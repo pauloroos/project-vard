@@ -643,28 +643,78 @@ export class Conversa {
       ultimoSeq = obj.seq;
       if (obj.evento_tipo === "texto" && typeof obj.dados.texto === "string") {
         if (sinal.aborted) return;
+        const antes = completo.length;
         completo += obj.dados.texto;
         buffer += obj.dados.texto;
+        // Primeira parte da resposta: a UI sai de `pensando` para `falando`.
+        if (antes === 0 && completo.length > 0 && this.estado === "pensando") this.mudar("falando");
         esvaziarBuffer();
         rearmarFlush();
         avisar();
-      } else if (obj.evento_tipo === "fim" || obj.evento_tipo === "erro") {
-        limparFlush();
-        const resto = buffer.trim();
-        if (resto && !sinal.aborted) fila.push(resto);
-        buffer = "";
-        terminado = true;
-        cleanup();
-        avisar();
+      } else if (obj.evento_tipo === "fim") {
+        const dados = (obj.dados ?? {}) as Record<string, unknown>;
+        const erroFim = dados.erro;
+        // `fim` com erro: "cancelado" é interrupção normal; qualquer outro código é erro visível.
+        if (typeof erroFim === "string" && erroFim) { encerrarComErro(erroFim); return; }
+        completarCom(dados.resposta);
+        encerrar();
+      } else if (obj.evento_tipo === "erro") {
+        const codigo = ((obj.dados ?? {}) as Record<string, unknown>).erro;
+        encerrarComErro(typeof codigo === "string" && codigo ? codigo : "erro_desconhecido");
       }
     };
-    const onError = () => {
+    /** Texto final do núcleo: fala só o que ainda não chegou pelos eventos `texto`. */
+    const completarCom = (respostaFinal: unknown) => {
+      if (typeof respostaFinal !== "string" || !respostaFinal.trim()) return;
+      if (!completo.trim()) { completo = respostaFinal; buffer += respostaFinal; }
+      else if (respostaFinal.startsWith(completo) && respostaFinal.length > completo.length) {
+        const falta = respostaFinal.slice(completo.length);
+        completo = respostaFinal;
+        buffer += falta;
+      }
+    };
+    const encerrar = () => {
+      if (terminado) return;
       limparFlush();
-      erroSse = new Error("sse_erro");
+      const resto = buffer.trim();
+      if (resto && !sinal.aborted) {
+        const e = extrairFrasesProntas(buffer);
+        fila.push(...e.prontas);
+        if (e.resto.trim()) fila.push(e.resto.trim());
+      }
+      buffer = "";
       terminado = true;
       cleanup();
       avisar();
     };
+    const encerrarComErro = (codigo: string) => {
+      if (terminado) return;
+      limparFlush();
+      buffer = "";
+      fila.length = 0;
+      erroSse = new Error(ehCancelamentoPedido(codigo) ? "cancelado" : codigo);
+      terminado = true;
+      cleanup();
+      avisar();
+    };
+    // O SSE pode cair sem avisar: sonda o pedido e, no prazo, desiste com erro visível (a UI nunca fica presa em `pensando`).
+    const sondar = async () => {
+      if (terminado || sinal.aborted) return;
+      try {
+        const snap = await d.ponte?.consultarPedido?.(pedidoId);
+        if (!snap || terminado || sinal.aborted) return;
+        if (snap.estado === "cancelado") { encerrarComErro("cancelado"); return; }
+        if (snap.estado === "falhou") {
+          const erroSonda = (snap as { erro?: unknown }).erro;
+          encerrarComErro(typeof erroSonda === "string" && erroSonda ? erroSonda : "erro_desconhecido");
+          return;
+        }
+        if (snap.estado === "concluido") { completarCom(snap.resposta); encerrar(); }
+      } catch { /* rede instável: tenta de novo na próxima sondagem ou no prazo */ }
+    };
+    let sonda: ReturnType<typeof setInterval> | null = null;
+    let prazo: ReturnType<typeof setTimeout> | null = null;
+    const onError = () => encerrarComErro("sse_erro");
     const onAbort = () => {
       limparFlush();
       fila.length = 0;
@@ -673,6 +723,8 @@ export class Conversa {
       avisar();
     };
     const cleanup = () => {
+      if (sonda) { clearInterval(sonda); sonda = null; }
+      if (prazo) { clearTimeout(prazo); prazo = null; }
       window.removeEventListener("vard-evento-pedido", onEvento as unknown as EventListener);
       window.removeEventListener("error", onError);
       sinal.removeEventListener("abort", onAbort);
@@ -681,6 +733,11 @@ export class Conversa {
       window.addEventListener("vard-evento-pedido", onEvento as unknown as EventListener);
       window.addEventListener("error", onError);
       sinal.addEventListener("abort", onAbort, { once: true });
+      sonda = setInterval(() => { void sondar(); }, SONDAGEM_PEDIDO_MS);
+      prazo = setTimeout(() => {
+        prazo = null;
+        void sondar().then(() => encerrarComErro("timeout"));
+      }, PRAZO_PEDIDO_MS);
     } else {
       const resto = buffer.trim();
       if (resto) {

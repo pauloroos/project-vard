@@ -207,7 +207,7 @@ export class Hud {
   /** Indicador vermelho: a tela está prestes a ser capturada. */
   setIndicadorTela(ligado: boolean) { this.raiz.classList.toggle("capturando", ligado); }
 
-  setEstado(e: Estado, detalhe = "") { this.estado = e; this.detalhe = detalhe; this.pintar(); }
+  setEstado(e: Estado, detalhe = "") { this.estado = e; this.detalhe = detalhe; this.raiz.dataset.estado = e; this.pintar(); }
   setOuvido(t: string) { this.ouvido = t; this.pintar(); }
   setResposta(t: string) {
     this.resposta = t; this.pintar();

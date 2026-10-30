@@ -21,8 +21,8 @@ export class Invisibilidade {
   /** Ctrl+Alt+V ou "Mostrar/ocultar" da bandeja com o modo ligado: revela ou esconde na hora. */
   alternarRevelacao() { this.revelado = !this.revelado; this.decidir(this.revelado ? undefined : 0); }
 
-  /** "ouvindo" não conta (o VAD dispara com qualquer ruído, antes de saber se foi chamado), nem "jogo", "erro" e "fora". */
-  private motivo(): boolean { return !this.modo || this.estado === "pensando" || this.estado === "falando" || this.canal || this.revelado; }
+  /** "ouvindo" não conta (o VAD dispara com qualquer ruído, antes de saber se foi chamado), nem "jogo", "erro" e "fora". "transcrevendo" conta pois a fala já começou. */
+  private motivo(): boolean { return !this.modo || this.estado === "transcrevendo" || this.estado === "pensando" || this.estado === "falando" || this.canal || this.revelado; }
 
   private decidir(atraso = this.atrasoMs) {
     if (this.motivo()) { this.cancelar(); this.mudar(true); return; }

@@ -10,3 +10,7 @@ body {
 #resposta { max-width: 80vw; min-height: 6vmin; font-size: 4.2vmin; line-height: 1.3; }
 body[data-estado="jogo"] { color: #787c82; text-shadow: none; }
 body[data-estado="erro"] #estado { color: #ff3838; }
+
+body[data-estado="transcrevendo"] { color: #a78bfa; text-shadow: 0 0 1vmin #7c3aed; }
+body[data-estado="transcrevendo"] #estado::after { content: " ●"; animation: piscar 0.7s infinite alternate; }
+body[data-estado="pensando"] #estado::after { content: " …"; }

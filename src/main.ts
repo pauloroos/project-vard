@@ -159,7 +159,7 @@ window.addEventListener("DOMContentLoaded", async () => {
     if (salaAberta) void emitTo("sala", "sala:espelho", ev).catch(() => {});
   };
   // `revela`: false no "pensando" da transcrição sem push-to-talk; antes do nome ser dito o modo invisível não pode aparecer.
-  const mostrarEstado = (e: Estado, detalhe = "", revela = true) => { __ultimoEstado.estado = e; __ultimoEstado.detalhe = detalhe; if (revela) invisibilidade.definirEstado(e); nucleo.setEstado(e); hud.setEstado(e, detalhe); paraSala({ tipo: "estado", estado: e, detalhe }); };
+  const mostrarEstado = (e: Estado, detalhe = "", revela = true) => { __ultimoEstado.estado = e; __ultimoEstado.detalhe = detalhe; if (revela) invisibilidade.definirEstado(e); nucleo.setEstado(e); hud.setEstado(e, detalhe); app.dataset.estado = e; paraSala({ tipo: "estado", estado: e, detalhe }); };
   const mostrarOuvido = (t: string) => { hud.setOuvido(t); paraSala({ tipo: "ouvido", texto: t }); };
   const mostrarResposta = (t: string) => { hud.setResposta(t); paraSala({ tipo: "resposta", texto: t }); };
   hud.dica("clique para ligar o ouvido");
@@ -315,6 +315,8 @@ async function transcreverFala(wav: ArrayBuffer, sinal?: AbortSignal): Promise<s
   let ocupado = false; // transcrevendo ou pensando: ignora novos eventos do VAD
   let pttPendente = false; // push-to-talk apertado durante a resposta: começa a capturar quando o ciclo terminar
   let estavaFalando = false;
+  // false enquanto a Conversa muda de estado por uma transcrição sem push-to-talk (o aoEstado não revela o modo invisível).
+  let revelarEstado = true;
 
   // Ponte opcional do Vard: sem ela o HUD funciona igual, só sem o botão Tela e sem modo jogo.
   const ponte = new Ponte(cfg.ponte_url);
@@ -399,7 +401,7 @@ async function transcreverFala(wav: ArrayBuffer, sinal?: AbortSignal): Promise<s
     get cerebro() { return cfg.cerebro; },
     sessaoVoz: () => sessaoVozId,
     aoEstado: (e, detalhe) => {
-      mostrarEstado(e, detalhe);
+      mostrarEstado(e, detalhe, revelarEstado);
       // Terminou de falar: descarta o pre-roll, que teria a cauda da própria voz (eco).
       if (estavaFalando && e !== "falando") { anel = []; anelAmostras = 0; }
       estavaFalando = e === "falando";
@@ -550,6 +552,7 @@ async function transcreverFala(wav: ArrayBuffer, sinal?: AbortSignal): Promise<s
   };
 
   const comecarCaptura = () => {
+    if (conversa.estado === "erro") return; // não inicia gravação em estado de erro
     pcm = anel; anel = []; anelAmostras = 0; // o pre-roll vira o começo da fala
     capturando = true;
     mostrarEstado("ouvindo");
@@ -564,18 +567,35 @@ async function transcreverFala(wav: ArrayBuffer, sinal?: AbortSignal): Promise<s
     for (const b of pcm) { tudo.set(b, o); o += b.length; }
     pcm = [];
     console.log("fala capturada", tudo.length, "amostras a", taxaAtual(), "Hz");
-    if (tudo.length < (taxaAtual() * MIN_FALA_MS) / 1000 || conversa.estado === "fora" || conversa.estado === "erro") {
+    if (conversa.estado === "erro") return; // não inicia gravação em estado de erro
+    if (tudo.length < (taxaAtual() * MIN_FALA_MS) / 1000 || conversa.estado === "fora") {
       mostrarEstado(conversa.estado, conversa.detalhe);
       return;
     }
     const ciclo = ++cicloVoz;
     ocupado = true;
-    mostrarEstado("pensando", "", pushToTalk);
+    revelarEstado = pushToTalk; // sem push-to-talk o nome ainda não foi dito: o modo invisível não aparece
+    try { conversa.notificarInicioTranscricao(); } finally { revelarEstado = true; }
+    mostrarEstado("transcrevendo", "", pushToTalk);
+    let timerTranscricao: ReturnType<typeof setTimeout> | null = setTimeout(() => {
+      if (ciclo === cicloVoz) {
+        console.warn("transcrição presa em transcrevendo; timeout");
+        ocupado = false;
+        mostrarEstado("erro", "tempo de transcrição esgotado");
+        // volta ao repouso após exibir erro brevemente
+        setTimeout(() => { if (ciclo === cicloVoz) mostrarEstado(conversa.estado, conversa.detalhe); }, 3000);
+      }
+    }, 30000);
     try {
       const wav = pcmParaWav(reamostrar(tudo, taxaAtual(), 16000), 16000);
       let texto: string;
       try {
         texto = await transcreverFala(wav);
+        if (timerTranscricao) { clearTimeout(timerTranscricao); timerTranscricao = null; }
+        if (ciclo !== cicloVoz || estaMudo() || reuniaoAtiva) return;
+        revelarEstado = pushToTalk;
+        try { conversa.notificarTranscricaoPronta(); } finally { revelarEstado = true; }
+        mostrarEstado("pensando", "", pushToTalk);
       } catch (erro) {
         if (ciclo !== cicloVoz || estaMudo() || reuniaoAtiva) return;
         console.warn("transcrição falhou", erro);
@@ -597,8 +617,10 @@ async function transcreverFala(wav: ArrayBuffer, sinal?: AbortSignal): Promise<s
         pushToTalk,
       );
     } catch (erro) {
+      if (timerTranscricao) { clearTimeout(timerTranscricao); timerTranscricao = null; }
       console.error("ciclo de fala falhou", erro);
     } finally {
+      if (timerTranscricao) { clearTimeout(timerTranscricao); timerTranscricao = null; }
       if (ciclo !== cicloVoz) return;
       fimDaFala = 0;
       ocupado = false;
