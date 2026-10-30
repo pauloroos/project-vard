@@ -189,6 +189,19 @@ async def processar_fila(sessao_id: str) -> None:
             info.estado = EstadoPedido.FALHOU
             info.erro = "executor_nao_configurado"
             _gravar_info(info)
+            info.ultimo_seq += 1
+            _gravar_info(info)
+            if _emitir_evento is not None:
+                try:
+                    _emitir_evento(EventoPedido(
+                        pedido_id=proximo,
+                        sessao_id=sessao_id,
+                        seq=info.ultimo_seq,
+                        tipo=TipoEvento.ERRO,
+                        dados={"erro": "executor_nao_configurado"},
+                    ))
+                except Exception:
+                    pass
             continue
 
         evento_estado = EventoPedido(
@@ -242,11 +255,33 @@ async def processar_fila(sessao_id: str) -> None:
             if info.estado not in (EstadoPedido.CANCELADO,):
                 info.estado = EstadoPedido.CANCELADO
                 _gravar_info(info)
+                info.ultimo_seq += 1
+                try:
+                    _emissor(EventoPedido(
+                        pedido_id=proximo,
+                        sessao_id=sessao_id,
+                        seq=info.ultimo_seq,
+                        tipo=TipoEvento.ERRO,
+                        dados={"erro": "cancelado"},
+                    ))
+                except Exception:
+                    pass
         except Exception as exc:
             info = _ler_info(proximo) or info
             info.estado = EstadoPedido.FALHOU
             info.erro = str(exc)[:200]
             _gravar_info(info)
+            info.ultimo_seq += 1
+            try:
+                _emissor(EventoPedido(
+                    pedido_id=proximo,
+                    sessao_id=sessao_id,
+                    seq=info.ultimo_seq,
+                    tipo=TipoEvento.ERRO,
+                    dados={"erro": str(exc)[:200]},
+                ))
+            except Exception:
+                pass
         finally:
             with _trava:
                 _executores.pop(proximo, None)
