@@ -1404,6 +1404,13 @@ http.server.HTTPServer(('127.0.0.1', {porta}), H).serve_forever()
     }
 
     #[test]
+    fn executar_jogo_retorna_erro_indisponivel() {
+        // Modo jogo desativado nesta frente: recusa com erro claro, sem tocar na ponte.
+        let err = executar_jogo().err().expect("modo jogo deveria recusar");
+        assert!(err.contains("indisponível"), "mensagem inesperada: {}", err);
+    }
+
+    #[test]
     fn executar_voltar_sem_ponte_retorna_ligado() {
         let _ambiente = ambiente_isolado();
         let dir = tempfile::tempdir().unwrap();

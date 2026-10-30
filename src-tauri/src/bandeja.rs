@@ -298,6 +298,12 @@ mod testes {
     }
 
     #[test]
+    fn menu_ligado_nao_tem_jogo() {
+        let itens = itens_menu(&foto("ligado"), false, false, true, false, false);
+        assert!(!itens.iter().any(|i| i.id == "jogo"));
+    }
+
+    #[test]
     fn menu_jogo_desabilita_config_sala() {
         let itens = itens_menu(&foto("jogo"), false, false, true, false, false);
         let config = itens.iter().find(|i| i.id == "config").unwrap();
