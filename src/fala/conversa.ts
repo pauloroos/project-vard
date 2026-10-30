@@ -8,8 +8,28 @@ import { aPartirDoGatilho, classificar, ehConfirmacao, ehInterrupcao, extrairCom
 import type { Cerebro } from "../config/cerebro";
 import type { EventoPedidoSSE } from "../conectores/ponte/cliente";
 
-export type Estado = "repouso" | "ouvindo" | "pensando" | "falando" | "jogo" | "erro" | "fora";
+export type Estado = "repouso" | "ouvindo" | "transcrevendo" | "pensando" | "falando" | "jogo" | "erro" | "fora";
 export interface Mensagem { role: "system" | "user" | "assistant"; content: string }
+
+/** Prazo máximo esperando o `fim`/`erro` do pedido antes de sondar e desistir com erro visível. */
+export const PRAZO_PEDIDO_MS = 60000;
+/** Intervalo da sondagem do pedido enquanto o SSE não entrega o evento terminal. */
+export const SONDAGEM_PEDIDO_MS = 2000;
+
+/** Evento `erro` com `{erro: "cancelado"}` é interrupção normal: volta ao repouso sem mensagem. */
+export function ehCancelamentoPedido(erro: unknown): boolean {
+  return erro === "cancelado";
+}
+
+/** Detalhe em português para o estado `erro` a partir do código que o núcleo mandou. */
+export function mensagemParaErroPedido(erro: unknown): string {
+  const codigo = typeof erro === "string" && erro.trim() ? erro.trim() : "erro_desconhecido";
+  if ((FALAS.erros as Record<string, string>)[codigo]) return (FALAS.erros as Record<string, string>)[codigo];
+  if (codigo === "sse_erro" || codigo === "rede" || codigo === "timeout" || codigo === "resposta vazia") {
+    return "Conexão perdida com o núcleo. Tente de novo.";
+  }
+  return `Não consegui pensar nisso agora (${codigo}).`;
+}
 /** PCM 16 bits mono em fluxo, como o serviço de voz entrega. */
 export interface FalaEmFluxo { corpo: ReadableStream<Uint8Array>; taxa: number }
 /** Uma frase pronta para tocar: em fluxo (voz própria) ou WAV inteiro (reserva no OpenJarvis). */
@@ -101,9 +121,11 @@ export class Conversa {
   private microfoneFechado = false;
   private erroPonte = false;
   private pergunta: AbortController | null = null;
+  private controladorCiclo: AbortController | null = null; // ciclo STT em curso: o aborto cancela transcrição e descarta texto tardio
   private canalAte = 0; // instante em que o modo conversa fecha; 0 = fechado
   private relogioCanal: ReturnType<typeof setTimeout> | null = null;
   private entrandoEmJogo = false; // aviso do modo jogo tocando: a sondagem da ponte não mexe no estado
+  private timerTranscrevendo: ReturnType<typeof setTimeout> | null = null;
 
   constructor(private d: DepsConversa) {}
 
@@ -137,10 +159,34 @@ export class Conversa {
   private podeFalar(): boolean { return !this.mudoPorReuniao() && this.d.falarPermitida?.() !== false; }
 
   private mudar(e: Estado, detalhe = "") {
+    if (this.timerTranscrevendo) { clearTimeout(this.timerTranscrevendo); this.timerTranscrevendo = null; }
+    if (e === "transcrevendo") {
+      this.timerTranscrevendo = setTimeout(() => {
+        if (this.estado === "transcrevendo") {
+          this.mudar("erro", "tempo de transcrição esgotado");
+          setTimeout(() => { if (this.estado === "erro") this.mudar("repouso"); }, 3000);
+        }
+      }, 30000);
+    }
     this.estado = e;
     this.detalhe = detalhe;
     this.d.aoEstado?.(e, detalhe);
   }
+
+  /** Notifica início de captura/transcrição: vai para transcrevendo. Retorna false se em erro (bloqueia). */
+  notificarInicioTranscricao(): boolean {
+    if (this.estado === "erro" || this.estado === "fora" || this.emJogo()) return false;
+    this.mudar("transcrevendo");
+    return true;
+  }
+
+  /** Transcrição pronta: sai de transcrevendo para pensando. */
+  notificarTranscricaoPronta(): void {
+    if (this.estado === "transcrevendo") this.mudar("pensando");
+  }
+
+  /** Anota o controller do ciclo STT em curso (aborto cancela transcrição). */
+  anotarCiclo(ac: AbortController): void { this.controladorCiclo = ac; }
 
   private async tocar(wav: Promise<ArrayBuffer>, mudarEstado = true) {
     try {
@@ -262,9 +308,11 @@ export class Conversa {
     // Entre uma frase e outra a boca fica muda por um instante: o estado "falando" segura a vez.
     if (this.d.boca.falando || this.estado === "falando") return;
     const inicio = performance.now();
-    if (this.estado === "fora" || this.estado === "erro" || this.emJogo()) return;
+    // `erro` não bloqueia a próxima tentativa: a pergunta nova sai do erro para `pensando`.
+    if (this.estado === "fora" || this.emJogo()) return;
     const bruto = texto.trim();
     if (!bruto) return;
+    if (this.controladorCiclo?.signal.aborted) return; // interrompido durante transcrição: descarta texto tardio
     const v = gatilhos(this.d.config);
 
     // Confirmação do modo jogo: vale só a próxima frase; "sim" ou "confirmo" sozinhos (com ou sem o nome).
@@ -349,7 +397,6 @@ export class Conversa {
         if (ac.signal.aborted || this.emJogo()) { cancelarPedido(); return; }
         let ultimoSeq = -1;
         let textoAcumulado = "";
-        let jaTerminou = false;
         // Reconciliação inicial: consulta estado atual para pegar texto já produzido antes do SSE.
         try {
           const snap = await this.d.ponte.consultarPedido?.(pedidoId);
@@ -357,46 +404,111 @@ export class Conversa {
             textoAcumulado = snap.resposta;
             ultimoSeq = Number((snap as { ultimo_seq?: number }).ultimo_seq ?? 0);
           }
-          // O "fim" pode ter saído antes desta consulta: com o pedido encerrado, nenhum evento novo vai chegar.
-          jaTerminou = !!snap && ["concluido", "falhou", "cancelado"].includes(snap.estado);
-        } catch { /* segue com SSE */ }
-        // Escuta eventos SSE da sessão até fim/erro/cancelamento ou abort.
-        if (ac.signal.aborted || this.emJogo()) return;
-        const esperarFim = jaTerminou ? Promise.resolve(textoAcumulado.trim()) : new Promise<string>((resolve, reject) => {
-          const onEvento = (ev: Event) => {
-            if (ac.signal.aborted) return;
-            const msg = (ev as MessageEvent).data;
-            if (typeof msg !== "string") return;
-            let obj: EventoPedidoSSE | null = null;
-            try { obj = JSON.parse(msg) as EventoPedidoSSE; } catch { return; }
-            if (!obj || obj.tipo !== "pedido" || obj.sessao_id !== sessaoId || obj.pedido_id !== pedidoId) return;
-            if (obj.seq <= ultimoSeq) return; // ignora repetido
-            ultimoSeq = obj.seq;
-            if (obj.evento_tipo === "texto" && typeof obj.dados.texto === "string") {
-              textoAcumulado += obj.dados.texto;
-            } else if (obj.evento_tipo === "fim" || obj.evento_tipo === "erro") {
-              cleanup();
-              resolve(textoAcumulado.trim());
+          if (snap && snap.estado === "cancelado") {
+            this.abrirCanal();
+            if (this.estado !== "repouso") this.mudar("repouso");
+            return;
+          }
+          if (snap && snap.estado === "falhou") {
+            const erroSnap = (snap as { erro?: unknown }).erro;
+            throw new Error(typeof erroSnap === "string" && erroSnap ? erroSnap : "erro_desconhecido");
+          }
+          if (snap && snap.estado === "concluido") {
+            resposta = textoAcumulado.trim();
+            if (!resposta) throw new Error("resposta vazia");
+            if (ac.signal.aborted || this.emJogo()) return;
+          } else {
+            if (ac.signal.aborted || this.emJogo()) return;
+            const esperarFim = new Promise<string>((resolve, reject) => {
+              let terminado = false;
+              const onEvento = (ev: Event) => {
+                if (ac.signal.aborted || terminado) return;
+                const msg = (ev as MessageEvent).data;
+                if (typeof msg !== "string") return;
+                let obj: EventoPedidoSSE | null = null;
+                try { obj = JSON.parse(msg) as EventoPedidoSSE; } catch { return; }
+                if (!obj || obj.tipo !== "pedido" || obj.sessao_id !== sessaoId || obj.pedido_id !== pedidoId) return;
+                if (obj.seq <= ultimoSeq) return;
+                ultimoSeq = obj.seq;
+                if (obj.evento_tipo === "texto" && typeof obj.dados.texto === "string") {
+                  const antes = textoAcumulado.length;
+                  textoAcumulado += obj.dados.texto;
+                  if (antes === 0 && textoAcumulado.length > 0 && this.estado === "pensando") this.mudar("falando");
+                } else if (obj.evento_tipo === "fim") {
+                  const erroFim = (obj.dados as Record<string, unknown>)?.erro;
+                  if (typeof erroFim === "string" && erroFim && !ehCancelamentoPedido(erroFim)) {
+                    cleanup();
+                    reject(new Error(erroFim));
+                    return;
+                  }
+                  if (ehCancelamentoPedido(erroFim)) {
+                    cleanup();
+                    reject(new Error("cancelado"));
+                    return;
+                  }
+                  const respostaFim = (obj.dados as Record<string, unknown>)?.resposta;
+                  if (typeof respostaFim === "string" && respostaFim.trim()) textoAcumulado = respostaFim;
+                  cleanup();
+                  resolve(textoAcumulado.trim());
+                } else if (obj.evento_tipo === "erro") {
+                  const codigo = (obj.dados as Record<string, unknown>)?.erro;
+                  cleanup();
+                  reject(new Error(typeof codigo === "string" && codigo ? codigo : "erro_desconhecido"));
+                }
+              };
+              const onError = () => { if (!terminado) { cleanup(); reject(new Error("sse_erro")); } };
+              const sondar = async () => {
+                if (terminado || ac.signal.aborted) return;
+                try {
+                  const snap = await this.d.ponte?.consultarPedido?.(pedidoId);
+                  if (!snap || terminado || ac.signal.aborted) return;
+                  if (snap.estado === "cancelado") { cleanup(); reject(new Error("cancelado")); return; }
+                  if (snap.estado === "falhou") {
+                    cleanup();
+                    const erroSonda = (snap as { erro?: unknown }).erro;
+                    reject(new Error(typeof erroSonda === "string" && erroSonda ? erroSonda : "erro_desconhecido"));
+                    return;
+                  }
+                  if (snap.estado === "concluido") {
+                    if (typeof snap.resposta === "string" && snap.resposta.trim()) textoAcumulado = snap.resposta;
+                    cleanup();
+                    resolve(textoAcumulado.trim());
+                  }
+                } catch { /* rede instável */ }
+              };
+              const cleanup = () => {
+                if (terminado) return;
+                terminado = true;
+                clearTimeout(prazo);
+                clearInterval(sonda);
+                window.removeEventListener("vard-evento-pedido", onEvento as unknown as EventListener);
+                window.removeEventListener("error", onError);
+              };
+              window.addEventListener("vard-evento-pedido", onEvento as unknown as EventListener);
+              window.addEventListener("error", onError);
+              const sonda = setInterval(() => { void sondar(); }, SONDAGEM_PEDIDO_MS);
+              const prazo = setTimeout(() => { void sondar().then(() => { if (!terminado) { cleanup(); reject(new Error("timeout")); } }); }, PRAZO_PEDIDO_MS);
+              ac.signal.addEventListener("abort", () => { cleanup(); reject(new Error("abortado")); }, { once: true });
+            });
+            try {
+              resposta = await esperarFim;
+            } catch (erro) {
+              cancelarPedido();
+              if (ac.signal.aborted || this.emJogo()) return;
+              throw erro;
             }
-          };
-          const onError = () => { cleanup(); reject(new Error("sse_erro")); };
-          const cleanup = () => {
-            window.removeEventListener("vard-evento-pedido", onEvento as unknown as EventListener);
-            window.removeEventListener("error", onError);
-          };
-          window.addEventListener("vard-evento-pedido", onEvento as unknown as EventListener);
-          window.addEventListener("error", onError);
-          ac.signal.addEventListener("abort", () => { cleanup(); reject(new Error("abortado")); });
-        });
-        try {
-          resposta = await esperarFim;
+            if (!resposta) throw new Error("resposta vazia");
+          }
         } catch (erro) {
-          // Cancela pedido se a fala foi cortada (abort) ou houve erro.
-          cancelarPedido();
-          if (ac.signal.aborted || this.emJogo()) return;
+          const msg = erro instanceof Error ? erro.message : String(erro ?? "");
+          if (msg === "cancelado" || msg === "abortado" || ac.signal.aborted) {
+            this.abrirCanal();
+            if (this.estado !== "repouso") this.mudar("repouso");
+            if (this.pergunta === ac) this.pergunta = null;
+            return;
+          }
           throw erro;
         }
-        if (!resposta) throw new Error("resposta vazia");
       } else {
         let instrucao = this.d.config.instrucao_formato;
         try {
@@ -417,6 +529,23 @@ export class Conversa {
       console.info(`resposta do núcleo em ${Math.round(performance.now() - inicio)} ms`);
     } catch (erro) {
       if (ac.signal.aborted || this.emJogo()) return;
+      const msgErro = erro instanceof Error ? erro.message : String((erro as { codigo?: unknown } | null)?.codigo ?? erro ?? "");
+      if (msgErro === "cancelado" || msgErro === "abortado" || ehCancelamentoPedido(msgErro)) {
+        this.abrirCanal();
+        if (this.estado !== "repouso") this.mudar("repouso");
+        if (this.pergunta === ac) this.pergunta = null;
+        return;
+      }
+      if (!ver && this.d.cerebro === "proprio") {
+        const codigo = (erro as { codigo?: string } | null)?.codigo ?? msgErro;
+        const detalhe = mensagemParaErroPedido(codigo);
+        console.warn("pedido falhou", erro);
+        try { await this.falarFixa(FALAS.erroModelo, false); } catch { /* sem voz */ }
+        this.abrirCanal();
+        this.mudar("erro", detalhe);
+        if (this.pergunta === ac) this.pergunta = null;
+        return;
+      }
       console.warn(ver ? "olhos falharam" : "agente falhou", erro);
       const codigo = (erro as { codigo?: string } | null)?.codigo;
       const fala = (codigo && (FALAS.erros as Record<string, string>)[codigo]) || FALAS.erroModelo;
@@ -506,10 +635,12 @@ export class Conversa {
   }
 
   interromper(): void {
+    this.controladorCiclo?.abort();
+    this.controladorCiclo = null;
     this.pergunta?.abort(); // cancela pergunta/síntese em andamento: a resposta tardia não é falada
     this.pergunta = null;
     this.d.boca.parar();
-    if (this.estado === "falando" || this.estado === "pensando") this.mudar("repouso");
+    if (this.estado === "falando" || this.estado === "pensando" || this.estado === "transcrevendo" || this.estado === "erro") this.mudar("repouso");
     // Canal órfão (relógio limpo ao perguntar): rearma para o canal fechar sozinho depois de conversa_ms.
     if (this.canalAte > 0 && !this.relogioCanal) this.abrirCanal();
   }

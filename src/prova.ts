@@ -26,7 +26,7 @@ function analisadorFalso(amplitude: number): AnalyserNode {
 }
 
 export function ativarProva(modo: string, nucleo: Nucleo, hud: Hud) {
-  const estado = (["repouso", "ouvindo", "pensando", "falando", "jogo", "erro", "fora"].includes(modo) ? modo : "repouso") as Estado;
+  const estado = (["repouso", "ouvindo", "transcrevendo", "pensando", "falando", "jogo", "erro", "fora"].includes(modo) ? modo : "repouso") as Estado;
   nucleo.setAnalisadores(analisadorFalso(estado === "ouvindo" ? 0.8 : 0.02), analisadorFalso(estado === "falando" ? 0.9 : 0.02));
   hud.setMudo(false);
   hud.setTaxa(48000);
