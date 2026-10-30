@@ -2,13 +2,12 @@ import { Aneis, R_INT } from "./aneis";
 import { simplex2 } from "./ruido";
 import type { FonteDeEspectro } from "../sala/espectro";
 
-export type Estado = "repouso" | "ouvindo" | "transcrevendo" | "pensando" | "falando" | "jogo" | "erro" | "fora";
+export type Estado = "repouso" | "ouvindo" | "pensando" | "falando" | "jogo" | "erro" | "fora";
 
 /** Cor principal, cor de brilho e opacidade global por estado. */
 const PALETA: Record<Estado, { c: [number, number, number]; g: [number, number, number]; alfa: number }> = {
   repouso: { c: [0, 240, 255], g: [0, 162, 255], alfa: 1 },
   ouvindo: { c: [0, 240, 255], g: [0, 162, 255], alfa: 1 },
-  transcrevendo: { c: [160, 120, 255], g: [120, 80, 255], alfa: 1 },
   falando: { c: [0, 240, 255], g: [0, 162, 255], alfa: 1 },
   pensando: { c: [255, 153, 0], g: [255, 190, 70], alfa: 1 },
   jogo: { c: [120, 124, 130], g: [70, 74, 80], alfa: 0.8 },
@@ -23,7 +22,6 @@ interface Alvo {
 const ALVOS: Record<Estado, Alvo> = {
   repouso: { velExt: 1, velResto: 1, escala: 1, fft: 0, pulso: 0, respira: 1, agita: 0.35 },
   ouvindo: { velExt: 0.25, velResto: 1, escala: 1, fft: 1, pulso: 0.4, respira: 0.5, agita: 0.5 },
-  transcrevendo: { velExt: 2.0, velResto: 2.2, escala: 0.96, fft: 0.3, pulso: 0.7, respira: 0.4, agita: 1.1 },
   pensando: { velExt: 3.2, velResto: 3.6, escala: 0.93, fft: 0, pulso: 0, respira: 0.3, agita: 1.5 },
   falando: { velExt: 1.5, velResto: 1.8, escala: 1, fft: 1, pulso: 1, respira: 0.2, agita: 0.9 },
   jogo: { velExt: 0, velResto: 0, escala: 1, fft: 0, pulso: 0, respira: 0, agita: 0 },
@@ -129,7 +127,7 @@ export class Nucleo {
 
   private paleta(e: Estado) {
     const pal = PALETA[e];
-    return this.corEscolhida && ["repouso", "ouvindo", "transcrevendo", "falando", "fora"].includes(e)
+    return this.corEscolhida && ["repouso", "ouvindo", "falando", "fora"].includes(e)
       ? { ...this.corEscolhida, alfa: pal.alfa } : pal;
   }
 

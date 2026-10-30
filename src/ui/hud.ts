@@ -5,7 +5,7 @@ import type { Estado } from "../fala/conversa";
 import { Revelador } from "./revelador";
 
 export const ROTULO_ESTADO: Record<Estado, string> = {
-  repouso: "pronto", ouvindo: "ouvindo", transcrevendo: "transcrevendo", pensando: "pensando", falando: "falando",
+  repouso: "pronto", ouvindo: "ouvindo", pensando: "pensando", falando: "falando",
   jogo: "MODO JOGO", erro: "atenção", fora: "núcleo offline",
 };
 
@@ -207,7 +207,7 @@ export class Hud {
   /** Indicador vermelho: a tela está prestes a ser capturada. */
   setIndicadorTela(ligado: boolean) { this.raiz.classList.toggle("capturando", ligado); }
 
-  setEstado(e: Estado, detalhe = "") { this.estado = e; this.detalhe = detalhe; this.raiz.dataset.estado = e; this.pintar(); }
+  setEstado(e: Estado, detalhe = "") { this.estado = e; this.detalhe = detalhe; this.pintar(); }
   setOuvido(t: string) { this.ouvido = t; this.pintar(); }
   setResposta(t: string) {
     this.resposta = t; this.pintar();
