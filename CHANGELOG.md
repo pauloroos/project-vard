@@ -5,14 +5,28 @@ Os instaladores de cada versão ficam na página de [releases](https://github.co
 
 ## [Unreleased]
 
-### Fixed
-- cérebro: todo pedido termina, histórico certo, contrato das ferramentas. <!-- crew:20261030-0227-cerebro-todo-pedido-termina-historico-ce -->
-- Frente 2: serviços se recuperam e modo jogo honesto. <!-- crew:20261030-0228-frente-2-servicos-se-recuperam-e-modo-jo -->
+## [0.9.9] — 2026-10-30
+
+Versão só de correções: a conversa básica fica confiável antes de novas funcionalidades (issue #6).
 
 ### Corrigido
 
-- `recarregar` volta a subir o serviço: após `parar()` + `repetir()`, a thread supervisora é recriada com novo PID (`servicos.rs`).
-- Modo jogo desativado nesta versão: o Rust recusa com "modo jogo indisponível nesta versão" e a bandeja não oferece a opção. O endpoint `/modo` retorna 503 para `jogo` e sucesso imediato para `voltar`, sem encaminhá-los ao Rust, interrompendo o laço nesse caminho; verbos inválidos mantêm o status 422. A limpeza das ofertas no frontend fica para as frentes 3/4; liberação de GPU e configuração de um modo jogo futuro não foram implementadas.
+- Todo pedido ao cérebro próprio termina: falta de executor, erro ou cancelamento agora encerram o pedido com um
+  aviso, em vez de deixar a tela em "pensando" para sempre.
+- O histórico da conversa grava a pergunta do usuário, então o assistente lembra do que foi dito nos turnos anteriores.
+- As ferramentas voltam a funcionar com o Claude e o Gemini: os nomes das ferramentas chegavam vazios ao provedor.
+- "Recarregar" na bandeja volta a subir os serviços depois de "Parar".
+- Interromper (botão, atalho ou push-to-talk) cancela a transcrição, a resposta e a fala; nenhum texto antigo volta a
+  ser falado depois. Um pedido cancelado volta ao repouso sem mensagem de erro.
+- Trocar o microfone ou a saída nas configurações vale na hora ou avisa que é preciso reiniciar; uma falha ao aplicar a
+  saída aparece na tela.
+- O widget mostra cada etapa (transcrevendo, pensando, falando) e todo erro fica visível, inclusive a queda da conexão
+  com o núcleo.
+- No cérebro próprio, a resposta é falada frase por frase, sem esperar o texto inteiro.
+
+### Removido
+
+- O modo jogo saiu da bandeja e o núcleo recusa o pedido: ele não liberava a GPU de verdade nesta versão.
 
 ## [0.9.8] — 2026-10-24
 
