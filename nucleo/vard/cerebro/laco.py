@@ -85,6 +85,7 @@ async def executar_pedido(
     if persona:
         mensagens.insert(0, {"role": "system", "content": persona})
     mensagens.append({"role": "user", "content": pedido.texto})
+    sessoes.adicionar_mensagem(pedido.sessao_id, {"role": "user", "content": pedido.texto})
 
     seq = info.ultimo_seq
     resposta_final: str | None = None
