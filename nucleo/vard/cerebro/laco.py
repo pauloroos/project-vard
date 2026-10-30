@@ -2,7 +2,7 @@
 
 Contrato mínimo da T4:
 - Recebe Pedido, AdaptadorProvedor e GerenciadorFerramentas.
-- Mantém histórico da sessão via sessoes.obter_historico/adicionar_mensagem.
+- Mantém histórico da sessão via sessoes.obter_historico/adicionar_troca.
 - Emite EventosPedido (texto, ferramenta, fim, erro) via callback.
 - Diário registra intenção antes do efeito e resultado após confirmação.
 - Repetição no mesmo turno reutiliza resultado confirmado; incerto termina sem repetir.
@@ -89,6 +89,7 @@ async def executar_pedido(
     seq = info.ultimo_seq
     resposta_final: str | None = None
     erro_final: str | None = None
+    texto_emitido = False  # rastreia se algum evento TEXTO foi emitido no laço
 
     try:
         for turno in range(LIMITE_TURNOS):
@@ -157,6 +158,16 @@ async def executar_pedido(
                                 conteudo = ev.dados.get("conteudo", "")
                                 if conteudo:
                                     texto_acumulado.append(conteudo)
+                                    # FR-008: emite TEXTO progressivo durante streaming
+                                    texto_emitido = True
+                                    seq += 1
+                                    emitir(EventoPedido(
+                                        pedido_id=pedido.pedido_id,
+                                        sessao_id=pedido.sessao_id,
+                                        seq=seq,
+                                        tipo=TipoEvento.TEXTO,
+                                        dados={"texto": conteudo},
+                                    ))
                             elif ev.tipo == "chamada":
                                 chamadas_coletadas.append(ev.dados)
                             elif ev.tipo == "fim":
@@ -257,6 +268,7 @@ async def executar_pedido(
                     mensagens.append({
                         "role": "tool",
                         "tool_call_id": chamada.get("id", ""),
+                        "name": nome,
                         "content": _serializar_resultado(res_ferramenta),
                     })
 
@@ -265,18 +277,18 @@ async def executar_pedido(
                 continue
 
             # --- Resposta textual final ---
-            texto = "".join(texto_acumulado)
-            if texto:
+            resposta_final = "".join(texto_acumulado)
+            # Se nenhum TEXTO foi emitido via streaming (contrato antigo ou segunda inferência),
+            # emite um evento TEXTO com o conteúdo completo para compatibilidade com o frontend.
+            if resposta_final and not texto_emitido:
                 seq += 1
                 emitir(EventoPedido(
                     pedido_id=pedido.pedido_id,
                     sessao_id=pedido.sessao_id,
                     seq=seq,
                     tipo=TipoEvento.TEXTO,
-                    dados={"texto": texto},
+                    dados={"texto": resposta_final},
                 ))
-                sessoes.adicionar_mensagem(pedido.sessao_id, {"role": "assistant", "content": texto})
-            resposta_final = texto
             break
         else:
             erro_final = "limite_turnos_atingido"
@@ -320,6 +332,8 @@ async def executar_pedido(
     else:
         info.estado = EstadoPedido.CONCLUIDO
         info.resposta = resposta_final
+        if resposta_final is not None:
+            sessoes.adicionar_troca(pedido.sessao_id, pedido.texto, resposta_final)
     info.provedor_usado = getattr(adaptador, 'nome', '') or type(adaptador).__name__
     modulo_pedidos._gravar_info(info)
 

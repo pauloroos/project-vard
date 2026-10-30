@@ -6,9 +6,9 @@ import { cortarEmFrases } from "./frases";
 import { ehEncerramento } from "./encerramento";
 import { aPartirDoGatilho, classificar, ehConfirmacao, ehInterrupcao, extrairComando } from "./rotas";
 import type { Cerebro } from "../config/cerebro";
-import type { EventoPedidoSSE } from "../conectores/ponte/cliente";
+import { ErroPonte, type EventoPedidoSSE } from "../conectores/ponte/cliente";
 
-export type Estado = "repouso" | "ouvindo" | "pensando" | "falando" | "jogo" | "erro" | "fora";
+export type Estado = "repouso" | "ouvindo" | "transcrevendo" | "pensando" | "falando" | "jogo" | "erro" | "fora";
 export interface Mensagem { role: "system" | "user" | "assistant"; content: string }
 /** PCM 16 bits mono em fluxo, como o serviço de voz entrega. */
 export interface FalaEmFluxo { corpo: ReadableStream<Uint8Array>; taxa: number }
@@ -56,7 +56,7 @@ export interface DepsConversa {
     /** Cancela um pedido do cérebro próprio. */
     cancelar?(pedidoId: string): Promise<{ estado: string } | null>;
     /** Consulta o estado de um pedido do cérebro próprio. */
-    consultarPedido?(pedidoId: string): Promise<{ resposta?: string | null; estado: string } | null>;
+    consultarPedido?(pedidoId: string): Promise<{ resposta?: string | null; estado: string; erro?: string | null; ultimo_seq?: number } | null>;
   };
   /** Cérebro ativo: 'openjarvis' (padrão) ou 'proprio' (usa rotas /pedidos). */
   cerebro?: Cerebro;
@@ -91,6 +91,8 @@ export interface DepsConversa {
 
 const MAX_MENSAGENS = 20; // 10 trocas
 const PRAZO_CONFIRMACAO_MS = 15000;
+const PRAZO_SEM_PROGRESSO_MS = 90000;
+const INTERVALO_CONSULTA_PEDIDO_MS = 3000;
 
 export class Conversa {
   estado: Estado = "repouso";
@@ -101,6 +103,8 @@ export class Conversa {
   private microfoneFechado = false;
   private erroPonte = false;
   private pergunta: AbortController | null = null;
+  /** Fila de fala progressiva: garante que frases não se sobreponham e que this.pergunta viva até o fim. */
+  private filaFala: Promise<void> = Promise.resolve();
   private canalAte = 0; // instante em que o modo conversa fecha; 0 = fechado
   private relogioCanal: ReturnType<typeof setTimeout> | null = null;
   private entrandoEmJogo = false; // aviso do modo jogo tocando: a sondagem da ponte não mexe no estado
@@ -212,7 +216,7 @@ export class Conversa {
       for (let i = 0; i < frases.length; i++) {
         if (!this.podeFalar()) return; // "não falar" ligou no meio: corta sem esperar o fim de uma fala que não existe
         let som: Som | null = null;
-        try { som = await pendente; } catch (erro) { console.warn("falha ao sintetizar a frase", erro); }
+        try { som = await pendente; } catch (erro) { console.warn("falha ao sintetizar a frase", erro); this.mudar("erro", `sintese: ${(erro as Error).message || String(erro)}`); }
         pendente = null;
         if (sinal.aborted || this.emJogo()) { descartar(som); return; }
         if (i + 1 < frases.length) pendente = sintetizar(frases[i + 1]);
@@ -239,7 +243,14 @@ export class Conversa {
             try {
               const wav = await reserva(frases[i]);
               if (!sinal.aborted) await d.boca.tocar(wav);
-            } catch (erro2) { console.warn("falha ao falar pela reserva", erro2); }
+            } catch (erro2) {
+              // FR-007/T007: falha persistente (voz própria + reserva) deve chegar à interface.
+              console.warn("falha ao falar pela reserva", erro2);
+              if (!sinal.aborted && this.estado !== "erro") this.mudar("erro");
+            }
+          } else {
+            // WAV (reserva ou OpenJarvis) falhou sem fluxo alternativo: propaga erro à interface.
+            if (!sinal.aborted && this.estado !== "erro") this.mudar("erro");
           }
         }
         if (sinal.aborted) return;
@@ -322,6 +333,7 @@ export class Conversa {
     this.pergunta = ac;
     const ver = rota === "see";
     let resposta: string;
+    let falouProgressivamente = false; // FR-008: evita duplicar fala no fim se já falou durante streaming
     try {
       if (ver) {
         if (!this.d.capturar || !this.d.ponte) throw new Error("sem captura");
@@ -348,51 +360,217 @@ export class Conversa {
         ac.signal.addEventListener("abort", cancelarPedido, { once: true });
         if (ac.signal.aborted || this.emJogo()) { cancelarPedido(); return; }
         let ultimoSeq = -1;
+        let ultimoEstado = estado.estado ?? "na_fila";
         let textoAcumulado = "";
-        let jaTerminou = false;
+        // FR-008: buffer para fala incremental — só frases completas (com pontuação) são faladas durante streaming.
+        let bufferFala = "";
+        let posFalada = 0;
+        const falarFrasesCompletas = () => {
+          if (!this.podeFalar()) return;
+          const frases = cortarEmFrases(bufferFala);
+          if (frases.length <= 1) return; // sem frase completa ainda
+          // Fala todas exceto a última (que pode ser parcial), serializando pela fila
+          for (let i = 0; i < frases.length - 1; i++) {
+            const frase = frases[i];
+            if (!frase) continue;
+            falouProgressivamente = true;
+            this.filaFala = this.filaFala.then(() => this.falarEmFrases(frase, ac.signal)).catch(() => {});
+            posFalada += frase.length;
+          }
+          // FR-008-fix: preservar o conteúdo original do buffer para o resto incompleto.
+          // cortarEmFrases faz trim em cada fragmento, o que perde espaços finais.
+          // Calcula quantos caracteres foram consumidos (com espaços entre frases) e
+          // mantém o sufixo original do buffer, não o fragmento trimado.
+          let consumido = 0;
+          for (let i = 0; i < frases.length - 1; i++) {
+            consumido += (frases[i]?.length ?? 0) + 1; // +1 pelo espaço entre frases
+          }
+          bufferFala = bufferFala.slice(consumido).trimStart() || (frases[frases.length - 1] ?? "");
+        };
+        let snapInicial: { resposta?: string | null; estado: string; ultimo_seq?: number; erro?: string | null } | null = null;
         // Reconciliação inicial: consulta estado atual para pegar texto já produzido antes do SSE.
         try {
           const snap = await this.d.ponte.consultarPedido?.(pedidoId);
-          if (snap && typeof snap.resposta === "string") {
-            textoAcumulado = snap.resposta;
+          if (snap) {
+            snapInicial = snap;
+            if (typeof snap.resposta === "string") textoAcumulado = snap.resposta;
             ultimoSeq = Number((snap as { ultimo_seq?: number }).ultimo_seq ?? 0);
+            if (snap.estado) ultimoEstado = snap.estado;
           }
-          // O "fim" pode ter saído antes desta consulta: com o pedido encerrado, nenhum evento novo vai chegar.
-          jaTerminou = !!snap && ["concluido", "falhou", "cancelado"].includes(snap.estado);
         } catch { /* segue com SSE */ }
-        // Escuta eventos SSE da sessão até fim/erro/cancelamento ou abort.
+        // O "fim" pode ter saído antes desta consulta: com o pedido encerrado, nenhum evento novo vai chegar.
+        const jaTerminou = !!snapInicial && ["concluido", "falhou", "cancelado"].includes(snapInicial.estado);
         if (ac.signal.aborted || this.emJogo()) return;
-        const esperarFim = jaTerminou ? Promise.resolve(textoAcumulado.trim()) : new Promise<string>((resolve, reject) => {
+        if (!jaTerminou && textoAcumulado) {
+          bufferFala = textoAcumulado;
+          falarFrasesCompletas();
+        }
+        const promessaInicial = () => {
+          if (!snapInicial || snapInicial.estado === "concluido") return Promise.resolve(textoAcumulado.trim());
+          if (snapInicial.estado === "falhou") return Promise.reject(new ErroPonte(snapInicial.erro ?? "modelo_http"));
+          return Promise.reject(new Error("cancelado"));
+        };
+        const esperarFim = jaTerminou ? promessaInicial() : new Promise<string>((resolve, reject) => {
+          let resolvido = false;
+          let timerPrazo: ReturnType<typeof setTimeout> | null = null;
+          let timerIntervalo: ReturnType<typeof setInterval> | null = null;
+
+          const estourarPrazo = () => {
+            if (resolvido || ac.signal.aborted) return;
+            resolvido = true;
+            cleanup();
+            cancelarPedido();
+            this.d.depoisDaCaptura?.();
+            this.mudar("erro", FALAS.erros.modelo_demorou);
+            reject(new ErroPonte("modelo_demorou"));
+          };
+
+          const rearmarPrazo = () => {
+            if (timerPrazo) clearTimeout(timerPrazo);
+            timerPrazo = setTimeout(estourarPrazo, PRAZO_SEM_PROGRESSO_MS);
+          };
+
+          const consultar = async () => {
+            if (resolvido || ac.signal.aborted) return;
+            try {
+              const snap = await this.d.ponte?.consultarPedido?.(pedidoId);
+              if (!snap || resolvido || ac.signal.aborted) return;
+              const snapSeq = Number((snap as { ultimo_seq?: number }).ultimo_seq ?? ultimoSeq);
+              const snapEstado = snap.estado;
+              let progresso = false;
+              if (snapSeq > ultimoSeq) {
+                ultimoSeq = snapSeq;
+                progresso = true;
+              }
+              if (snapEstado !== ultimoEstado) {
+                ultimoEstado = snapEstado;
+                progresso = true;
+              }
+              if (typeof snap.resposta === "string") {
+                // FR-003/Finding #3 fix: após ferramenta, o snapshot pode trazer a resposta
+                // completa (introdução + resultado). Compara pelo comprimento do texto, não
+                // apenas pela seq, porque a consulta pode atualizar ultimoSeq antes de chegar
+                // aqui e o evento fim exige resposta maior que todo o texto acumulado.
+                if (snap.resposta.length > textoAcumulado.length) {
+                  if (snap.resposta.startsWith(textoAcumulado)) {
+                    // Extensão direta do texto já acumulado.
+                    const delta = snap.resposta.slice(textoAcumulado.length);
+                    textoAcumulado = snap.resposta;
+                    bufferFala += delta;
+                  } else {
+                    // Resposta pós-ferramenta ou conteúdo diferente: preserva texto anterior
+                    // se não estiver contido no snapshot, senão substitui.
+                    if (!snap.resposta.includes(textoAcumulado) && textoAcumulado) {
+                      const separador = "\n";
+                      textoAcumulado = textoAcumulado + separador + snap.resposta;
+                      bufferFala += separador + snap.resposta;
+                    } else {
+                      textoAcumulado = snap.resposta;
+                      bufferFala = snap.resposta;
+                    }
+                  }
+                  falarFrasesCompletas();
+                  progresso = true;
+                } else if (snapSeq > ultimoSeq && snap.resposta !== textoAcumulado) {
+                  // Mesma quantidade de texto mas conteúdo diferente e seq maior: aceita.
+                  textoAcumulado = snap.resposta;
+                  bufferFala = snap.resposta;
+                  falarFrasesCompletas();
+                  progresso = true;
+                }
+              }
+              if (progresso) rearmarPrazo();
+              if (snapEstado === "concluido") {
+                // FR-008: flush do buffer restante se a conclusão vier por consulta/reconexão
+                const resto = bufferFala.trim();
+                if (resto && this.podeFalar()) {
+                  falouProgressivamente = true;
+                  this.filaFala = this.filaFala.then(() => this.falarEmFrases(resto, ac.signal)).catch(() => {});
+                }
+                bufferFala = "";
+                resolvido = true;
+                cleanup();
+                resolve(textoAcumulado.trim());
+              } else if (snapEstado === "falhou") {
+                resolvido = true;
+                cleanup();
+                reject(new ErroPonte(snap.erro ?? "modelo_http"));
+              } else if (snapEstado === "cancelado") {
+                resolvido = true;
+                cleanup();
+                reject(new Error("cancelado"));
+              }
+            } catch {
+              /* segue aguardando próximo ciclo ou evento */
+            }
+          };
+
           const onEvento = (ev: Event) => {
-            if (ac.signal.aborted) return;
+            if (resolvido || ac.signal.aborted) return;
             const msg = (ev as MessageEvent).data;
             if (typeof msg !== "string") return;
             let obj: EventoPedidoSSE | null = null;
             try { obj = JSON.parse(msg) as EventoPedidoSSE; } catch { return; }
             if (!obj || obj.tipo !== "pedido" || obj.sessao_id !== sessaoId || obj.pedido_id !== pedidoId) return;
+            // Qualquer evento válido do pedido indica progresso
+            rearmarPrazo();
             if (obj.seq <= ultimoSeq) return; // ignora repetido
             ultimoSeq = obj.seq;
             if (obj.evento_tipo === "texto" && typeof obj.dados.texto === "string") {
               textoAcumulado += obj.dados.texto;
-            } else if (obj.evento_tipo === "fim" || obj.evento_tipo === "erro") {
+              // FR-008: fala incremental — só frases completas durante streaming
+              bufferFala += obj.dados.texto;
+              falarFrasesCompletas();
+            } else if (obj.evento_tipo === "fim") {
+              // FR-008: reconcilia qualquer texto final entregue no evento fim antes do flush
+              if (typeof obj.dados?.resposta === "string" && obj.dados.resposta.length > textoAcumulado.length) {
+                const delta = obj.dados.resposta.slice(textoAcumulado.length);
+                textoAcumulado = obj.dados.resposta;
+                bufferFala += delta;
+              }
+              // FR-008: flush do buffer restante como frase final, serializado pela fila
+              const resto = bufferFala.trim();
+              if (resto && this.podeFalar()) {
+                falouProgressivamente = true;
+                this.filaFala = this.filaFala.then(() => this.falarEmFrases(resto, ac.signal)).catch(() => {});
+              }
+              bufferFala = "";
+              resolvido = true;
               cleanup();
               resolve(textoAcumulado.trim());
+            } else if (obj.evento_tipo === "erro") {
+              resolvido = true;
+              cleanup();
+              const erroCod = typeof obj.dados?.erro === "string" ? obj.dados.erro : "modelo_http";
+              reject(new ErroPonte(erroCod));
             }
           };
+
+          const onReconectou = () => { void consultar(); };
           const onError = () => { cleanup(); reject(new Error("sse_erro")); };
+
           const cleanup = () => {
+            if (timerPrazo) { clearTimeout(timerPrazo); timerPrazo = null; }
+            if (timerIntervalo) { clearInterval(timerIntervalo); timerIntervalo = null; }
             window.removeEventListener("vard-evento-pedido", onEvento as unknown as EventListener);
+            window.removeEventListener("vard-sse-reconectou", onReconectou);
             window.removeEventListener("error", onError);
           };
+
           window.addEventListener("vard-evento-pedido", onEvento as unknown as EventListener);
+          window.addEventListener("vard-sse-reconectou", onReconectou);
           window.addEventListener("error", onError);
           ac.signal.addEventListener("abort", () => { cleanup(); reject(new Error("abortado")); });
+
+          rearmarPrazo();
+          timerIntervalo = setInterval(() => { void consultar(); }, INTERVALO_CONSULTA_PEDIDO_MS);
         });
         try {
           resposta = await esperarFim;
         } catch (erro) {
           // Cancela pedido se a fala foi cortada (abort) ou houve erro.
           cancelarPedido();
+          this.d.depoisDaCaptura?.();
           if (ac.signal.aborted || this.emJogo()) return;
           throw erro;
         }
@@ -420,9 +598,12 @@ export class Conversa {
       console.warn(ver ? "olhos falharam" : "agente falhou", erro);
       const codigo = (erro as { codigo?: string } | null)?.codigo;
       const fala = (codigo && (FALAS.erros as Record<string, string>)[codigo]) || FALAS.erroModelo;
+      this.mudar("erro", `resposta: ${fala}`);
       await this.falarFixa(fala);
       this.abrirCanal();
-      if (this.estado !== "repouso") this.mudar("repouso");
+      // Finding #8 fix: mantém o estado "erro" visível na interface até a próxima
+      // interação do usuário ou nova pergunta, em vez de apagar imediatamente com "repouso".
+      // O canal já foi reaberto acima para aceitar nova entrada.
       return;
     }
     if (!ver) {
@@ -431,7 +612,14 @@ export class Conversa {
     }
     this.d.aoResposta?.(resposta);
     if (this.emJogo()) return;
-    await this.falarEmFrases(resposta, ac.signal);
+    // FR-008: se a fala já ocorreu progressivamente durante streaming, não repete
+    if (!falouProgressivamente) {
+      await this.falarEmFrases(resposta, ac.signal);
+    } else {
+      // Aguarda a fila de fala progressiva terminar antes de liberar this.pergunta,
+      // para que interromper() ainda possa abortar e cancelar o pedido.
+      try { await this.filaFala; } catch { /* erros de fala já foram tratados dentro de falarEmFrases */ }
+    }
     if (this.pergunta === ac) this.pergunta = null;
     if (!ac.signal.aborted && !this.emJogo()) { this.abrirCanal(); this.d.aoProcessamentoConcluido?.(); this.mudar("repouso"); }
   }

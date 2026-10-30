@@ -30,6 +30,8 @@ _lacos_ativos: dict[str, asyncio.Task] = {}  # D2: laço de processamento por se
 _corpo_por_id: dict[str, str] = {}
 _rodar_fn: Callable[[Pedido, Callable[[EventoPedido], None]], Awaitable[None]] | None = None
 _emitir_evento: Callable[[EventoPedido], None] | None = None  # D2: callback para SSE
+_erros_emitidos: set[str] = set()
+_fim_emitidos: set[str] = set()
 
 
 def configurar_emissor(fn: Callable[[EventoPedido], None] | None) -> None:
@@ -146,26 +148,94 @@ def admitir(pedido: Pedido) -> tuple[EstadoPedidoInfo, bool]:
     return info, True
 
 
+def _emitir_despachante(ev: EventoPedido) -> None:
+    with _trava:
+        cur = _ler_info(ev.pedido_id)
+        if cur is not None:
+            if ev.seq > cur.ultimo_seq:
+                cur.ultimo_seq = ev.seq
+            # FR-008: acumula texto progressivo durante streaming
+            if ev.tipo == TipoEvento.TEXTO and isinstance(ev.dados.get("texto"), str):
+                cur.resposta = (cur.resposta or "") + ev.dados["texto"]
+            if ev.tipo == TipoEvento.FIM and ev.dados.get("resposta") is not None:
+                cur.resposta = ev.dados["resposta"]
+            if ev.tipo in (TipoEvento.ERRO, TipoEvento.FIM) and ev.dados.get("erro") is not None:
+                if not cur.erro:
+                    cur.erro = ev.dados["erro"]
+            _gravar_info(cur)
+        if ev.tipo == TipoEvento.ERRO:
+            _erros_emitidos.add(ev.pedido_id)
+        elif ev.tipo == TipoEvento.FIM:
+            _fim_emitidos.add(ev.pedido_id)
+    if _emitir_evento is not None:
+        try:
+            _emitir_evento(ev)
+        except Exception:
+            pass
+
+
+def _garantir_terminal(pedido_id: str, sessao_id: str, erro: str | None = None, resposta: str | None = None) -> None:
+    """Garante a emissão de evento terminal (erro e/ou fim) se ainda não foi emitido."""
+    with _trava:
+        info = _ler_info(pedido_id)
+        seq = info.ultimo_seq if info else 0
+        precisa_erro = erro is not None and pedido_id not in _erros_emitidos
+        precisa_fim = pedido_id not in _fim_emitidos
+
+    if precisa_erro:
+        seq += 1
+        ev_erro = EventoPedido(
+            pedido_id=pedido_id,
+            sessao_id=sessao_id,
+            seq=seq,
+            tipo=TipoEvento.ERRO,
+            dados={"erro": erro},
+        )
+        _emitir_despachante(ev_erro)
+
+    if precisa_fim:
+        with _trava:
+            info = _ler_info(pedido_id)
+            if info:
+                seq = max(seq, info.ultimo_seq)
+        seq += 1
+        ev_fim = EventoPedido(
+            pedido_id=pedido_id,
+            sessao_id=sessao_id,
+            seq=seq,
+            tipo=TipoEvento.FIM,
+            dados={"resposta": resposta, "erro": erro},
+        )
+        _emitir_despachante(ev_fim)
+
+
 def consultar(pedido_id: str) -> EstadoPedidoInfo | None:
     return _ler_info(pedido_id)
 
 
 def cancelar(pedido_id: str) -> EstadoPedidoInfo | None:
     """Cancela um pedido se ainda estiver na fila ou executando."""
+    na_fila = False
+    sessao_id = ""
     with _trava:
         info = _ler_info(pedido_id)
         if info is None:
             return None
-        if info.estado in (EstadoPedido.CONCLUIDO, EstadoPedido.CANCELADO):
+        if info.estado in (EstadoPedido.CONCLUIDO, EstadoPedido.CANCELADO, EstadoPedido.FALHOU):
             return info
+        sessao_id = info.sessao_id
         info.estado = EstadoPedido.CANCELADO
+        info.erro = "cancelado"
         _gravar_info(info)
         fila = _fila_por_sessao.get(info.sessao_id, [])
         if pedido_id in fila:
             fila.remove(pedido_id)
+            na_fila = True
     task = _executores.get(pedido_id)
     if task and not task.done():
         task.cancel()
+    elif na_fila:
+        _garantir_terminal(pedido_id, sessao_id, erro="cancelado")
     return info
 
 
@@ -189,6 +259,7 @@ async def processar_fila(sessao_id: str) -> None:
             info.estado = EstadoPedido.FALHOU
             info.erro = "executor_nao_configurado"
             _gravar_info(info)
+            _garantir_terminal(proximo, sessao_id, erro="executor_nao_configurado")
             continue
 
         evento_estado = EventoPedido(
@@ -207,49 +278,40 @@ async def processar_fila(sessao_id: str) -> None:
         origem_real = Origem.PAINEL  # padrão; admitir sempre grava PAINEL via server
         # Se houver como inferir origem do corpo salvo, usar; senão, mantém PAINEL
 
-        def _emissor(ev: EventoPedido) -> None:
-            with _trava:
-                cur = _ler_info(ev.pedido_id)
-                if cur is not None:
-                    if ev.seq > cur.ultimo_seq:
-                        cur.ultimo_seq = ev.seq
-                    if ev.tipo == TipoEvento.FIM and ev.dados.get("resposta") is not None:
-                        cur.resposta = ev.dados["resposta"]
-                    _gravar_info(cur)
-            if _emitir_evento is not None:
-                try:
-                    _emitir_evento(ev)
-                except Exception:
-                    pass
-
         pedido_real = Pedido(
             pedido_id=proximo,
             sessao_id=sessao_id,
             origem=origem_real,
             texto=texto_real,
         )
-        exec_task = asyncio.create_task(_rodar_fn(pedido_real, _emissor))
-        with _trava:
-            _executores[proximo] = exec_task
         try:
-            await exec_task
-            info = _ler_info(proximo) or info
-            if info.estado == EstadoPedido.EXECUTANDO:
-                info.estado = EstadoPedido.CONCLUIDO
+            exec_task = asyncio.create_task(_rodar_fn(pedido_real, _emitir_despachante))
+            with _trava:
+                _executores[proximo] = exec_task
+            try:
+                await exec_task
+                info = _ler_info(proximo) or info
+                if info.estado == EstadoPedido.EXECUTANDO:
+                    info.estado = EstadoPedido.CONCLUIDO
+                    _gravar_info(info)
+                _garantir_terminal(proximo, sessao_id, erro=info.erro, resposta=info.resposta)
+            except asyncio.CancelledError:
+                info = _ler_info(proximo) or info
+                if info.estado not in (EstadoPedido.CANCELADO,):
+                    info.estado = EstadoPedido.CANCELADO
+                if not info.erro:
+                    info.erro = "cancelado"
                 _gravar_info(info)
-        except asyncio.CancelledError:
-            info = _ler_info(proximo) or info
-            if info.estado not in (EstadoPedido.CANCELADO,):
-                info.estado = EstadoPedido.CANCELADO
-                _gravar_info(info)
+                _garantir_terminal(proximo, sessao_id, erro="cancelado")
+            finally:
+                with _trava:
+                    _executores.pop(proximo, None)
         except Exception as exc:
             info = _ler_info(proximo) or info
             info.estado = EstadoPedido.FALHOU
             info.erro = str(exc)[:200]
             _gravar_info(info)
-        finally:
-            with _trava:
-                _executores.pop(proximo, None)
+            _garantir_terminal(proximo, sessao_id, erro=info.erro)
 
 
 def recuperar_interrupcoes() -> int:
@@ -286,6 +348,8 @@ def limpar_tudo() -> None:
     _executores.clear()
     _corpo_por_id.clear()
     _lacos_ativos.clear()
+    _erros_emitidos.clear()
+    _fim_emitidos.clear()
     base = _base()
     if base.exists():
         for arq in base.glob("*.json"):

@@ -266,11 +266,18 @@ export class Ponte {
     let parado = false;
     let espera = 1000;
     let timer = 0;
+    let jaConectou = false;
     const abrir = () => {
       if (parado) return;
       const es = new EventSource(`${this.base}/events`);
       fonte = es;
-      es.onopen = () => { espera = 1000; };
+      es.onopen = () => {
+        espera = 1000;
+        if (jaConectou && typeof window !== "undefined") {
+          window.dispatchEvent(new Event("vard-sse-reconectou"));
+        }
+        jaConectou = true;
+      };
       es.onerror = () => {
         es.close();
         if (parado) return;

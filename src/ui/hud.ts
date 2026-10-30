@@ -5,7 +5,7 @@ import type { Estado } from "../fala/conversa";
 import { Revelador } from "./revelador";
 
 export const ROTULO_ESTADO: Record<Estado, string> = {
-  repouso: "pronto", ouvindo: "ouvindo", pensando: "pensando", falando: "falando",
+  repouso: "pronto", ouvindo: "ouvindo", transcrevendo: "transcrevendo", pensando: "pensando", falando: "falando",
   jogo: "MODO JOGO", erro: "atenção", fora: "núcleo offline",
 };
 

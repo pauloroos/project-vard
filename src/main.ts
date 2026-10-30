@@ -278,6 +278,8 @@ async function transcreverFala(wav: ArrayBuffer, sinal?: AbortSignal): Promise<s
   let pttSegurado = false;
   let cicloVoz = 0;
   let ocupado = false; // transcrevendo ou pensando: ignora novos eventos do VAD
+  // Controlador de aborto da transcrição em andamento; interromper cancela o pedido de STT.
+  let controladorTranscricao: AbortController | null = null;
   let pttPendente = false; // push-to-talk apertado durante a resposta: começa a capturar quando o ciclo terminar
   let estavaFalando = false;
 
@@ -505,7 +507,12 @@ async function transcreverFala(wav: ArrayBuffer, sinal?: AbortSignal): Promise<s
   void checarSaude();
   setInterval(() => { void checarSaude(); }, 5000);
 
-  interromperTudo = () => conversa.interromper();
+  interromperTudo = () => {
+    // FR-003/C3: botão e atalho também cancelam transcrição em andamento.
+    controladorTranscricao?.abort();
+    controladorTranscricao = null;
+    conversa.interromper();
+  };
 
   const guardarAmostras = (a: Float32Array) => {
     if (capturando) { pcm.push(a); return; }
@@ -534,16 +541,22 @@ async function transcreverFala(wav: ArrayBuffer, sinal?: AbortSignal): Promise<s
       return;
     }
     const ciclo = ++cicloVoz;
+    // AbortController por ciclo de voz: interromper cancela a transcrição em andamento.
+    const acTranscricao = new AbortController();
+    controladorTranscricao = acTranscricao;
     ocupado = true;
-    mostrarEstado("pensando", "", pushToTalk);
+    mostrarEstado("transcrevendo", "", pushToTalk);
     try {
       const wav = pcmParaWav(reamostrar(tudo, taxaAtual(), 16000), 16000);
       let texto: string;
       try {
-        texto = await transcreverFala(wav);
+        texto = await transcreverFala(wav, acTranscricao.signal);
       } catch (erro) {
+        // Interrupção via AbortSignal: sai silenciosamente, sem erro no HUD.
+        if (acTranscricao.signal.aborted) return;
         if (ciclo !== cicloVoz || estaMudo() || reuniaoAtiva) return;
         console.warn("transcrição falhou", erro);
+        mostrarEstado("erro", `transcricao: ${(erro as Error).message || String(erro)}`);
         if (!naoFalar) { try { await boca.tocar(await fixa(FALAS.erroOuvido)); } catch { /* sem voz, fica só no HUD */ } }
         return;
       }
@@ -565,6 +578,7 @@ async function transcreverFala(wav: ArrayBuffer, sinal?: AbortSignal): Promise<s
       console.error("ciclo de fala falhou", erro);
     } finally {
       if (ciclo !== cicloVoz) return;
+      controladorTranscricao = null;
       fimDaFala = 0;
       ocupado = false;
       detector.reset();
@@ -577,6 +591,9 @@ async function transcreverFala(wav: ArrayBuffer, sinal?: AbortSignal): Promise<s
   const controleVoz = new ControleCapturaVoz(cfg.interromper_ao_falar, {
     interromper: () => {
       ++cicloVoz;
+      // Cancela a transcrição em andamento antes de interromper a conversa.
+      controladorTranscricao?.abort();
+      controladorTranscricao = null;
       // A transicao de estado limpa a cauda da boca; nesta interrupcao o anel ja contem a nova fala.
       const preRoll = anel; const amostras = anelAmostras;
       conversa.interromper();
@@ -705,7 +722,12 @@ async function transcreverFala(wav: ArrayBuffer, sinal?: AbortSignal): Promise<s
     if (!ligado || estaMudo() || reuniaoAtiva) return; // reunião: o widget está mudo (sem tocar no mudo do usuário)
     // Apertar para falar corta a resposta em curso (mesmo caminho do botão Interromper) e depois captura.
     const respondendo = boca.falando || ocupado;
-    if (respondendo) conversa.interromper();
+    if (respondendo) {
+      // FR-003/C3: push-to-talk também cancela transcrição em andamento.
+      controladorTranscricao?.abort();
+      controladorTranscricao = null;
+      conversa.interromper();
+    }
     pttSegurado = true;
     if (ocupado) { pttPendente = true; return; } // encerrar() inicia a captura no finally
     if (!capturando) comecarCaptura(); // se o VAD já estava capturando, segue acumulando o mesmo PCM
@@ -716,7 +738,12 @@ async function transcreverFala(wav: ArrayBuffer, sinal?: AbortSignal): Promise<s
     pttPendente = false;
     if (capturando) void encerrar(true);
   });
-  await listen("parar", () => { conversa.interromper(); });
+  await listen("parar", () => {
+    // FR-003/C3: atalho global também cancela transcrição em andamento.
+    controladorTranscricao?.abort();
+    controladorTranscricao = null;
+    conversa.interromper();
+  });
   await listen("alternar-revelacao", () => invisibilidade.alternarRevelacao());
   await listen<unknown>("invisivel", (ev) => {
     if (typeof ev.payload !== "boolean") { console.warn("invisivel ignorado: payload inválido"); return; }
