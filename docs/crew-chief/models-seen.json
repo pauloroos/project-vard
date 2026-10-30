@@ -1,6 +1,48 @@
 {
   "last_check": "2026-10-30T04:47:01+00:00",
   "models": {
+    "antigravity:claude-opus-5-5-high": {
+      "cost": "free",
+      "first_seen": "2026-10-30T02:21:56+00:00",
+      "last_seen": "2026-10-30T02:22:13+00:00",
+      "present": true,
+      "trains": false
+    },
+    "antigravity:claude-opus-5-5-low": {
+      "cost": "free",
+      "first_seen": "2026-10-30T02:21:56+00:00",
+      "last_seen": "2026-10-30T02:22:13+00:00",
+      "present": true,
+      "trains": false
+    },
+    "antigravity:claude-opus-5-5-medium": {
+      "cost": "free",
+      "first_seen": "2026-10-30T02:21:56+00:00",
+      "last_seen": "2026-10-30T02:22:13+00:00",
+      "present": true,
+      "trains": false
+    },
+    "antigravity:claude-sonnet-5-5-high": {
+      "cost": "free",
+      "first_seen": "2026-10-30T02:21:56+00:00",
+      "last_seen": "2026-10-30T02:22:13+00:00",
+      "present": true,
+      "trains": false
+    },
+    "antigravity:claude-sonnet-5-5-low": {
+      "cost": "free",
+      "first_seen": "2026-10-30T02:21:56+00:00",
+      "last_seen": "2026-10-30T02:22:13+00:00",
+      "present": true,
+      "trains": false
+    },
+    "antigravity:claude-sonnet-5-5-medium": {
+      "cost": "free",
+      "first_seen": "2026-10-30T02:21:56+00:00",
+      "last_seen": "2026-10-30T02:22:13+00:00",
+      "present": true,
+      "trains": false
+    },
     "antigravity:gemini-3.8-flash-high": {
       "cost": "free",
       "first_seen": "2026-10-30T02:27:26+00:00",
@@ -19,6 +61,34 @@
       "cost": "free",
       "first_seen": "2026-10-30T02:27:26+00:00",
       "last_seen": "2026-10-30T04:47:01+00:00",
+      "present": true,
+      "trains": false
+    },
+    "antigravity:gemini-4-argon-high": {
+      "cost": "free",
+      "first_seen": "2026-10-30T02:21:56+00:00",
+      "last_seen": "2026-10-30T02:22:13+00:00",
+      "present": true,
+      "trains": false
+    },
+    "antigravity:gemini-4-argon-low": {
+      "cost": "free",
+      "first_seen": "2026-10-30T02:21:56+00:00",
+      "last_seen": "2026-10-30T02:22:13+00:00",
+      "present": true,
+      "trains": false
+    },
+    "antigravity:gemini-4-argon-medium": {
+      "cost": "free",
+      "first_seen": "2026-10-30T02:21:56+00:00",
+      "last_seen": "2026-10-30T02:22:13+00:00",
+      "present": true,
+      "trains": false
+    },
+    "antigravity:gpt-oss-120b-medium": {
+      "cost": "free",
+      "first_seen": "2026-10-30T02:21:56+00:00",
+      "last_seen": "2026-10-30T02:22:13+00:00",
       "present": true,
       "trains": false
     },
@@ -61,6 +131,27 @@
       "cost": "included",
       "first_seen": "2026-10-30T02:27:26+00:00",
       "last_seen": "2026-10-30T04:47:01+00:00",
+      "present": true,
+      "trains": false
+    },
+    "opencode:omni/cu/grok-4.7-high": {
+      "cost": "included",
+      "first_seen": "2026-10-30T02:21:56+00:00",
+      "last_seen": "2026-10-30T02:22:13+00:00",
+      "present": true,
+      "trains": false
+    },
+    "opencode:omni/cu/grok-4.7-medium": {
+      "cost": "included",
+      "first_seen": "2026-10-30T02:21:56+00:00",
+      "last_seen": "2026-10-30T02:22:13+00:00",
+      "present": true,
+      "trains": false
+    },
+    "opencode:omni/cu/grok-4.7-xhigh": {
+      "cost": "included",
+      "first_seen": "2026-10-30T02:21:56+00:00",
+      "last_seen": "2026-10-30T02:22:13+00:00",
       "present": true,
       "trains": false
     },

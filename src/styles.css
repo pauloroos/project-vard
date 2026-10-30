@@ -107,3 +107,20 @@ html, body { background: transparent; margin: 0; overflow: hidden; }
 #app.dock-cima #dica { top: calc(322px * var(--escala)); }
 #app.dock-cima #resposta { top: calc(337px * var(--escala)); }
 #app.dock-cima.capturando::after { top: calc(48px * var(--escala)); }
+
+/* Estado transcrevendo: microfone pulsante roxo, distinto de pensando laranja */
+#app[data-estado="transcrevendo"] #dica {
+  color: #a78bfa;
+  text-shadow: 0 0 6px #a78bfa, 0 0 12px #a78bfa;
+  animation: pulsar-transcrevendo 0.9s ease-in-out infinite alternate;
+}
+@keyframes pulsar-transcrevendo { from { opacity: 0.6; } to { opacity: 1; } }
+#app[data-estado="transcrevendo"] #dica::before {
+  content: "● ";
+  color: #a78bfa;
+  animation: piscar 0.6s infinite alternate;
+}
+#app[data-estado="pensando"] #dica::after {
+  content: " …";
+  letter-spacing: 0.2em;
+}

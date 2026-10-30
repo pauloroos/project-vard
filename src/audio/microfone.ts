@@ -138,3 +138,8 @@ export function definirMudo(mudo: boolean): void {
 }
 
 export function estaMudo(): boolean { return mudoPedido; }
+
+/** Indica se o microfone está atualmente aberto. */
+export function microfoneAberto(): boolean {
+  return atual !== null;
+}
