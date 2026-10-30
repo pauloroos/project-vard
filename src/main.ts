@@ -43,6 +43,13 @@ const PRE_ROLL_MS = 300;
 const PRAZO_FALA_FIXA_MS = 2000;
 const MIN_FALA_MS = 300;
 
+// Hooks apenas para teste `config-salva-dispositivos` exercer o handler real via evento Tauri.
+export let __ctxAudio: AudioContext | null = null;
+export function __setCtxAudio(ctx: AudioContext | null): void { __ctxAudio = ctx; }
+let _cfgRef: Config | null = null;
+export function __obterCfg(): Config | null { return _cfgRef; }
+export const __ultimoEstado: { estado: Estado | null; detalhe: string | null } = { estado: null, detalhe: null };
+
 /**
  * Reaplica no áudio vivo os dispositivos que o painel trocou: microfone para a próxima captura
  * e saída no AudioContext em uso. Qualquer falha vira estado de erro visível, nunca silêncio.
@@ -72,6 +79,7 @@ export async function aplicarDispositivosSalvos(
 
 window.addEventListener("DOMContentLoaded", async () => {
   const cfg = await carregarConfig(); // nunca lança: arquivo ruim cai para o padrão
+  _cfgRef = cfg;
   const canvas = document.getElementById("nucleo") as HTMLCanvasElement;
   const app = document.getElementById("app") as HTMLElement;
   const nucleo = new Nucleo(canvas, ladoDoTamanho(cfg));
@@ -152,7 +160,7 @@ window.addEventListener("DOMContentLoaded", async () => {
     if (salaAberta) void emitTo("sala", "sala:espelho", ev).catch(() => {});
   };
   // `revela`: false no "pensando" da transcrição sem push-to-talk; antes do nome ser dito o modo invisível não pode aparecer.
-  const mostrarEstado = (e: Estado, detalhe = "", revela = true) => { if (revela) invisibilidade.definirEstado(e); nucleo.setEstado(e); hud.setEstado(e, detalhe); paraSala({ tipo: "estado", estado: e, detalhe }); };
+  const mostrarEstado = (e: Estado, detalhe = "", revela = true) => { __ultimoEstado.estado = e; __ultimoEstado.detalhe = detalhe; if (revela) invisibilidade.definirEstado(e); nucleo.setEstado(e); hud.setEstado(e, detalhe); paraSala({ tipo: "estado", estado: e, detalhe }); };
   const mostrarOuvido = (t: string) => { hud.setOuvido(t); paraSala({ tipo: "ouvido", texto: t }); };
   const mostrarResposta = (t: string) => { hud.setResposta(t); paraSala({ tipo: "resposta", texto: t }); };
   hud.dica("clique para ligar o ouvido");
@@ -246,8 +254,7 @@ async function transcreverFala(wav: ArrayBuffer, sinal?: AbortSignal): Promise<s
 
   // A boca só existe depois que o microfone abre (usa o mesmo AudioContext).
   let bocaReal: Boca | null = null;
-  // O AudioContext em uso (o mesmo da boca), para reaplicar a saída escolhida no painel.
-  let contextoAudio: AudioContext | null = null;
+  // __ctxAudio é o AudioContext em uso (mesmo da boca), usado no config-salva para reaplicar saída.
   // "Não falar" ligado: nenhuma síntese nem áudio passa daqui (nem a fala fixa, nem a resposta, nem os avisos).
   let naoFalar = cfg.nao_falar;
   // Latência: do fim da fala do usuário até o começo da reprodução da resposta.
@@ -631,7 +638,7 @@ async function transcreverFala(wav: ArrayBuffer, sinal?: AbortSignal): Promise<s
     detector.fechar(); referenciasSaida.length = 0;
     largarAmostras?.(); largarAmostras = null;
     bocaReal?.parar(); bocaReal = null;
-    contextoAudio = null;
+    __ctxAudio = null;
     nucleo.setAnalisadores(null, null);
     analisadorEntrada = null;
     fecharMicrofone();
@@ -653,7 +660,7 @@ async function transcreverFala(wav: ArrayBuffer, sinal?: AbortSignal): Promise<s
       definirMudo(false);
       hud.setMudo(false);
       bocaReal = new Boca(mic.contexto);
-      contextoAudio = mic.contexto;
+      __ctxAudio = mic.contexto;
       void aplicarSaidaNoContexto(mic.contexto).catch(() => {});
       hud.setTaxa(mic.contexto.sampleRate);
       mostrarEstado(conversa.estado, conversa.detalhe);
@@ -702,7 +709,7 @@ async function transcreverFala(wav: ArrayBuffer, sinal?: AbortSignal): Promise<s
         const ctxDev = new AudioContext();
         void aplicarSaidaNoContexto(ctxDev).catch(() => {});
         bocaReal = new Boca(ctxDev);
-        contextoAudio = ctxDev;
+        __ctxAudio = ctxDev;
         nucleo.setAnalisadores(null, bocaReal.analisador);
       }
       ocupado = true;
@@ -860,7 +867,7 @@ async function transcreverFala(wav: ArrayBuffer, sinal?: AbortSignal): Promise<s
       restaurarPreferencia(recebido); // a saída e a próxima captura leem a preferência daqui
       cfg.microfone_id = recebido.microfone_id; cfg.microfone_rotulo = recebido.microfone_rotulo;
       cfg.saida_id = recebido.saida_id; cfg.saida_rotulo = recebido.saida_rotulo;
-      await aplicarDispositivosSalvos(cfg, mudouDispositivo, contextoAudio, mostrarEstado);
+      await aplicarDispositivosSalvos(cfg, mudouDispositivo, __ctxAudio, mostrarEstado);
     }
     if (mudou.includes("cerebro") || mudou.includes("usar_openjarvis")) oj = deveUsarOj() ? clienteOj : null;
     if (aplicarVozAoVivo(cfg, recebido)) { voz = criarFonteDeVoz(cfg); vozReserva = criarReserva(); }
