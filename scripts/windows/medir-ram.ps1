@@ -1,15 +1,15 @@
-<#
+﻿<#
 .SYNOPSIS
     Medidor de memória RAM por árvore de processos para o Project Vard no Windows.
 .DESCRIPTION
-    Script somente leitura que recebe um ou mais PIDs raiz (-Pid) e inspeciona
+    Script somente leitura que recebe um ou mais PIDs raiz (-PidsRaiz) e inspeciona
     a árvore completa de processos utilizando Win32_Process e Get-Process.
     Calcula Working Set (WorkingSet64) e Private Bytes (PrivateMemorySize64)
     por processo, agregando os totais por componente do Vard e total geral.
     Também suporta modo de autoteste puramente lógico (-AutoTeste) com dados
     sintéticos, executável sem tocar em processos reais.
 
-.PARAMETER Pid
+.PARAMETER PidsRaiz
     Um ou mais IDs de processo (PID) raiz da árvore a ser medida.
     Obrigatório, exceto quando -AutoTeste é especificado.
 
@@ -30,8 +30,9 @@
 
 .PARAMETER AutoTeste
     Executa a verificação lógica interna das rotinas puras (classificação,
-    agregação, herança de pai, detecção de PID encerrado, deduplicação de raiz
-    e cálculo de mediana/faixa) com dados fictícios e sai com código 0 ou 1.
+    agregação, herança de pai, detecção de PID encerrado, deduplicação de raiz,
+    cálculo de mediana/faixa e compatibilidade de início/reutilização de PID)
+    com dados fictícios e sai com código 0 ou 1.
 
 .NOTES
     Compatibilidade: Windows PowerShell 5.1+ e PowerShell Core (pwsh 7+).
@@ -84,7 +85,7 @@
 [CmdletBinding(DefaultParameterSetName = "Medicao")]
 param(
     [Parameter(ParameterSetName = "Medicao", Mandatory = $true, Position = 0)]
-    [int[]]$Pid,
+    [int[]]$PidsRaiz,
 
     [Parameter(ParameterSetName = "Medicao", Mandatory = $true, Position = 1)]
     [ValidateSet("repouso", "conversa", "sala", "configuracoes")]
@@ -174,6 +175,47 @@ function Classificar-Processo {
     return $null
 }
 
+function Testar-InicioCompativel {
+    <#
+    .SYNOPSIS
+        Verifica se o StartTime atual de um processo é compatível com o esperado.
+        Se qualquer um dos lados for nulo ou DateTime.MinValue (sem início conhecido),
+        considera compatível para medição normal. Se ambos forem válidos, tolera
+        diferença de até $ToleranciaSegundos (padrão: 5s); se exceder, indica
+        que o PID foi encerrado ou reutilizado pelo sistema operacional.
+    #>
+    param(
+        [object]$InicioEsperado,
+        [object]$InicioAtual,
+        [double]$ToleranciaSegundos = 5.0
+    )
+
+    if ($null -eq $InicioEsperado -or $null -eq $InicioAtual) {
+        return $true
+    }
+
+    # Trata caso de coerção para DateTime.MinValue
+    if ($InicioEsperado -is [datetime] -and $InicioEsperado -eq [datetime]::MinValue) {
+        return $true
+    }
+    if ($InicioAtual -is [datetime] -and $InicioAtual -eq [datetime]::MinValue) {
+        return $true
+    }
+
+    try {
+        $dtEsp = [datetime]$InicioEsperado
+        $dtAtu = [datetime]$InicioAtual
+        if ($dtEsp -eq [datetime]::MinValue -or $dtAtu -eq [datetime]::MinValue) {
+            return $true
+        }
+        $diferenca = [Math]::Abs(($dtAtu - $dtEsp).TotalSeconds)
+        return ($diferenca -le $ToleranciaSegundos)
+    } catch {
+        # Se não puder converter para datetime, assume compatível
+        return $true
+    }
+}
+
 function Calcular-Mediana {
     param([double[]]$Valores)
     if (-not $Valores -or $Valores.Count -eq 0) { return 0.0 }
@@ -205,25 +247,28 @@ function Resolver-ArvorePura {
     <#
     .SYNOPSIS
         Monta a árvore lógica de processos e propaga a classificação por herança.
+        Funciona com [object[]] (CimInstance, PSCustomObject ou Hashtable).
         Cada processo entra uma única vez.
     #>
     param(
         [int[]]$PidsRaiz,
-        [hashtable[]]$TabelaProcessos
+        [object[]]$TabelaProcessos
     )
 
     $tabelaPorPid = @{}
-    foreach ($p in $TabelaProcessos) {
-        $tabelaPorPid[[int]$p.ProcessId] = $p
-    }
-
     $filhosPorPai = @{}
+
     foreach ($p in $TabelaProcessos) {
+        if ($null -eq $p) { continue }
+        $pId = [int]$p.ProcessId
         $paiId = [int]$p.ParentProcessId
+
+        $tabelaPorPid[$pId] = $p
+
         if (-not $filhosPorPai.ContainsKey($paiId)) {
             $filhosPorPai[$paiId] = New-Object System.Collections.Generic.List[int]
         }
-        $filhosPorPai[$paiId].Add([int]$p.ProcessId)
+        $filhosPorPai[$paiId].Add($pId)
     }
 
     $vistos = New-Object 'System.Collections.Generic.HashSet[int]'
@@ -273,7 +318,8 @@ function Resolver-ArvorePura {
                     }
                     $fInfo = $tabelaPorPid[$filhoId]
                     $catPropria = Classificar-Processo -Nome $fInfo.Name -Comando $fInfo.CommandLine
-                    # Se pai for Cérebro (CLI), filhos herdam a categoria
+                    # Se pai for Cérebro (CLI), filhos herdam a categoria obrigatoriamente
+                    # conforme nucleo/vard/recursos.py (_categoria: debaixo de CLI tudo conta para ela)
                     $catFinal = if ($item.Categoria -eq "Cérebro (CLI)") {
                         "Cérebro (CLI)"
                     } elseif ($catPropria) {
@@ -411,6 +457,98 @@ function Consolidar-AmostraPura {
     }
 }
 
+function Gerar-ResumoSeries {
+    <#
+    .SYNOPSIS
+        Calcula estatísticas de resumo (mediana, mín e máx) para o total geral,
+        para cada componente e para cada processo ativo ao longo de todas as amostras.
+    #>
+    param(
+        [array]$AmostrasColetadas
+    )
+
+    if (-not $AmostrasColetadas -or $AmostrasColetadas.Count -eq 0) {
+        return [ordered]@{}
+    }
+
+    $seriesWsTotal = @()
+    $seriesPbTotal = @()
+    $seriesComp = @{}
+    $seriesProc = @{}
+
+    foreach ($amostra in $AmostrasColetadas) {
+        $seriesWsTotal += [double]$amostra.total.working_set_mb
+        $seriesPbTotal += [double]$amostra.total.private_mb
+
+        foreach ($c in $amostra.componentes) {
+            $cNome = [string]$c.nome
+            if (-not $seriesComp.ContainsKey($cNome)) {
+                $seriesComp[$cNome] = @{
+                    ws = New-Object System.Collections.Generic.List[double]
+                    pb = New-Object System.Collections.Generic.List[double]
+                }
+            }
+            $seriesComp[$cNome].ws.Add([double]$c.working_set_mb)
+            $seriesComp[$cNome].pb.Add([double]$c.private_mb)
+        }
+
+        foreach ($arv in $amostra.arvores) {
+            foreach ($p in $arv.processos) {
+                $pId = [int]$p.pid
+                if (-not $seriesProc.ContainsKey($pId)) {
+                    $seriesProc[$pId] = @{
+                        nome = [string]$p.nome
+                        componente = [string]$p.componente
+                        ws = New-Object System.Collections.Generic.List[double]
+                        pb = New-Object System.Collections.Generic.List[double]
+                    }
+                }
+                if (-not $p.encerrado) {
+                    $seriesProc[$pId].ws.Add([double]$p.working_set_mb)
+                    $seriesProc[$pId].pb.Add([double]$p.private_mb)
+                }
+            }
+        }
+    }
+
+    $resumoComp = [ordered]@{}
+    foreach ($cNome in $script:COMPONENTES_ORDEM) {
+        if ($seriesComp.ContainsKey($cNome)) {
+            $wsArr = @($seriesComp[$cNome].ws)
+            $pbArr = @($seriesComp[$cNome].pb)
+            $resumoComp[$cNome] = [ordered]@{
+                working_set_mb = Calcular-EstatisticaFaixa $wsArr
+                private_mb     = Calcular-EstatisticaFaixa $pbArr
+            }
+        }
+    }
+
+    $resumoProc = @()
+    foreach ($pId in ($seriesProc.Keys | Sort-Object)) {
+        $pInfo = $seriesProc[$pId]
+        $wsArr = @($pInfo.ws)
+        $pbArr = @($pInfo.pb)
+        if ($wsArr.Count -gt 0) {
+            $resumoProc += [ordered]@{
+                pid            = $pId
+                nome           = $pInfo.nome
+                componente     = $pInfo.componente
+                working_set_mb = Calcular-EstatisticaFaixa $wsArr
+                private_mb     = Calcular-EstatisticaFaixa $pbArr
+            }
+        }
+    }
+
+    return [ordered]@{
+        total = [ordered]@{
+            working_set_mb = Calcular-EstatisticaFaixa $seriesWsTotal
+            private_mb     = Calcular-EstatisticaFaixa $seriesPbTotal
+        }
+        componentes = $resumoComp
+        processos   = $resumoProc
+    }
+}
+
 # -----------------------------------------------------------------------------
 # Autoteste (--AutoTeste) com dados sintéticos
 # -----------------------------------------------------------------------------
@@ -441,22 +579,24 @@ function Executar-AutoTeste {
     if ($c7 -ne "Widget") { throw "Falha Teste 1: esperado Widget, obteve $c7" }
     Write-Host "  [OK] Classificação de executáveis e comandos observáveis."
 
-    # Teste 2: Herança de classificação pelo pai e árvore pura
-    # Cenário de processos sintéticos:
+    # Teste 2: Herança de classificação pelo pai e árvore pura com tipos reais (PSCustomObject / CimInstance)
+    # Cenário de processos sintéticos com tipos heterogêneos:
     # 100 (vard.exe) -> 200 (conhost.exe sem comando -> herda Widget)
     # 100 -> 300 (python uvicorn server:app -> Núcleo)
     # 300 -> 301 (python nucleo/mesa_mcp.py -> MCPs)
     # 300 -> 302 (python worker_auxiliar.py sem regra -> herda Núcleo do pai 300)
     # 100 -> 400 (claude.exe -> Cérebro (CLI))
     # 400 -> 401 (cmd.exe auxiliar -> herda Cérebro (CLI) porque está sob CLI)
+    # 401 -> 402 (node.exe subprocesso de cmd.exe sob CLI -> herda Cérebro (CLI))
     $tabelaFicticia = @(
-        @{ ProcessId = 100; ParentProcessId = 1;   Name = "vard.exe";           CommandLine = "vard.exe"; CreationDate = "20261102000000.000000+000" },
+        [PSCustomObject]@{ ProcessId = 100; ParentProcessId = 1;   Name = "vard.exe";           CommandLine = "vard.exe"; CreationDate = "20261102000000.000000+000" },
         @{ ProcessId = 200; ParentProcessId = 100; Name = "conhost.exe";        CommandLine = "conhost.exe"; CreationDate = "20261102000001.000000+000" },
-        @{ ProcessId = 300; ParentProcessId = 100; Name = "python.exe";         CommandLine = "uv run uvicorn server:app"; CreationDate = "20261102000002.000000+000" },
+        [PSCustomObject]@{ ProcessId = 300; ParentProcessId = 100; Name = "python.exe";         CommandLine = "uv run uvicorn server:app"; CreationDate = "20261102000002.000000+000" },
         @{ ProcessId = 301; ParentProcessId = 300; Name = "python.exe";         CommandLine = "python nucleo/mesa_mcp.py"; CreationDate = "20261102000003.000000+000" },
-        @{ ProcessId = 302; ParentProcessId = 300; Name = "python.exe";         CommandLine = "python worker_auxiliar.py"; CreationDate = "20261102000004.000000+000" },
+        [PSCustomObject]@{ ProcessId = 302; ParentProcessId = 300; Name = "python.exe";         CommandLine = "python worker_auxiliar.py"; CreationDate = "20261102000004.000000+000" },
         @{ ProcessId = 400; ParentProcessId = 100; Name = "claude.exe";         CommandLine = "claude.exe"; CreationDate = "20261102000005.000000+000" },
-        @{ ProcessId = 401; ParentProcessId = 400; Name = "cmd.exe";            CommandLine = "cmd.exe /c echo ok"; CreationDate = "20261102000006.000000+000" }
+        [PSCustomObject]@{ ProcessId = 401; ParentProcessId = 400; Name = "cmd.exe";            CommandLine = "cmd.exe /c echo ok"; CreationDate = "20261102000006.000000+000" },
+        [PSCustomObject]@{ ProcessId = 402; ParentProcessId = 401; Name = "node.exe";           CommandLine = "node worker.js"; CreationDate = "20261102000007.000000+000" }
     )
 
     $resArvore = Resolver-ArvorePura -PidsRaiz @(100) -TabelaProcessos $tabelaFicticia
@@ -472,13 +612,13 @@ function Executar-AutoTeste {
     if ($procMap[302] -ne "Núcleo") { throw "Falha Teste 2: PID 302 deveria herdar Núcleo do pai 300" }
     if ($procMap[400] -ne "Cérebro (CLI)") { throw "Falha Teste 2: PID 400 deveria ser Cérebro (CLI)" }
     if ($procMap[401] -ne "Cérebro (CLI)") { throw "Falha Teste 2: PID 401 debaixo de CLI deveria ser Cérebro (CLI)" }
-    Write-Host "  [OK] Herança de categoria e classificação da árvore de processos."
+    if ($procMap[402] -ne "Cérebro (CLI)") { throw "Falha Teste 2: PID 402 descendente de CLI deveria ser Cérebro (CLI)" }
+    Write-Host "  [OK] Herança de categoria (incluindo Cérebro) e suporte a objetos reais."
 
-    # Teste 3: Deduplicação de PID raiz repetido
+    # Teste 3: Deduplicação de PID raiz repetido ou sobreposto
     $resDup = Resolver-ArvorePura -PidsRaiz @(100, 100, 300) -TabelaProcessos $tabelaFicticia
-    # 300 já é filho de 100, portanto não deve duplicar nenhum processo
-    if ($resDup.total_processos_unicos -ne 7) {
-        throw "Falha Teste 3: esperado 7 processos únicos, obteve $($resDup.total_processos_unicos)"
+    if ($resDup.total_processos_unicos -ne 8) {
+        throw "Falha Teste 3: esperado 8 processos únicos, obteve $($resDup.total_processos_unicos)"
     }
     Write-Host "  [OK] Deduplicação de PIDs raiz repetidos ou sobrepostos."
 
@@ -492,23 +632,24 @@ function Executar-AutoTeste {
         302 = @{ working_set_mb = 0.0;   private_mb = 0.0;  encerrado = $true }
         400 = @{ working_set_mb = 80.0;  private_mb = 75.0; encerrado = $false }
         401 = @{ working_set_mb = 25.0;  private_mb = 20.0; encerrado = $false }
+        402 = @{ working_set_mb = 30.0;  private_mb = 25.0; encerrado = $false }
     }
 
     $consolidado = Consolidar-AmostraPura -Arvores $resArvore.arvores -MapaMemoria $mapaMem
 
-    # Processos ativos: 6 (100, 200, 300, 301, 400, 401; 302 ignorado do total)
-    if ($consolidado.total.processos -ne 6) {
-        throw "Falha Teste 4: esperado 6 processos ativos no total, obteve $($consolidado.total.processos)"
+    # Processos ativos: 7 (302 ignorado por estar encerrado)
+    if ($consolidado.total.processos -ne 7) {
+        throw "Falha Teste 4: esperado 7 processos ativos no total, obteve $($consolidado.total.processos)"
     }
 
-    # Working set esperado: 120 + 15 + 60 + 70 + 80 + 25 = 370.0 MB
-    if ([Math]::Abs($consolidado.total.working_set_mb - 370.0) -gt 0.01) {
-        throw "Falha Teste 4: WS total esperado 370.0 MB, obteve $($consolidado.total.working_set_mb)"
+    # Working set esperado: 120 + 15 + 60 + 70 + 80 + 25 + 30 = 400.0 MB
+    if ([Math]::Abs($consolidado.total.working_set_mb - 400.0) -gt 0.01) {
+        throw "Falha Teste 4: WS total esperado 400.0 MB, obteve $($consolidado.total.working_set_mb)"
     }
 
-    # Private bytes esperado: 90 + 10 + 50 + 65 + 75 + 20 = 310.0 MB
-    if ([Math]::Abs($consolidado.total.private_mb - 310.0) -gt 0.01) {
-        throw "Falha Teste 4: PB total esperado 310.0 MB, obteve $($consolidado.total.private_mb)"
+    # Private bytes esperado: 90 + 10 + 50 + 65 + 75 + 20 + 25 = 335.0 MB
+    if ([Math]::Abs($consolidado.total.private_mb - 335.0) -gt 0.01) {
+        throw "Falha Teste 4: PB total esperado 335.0 MB, obteve $($consolidado.total.private_mb)"
     }
 
     # Componente Widget: 100 (120/90) + 200 (15/10) = 135.0 WS / 100.0 PB
@@ -517,23 +658,80 @@ function Executar-AutoTeste {
         throw "Falha Teste 4: Widget incorreto: WS=$($compWidget.working_set_mb) PB=$($compWidget.private_mb)"
     }
 
-    # Componente MCPs: 301 (70/65)
-    $compMcp = $consolidado.componentes | Where-Object { $_.nome -eq "MCPs" }
-    if ($compMcp.working_set_mb -ne 70.0 -or $compMcp.private_mb -ne 65.0) {
-        throw "Falha Teste 4: MCPs incorreto"
+    # Componente Cérebro (CLI): 400 (80/75) + 401 (25/20) + 402 (30/25) = 135.0 WS / 120.0 PB
+    $compCerebro = $consolidado.componentes | Where-Object { $_.nome -eq "Cérebro (CLI)" }
+    if ($compCerebro.working_set_mb -ne 135.0 -or $compCerebro.private_mb -ne 120.0) {
+        throw "Falha Teste 4: Cérebro (CLI) incorreto: WS=$($compCerebro.working_set_mb) PB=$($compCerebro.private_mb)"
     }
     Write-Host "  [OK] Agregação de memória por componente e tratamento de PID encerrado."
 
     # Teste 5: Cálculo de mediana e faixa
     $estat = Calcular-EstatisticaFaixa @(105.0, 98.0, 100.0)
     if ($estat.mediana -ne 100.0 -or $estat.min -ne 98.0 -or $estat.max -ne 105.0) {
-        throw "Falha Teste 5: Estatística com 3 elementos incorreta: $($estat | ConvertTo-Json -Compress)"
+        throw "Falha Teste 5: Estatística com 3 elementos incorreta"
     }
     $estatPar = Calcular-EstatisticaFaixa @(10.0, 20.0, 30.0, 40.0)
     if ($estatPar.mediana -ne 25.0) {
         throw "Falha Teste 5: Mediana par incorreta"
     }
     Write-Host "  [OK] Estatísticas de dispersão (mediana, mínimo e máximo)."
+
+    # Teste 6: Compatibilidade de StartTime e reutilização de PID
+    $dtBase = [datetime]::Parse("2026-11-02T10:00:00Z").ToUniversalTime()
+    $dtPerto = $dtBase.AddSeconds(2)
+    $dtLonge = $dtBase.AddSeconds(30)
+    $dtMin = [datetime]::MinValue
+
+    # (a) Mesmo início: compatível
+    if (-not (Testar-InicioCompativel -InicioEsperado $dtBase -InicioAtual $dtBase)) {
+        throw "Falha Teste 6a: Mesmo início deveria ser compatível"
+    }
+    # (b) Variação dentro da tolerância (2s <= 5s): compatível
+    if (-not (Testar-InicioCompativel -InicioEsperado $dtBase -InicioAtual $dtPerto)) {
+        throw "Falha Teste 6b: Variação pequena deveria ser compatível"
+    }
+    # (c) Diferença grande (30s > 5s): PID reutilizado, deve ser incompatível ($false)
+    if (Testar-InicioCompativel -InicioEsperado $dtBase -InicioAtual $dtLonge) {
+        throw "Falha Teste 6c: Início diferente além da tolerância deveria ser incompatível (reutilizado)"
+    }
+    # (d) Sem início conhecido ($null ou DateTime.MinValue): deve medir normalmente ($true)
+    if (-not (Testar-InicioCompativel -InicioEsperado $null -InicioAtual $dtBase)) {
+        throw "Falha Teste 6d: Esperado $null deve ser compatível para medir"
+    }
+    if (-not (Testar-InicioCompativel -InicioEsperado $dtBase -InicioAtual $null)) {
+        throw "Falha Teste 6d: Atual $null deve ser compatível para medir"
+    }
+    if (-not (Testar-InicioCompativel -InicioEsperado $dtMin -InicioAtual $dtBase)) {
+        throw "Falha Teste 6d: DateTime.MinValue esperado deve ser compatível para medir (não encerrar)"
+    }
+    Write-Host "  [OK] Detecção de reutilização de PID e preservação de processos sem StartTime."
+
+    # Teste 7: Resumo estruturado com séries e agregação por componente e processo
+    $amostra1 = $consolidado
+    # Amostra 2 sintética com pequena variação
+    $mapaMem2 = @{
+        100 = @{ working_set_mb = 122.0; private_mb = 91.0; encerrado = $false }
+        200 = @{ working_set_mb = 16.0;  private_mb = 11.0; encerrado = $false }
+        300 = @{ working_set_mb = 62.0;  private_mb = 52.0; encerrado = $false }
+        301 = @{ working_set_mb = 72.0;  private_mb = 66.0; encerrado = $false }
+        302 = @{ working_set_mb = 0.0;   private_mb = 0.0;  encerrado = $true }
+        400 = @{ working_set_mb = 81.0;  private_mb = 76.0; encerrado = $false }
+        401 = @{ working_set_mb = 26.0;  private_mb = 21.0; encerrado = $false }
+        402 = @{ working_set_mb = 31.0;  private_mb = 26.0; encerrado = $false }
+    }
+    $amostra2 = Consolidar-AmostraPura -Arvores $resArvore.arvores -MapaMemoria $mapaMem2
+    $resumoMultiplo = Gerar-ResumoSeries -AmostrasColetadas @($amostra1, $amostra2)
+
+    if (-not $resumoMultiplo.total -or -not $resumoMultiplo.componentes -or -not $resumoMultiplo.processos) {
+        throw "Falha Teste 7: Resumo múltiplo incompleto"
+    }
+    if ($resumoMultiplo.processos.Count -ne 7) {
+        throw "Falha Teste 7: esperado resumo de 7 processos ativos, obteve $($resumoMultiplo.processos.Count)"
+    }
+    if ($resumoMultiplo.componentes["Widget"].working_set_mb.mediana -ne 136.5) {
+        throw "Falha Teste 7: Mediana do componente Widget esperada 136.5, obteve $($resumoMultiplo.componentes['Widget'].working_set_mb.mediana)"
+    }
+    Write-Host "  [OK] Estruturação do resumo estatístico por componente e processo."
 
     Write-Host "[AutoTeste] Todos os testes passaram com sucesso (código 0)."
     return $true
@@ -560,23 +758,35 @@ function Obter-ProcessosWmi {
 }
 
 function Ler-MemoriaProcessoWindows {
-    param([int]$ProcessId, [datetime]$InicioEsperado)
+    param(
+        [int]$ProcessId,
+        [object]$InicioEsperado
+    )
 
     $proc = Get-Process -Id $ProcessId -ErrorAction SilentlyContinue
     if (-not $proc) {
-        return @{ encerrado = $true; working_set_mb = 0.0; private_mb = 0.0 }
+        return @{ encerrado = $true; working_set_mb = 0.0; private_mb = 0.0; inicio_atual = $null }
+    }
+
+    $inicioAtual = $null
+    try {
+        $inicioAtual = $proc.StartTime
+    } catch {
+        $inicioAtual = $null
+    }
+
+    # Valida reutilização de PID através da função pura Testar-InicioCompativel
+    if (-not (Testar-InicioCompativel -InicioEsperado $InicioEsperado -InicioAtual $inicioAtual)) {
+        # PID reutilizado pelo sistema operacional
+        return @{ encerrado = $true; working_set_mb = 0.0; private_mb = 0.0; inicio_atual = $inicioAtual }
     }
 
     try {
-        if ($InicioEsperado -and [Math]::Abs(($proc.StartTime - $InicioEsperado).TotalSeconds) -gt 5) {
-            # PID reutilizado pelo sistema operacional
-            return @{ encerrado = $true; working_set_mb = 0.0; private_mb = 0.0 }
-        }
         $wsMb = [Math]::Round(($proc.WorkingSet64 / 1MB), 2)
         $pbMb = [Math]::Round(($proc.PrivateMemorySize64 / 1MB), 2)
-        return @{ encerrado = $false; working_set_mb = $wsMb; private_mb = $pbMb }
+        return @{ encerrado = $false; working_set_mb = $wsMb; private_mb = $pbMb; inicio_atual = $inicioAtual }
     } catch {
-        return @{ encerrado = $true; working_set_mb = 0.0; private_mb = 0.0 }
+        return @{ encerrado = $true; working_set_mb = 0.0; private_mb = 0.0; inicio_atual = $inicioAtual }
     }
 }
 
@@ -595,8 +805,8 @@ if ($AutoTeste) {
 }
 
 # Validações iniciais de parâmetros de medição
-if (-not $Pid -or $Pid.Count -eq 0) {
-    [Console]::Error.WriteLine("Erro: Informe ao menos um PID raiz em -Pid.")
+if (-not $PidsRaiz -or $PidsRaiz.Count -eq 0) {
+    [Console]::Error.WriteLine("Erro: Informe ao menos um PID raiz em -PidsRaiz.")
     exit 1
 }
 
@@ -610,33 +820,45 @@ if ($Amostras -lt 1) {
 }
 
 # 1. Conferência preliminar dos PIDs raiz
-$inicioRaizes = @{}
-foreach ($rId in $Pid) {
+foreach ($rId in $PidsRaiz) {
     $p = Get-Process -Id $rId -ErrorAction SilentlyContinue
     if (-not $p) {
         [Console]::Error.WriteLine("Erro: Processo raiz PID $rId não foi encontrado.")
         exit 1
     }
-    try {
-        $inicioRaizes[$rId] = $p.StartTime
-    } catch {
-        $inicioRaizes[$rId] = $null
-    }
 }
 
 # 2. Resolução da árvore hierárquica completa
 $processosWmi = Obter-ProcessosWmi
-$arvoreResolvida = Resolver-ArvorePura -PidsRaiz $Pid -TabelaProcessos $processosWmi
+$arvoreResolvida = Resolver-ArvorePura -PidsRaiz $PidsRaiz -TabelaProcessos $processosWmi
+
+# 3. Mapeia StartTime conhecido de TODOS os processos presentes na árvore resolvida
+$inicioProcessosConhecido = @{}
+foreach ($arv in $arvoreResolvida.arvores) {
+    foreach ($proc in $arv.processos) {
+        $pId = [int]$proc.Pid
+        if (-not $inicioProcessosConhecido.ContainsKey($pId)) {
+            $pObj = Get-Process -Id $pId -ErrorAction SilentlyContinue
+            if ($pObj) {
+                try {
+                    $inicioProcessosConhecido[$pId] = $pObj.StartTime
+                } catch {
+                    $inicioProcessosConhecido[$pId] = $null
+                }
+            } else {
+                $inicioProcessosConhecido[$pId] = $null
+            }
+        }
+    }
+}
 
 # Metadados do host
 $windowsVer = [System.Environment]::OSVersion.VersionString
 $arquitetura = if ([System.Environment]::Is64BitOperatingSystem) { "x64" } else { "x86" }
 $inicioUtc = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
 
-# 3. Coleta de amostras temporais
+# 4. Coleta de amostras temporais
 $amostrasColetadas = @()
-$seriesWsTotal = @()
-$seriesPbTotal = @()
 
 for ($i = 1; $i -le $Amostras; $i++) {
     $mapaAmostra = @{}
@@ -644,27 +866,28 @@ for ($i = 1; $i -le $Amostras; $i++) {
     foreach ($arv in $arvoreResolvida.arvores) {
         foreach ($proc in $arv.processos) {
             $pId = [int]$proc.Pid
-            $inicioEsp = if ($inicioRaizes.ContainsKey($pId)) { $inicioRaizes[$pId] } else { $null }
-            $mapaAmostra[$pId] = Ler-MemoriaProcessoWindows -ProcessId $pId -InicioEsperado $inicioEsp
+            $inicioEsp = if ($inicioProcessosConhecido.ContainsKey($pId)) { $inicioProcessosConhecido[$pId] } else { $null }
+            $leitura = Ler-MemoriaProcessoWindows -ProcessId $pId -InicioEsperado $inicioEsp
+            $mapaAmostra[$pId] = $leitura
+
+            # Se o processo foi lido pela primeira vez com StartTime válido, memoriza
+            if ($null -eq $inicioEsp -and $null -ne $leitura.inicio_atual) {
+                $inicioProcessosConhecido[$pId] = $leitura.inicio_atual
+            }
         }
     }
 
     $consolidadoAmostra = Consolidar-AmostraPura -Arvores $arvoreResolvida.arvores -MapaMemoria $mapaAmostra
     $amostrasColetadas += $consolidadoAmostra
-    $seriesWsTotal += [double]$consolidadoAmostra.total.working_set_mb
-    $seriesPbTotal += [double]$consolidadoAmostra.total.private_mb
 
     if ($i -lt $Amostras -and $IntervaloSeg -gt 0) {
-        Start-Sleep -Seconds $IntervaloSeg
+        Start-Sleep -Milliseconds ([int]([Math]::Round($IntervaloSeg * 1000)))
     }
 }
 
-# Usa a última amostra para a fotografia estrutural e as séries para o resumo estatístico
+# 5. Consolidação estatística de todas as amostras coletadas
 $ultimaAmostra = $amostrasColetadas[-1]
-$resumoEstatistico = [ordered]@{
-    working_set_mb = Calcular-EstatisticaFaixa $seriesWsTotal
-    private_mb     = Calcular-EstatisticaFaixa $seriesPbTotal
-}
+$resumoEstatistico = Gerar-ResumoSeries -AmostrasColetadas $amostrasColetadas
 
 $saidaFinal = [ordered]@{
     estado       = $Estado
@@ -673,7 +896,7 @@ $saidaFinal = [ordered]@{
         windows      = $windowsVer
         arquitetura  = $arquitetura
     }
-    amostras     = $Amostras
+    amostras     = $amostrasColetadas
     arvores      = $ultimaAmostra.arvores
     componentes  = $ultimaAmostra.componentes
     total        = $ultimaAmostra.total
@@ -709,8 +932,8 @@ if ($SaidaJson) {
 
     Write-Host "--- Total Geral e Dispersão de Amostras ---"
     Write-Host ("Processos ativos : {0}" -f $ultimaAmostra.total.processos)
-    Write-Host ("Working Set (MB) : Mediana={0:N2} (Min={1:N2}, Max={2:N2})" -f $resumoEstatistico.working_set_mb.mediana, $resumoEstatistico.working_set_mb.min, $resumoEstatistico.working_set_mb.max)
-    Write-Host ("Private Bytes(MB): Mediana={0:N2} (Min={1:N2}, Max={2:N2})" -f $resumoEstatistico.private_mb.mediana, $resumoEstatistico.private_mb.min, $resumoEstatistico.private_mb.max)
+    Write-Host ("Working Set (MB) : Mediana={0:N2} (Min={1:N2}, Max={2:N2})" -f $resumoEstatistico.total.working_set_mb.mediana, $resumoEstatistico.total.working_set_mb.min, $resumoEstatistico.total.working_set_mb.max)
+    Write-Host ("Private Bytes(MB): Mediana={0:N2} (Min={1:N2}, Max={2:N2})" -f $resumoEstatistico.total.private_mb.mediana, $resumoEstatistico.total.private_mb.min, $resumoEstatistico.total.private_mb.max)
     Write-Host "================================================================================"
 }
 
