@@ -223,8 +223,37 @@ async def _executar_pedido_cerebro(pedido, emitir):
     else:
         raise _ErroCerebro("cerebro_tipo_desconhecido")
 
+    usa_mcps = not tipo_provedor.startswith("cli-")
+    if usa_mcps:
+        await _ligar_mcps_locais()
     await cerebro_laco.executar_pedido(pedido, adaptador, emitir,
-        gerenciador_ferramentas=_ferramentas_cerebro if not tipo_provedor.startswith("cli-") else None)
+        gerenciador_ferramentas=_ferramentas_cerebro if usa_mcps else None)
+
+
+_mcps_locais: dict = {"ligados": False, "tarefa": None}
+
+
+async def _subir_mcps_locais(gerenciador) -> None:
+    from vard.segredos import servidores_locais
+    for nome, servidor in servidores_locais().items():
+        try:
+            await gerenciador.adicionar_stdio(nome, servidor["command"], servidor["args"])
+        except Exception:
+            log.warning("MCP local indisponível: %s", nome)
+    _mcps_locais["ligados"] = True
+
+
+async def _ligar_mcps_locais() -> None:
+    """Sobe os MCPs locais do cérebro uma vez por vida do núcleo.
+
+    Uma tarefa única e blindada: pedidos simultâneos esperam a mesma, e um pedido cancelado
+    não interrompe a subida no meio (o que deixaria processo órfão e subiria de novo).
+    """
+    if _mcps_locais["ligados"] or _ferramentas_cerebro is None:
+        return
+    if _mcps_locais["tarefa"] is None:
+        _mcps_locais["tarefa"] = asyncio.ensure_future(_subir_mcps_locais(_ferramentas_cerebro))
+    await asyncio.shield(_mcps_locais["tarefa"])
 
 
 # Poller do Telegram: um por núcleo, religado quando a configuração muda (tela, assistente, migração).
@@ -277,13 +306,10 @@ async def lifespan(app):
     """Ciclo de vida: inicia/para o TelegramPoller condicional (T11) e o SupervisorCli (T16)."""
     global _ferramentas_cerebro
     from vard.cerebro.ferramentas import GerenciadorFerramentas
-    from vard.segredos import servidores_locais
+    # Os MCPs locais sobem no primeiro pedido de provedor de API (_ligar_mcps_locais): a CLI abre os dela,
+    # e seis processos Python parados custavam ~430 MB.
     _ferramentas_cerebro = GerenciadorFerramentas()
-    for nome, servidor in servidores_locais().items():
-        try:
-            await _ferramentas_cerebro.adicionar_stdio(nome, servidor["command"], servidor["args"])
-        except Exception:
-            log.warning("MCP local indisponível: %s", nome)
+    _mcps_locais["ligados"], _mcps_locais["tarefa"] = False, None
     # Configura o executor do cérebro próprio (T16: ligação no despachante)
     cerebro_pedidos.configurar_executor(_executar_pedido_cerebro)
     # D2: encaminha eventos do cérebro próprio para o SSE /events
