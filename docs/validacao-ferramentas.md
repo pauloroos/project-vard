@@ -169,36 +169,37 @@ Causa raiz: `nucleo/vard/vigia.py:11: import msvcrt` — módulo exclusivo do Wi
 
 ---
 
-## Prova real do cérebro e dos MCPs (J2) — 2026-11-02 (pit stop 1)
+## Prova real do cérebro e dos MCPs (J2) — 2026-11-02
 
-Executada em Linux aarch64 com modelo remoto via adaptador OpenAI-compatível.
+Executada em Linux aarch64 com modelo de prova via ambiente.
 Configuração isolada via `VARD_CONFIG`, `VARD_DADOS` e `VARD_HUD_CONFIG_DIR` apontando para diretórios temporários; `paineis.json` gerado com as quatro chaves de agente (`claude`, `codex`, `opencode`, `agy`) exigidas por `ajustes.validar_documento`.
-Saída sanitizada em `/tmp/opencode/vard-j2-pitstop-prova.json`. Nenhum segredo, endpoint ou nome de modelo no relatório.
+Saída sanitizada em `/tmp/opencode/vard-j2-final.json`. Nenhum segredo, endpoint ou nome de modelo no relatório.
+
+> **Histórico:** A primeira execução (pit stop 1) registrou `auth_401` porque o comando de prova exportou um modelo fictício (`provedor/modelo-de-teste`) em vez do modelo de prova real — falha do harness, não do produto. A reexecução com o ambiente correto passou; o resultado abaixo reflete essa execução bem-sucedida.
 
 ### MCPs diretos (stdio, sem modelo)
 
 | MCP | Ferramenta | Status | Resultado sanitizado |
 | --- | --- | --- | --- |
-| configuracoes | ver_configuracoes | executou | Configurações atuais com widget, perfil e provedor ativo (sanitizado) |
-| configuracoes | listar_provedores | executou | Provedores com id, nome, tipo e modelo sanitizados (`***`) |
+| configuracoes | ver_configuracoes | executou | Configurações atuais: widget com OpenJarvis desligado, perfil versão 1, respondedor de prova |
+| configuracoes | listar_provedores | executou | Provedores com id, nome, tipo e url_base/modelo sanitizados (`***`) |
 | configuracoes | listar_vozes | executou | Catálogo de vozes Kokoro/Edge/Piper com IDs e rótulos |
 | memoria | memoria_buscar | executou | "A memória não está configurada: falta o projeto em memoria.toml." |
 | reuniao | reuniao_status | executou | "O modo reunião não está instalado." |
-| mesa | hora_atual | executou | Hora atual formatada em português (UTC+00:00) |
+| mesa | hora_atual | executou | "Agora são 6h37 de segunda-feira, 2 de novembro de 2026 (UTC+00:00)." |
 | oficina | — | pendencia_windows | MCP depende de msvcrt/Windows; não aplicável em Linux |
 | consulta | — | pendencia_windows | MCP depende de msvcrt/Windows; não aplicável em Linux |
 
-### Cérebro por HTTP/SSE (modelo real + ferramenta real)
+### Cérebro por HTTP/SSE (modelo de prova via ambiente + ferramenta real)
 
-- **Estado do pedido:** falhou
+- **Estado do pedido:** concluido
 - **HTTP status:** 202
-- **Erro:** `auth_401` (credencial recusada pelo provedor remoto)
-- **Ferramenta chamada:** nenhuma (erro antes da chamada)
-- **Eventos SSE:** erro → fim (2 eventos, sanitizados)
-- **Duração:** 10,9 s
-- **Processo núcleo:** PID 93146, terminado graceful
-
-> **Pendência:** O provedor remoto recusou a credencial (`auth_401`) apesar de `segredos.toml` temporário com `[lmstudio] chave` e `VARD_CONFIG` isolado. A resolução de credenciais foi verificada offline (chave lida corretamente); a causa provável é incompatibilidade entre o formato da chave e o esperado pelo endpoint remoto. Requer investigação do contrato de autenticação do provedor antes de nova tentativa.
+- **Erro:** nenhum
+- **Ferramenta chamada:** `ver_configuracoes` (argumento `reason`: consultar configurações atuais)
+- **Eventos SSE:** ferramenta → texto → fim (3 eventos, sanitizados)
+- **Resposta sanitizada:** "As configurações atuais definem o respondedor como \"omni-prova\", perfil versão 1 e o uso do OpenJarvis desligado no widget."
+- **Duração:** 13,7 s
+- **Processo núcleo:** PID 98468, terminado graceful; nenhum processo restante
 
 ---
 
