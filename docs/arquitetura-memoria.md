@@ -250,7 +250,7 @@ Esta seção consolida o baseline atual, a meta projetada para a versão 0.10.0,
 | **Arquitetura dos MCPs Locais** | **~420 MB** (6 processos CPython independentes consumindo ~70 MB cada um). | **≤ 420 MB** (em stdio isolado atual); estimativa futura **≤ 110 MB** (se consolidado em processo único). | **Diagnóstico**: O modelo stdio atual lança 6 processos Python paralelos via `nucleo/vard/segredos.py` (`servidores_locais`), onde cada processo carrega uma cópia completa do runtime Python, Pydantic, Starlette e SDK MCP (~70 MB).<br>**Oportunidade e Estimativa**: No Vard 0.9.4 leve, já houve a eliminação de `uv run` por chamada (poupando 15 subprocessos intermediários). Na versão 0.10.0, a unificação do despacho interno das ferramentas dentro do processo do núcleo ou a criação de um MCP consolidador de entrada única tem potencial estimado de poupar ~300 MB de RAM. Esta economia é uma estimativa/hipótese arquitetural que depende de coordenação técnica entre as ferramentas e o núcleo (já que o gerenciador de ferramentas e a integração externa com OpenJarvis utilizam o contrato stdio); não constitui promessa imediata. | Arquivos: `nucleo/vard/segredos.py`, `nucleo/server.py`, `nucleo/*_mcp.py`. Módulo de ferramentas e integração. |
 | **Núcleo Python (Uvicorn / FastAPI)** | **~55–60 MB** (medido: 54.7 MB repouso, 60.5 MB pós-rotas). | **≤ 60 MB** em repouso. | O Uvicorn opera de forma enxuta. Reduções adicionais incluem o descarregamento (*lazy import*) de módulos administrativos (`vard/telegram_migracao.py`, rotas de pacotes) somente quando acionados. | Arquivos: `nucleo/server.py`. Módulo do núcleo. |
 | **Janelas WebView2 (HUD / Config / Sala)** | **~150–250 MB** por janela ativa. | **Meta/hipótese**: redução estimada de 30% a 50% no consumo ocioso da Sala e Configurações (a ser validada por medição comparativa de Working Set no Windows antes e após a suspensão de loops visuais/canvas). | **Padrão implementado**: A janela de configurações e a sala já são destruídas ao fechar (`janelas.rs`), impedindo acúmulo de processos inativos. O HUD é escondido (`hide`) quando a sala abre.<br>**Oportunidade**: Interrupção de *requestAnimationFrame*, suspensão de timers CSS e parada de animações canvas quando a janela não estiver visível. | Arquivos: `src-tauri/src/janelas.rs`, `src/main.ts`, `src/sala-main.ts`, `src/sala/`. Módulo de interface. |
-| **Detecção de Voz (VAD Silero vs Energia)** | Silero VAD on-demand: **~130 MB** líquido adicionado. | **Zero impacto adicional** quando em modo Energia. | O carregamento sob demanda (`src/audio/vad-selecionavel.ts` e `src/audio/silero.ts`) só instancia o ONNX Runtime Web e aloca tensores caso o usuário selecione explicitamente "Silero (local)". Destruição do modelo (`destruir()`) ao trocar para energia libera o WebAssembly e o contexto de inferência. | Arquivos: `src/audio/silero.ts`, `src/audio/vad-selecionavel.ts`. Módulo de áudio e interface. |
+| **Detecção de Voz (VAD Silero vs Energia)** | Silero VAD on-demand: **~130 MB** líquido adicionado. Antes, reiniciar o detector sem `fechar()` deixava a sessão ONNX anterior viva até o fim do WebView. | **Zero impacto adicional** quando em modo Energia. Sessão anterior destruída no ponto de troca, coberta pelo teste `reiniciar sem fechar destrói a sessão Silero anterior exatamente uma vez` (`tests/vad-silero.test.ts`). A redução em MB no WebView2 não foi medida nesta máquina; a prova aqui é o teste de destruição, e a medição fica para o Windows. | O carregamento sob demanda (`src/audio/vad-selecionavel.ts` e `src/audio/silero.ts`) só instancia o ONNX Runtime Web e aloca tensores caso o usuário selecione explicitamente "Silero (local)". Destruição do modelo (`destruir()`) ao trocar para energia ou ao reiniciar o detector libera o WebAssembly e o contexto de inferência. | Arquivos: `src/audio/silero.ts`, `src/audio/vad-selecionavel.ts`. Módulo de áudio e interface. |
 | **Serviço de Voz Local** | Variável: Kokoro (~100 MB RAM) ou XTTS v2 (~3 GB RAM se carregado em processo compartilhado). | Kokoro: **WS ≤ 120 MB / PB ≤ 110 MB**.<br>XTTS v2: **WS ≤ 300 MB / PB ≤ 280 MB** (processo host isolado; tensores neurais pesados em VRAM dedicada de GPU). | Em `voz/vard_voz/servidor.py`, a descarga de XTTS dentro do mesmo processo não devolve RAM ao sistema operacional. O isolamento do motor Kokoro em ONNX CPU garante estabilidade e baixo consumo. | Arquivos: `voz/vard_voz/servidor.py`. Módulo de síntese de voz. |
 
 ---
@@ -345,23 +345,31 @@ Para reproduzir os testes empíricos documentados na seção 4, execute os segui
    ```
 
 3. **Comando manual para medição direta de um MCP (ex.: Mesa)**:
+   O bloco abaixo é autocontido: mantém o stdin do MCP aberto sem deixar `sleep` órfão,
+   mede após estabilização e encerra todo o grupo de processos ao final.
    ```bash
-   export VARD_DADOS="/tmp/vard-med-repro/dados"
-   export VARD_CONFIG="/tmp/vard-med-repro/config"
-   mkdir -p "$VARD_DADOS" "$VARD_CONFIG"
-   
-   # Inicia em grupo de processos isolado via setsid mantendo stdin aberto via pipe
-   sleep infinity | setsid ./nucleo/.venv/bin/python nucleo/mesa_mcp.py &
-   PID_MCP=$!
-   
-   # Aguarda 25 segundos de estabilização
-   sleep 25
-   
-   # Coleta RSS em MB
-   ps -o pid,pgid,rss,comm -p $PID_MCP | awk 'NR>1 {printf "PID %s (PGID %s, %s): %.1f MB\n", $1, $2, $4, $3/1024}'
-   
-   # Encerramento limpo de todo o grupo de processos
-   kill -TERM -- -$PID_MCP
+   ./nucleo/.venv/bin/python - << 'PY'
+   import os, signal, subprocess, time, psutil
+   env = os.environ.copy()
+   env["VARD_DADOS"] = "/tmp/vard-med-repro/dados"
+   env["VARD_CONFIG"] = "/tmp/vard-med-repro/config"
+   os.makedirs(env["VARD_DADOS"], exist_ok=True)
+   os.makedirs(env["VARD_CONFIG"], exist_ok=True)
+   proc = subprocess.Popen(
+       ["./nucleo/.venv/bin/python", "nucleo/mesa_mcp.py"],
+       env=env, stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+       preexec_fn=os.setsid,
+   )
+   time.sleep(25)
+   try:
+       rss = psutil.Process(proc.pid).memory_info().rss / (1024 * 1024)
+       print(f"PID {proc.pid}: {rss:.1f} MB")
+   finally:
+       try: os.killpg(proc.pid, signal.SIGTERM)
+       except ProcessLookupError: pass
+       proc.wait(timeout=5)
+       if proc.stdin: proc.stdin.close()
+   PY
    rm -rf /tmp/vard-med-repro
    ```
 
