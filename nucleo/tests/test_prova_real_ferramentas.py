@@ -284,14 +284,21 @@ class TestHarnessSimulado:
                     original_tools = server_mod._ferramentas_cerebro
                     server_mod._ferramentas_cerebro = fake_tools
 
+                    # Isola o teste do despachante global: salva _rodar_fn e configura None
+                    # para que admitir() não dispare processar_fila concorrente com a chamada
+                    # direta a _executar_pedido_cerebro. Sem isso, outro teste da suíte pode
+                    # ter configurado _rodar_fn e as chamadas ao provedor falso se misturam.
+                    rodar_fn_original = modulo_pedidos._rodar_fn
+                    modulo_pedidos.configurar_executor(None)
                     try:
                         modulo_pedidos.definir_pasta(dados_dir / "pedidos")
                         modulo_pedidos.limpar_tudo()
 
                         pedido_id = str(uuid.uuid4())
+                        sessao_id = "sess-j2-teste"
                         pedido = Pedido(
                             pedido_id=pedido_id,
-                            sessao_id="sess-j2-teste",
+                            sessao_id=sessao_id,
                             origem=Origem.PAINEL,
                             texto="quais são as configurações atuais?",
                         )
@@ -304,10 +311,21 @@ class TestHarnessSimulado:
                                 "dados": ev.dados or {},
                             })
 
-                        # Admite o pedido antes de executar (contrato do executor)
+                        # Admite o pedido (contrato do executor); com _rodar_fn=None o laço
+                        # marca o pedido como FALHOU rapidamente e termina sem tocar no provedor.
                         modulo_pedidos.admitir(pedido)
+                        tarefa_laco = modulo_pedidos._lacos_ativos.get(sessao_id)
+                        if tarefa_laco is not None:
+                            try:
+                                await asyncio.wait_for(tarefa_laco, timeout=2.0)
+                            except Exception:
+                                pass
+
+                        # Chama o executor diretamente; o laço já terminou e não há
+                        # concorrência com outro _rodar_fn da suíte.
                         await _executar_pedido_cerebro(pedido, emitir)
                     finally:
+                        modulo_pedidos.configurar_executor(rodar_fn_original)
                         server_mod._ferramentas_cerebro = original_tools
 
                     # Verifica estado final
