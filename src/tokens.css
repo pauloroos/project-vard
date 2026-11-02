@@ -1,0 +1,93 @@
+/**
+ * Project Vard — Tokens visuais compartilhados (0.10.0)
+ * Sistema visual futurista militar-limpo para HUD, Sala e Configurações.
+ * Fonte única de verdade para cores, vidro, espaçamento, raios, tipografia e movimento.
+ */
+
+:root {
+  /* Cores estruturais e semânticas */
+  --vard-fundo: #060b11;
+  --vard-fundo-elevado: #0a141e;
+  --vard-superficie: rgba(0, 240, 255, 0.05);
+  --vard-superficie-forte: rgba(0, 240, 255, 0.12);
+  --vard-borda: rgba(0, 240, 255, 0.22);
+  --vard-borda-forte: rgba(0, 240, 255, 0.45);
+  --vard-texto: #d8f4f8;
+  --vard-texto-fraco: #92c5d1;
+  --vard-ciano: #00f0ff;
+  --vard-ciano-forte: #3df3ff;
+  --vard-ambar: #ffb020;
+  --vard-violeta: #b59cff;
+  --vard-erro: #ff5555;
+
+  /* Vidro fosco e profundidade holográfica */
+  --vard-vidro: rgba(8, 18, 28, 0.75);
+  --vard-vidro-borda: rgba(0, 240, 255, 0.25);
+  --vard-brilho: #00a2ff;
+  --vard-sombra-1: 0 2px 8px rgba(0, 0, 0, 0.5);
+  --vard-sombra-2: 0 4px 16px rgba(0, 0, 0, 0.65), 0 0 1px rgba(0, 240, 255, 0.2);
+  --vard-sombra-3: 0 12px 36px rgba(0, 0, 0, 0.8), 0 0 2px rgba(0, 240, 255, 0.3);
+
+  /* Escala de espaçamento (4, 8, 12, 16, 24, 32px) */
+  --vard-esp-1: 4px;
+  --vard-esp-2: 8px;
+  --vard-esp-3: 12px;
+  --vard-esp-4: 16px;
+  --vard-esp-5: 24px;
+  --vard-esp-6: 32px;
+
+  /* Raios de arredondamento */
+  --vard-raio-1: 4px;
+  --vard-raio-2: 8px;
+  --vard-raio-3: 12px;
+  --vard-raio-4: 16px;
+  --vard-raio-pilula: 999px;
+
+  /* Tipografia técnica (pilhas locais, sem conexões externas) */
+  --vard-fonte-mono: ui-monospace, "Cascadia Mono", Consolas, monospace;
+  --vard-fonte-sans: "Segoe UI Variable", "Segoe UI", system-ui, sans-serif;
+  --vard-texto-1: 10px;
+  --vard-texto-2: 11px;
+  --vard-texto-3: 12px;
+  --vard-texto-4: 13px;
+  --vard-texto-5: 15px;
+  --vard-texto-6: 18px;
+
+  /* Transições e foco acessível */
+  --vard-duracao-1: 120ms;
+  --vard-duracao-2: 200ms;
+  --vard-foco: 0 0 0 2px var(--vard-fundo), 0 0 0 4px var(--vard-ciano);
+
+  /* Aliases de compatibilidade com código existente */
+  --ciano: var(--vard-ciano);
+  --brilho: var(--vard-brilho);
+  --fundo: var(--vard-fundo);
+  --fundo-menu: var(--vard-fundo-elevado);
+  --borda: var(--vard-borda);
+  --mono: var(--vard-fonte-mono);
+  --sans: var(--vard-fonte-sans);
+}
+
+/* Foco visível acessível em todos os controles interativos */
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+a:focus-visible,
+summary:focus-visible,
+[tabindex]:focus-visible {
+  outline: 2px solid var(--vard-ciano);
+  outline-offset: 2px;
+}
+
+/* Respeito à preferência de movimento reduzido */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

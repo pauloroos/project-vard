@@ -1,5 +1,4 @@
-/* Estilos da aba Perfil (0.9.4): chamada + perfis prontos em cards + campos do perfil.json.
-   Variáveis herdadas de configuracoes.css (--ciano, --fundo, --borda, --mono, --sans). */
+/* Estilos da aba Perfil (0.9.4): chamada + perfis prontos em cards + campos do perfil.json. */
 
 .perfil-chamada {
   display: grid;
@@ -11,28 +10,29 @@
   display: flex;
   flex-direction: column;
   gap: 4px;
-  font: 12px/1.4 var(--sans);
-  color: rgba(0, 240, 255, 0.85);
+  font: var(--vard-texto-3)/1.4 var(--vard-fonte-sans);
+  color: var(--vard-texto-fraco);
 }
 
 .perfil-chamada input {
-  background: rgba(0, 240, 255, 0.06);
-  border: 1px solid var(--borda);
-  border-radius: 4px;
-  color: var(--ciano);
-  font: 13px/1.5 var(--sans);
+  background: var(--vard-superficie);
+  border: 1px solid var(--vard-borda);
+  border-radius: var(--vard-raio-1);
+  color: var(--vard-texto);
+  font: var(--vard-texto-4)/1.5 var(--vard-fonte-sans);
   padding: 6px 10px;
 }
 
-.perfil-chamada input:focus {
-  outline: none;
-  border-color: var(--ciano);
-  box-shadow: 0 0 0 2px rgba(0, 240, 255, 0.15);
+.perfil-chamada input:focus-visible {
+  outline: 2px solid var(--vard-ciano);
+  outline-offset: 2px;
+  border-color: var(--vard-ciano);
+  box-shadow: 0 0 8px rgba(0, 240, 255, 0.2);
 }
 
 .perfil-prontos-titulo {
-  font: 600 13px/1.4 var(--sans);
-  color: var(--ciano);
+  font: 600 var(--vard-texto-4)/1.4 var(--vard-fonte-sans);
+  color: var(--vard-ciano);
   margin: 0 0 8px;
 }
 
@@ -44,34 +44,41 @@
 }
 
 .perfil-pronto-card {
-  background: rgba(0, 240, 255, 0.04);
-  border: 1px solid var(--borda);
-  border-radius: 6px;
+  background: var(--vard-vidro);
+  border: 1px solid var(--vard-vidro-borda);
+  border-radius: var(--vard-raio-2);
   padding: 10px 12px;
   cursor: pointer;
-  transition: border-color 0.15s, background 0.15s;
+  transition: border-color var(--vard-duracao-1), background var(--vard-duracao-1), box-shadow var(--vard-duracao-1);
   display: flex;
   flex-direction: column;
   gap: 4px;
+  box-shadow: var(--vard-sombra-1);
 }
 
-.perfil-pronto-card:hover,
+.perfil-pronto-card:hover {
+  border-color: var(--vard-ciano);
+  background: var(--vard-superficie-forte);
+  box-shadow: 0 0 8px var(--vard-brilho);
+}
+
 .perfil-pronto-card:focus-visible {
-  border-color: var(--ciano);
-  background: rgba(0, 240, 255, 0.08);
-  outline: none;
+  border-color: var(--vard-ciano);
+  background: var(--vard-superficie-forte);
+  outline: 2px solid var(--vard-ciano);
+  outline-offset: 2px;
 }
 
 .perfil-pronto-card h4 {
   margin: 0;
-  font: 600 12px/1.3 var(--sans);
-  color: var(--ciano);
+  font: 600 var(--vard-texto-3)/1.3 var(--vard-fonte-sans);
+  color: var(--vard-texto);
 }
 
 .perfil-pronto-card p {
   margin: 0;
-  font: 11px/1.4 var(--sans);
-  color: rgba(0, 240, 255, 0.7);
+  font: var(--vard-texto-2)/1.4 var(--vard-fonte-sans);
+  color: var(--vard-texto-fraco);
 }
 
 .perfil-campos {
@@ -83,26 +90,27 @@
   display: flex;
   flex-direction: column;
   gap: 4px;
-  font: 12px/1.4 var(--sans);
-  color: rgba(0, 240, 255, 0.85);
+  font: var(--vard-texto-3)/1.4 var(--vard-fonte-sans);
+  color: var(--vard-texto-fraco);
 }
 
 .perfil-campos input,
 .perfil-campos textarea {
-  background: rgba(0, 240, 255, 0.06);
-  border: 1px solid var(--borda);
-  border-radius: 4px;
-  color: var(--ciano);
-  font: 13px/1.5 var(--sans);
+  background: var(--vard-superficie);
+  border: 1px solid var(--vard-borda);
+  border-radius: var(--vard-raio-1);
+  color: var(--vard-texto);
+  font: var(--vard-texto-4)/1.5 var(--vard-fonte-sans);
   padding: 6px 10px;
   resize: vertical;
 }
 
-.perfil-campos input:focus,
-.perfil-campos textarea:focus {
-  outline: none;
-  border-color: var(--ciano);
-  box-shadow: 0 0 0 2px rgba(0, 240, 255, 0.15);
+.perfil-campos input:focus-visible,
+.perfil-campos textarea:focus-visible {
+  outline: 2px solid var(--vard-ciano);
+  outline-offset: 2px;
+  border-color: var(--vard-ciano);
+  box-shadow: 0 0 8px rgba(0, 240, 255, 0.2);
 }
 
 .perfil-acoes {
@@ -112,28 +120,30 @@
 }
 
 .perfil-acoes button {
-  background: rgba(0, 240, 255, 0.1);
-  border: 1px solid var(--borda);
-  border-radius: 4px;
-  color: var(--ciano);
-  font: 12px/1.4 var(--sans);
+  background: var(--vard-superficie);
+  border: 1px solid var(--vard-borda-forte);
+  border-radius: var(--vard-raio-1);
+  color: var(--vard-ciano);
+  font: var(--vard-texto-3)/1.4 var(--vard-fonte-sans);
   padding: 6px 14px;
   cursor: pointer;
+  transition: all var(--vard-duracao-1) ease;
 }
 
 .perfil-acoes button:hover {
-  background: rgba(0, 240, 255, 0.18);
-  border-color: var(--ciano);
+  background: var(--vard-superficie-forte);
+  border-color: var(--vard-ciano);
+  box-shadow: 0 0 8px var(--vard-brilho);
 }
 
 .perfil-previa-texto {
   margin-top: 12px;
   padding: 10px;
-  background: rgba(0, 240, 255, 0.04);
-  border: 1px solid var(--borda);
-  border-radius: 4px;
-  font: 12px/1.5 var(--mono);
-  color: rgba(0, 240, 255, 0.85);
+  background: var(--vard-superficie);
+  border: 1px solid var(--vard-borda);
+  border-radius: var(--vard-raio-1);
+  font: var(--vard-texto-3)/1.5 var(--vard-fonte-mono);
+  color: var(--vard-texto);
   white-space: pre-wrap;
   word-break: break-word;
   max-height: 200px;
@@ -144,19 +154,6 @@
 .modal-perfil-preview {
   display: grid;
   gap: 8px;
-  font: 12px/1.5 var(--sans);
-  color: rgba(0, 240, 255, 0.85);
-}
-
-.modal-perfil-preview dt {
-  font-weight: 600;
-  color: var(--ciano);
-  margin-top: 4px;
-}
-
-.modal-perfil-preview dd {
-  margin: 0 0 4px;
-  padding-left: 8px;
-  border-left: 2px solid var(--borda);
-  color: rgba(0, 240, 255, 0.75);
+  font: var(--vard-texto-3)/1.5 var(--vard-fonte-sans);
+  color: var(--vard-texto);
 }

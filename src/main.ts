@@ -146,10 +146,16 @@ window.addEventListener("DOMContentLoaded", async () => {
     void invoke("sincronizar_bandeja", { naoOuvir: cfg.nao_ouvir, naoFalar: cfg.nao_falar }).catch(() => {});
   };
   // Modo invisível: o widget só aparece durante a conversa (ou revelado à mão). Nunca esconde a janela: o WebView2 estrangularia os timers do VAD.
+  const atualizarVisibilidadeNucleo = () => {
+    const oculto = !invisibilidade.visivel() || document.visibilityState === "hidden";
+    nucleo.definirOculto(oculto);
+  };
   const invisibilidade = new Invisibilidade((visivel) => {
     hud.setInvisivel(!visivel);
+    atualizarVisibilidadeNucleo();
     void invoke("definir_invisivel", { ligado: !visivel || cfg.click_through }).catch(() => {});
   });
+  document.addEventListener("visibilitychange", atualizarVisibilidadeNucleo);
   invisibilidade.definirModo(cfg.invisivel);
   // Sala (tela cheia): espelho do que o widget mostra. O widget guarda o mesmo espelho para mandar o retrato quando ela abre.
   let salaAberta = false;

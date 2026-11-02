@@ -1,125 +1,340 @@
+@import "./tokens.css";
+
 :root {
-  --ciano: #00f0ff;
-  --brilho: #00a2ff;
-  --mono: "JetBrains Mono", Consolas, monospace;
   --escala: 1; /* lado do widget / 320 px; o main troca conforme o tamanho da config */
-  --cor-elementos: var(--ciano);
+  --cor-elementos: var(--vard-ciano);
   --opacidade-elementos: 1;
 }
-html, body { background: transparent; margin: 0; overflow: hidden; }
+
+html, body {
+  background: transparent;
+  margin: 0;
+  overflow: hidden;
+}
 
 /* Sem painel, sem vidro: só o vórtice flutuando. A janela inteira (inclusive a parte vazia) arrasta. */
 #app {
-  position: relative; width: calc(320px * var(--escala)); height: calc(360px * var(--escala)); background: transparent;
-  font-family: var(--mono); text-transform: uppercase; letter-spacing: 0.14em; color: var(--cor-elementos);
-  user-select: none; transition: opacity 0.3s ease;
+  position: relative;
+  width: calc(320px * var(--escala));
+  height: calc(360px * var(--escala));
+  background: transparent;
+  font-family: var(--vard-fonte-mono);
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--cor-elementos);
+  user-select: none;
+  transition: opacity var(--vard-duracao-2) ease;
 }
-#app.invisivel { opacity: 0; pointer-events: none; }
-#nucleo { position: absolute; left: 0; top: 0; display: block; cursor: move; }
+
+#app.invisivel {
+  opacity: 0;
+  pointer-events: none;
+}
+
+#nucleo {
+  position: absolute;
+  left: 0;
+  top: 0;
+  display: block;
+  cursor: move;
+}
 
 #dica {
-  position: absolute; left: calc(12px * var(--escala)); right: calc(12px * var(--escala)); top: calc(282px * var(--escala));
-  text-align: center; font-size: calc(8px * var(--escala)); line-height: calc(12px * var(--escala));
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-  text-shadow: 0 0 6px var(--cor-elementos), 0 0 12px var(--cor-elementos); opacity: calc(0.9 * var(--opacidade-elementos)); color: var(--cor-elementos);
+  position: absolute;
+  left: calc(12px * var(--escala));
+  right: calc(12px * var(--escala));
+  top: calc(282px * var(--escala));
+  text-align: center;
+  font-size: calc(8px * var(--escala));
+  line-height: calc(12px * var(--escala));
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-shadow: 0 0 6px var(--cor-elementos), 0 0 12px var(--cor-elementos);
+  opacity: calc(0.9 * var(--opacidade-elementos));
+  color: var(--cor-elementos);
 }
+
 #resposta {
-  position: absolute; left: calc(24px * var(--escala)); right: calc(24px * var(--escala)); top: calc(297px * var(--escala));
-  text-align: center; font-size: calc(7px * var(--escala)); line-height: calc(11px * var(--escala));
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-  letter-spacing: 0.08em; opacity: 0; transition: opacity 1.2s ease; color: var(--cor-elementos);
+  position: absolute;
+  left: calc(24px * var(--escala));
+  right: calc(24px * var(--escala));
+  top: calc(297px * var(--escala));
+  text-align: center;
+  font-size: calc(7px * var(--escala));
+  line-height: calc(11px * var(--escala));
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  letter-spacing: 0.08em;
+  opacity: 0;
+  transition: opacity 1.2s ease;
+  color: var(--cor-elementos);
 }
-#resposta.visivel { opacity: 0.6; transition: opacity 0.2s ease; }
+
+#resposta.visivel {
+  opacity: 0.75;
+  transition: opacity var(--vard-duracao-2) ease;
+}
 
 #botoes {
-  position: absolute; left: 0; right: 0; top: calc(322px * var(--escala)); display: flex; justify-content: center;
-  gap: calc(6px * var(--escala)); opacity: 0.4; transition: opacity 0.3s ease;
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: calc(322px * var(--escala));
+  display: flex;
+  justify-content: center;
+  gap: calc(6px * var(--escala));
+  opacity: 0.45;
+  transition: opacity var(--vard-duracao-2) ease;
 }
-#app:hover #botoes { opacity: 1; }
+
+#app:hover #botoes {
+  opacity: 1;
+}
+
 #botoes button {
-  width: calc(24px * var(--escala)); height: calc(24px * var(--escala)); padding: 0; display: flex; align-items: center;
-  justify-content: center; cursor: pointer; color: var(--cor-elementos);
+  width: calc(24px * var(--escala));
+  height: calc(24px * var(--escala));
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: var(--cor-elementos);
   background: color-mix(in srgb, var(--cor-elementos) 6%, transparent);
   border: 1px solid color-mix(in srgb, var(--cor-elementos) 35%, transparent);
-  border-radius: 50%; opacity: var(--opacidade-elementos);
+  border-radius: var(--vard-raio-pilula);
+  opacity: var(--opacidade-elementos);
+  backdrop-filter: blur(8px);
+  box-shadow: var(--vard-sombra-1);
+  transition: background var(--vard-duracao-1) ease, border-color var(--vard-duracao-1) ease, box-shadow var(--vard-duracao-1) ease;
 }
+
 #botoes button svg {
-  width: calc(13px * var(--escala)); height: calc(13px * var(--escala)); fill: none; stroke: currentColor;
-  stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; pointer-events: none;
+  width: calc(13px * var(--escala));
+  height: calc(13px * var(--escala));
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  pointer-events: none;
 }
-#botoes button:hover { background: color-mix(in srgb, var(--cor-elementos) 22%, transparent); box-shadow: 0 0 8px var(--brilho); }
-#botoes button[hidden] { display: none; }
+
+#botoes button:hover {
+  background: color-mix(in srgb, var(--cor-elementos) 22%, transparent);
+  box-shadow: 0 0 10px var(--vard-brilho), var(--vard-sombra-1);
+}
+
+#botoes button:focus-visible {
+  outline: 2px solid var(--cor-elementos);
+  outline-offset: 2px;
+}
+
+#botoes button[hidden] {
+  display: none;
+}
+
 #app.capturando::after {
-  content: ""; position: absolute; top: calc(8px * var(--escala)); right: calc(8px * var(--escala));
-  width: calc(10px * var(--escala)); height: calc(10px * var(--escala)); border-radius: 50%;
-  background: #ff3030; box-shadow: 0 0 10px #ff3030; animation: piscar 0.5s infinite alternate;
+  content: "";
+  position: absolute;
+  top: calc(8px * var(--escala));
+  right: calc(8px * var(--escala));
+  width: calc(10px * var(--escala));
+  height: calc(10px * var(--escala));
+  border-radius: var(--vard-raio-pilula);
+  background: var(--vard-erro);
+  box-shadow: 0 0 10px var(--vard-erro);
+  animation: piscar 0.5s infinite alternate;
 }
-@keyframes piscar { from { opacity: 0.4; } to { opacity: 1; } }
-#botoes button.ativo { color: #ff6060; border-color: rgba(255, 96, 96, 0.7); }
+
+@keyframes piscar {
+  from { opacity: 0.4; }
+  to { opacity: 1; }
+}
+
+#botoes button.ativo {
+  color: var(--vard-erro);
+  border-color: color-mix(in srgb, var(--vard-erro) 70%, transparent);
+}
 
 /* Bolinha de avisos não lidos (canto superior direito; some com zero, escondida no modo invisível junto com o resto). */
 #cont-avisos {
-  position: absolute; top: calc(8px * var(--escala)); right: calc(8px * var(--escala)); z-index: 5;
-  min-width: calc(14px * var(--escala)); height: calc(14px * var(--escala)); padding: 0 calc(3px * var(--escala));
-  margin: 0; display: flex; align-items: center; justify-content: center; cursor: pointer;
-  background: #ff6060; color: #fff; border: none; border-radius: calc(7px * var(--escala));
-  font-family: var(--mono); font-size: calc(8px * var(--escala)); line-height: 1; letter-spacing: 0; text-transform: none;
+  position: absolute;
+  top: calc(8px * var(--escala));
+  right: calc(8px * var(--escala));
+  z-index: 5;
+  min-width: calc(14px * var(--escala));
+  height: calc(14px * var(--escala));
+  padding: 0 calc(4px * var(--escala));
+  margin: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  background: var(--vard-erro);
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  border-radius: var(--vard-raio-pilula);
+  font-family: var(--vard-fonte-mono);
+  font-size: calc(8px * var(--escala));
+  line-height: 1;
+  letter-spacing: 0;
+  text-transform: none;
+  box-shadow: var(--vard-sombra-1);
 }
-#cont-avisos[hidden] { display: none; }
-#app.capturando #cont-avisos { right: calc(26px * var(--escala)); } /* o ponto vermelho de captura fica no mesmo canto */
 
-/* Chip "reunião" (canto superior esquerdo): ponto vermelho + rótulo, enquanto a reunião corre. Some no modo invisível junto com o resto. */
+#cont-avisos[hidden] {
+  display: none;
+}
+
+#app.capturando #cont-avisos {
+  right: calc(26px * var(--escala));
+}
+
+/* Chip "reunião" (canto superior esquerdo): ponto vermelho + rótulo, enquanto a reunião corre. */
 #chip-reuniao {
-  position: absolute; top: calc(8px * var(--escala)); left: calc(8px * var(--escala)); z-index: 5;
-  display: flex; align-items: center; gap: calc(4px * var(--escala));
-  height: calc(14px * var(--escala)); padding: 0 calc(5px * var(--escala));
-  background: rgba(255, 48, 48, 0.12); border: 1px solid rgba(255, 48, 48, 0.55); border-radius: calc(7px * var(--escala));
-  color: #ff8080; font-size: calc(8px * var(--escala)); line-height: 1; letter-spacing: 0.08em;
+  position: absolute;
+  top: calc(8px * var(--escala));
+  left: calc(8px * var(--escala));
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: calc(4px * var(--escala));
+  height: calc(14px * var(--escala));
+  padding: 0 calc(6px * var(--escala));
+  background: rgba(255, 48, 48, 0.14);
+  border: 1px solid rgba(255, 85, 85, 0.6);
+  border-radius: var(--vard-raio-pilula);
+  color: #ff9494;
+  font-size: calc(8px * var(--escala));
+  line-height: 1;
+  letter-spacing: 0.08em;
+  backdrop-filter: blur(6px);
+  box-shadow: var(--vard-sombra-1);
 }
-#chip-reuniao::before { content: ""; width: calc(5px * var(--escala)); height: calc(5px * var(--escala)); border-radius: 50%; background: #ff3030; box-shadow: 0 0 6px #ff3030; }
-#chip-reuniao[hidden] { display: none; }
 
-/* Bolinha de tarefas em andamento (canto superior esquerdo): girando suave + contador; some com zero. O mouse mostra a dica (title). */
+#chip-reuniao::before {
+  content: "";
+  width: calc(5px * var(--escala));
+  height: calc(5px * var(--escala));
+  border-radius: var(--vard-raio-pilula);
+  background: var(--vard-erro);
+  box-shadow: 0 0 6px var(--vard-erro);
+}
+
+#chip-reuniao[hidden] {
+  display: none;
+}
+
+/* Bolinha de tarefas em andamento (canto superior esquerdo): girando suave + contador; some com zero. */
 #andamento {
-  position: absolute; top: calc(8px * var(--escala)); left: calc(8px * var(--escala)); z-index: 5;
-  min-width: calc(14px * var(--escala)); height: calc(14px * var(--escala)); padding: 0 calc(4px * var(--escala));
-  display: flex; align-items: center; justify-content: center; gap: calc(3px * var(--escala));
-  background: rgba(0, 240, 255, 0.08); border: 1px solid rgba(0, 240, 255, 0.4); border-radius: calc(7px * var(--escala));
-  color: var(--cor-elementos); font-size: calc(8px * var(--escala)); line-height: 1; letter-spacing: 0; text-transform: none; opacity: var(--opacidade-elementos);
+  position: absolute;
+  top: calc(8px * var(--escala));
+  left: calc(8px * var(--escala));
+  z-index: 5;
+  min-width: calc(14px * var(--escala));
+  height: calc(14px * var(--escala));
+  padding: 0 calc(5px * var(--escala));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: calc(4px * var(--escala));
+  background: color-mix(in srgb, var(--cor-elementos) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--cor-elementos) 45%, transparent);
+  border-radius: var(--vard-raio-pilula);
+  color: var(--cor-elementos);
+  font-size: calc(8px * var(--escala));
+  line-height: 1;
+  letter-spacing: 0;
+  text-transform: none;
+  opacity: var(--opacidade-elementos);
+  backdrop-filter: blur(6px);
+  box-shadow: var(--vard-sombra-1);
 }
+
 #andamento::before {
-  content: ""; width: calc(6px * var(--escala)); height: calc(6px * var(--escala)); border-radius: 50%;
-  border: 1px solid var(--cor-elementos); border-top-color: transparent; animation: girar 1.2s linear infinite;
+  content: "";
+  width: calc(6px * var(--escala));
+  height: calc(6px * var(--escala));
+  border-radius: var(--vard-raio-pilula);
+  border: 1px solid var(--cor-elementos);
+  border-top-color: transparent;
+  animation: girar 1.2s linear infinite;
 }
-@keyframes girar { to { transform: rotate(360deg); } }
-#andamento[hidden] { display: none; }
-#chip-reuniao:not([hidden]) ~ #andamento { top: calc(26px * var(--escala)); } /* não embaixo do chip "reunião" */
 
-/* Compacto: só o holograma. O texto some; a barra aparece com o mouse em cima e some 2 s depois (Revelador). */
-#app.compacto #dica, #app.compacto #resposta { display: none; }
-#app.compacto #dica.avisando { display: block; }
-#app.compacto #botoes { opacity: 0; pointer-events: none; }
-#app.compacto.revelado #botoes { opacity: 1; pointer-events: auto; }
+@keyframes girar {
+  to { transform: rotate(360deg); }
+}
 
-/* Dock em cima: widget na metade de baixo do monitor; botões acima do holograma, textos abaixo. Mesma altura de janela. */
-#app.dock-cima #botoes { top: calc(6px * var(--escala)); }
-#app.dock-cima #nucleo { top: calc(40px * var(--escala)); }
-#app.dock-cima #dica { top: calc(322px * var(--escala)); }
-#app.dock-cima #resposta { top: calc(337px * var(--escala)); }
-#app.dock-cima.capturando::after { top: calc(48px * var(--escala)); }
+#andamento[hidden] {
+  display: none;
+}
+
+#chip-reuniao:not([hidden]) ~ #andamento {
+  top: calc(26px * var(--escala));
+}
+
+/* Compacto: só o holograma. O texto some; a barra aparece com o mouse em cima e some 2 s depois. */
+#app.compacto #dica,
+#app.compacto #resposta {
+  display: none;
+}
+
+#app.compacto #dica.avisando {
+  display: block;
+}
+
+#app.compacto #botoes {
+  opacity: 0;
+  pointer-events: none;
+}
+
+#app.compacto.revelado #botoes {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* Dock em cima: widget na metade de baixo do monitor; botões acima do holograma, textos abaixo. */
+#app.dock-cima #botoes {
+  top: calc(6px * var(--escala));
+}
+
+#app.dock-cima #nucleo {
+  top: calc(40px * var(--escala));
+}
+
+#app.dock-cima #dica {
+  top: calc(322px * var(--escala));
+}
+
+#app.dock-cima #resposta {
+  top: calc(337px * var(--escala));
+}
+
+#app.dock-cima.capturando::after {
+  top: calc(48px * var(--escala));
+}
 
 /* Estado transcrevendo: microfone pulsante roxo, distinto de pensando laranja */
 #app[data-estado="transcrevendo"] #dica {
-  color: #a78bfa;
-  text-shadow: 0 0 6px #a78bfa, 0 0 12px #a78bfa;
+  color: var(--vard-violeta);
+  text-shadow: 0 0 6px var(--vard-violeta), 0 0 12px var(--vard-violeta);
   animation: pulsar-transcrevendo 0.9s ease-in-out infinite alternate;
 }
-@keyframes pulsar-transcrevendo { from { opacity: 0.6; } to { opacity: 1; } }
+
+@keyframes pulsar-transcrevendo {
+  from { opacity: 0.6; }
+  to { opacity: 1; }
+}
+
 #app[data-estado="transcrevendo"] #dica::before {
   content: "● ";
-  color: #a78bfa;
+  color: var(--vard-violeta);
   animation: piscar 0.6s infinite alternate;
 }
+
 #app[data-estado="pensando"] #dica::after {
   content: " …";
   letter-spacing: 0.2em;

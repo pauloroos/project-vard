@@ -3,26 +3,27 @@
    A lista em cards e o modal vêm dos componentes compartilhados (src/ui/componentes.ts). */
 .mcp-titulo h2 {
   margin: 0 0 4px;
-  font: 13px/1.3 var(--mono);
+  font: var(--vard-texto-4)/1.3 var(--vard-fonte-mono);
   letter-spacing: 0.14em;
   text-transform: uppercase;
-  opacity: 0.9;
+  color: var(--vard-ciano);
 }
-.mcp-titulo p { margin: 0 0 12px; font-size: 12px; opacity: 0.75; }
+.mcp-titulo p { margin: 0 0 12px; font-size: var(--vard-texto-3); color: var(--vard-texto-fraco); }
 
 .mcp-aviso {
   margin: 0 0 12px;
-  padding: 10px 12px;
+  padding: 10px 14px;
   border: 1px solid rgba(255, 176, 32, 0.55);
-  border-radius: 8px;
+  border-radius: var(--vard-raio-2);
   background: rgba(255, 176, 32, 0.1);
   color: #ffd070;
-  font-size: 13px;
+  font-size: var(--vard-texto-4);
   line-height: 1.45;
+  box-shadow: var(--vard-sombra-1);
 }
 
-#msg-mcps { min-height: 20px; margin-top: 10px; opacity: 0.85; }
-#msg-mcps.ruim { color: #ffb020; opacity: 1; }
+#msg-mcps { min-height: 20px; margin-top: 10px; color: var(--vard-texto-fraco); font-size: var(--vard-texto-3); }
+#msg-mcps.ruim { color: var(--vard-ambar); }
 
 /* Modelos prontos (ex.: Windows-MCP) acima da lista. */
-.mcp-modelos { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 12px; }
+.mcp-modelos { display: flex; flex-wrap: wrap; gap: var(--vard-esp-2); margin: 0 0 12px; }

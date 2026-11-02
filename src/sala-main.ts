@@ -30,8 +30,30 @@ window.addEventListener("DOMContentLoaded", async () => {
     el("resposta").textContent = espelho.resposta;
   };
   const tique = () => { el("relogio").textContent = formatarHora(new Date()); };
-  tique();
-  setInterval(tique, 1000);
+  let relogioTimer: ReturnType<typeof setInterval> | null = null;
+  const iniciarRelogio = () => {
+    if (relogioTimer === null) {
+      tique();
+      relogioTimer = setInterval(tique, 1000);
+    }
+  };
+  const pararRelogio = () => {
+    if (relogioTimer !== null) {
+      clearInterval(relogioTimer);
+      relogioTimer = null;
+    }
+  };
+  const atualizarVisibilidadeSala = () => {
+    const oculto = document.visibilityState === "hidden";
+    nucleo.definirOculto(oculto);
+    if (oculto) {
+      pararRelogio();
+    } else {
+      iniciarRelogio();
+    }
+  };
+  document.addEventListener("visibilitychange", atualizarVisibilidadeSala);
+  iniciarRelogio();
   pintar();
 
   // Payloads vêm de outra janela: reduzir e EspectroRemoto.atualizar descartam o que não tem a forma esperada.

@@ -5,7 +5,45 @@ Este diretório contém as capturas de tela das interfaces do Vard (HUD, Sala e 
 ## Estrutura de diretórios
 
 - `antes/`: Capturas do estado visual de referência (antes do redesenho da versão 0.10.0), totalizando 14 imagens cobrindo o HUD, a Sala e todas as 12 seções de Configurações.
-- `depois/`: Diretório reservado para o registro visual após a conclusão das melhorias visuais.
+- `depois/`: Capturas do novo sistema visual implementado na versão 0.10.0, com tokens unificados, profundidade em vidro fosco, escala tipográfica consistente e acessibilidade completa.
+
+## Comparação antes e depois
+
+| Tela / Aba | Antes (`antes/`) | Depois (`depois/`) | Melhorias visuais aplicadas |
+| :--- | :--- | :--- | :--- |
+| **HUD** (`index.html`) | `hud.png` | `hud.png` | Chips de andamento, avisos e reunião aperfeiçoados com vidro fosco (`backdrop-filter`), raios pílula e sombras em camadas. Botões com foco visível `:focus-visible`, estados de repouso/hover aprimorados e tipografia técnica em mono com tracking refinado. |
+| **Sala** (`sala.html`) | `sala.png` | `sala.png` | Moldura HUD holográfica militar-futurista com cantos técnicos em tela cheia e telemetria discreta. Grade sutil e vinheta escura feitas com gradientes CSS puros. Relógio mono nítido, estado e textos em escala tipográfica balanceada. |
+| **Geral** | `configuracoes-geral.png` | `configuracoes-geral.png` | Seletor de cores em pílula com anéis de foco acessíveis, monitor de recursos com tabela de cabeçalho técnico e contrastes uniformizados. |
+| **Perfil** | `configuracoes-perfil.png` | `configuracoes-perfil.png` | Cards de perfil pronto em vidro fosco com sombras de profundidade, campos com foco `:focus-visible` de 2px e anel de realce sem remoção cega de outline. |
+| **Voz** | `configuracoes-voz.png` | `configuracoes-voz.png` | Grade de motores de voz em cartões de vidro com realce ativo e hover suave; avisos semânticos em âmbar legível. |
+| **Transcrição** | `configuracoes-transcricao.png` | `configuracoes-transcricao.png` | Controles de VAD, limiar e formato de instrução com tipografia técnica e inputs unificados nos tokens. |
+| **Atalhos** | `configuracoes-atalhos.png` | `configuracoes-atalhos.png` | Botões de captura de atalho em estilo técnico com realce em borda tracejada ao ouvir; linhas com espaçamento harmônico. |
+| **Oficina** | `configuracoes-oficina.png` | `configuracoes-oficina.png` | Barra de filtros e busca em vidro fosco, cards de habilidades com bordas sutis e fichas compactas. |
+| **Modelos** | `configuracoes-modelos.png` | `configuracoes-modelos.png` | Provedores e modelos com selos de status contrastantes (`selo-ativo`, `selo-reserva`) e foco visível. |
+| **Painéis & MCPs** | `configuracoes-paineis-mcps.png` | `configuracoes-paineis-mcps.png` | Tabelas transformadas em cartões de leitura horizontal com bordas de vidro fosco, etiquetas técnicas e botões de ação organizados. |
+| **Sistema** | `configuracoes-sistema.png` | `configuracoes-sistema.png` | Opções de inicialização, telemetria e diagnóstico com fieldsets em vidro e contraste de texto AA. |
+| **Reunião** | `configuracoes-reuniao.png` | `configuracoes-reuniao.png` | Bloco de reunião ativa com selo semântico e histórico de última reunião integrado ao tema escuro. |
+| **Avisos** | `configuracoes-avisos.png` | `configuracoes-avisos.png` | Lista de avisos em cards horizontais com horário mono, texto descritivo e destaque âmbar para novos alertas. |
+| **Diagnóstico** | `configuracoes-diagnostico.png` | `configuracoes-diagnostico.png` | Relatório de conectores, latência e saúde de processos com fundo escuro translúcido e texto legível. |
+
+## Tabela de contraste de cores (WCAG AA)
+
+Todos os pares de texto e elementos interativos do sistema de tokens (`src/tokens.css`) foram projetados e validados para atender ou superar os requisitos de conformidade WCAG 2.1 nível AA (mínimo de 4,5:1 para texto normal e 3,0:1 para elementos de destaque/gráficos) contra os fundos reais da interface:
+
+| Elemento / Token | Cor Hex | Fundo de Aplicação | Luminância Relativa | Razão de Contraste | Nível WCAG |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| `--vard-texto` | `#d8f4f8` | `--vard-fundo` (`#060b11`) | 0,8841 vs 0,0033 | **17,5 : 1** | AAA (Passa) |
+| `--vard-texto` | `#d8f4f8` | `--vard-fundo-elevado` (`#0a141e`) | 0,8841 vs 0,0055 | **16,8 : 1** | AAA (Passa) |
+| `--vard-texto-fraco` | `#92c5d1` | `--vard-fundo` (`#060b11`) | 0,5284 vs 0,0033 | **10,8 : 1** | AAA (Passa) |
+| `--vard-texto-fraco` | `#92c5d1` | `--vard-fundo-elevado` (`#0a141e`) | 0,5284 vs 0,0055 | **10,4 : 1** | AAA (Passa) |
+| `--vard-ciano` | `#00f0ff` | `--vard-fundo` (`#060b11`) | 0,6908 vs 0,0033 | **13,9 : 1** | AAA (Passa) |
+| `--vard-ciano` | `#00f0ff` | `--vard-fundo-elevado` (`#0a141e`) | 0,6908 vs 0,0055 | **13,3 : 1** | AAA (Passa) |
+| `--vard-ciano-forte` | `#3df3ff` | `--vard-fundo` (`#060b11`) | 0,8037 vs 0,0033 | **16,0 : 1** | AAA (Passa) |
+| `--vard-ambar` (pensando/aviso) | `#ffb020` | `--vard-fundo` (`#060b11`) | 0,5262 vs 0,0033 | **10,8 : 1** | AAA (Passa) |
+| `--vard-violeta` (transcrição) | `#b59cff` | `--vard-fundo` (`#060b11`) | 0,4079 vs 0,0033 | **8,6 : 1** | AAA (Passa) |
+| `--vard-erro` (erro/captura) | `#ff5555` | `--vard-fundo` (`#060b11`) | 0,2858 vs 0,0033 | **6,3 : 1** | AA (Passa) |
+
+*Nota: Em fundos com superfícies translúcidas (`--vard-superficie` ou `--vard-vidro`), o contraste efetivo de `--vard-texto` e `--vard-ciano` permanece acima de 12:1.*
 
 ## Como reproduzir as capturas
 
@@ -13,7 +51,7 @@ As capturas são geradas automaticamente por script Playwright em Python síncro
 
 ```bash
 PLAYWRIGHT_BROWSERS_PATH=<diretório de navegadores do Playwright> \
-python scripts/provas/capturas-visual.py
+python scripts/provas/capturas-visual.py --saida docs/capturas/depois
 ```
 
 ### Argumentos opcionais
