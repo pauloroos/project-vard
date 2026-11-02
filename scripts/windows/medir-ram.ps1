@@ -905,7 +905,8 @@ $saidaFinal = [ordered]@{
 
 if ($SaidaJson) {
     try {
-        $jsonTexto = $saidaFinal | ConvertTo-Json -Depth 6
+        # Profundidade 12 garante serializacao completa sem truncar amostras[] -> arvores[] -> processos[] nem resumo estatistico
+        $jsonTexto = $saidaFinal | ConvertTo-Json -Depth 12
         [System.IO.File]::WriteAllText($SaidaJson, $jsonTexto, [System.Text.Encoding]::UTF8)
         Write-Host "Resultado salvo em JSON com sucesso: $SaidaJson"
     } catch {
