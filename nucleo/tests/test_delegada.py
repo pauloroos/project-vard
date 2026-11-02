@@ -1010,7 +1010,10 @@ def test_servicos_citados_na_ordem_da_pergunta():
 
 
 def test_preparar_pasta_remove_juncao_sem_seguir_o_alvo(tmp_path):
+    import shutil
     import subprocess as sp
+    if shutil.which("cmd") is None:
+        pytest.skip("junção NTFS é exclusiva do Windows (cmd/mklink)")
     raiz = tmp_path / "delegada"
     p = delegada.preparar_pasta("claude", raiz=raiz)
     alvo = tmp_path / "alvo"
