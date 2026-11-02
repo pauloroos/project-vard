@@ -2,36 +2,43 @@
 .recursos-tabela {
   width: 100%;
   border-collapse: collapse;
-  font-size: 0.9em;
+  font-size: var(--vard-texto-3);
   margin-top: 0.5em;
 }
 .recursos-tabela th,
 .recursos-tabela td {
-  padding: 4px 8px;
-  border-bottom: 1px solid var(--borda, #ccc);
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--vard-borda);
   text-align: left;
 }
 .recursos-tabela th {
   font-weight: 600;
-  background: var(--fundo-secao, #f5f5f5);
+  background: var(--vard-superficie-forte);
+  color: var(--vard-ciano);
+  font-family: var(--vard-fonte-mono);
+  font-size: var(--vard-texto-2);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
 }
 .recursos-tabela .num {
   text-align: right;
   font-variant-numeric: tabular-nums;
+  font-family: var(--vard-fonte-mono);
 }
 .recursos-tabela .detalhe {
-  color: var(--texto-secundario, #666);
-  font-size: 0.85em;
+  color: var(--vard-texto-fraco);
+  font-size: var(--vard-texto-2);
 }
 .recursos-tabela tfoot td {
-  border-top: 2px solid var(--borda, #ccc);
+  border-top: 2px solid var(--vard-borda-forte);
   font-weight: 600;
+  color: var(--vard-texto);
 }
 .externos {
   margin-top: 0.5em;
-  font-size: 0.85em;
-  color: var(--texto-secundario, #666);
+  font-size: var(--vard-texto-2);
+  color: var(--vard-texto-fraco);
 }
 #cfg-recursos-campo p.aviso {
-  color: var(--aviso-cor, #b35900);
+  color: var(--vard-ambar);
 }

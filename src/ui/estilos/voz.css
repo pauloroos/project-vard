@@ -2,12 +2,12 @@
 .voz-motores {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(150px, 100%), 1fr));
-  gap: 8px;
+  gap: var(--vard-esp-2);
 }
 .voz-motor {
   min-width: 0;
   min-height: 94px;
-  padding: 10px;
+  padding: 10px 12px;
   display: flex;
   flex-direction: column;
   align-items: flex-start;
@@ -15,33 +15,45 @@
   gap: 5px;
   text-align: left;
   overflow-wrap: anywhere;
+  background: var(--vard-vidro);
+  border: 1px solid var(--vard-vidro-borda);
+  border-radius: var(--vard-raio-2);
+  box-shadow: var(--vard-sombra-1);
+  transition: all var(--vard-duracao-1) ease;
 }
-.voz-motor strong { font-size: 15px; }
-.voz-motor span { font-size: 11px; }
+.voz-motor:hover {
+  background: var(--vard-superficie-forte);
+  border-color: var(--vard-ciano);
+  box-shadow: 0 0 8px var(--vard-brilho);
+}
+.voz-motor strong { font-size: var(--vard-texto-5); color: var(--vard-texto); }
+.voz-motor span { font-size: var(--vard-texto-2); color: var(--vard-texto-fraco); }
 .voz-motor[aria-pressed="true"] {
-  background: rgba(0, 240, 255, 0.16);
-  border: 2px solid var(--ciano);
+  background: rgba(0, 240, 255, 0.18);
+  border: 2px solid var(--vard-ciano);
+  box-shadow: 0 0 10px var(--vard-brilho);
 }
-.voz-motor-ativo { font-weight: 700; }
+.voz-motor-ativo { font-weight: 700; color: var(--vard-ciano-forte) !important; }
 #cfg-voz, #cfg-voz fieldset, .voz-bloco-servico, .voz-select-linha { min-width: 0; }
 .voz-select-linha { flex-wrap: wrap; }
 .voz-select-linha select { flex-basis: 250px; max-width: 100%; }
 .voz-cadastrada-linha span { min-width: 0; overflow-wrap: anywhere; }
 .voz-aviso {
-  border: 1px solid var(--aviso, #ffb347);
-  background: rgba(255, 179, 71, 0.12);
-  color: inherit;
-  border-radius: 6px;
-  padding: 8px 10px;
+  border: 1px solid var(--vard-ambar);
+  background: rgba(255, 176, 32, 0.12);
+  color: #ffd070;
+  border-radius: var(--vard-raio-2);
+  padding: 10px 14px;
   margin: 0 0 10px;
+  box-shadow: var(--vard-sombra-1);
 }
 .voz-aviso p {
   margin: 4px 0 0;
-  opacity: 0.85;
+  color: var(--vard-texto);
 }
 .voz-select-linha {
   display: flex;
-  gap: 8px;
+  gap: var(--vard-esp-2);
   align-items: center;
 }
 .voz-select-linha select {
@@ -53,19 +65,22 @@
   flex-shrink: 0;
 }
 .voz-bloco-servico {
-  border: 1px solid var(--borda, rgba(255, 255, 255, 0.12));
-  border-radius: 6px;
-  padding: 10px 12px;
+  border: 1px solid var(--vard-vidro-borda);
+  border-radius: var(--vard-raio-2);
+  background: var(--vard-vidro);
+  box-shadow: var(--vard-sombra-1);
+  padding: 12px 14px;
   margin: 0 0 10px;
 }
 .voz-bloco-servico h4 {
   margin: 0 0 4px;
-  font-size: 0.95rem;
+  font-size: var(--vard-texto-5);
+  color: var(--vard-ciano);
 }
 .voz-servico-desc {
   margin: 0 0 8px;
-  font-size: 0.85rem;
-  opacity: 0.8;
+  font-size: var(--vard-texto-3);
+  color: var(--vard-texto-fraco);
 }
 .voz-btn-secundario {
   margin-top: 6px;
@@ -74,9 +89,9 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 8px;
-  padding: 6px 0;
-  border-bottom: 1px solid var(--borda, rgba(255, 255, 255, 0.08));
+  gap: var(--vard-esp-2);
+  padding: 8px 0;
+  border-bottom: 1px solid var(--vard-borda);
 }
 .voz-cadastrada-linha:last-child {
   border-bottom: none;

@@ -360,6 +360,14 @@ class GerenciadorFerramentas:
         if cliente is not None:
             cliente.desabilitar(nome)
 
+    def pids_mcp(self) -> Dict[str, int]:
+        """Retorna PID atual de cada MCP stdio registrado (API pública)."""
+        resultado: Dict[str, int] = {}
+        for identificador, proc in self._processos.items():
+            if proc is not None and proc.pid is not None:
+                resultado[identificador] = proc.pid
+        return resultado
+
     async def fechar_tudo(self) -> None:
         """Encerra todos os subprocessos e conexões."""
         for identificador, cliente in list(self._clientes.items()):

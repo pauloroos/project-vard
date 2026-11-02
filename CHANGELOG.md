@@ -5,6 +5,26 @@ Os instaladores de cada versão ficam na página de [releases](https://github.co
 
 ## [Unreleased]
 
+## [0.10.0] — 2026-11-02
+
+Revisão para uso diário: visual das três telas, medição de memória e núcleo no instalador.
+
+### Adicionado
+
+- Tokens visuais e atualização do widget, da sala e das configurações, com capturas fictícias antes e depois.
+- Medidor de RAM por árvore de processo no Windows. Ele não soma processo cuja identidade não pôde ser confirmada.
+- O build `npm run tauri:build` monta o núcleo Python e o inclui no instalador. O build padrão falha se o núcleo não for incluído.
+
+### Alterado
+
+- Animações CSS e o laço do núcleo pausam quando a janela não está visível. Com movimento reduzido, o núcleo não reage continuamente ao áudio.
+- A prova pública de ferramentas fica bloqueada até haver garantia de que credencial não chega ao disco. Testes usam apenas canário fictício.
+
+### Pendente
+
+- Prova do aplicativo instalado, WebView2, voz e hardware, numa sessão posterior no Windows.
+- A medição real de processos e o instalador gerado ainda não foram executados no Windows.
+
 ## [0.9.9] — 2026-10-30
 
 Versão só de correções: a conversa básica fica confiável antes de novas funcionalidades (issue #6).

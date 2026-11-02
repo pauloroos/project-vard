@@ -133,10 +133,23 @@ def trava(arq: Path | None = None, espera: float = 10.0):
                 except Exception:
                     pass
         else:
+            import fcntl
+            fim = time.monotonic() + espera
+            while True:
+                try:
+                    fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                    break
+                except OSError:
+                    if time.monotonic() >= fim:
+                        raise TimeoutError(f"{alvo.name} ocupado há mais de {espera:.0f} s") from None
+                    time.sleep(0.05)
             try:
                 yield
             finally:
-                pass
+                try:
+                    fcntl.flock(fd, fcntl.LOCK_UN)
+                except Exception:
+                    pass
     finally:
         os.close(fd)
 

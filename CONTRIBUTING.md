@@ -18,6 +18,14 @@ npx tsc -p tsconfig.test.json   # tipos dos testes
 cargo test --manifest-path src-tauri/Cargo.toml
 ```
 
+Os testes de isolamento do script de capturas não fazem parte de `npm test`. Com o pacote Python `playwright` instalado, execute sem abrir navegador ou servidor:
+
+```bash
+python -m unittest discover -s tests -p test_capturas_visual.py
+```
+
+The screenshot isolation tests are separate from `npm test`; install the Python `playwright` package and run the command above. They do not open a browser or server.
+
 `HUD_REAL=1 HUD_REAL_WAV=<um WAV dizendo "Preflight"> npm run test:real` (PowerShell: `$env:HUD_REAL=1; $env:HUD_REAL_WAV="<wav>"; npm run test:real`) prova contra um OpenJarvis de verdade (transcrever, perguntar, sintetizar).
 
 O front tem três páginas, declaradas em vite.config.ts: index.html (widget), configuracoes.html (painel) e sala.html (tela cheia).
@@ -55,7 +63,10 @@ Prove behaviour through tests, the harness and `window.__vardPergunta`, never by
 
 ## Instaladores / Installers
 
-`npm run tauri build` gera o `.msi` e o `.exe` (NSIS) em `src-tauri/target/release/bundle/`.
+`npm run tauri:build` gera o `.msi` e o `.exe` (NSIS) em `src-tauri/target/release/bundle/`.
+O build monta o núcleo com PowerShell e `uv` antes de gerar o instalador. Se `build/nucleo`, `build/requisitos.txt` ou `build/nucleo-medidas.json` já existir, ele falha sem alterá-los: examine o conteúdo e mova ou remova esses itens conscientemente antes de montar novamente. Um arquivo de cache com hash incorreto também é preservado. Links e junções nos caminhos de montagem e cache são recusados. `npm run tauri build`, sem o overlay, falha de propósito para não gerar um pacote sem núcleo.
+
+The build assembles the core with PowerShell and `uv` before creating the installer. If `build/nucleo`, `build/requisitos.txt` or `build/nucleo-medidas.json` already exists, it fails without changing them: inspect the contents and deliberately move or remove those items before rebuilding. A cache file with an incorrect hash is also preserved. Links and junctions in the assembly and cache paths are rejected. `npm run tauri build`, without the overlay, fails on purpose so it cannot produce a package without the core.
 
 ## Convenções / Conventions
 

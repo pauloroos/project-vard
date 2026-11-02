@@ -1,7 +1,7 @@
 {
   "name": "vard",
   "private": true,
-  "version": "0.9.9",
+  "version": "0.10.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -11,6 +11,7 @@
     "check": "tsc --noEmit && tsc -p tsconfig.test.json",
     "tauri": "tauri",
     "tauri:dev": "tauri dev --config src-tauri/tauri.dev.conf.json",
+    "tauri:build": "tauri build --config src-tauri/tauri.nucleo.conf.json",
     "harness": "node tests/harness/servidor-falso.mjs",
     "vazamento": "node scripts/busca-vazamento.mjs",
     "test:real": "vitest run tests/integracao-real.test.ts",
