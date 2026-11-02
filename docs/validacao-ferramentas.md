@@ -169,6 +169,39 @@ Causa raiz: `nucleo/vard/vigia.py:11: import msvcrt` — módulo exclusivo do Wi
 
 ---
 
+## Prova real do cérebro e dos MCPs (J2) — 2026-11-02
+
+Executada em Linux aarch64 com modelo remoto via adaptador OpenAI-compatível.
+Saída sanitizada em `/tmp/opencode/vard-j2-prova-resultado.json`. Nenhum segredo, endpoint ou nome de modelo no relatório.
+
+### MCPs diretos (stdio, sem modelo)
+
+| MCP | Ferramenta | Status | Resultado sanitizado |
+| --- | --- | --- | --- |
+| configuracoes | ver_configuracoes | executou | "A configuração deve ser um objeto" |
+| configuracoes | listar_provedores | executou | "A configuração deve ser um objeto" |
+| configuracoes | listar_vozes | executou | "A configuração deve ser um objeto" |
+| memoria | memoria_buscar | executou | "A memória não está configurada: falta o projeto em memoria.toml." |
+| reuniao | reuniao_status | executou | "O modo reunião não está instalado." |
+| mesa | hora_atual | executou | "Agora são 6h19 de segunda-feira, 2 de novembro de 2026 (UTC+00:00)." |
+| oficina | — | pendencia_windows | MCP depende de msvcrt/Windows; não aplicável em Linux |
+| consulta | — | pendencia_windows | MCP depende de msvcrt/Windows; não aplicável em Linux |
+
+### Cérebro por HTTP/SSE (modelo real + ferramenta real)
+
+- **Estado do pedido:** concluido
+- **HTTP status:** 202
+- **Ferramenta chamada:** ver_configuracoes
+- **Argumentos sanitizados:** `{'reason': 'Consultar as configurações atuais do sistema a pedido do usuário.'}`
+- **Resposta sanitizada:** "Não foi possível carregar as configurações do sistema no momento, pois o serviço retornou que a configuração deve ser um objeto. Se precisar de algum ajuste específico, me avise."
+- **Eventos SSE:** ferramenta → texto → fim (3 eventos, todos sanitizados)
+- **Duração:** 19,9 s
+- **Processo núcleo:** PID 84131, terminado graceful
+
+> **Nota:** A resposta indica que a configuração temporária da prova não tinha estrutura completa para `ver_configuracoes`; o importante é que o laço cérebro→ferramenta→resposta funcionou end-to-end com modelo real.
+
+---
+
 ## Pendências de prova real
 
 | Item | Motivo da pendência |
