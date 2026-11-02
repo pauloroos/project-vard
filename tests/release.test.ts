@@ -79,6 +79,30 @@ describe("release T2 — runtime Python 3.13 embutido", () => {
     expect(recursos[chave!]).toBe("nucleo/");
   });
 
+  it("tauri.conf.json principal declara build/nucleo como recurso do bundle", () => {
+    const conf = JSON.parse(
+      readFileSync(join(RAIZ, "src-tauri", "tauri.conf.json"), "utf8"),
+    );
+    expect(conf.bundle?.resources).toBeDefined();
+    const recursos = conf.bundle.resources as Record<string, unknown>;
+    const chave = Object.keys(recursos).find((k) => k.includes("build/nucleo"));
+    expect(chave).toBeDefined();
+    expect(recursos[chave!]).toBe("nucleo/");
+  });
+
+  it("beforeBuildCommand encadeia montagem do nucleo antes do front com &&", () => {
+    const conf = JSON.parse(
+      readFileSync(join(RAIZ, "src-tauri", "tauri.conf.json"), "utf8"),
+    );
+    const cmd: string = conf.build?.beforeBuildCommand ?? "";
+    expect(cmd).toContain("&&");
+    const partes = cmd.split("&&").map((s: string) => s.trim());
+    const idxNucleo = partes.findIndex((p: string) => p.includes("nucleo"));
+    const idxBuild = partes.findIndex((p: string) => /(^|\s)(npm run build|vite build)($|\s)/.test(p));
+    expect(idxNucleo).toBeGreaterThanOrEqual(0);
+    expect(idxBuild).toBeGreaterThan(idxNucleo);
+  });
+
   it("package.json tem script nucleo que chama montar-nucleo.ps1", () => {
     const pkg = JSON.parse(readFileSync(join(RAIZ, "package.json"), "utf8"));
     expect(pkg.scripts?.nucleo).toContain("montar-nucleo.ps1");
