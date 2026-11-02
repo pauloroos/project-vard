@@ -25,7 +25,7 @@ Projeto independente, sem vínculo com o OpenJarvis nem com a Stanford.
 - A barra de botões abre do lado oposto à borda do monitor (em cima quando o widget está embaixo).
 - Aba Atualização: consulta a release mais nova no GitHub só quando você pede e instala dali.
 - Botão **Texto** abre a interface gráfica de texto do OpenJarvis.
-- Opcional: a ponte do Vard (setup privado do autor, `rdl-vard`) dá olhos na tela e modo jogo. Sem ela tudo funciona igual, veja [docs/ponte-do-vard.md](docs/ponte-do-vard.md).
+- Opcional: a ponte do Vard (setup privado do autor, `rdl-vard`) dá olhos na tela. O modo jogo está indisponível nesta versão. Veja [docs/ponte-do-vard.md](docs/ponte-do-vard.md).
 - Opcional: uma voz própria (qualquer motor de voz local que siga um contrato simples) fala a resposta frase a frase, começando antes de a resposta inteira estar sintetizada. Veja [Voz própria](#voz-própria-opcional).
 
 ## Requisitos
@@ -137,10 +137,10 @@ A aba **Modelos** lista os modelos que o OpenJarvis expõe (`/v1/models`) e deix
 
 ## Sistema
 
-A aba **Sistema** mostra o estado da ponte do Vard (o setup privado do autor: modo, se o OpenJarvis está no ar e quantas tarefas estão abertas), atualizado a cada 5 s enquanto a aba está aberta. Tem três botões:
+A aba **Sistema** mostra o estado da ponte do Vard (o setup privado do autor: modo, se o OpenJarvis está no ar e quantas tarefas estão abertas), atualizado a cada 5 s enquanto a aba está aberta. Os controles incluem:
 
 - **Ligar** sobe tudo (modelo, núcleo, ponte e voz).
-- **Modo jogo** desliga tudo e tira os modelos da GPU.
+- **Modo jogo** está indisponível nesta versão; não desliga serviços nem descarrega modelos.
 - **Desligar** derruba também o servidor de modelos e a bandeja. A ponte cai junto, então a aba passa a mostrar "fora" até você ligar de novo por outro meio.
 
 Cada botão pede confirmação: o primeiro clique troca o rótulo para **Confirmar**, e um segundo clique em até 5 s executa (outro botão ou o prazo estourado recomeçam). Os botões que não fazem sentido no modo atual ficam desligados, e sem a ponte nenhum funciona; o resto do Vard segue igual. O endereço da ponte (`ponte_url`) fica na aba Geral.

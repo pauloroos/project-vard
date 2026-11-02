@@ -27,7 +27,7 @@ Independent project, not affiliated with OpenJarvis or Stanford.
 - The button bar opens on the side away from the monitor edge (above when the widget is at the bottom).
 - Atualização tab: checks GitHub for the newest release only when you ask and installs from there.
 - The **Text** button opens OpenJarvis' graphical text interface.
-- Optional: the Vard bridge (the author's private setup, `rdl-vard`) adds screen vision and a game mode. Everything works without it, see [docs/ponte-do-vard.md](docs/ponte-do-vard.md) (Portuguese).
+- Optional: the Vard bridge (the author's private setup, `rdl-vard`) adds screen vision. Game mode is unavailable in this version. See [docs/ponte-do-vard.md](docs/ponte-do-vard.md) (Portuguese).
 - Optional: your own voice service (any local TTS engine that follows a small contract) speaks the answer sentence by sentence, starting before the whole answer is synthesized. See [Own voice](#own-voice-optional).
 
 ## Requirements
@@ -139,10 +139,10 @@ The **Modelos** tab lists the models OpenJarvis exposes (`/v1/models`) and lets 
 
 ## System
 
-The **Sistema** tab shows the state of the Vard bridge (the author's private setup: mode, whether OpenJarvis is up and how many tasks are open), refreshed every 5 s while the tab is open. It has three buttons:
+The **Sistema** tab shows the state of the Vard bridge (the author's private setup: mode, whether OpenJarvis is up and how many tasks are open), refreshed every 5 s while the tab is open. Its controls include:
 
 - **Ligar** brings everything up (model, core, bridge and voice).
-- **Modo jogo** turns everything off and takes the models off the GPU.
+- **Modo jogo** is unavailable in this version; it does not stop services or unload models.
 - **Desligar** also stops the model server and the tray. The bridge goes down with it, so the tab shows "fora" until you start it again some other way.
 
 Each button asks for confirmation: the first click changes the label to **Confirmar** and a second click within 5 s runs it (another button, or the timeout, starts over). Buttons that make no sense in the current mode are disabled, and without the bridge none of them works; the rest of Vard is unaffected. The bridge address (`ponte_url`) is in the Geral tab.
