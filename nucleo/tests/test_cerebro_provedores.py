@@ -56,6 +56,20 @@ class TestOpenAICompat:
         assert any(e.tipo == "fim" for e in eventos)
 
     @respx.mock
+    async def test_ferramentas_do_laco_saem_no_formato_openai(self):
+        """O laço manda {name, description, parameters}; o LM Studio recusa (400) sem type=function."""
+        body = _sse_linhas({"choices": [{"delta": {"content": "ok"}}]})
+        rota = respx.post("http://lm.local/v1/chat/completions").mock(
+            return_value=Response(200, text=body, headers={"content-type": "text/event-stream"})
+        )
+        do_laco = {"name": "abrir", "description": "abre", "parameters": {"type": "object", "properties": {}}}
+        ja_openai = {"type": "function", "function": {"name": "ver", "parameters": {"type": "object"}}}
+        adp = AdaptadorOpenAICompat("http://lm.local", "qwen2")
+        await _coletar(adp.inferir([{"role": "user", "content": "oi"}], ferramentas=[do_laco, ja_openai]))
+        enviadas = json.loads(rota.calls.last.request.content)["tools"]
+        assert enviadas == [{"type": "function", "function": do_laco}, ja_openai]
+
+    @respx.mock
     @pytest.mark.parametrize("base", ["http://lm.local/v1", "http://lm.local/v1/", "http://lm.local"])
     async def test_url_base_com_ou_sem_v1(self, base):
         """D9: quem cadastra a URL no padrão OpenAI/LM Studio (".../v1") não pode cair em /v1/v1."""
