@@ -37,6 +37,25 @@ describe("detector selecionável", () => {
     const t = montar("silero"); const p = t.d.iniciar(t.mic); t.d.fechar(); await p;
     expect(t.destruir).toHaveBeenCalledOnce();
   });
+  it("reiniciar sem fechar destrói a sessão Silero anterior exatamente uma vez", async () => {
+    const destruir1 = vi.fn(async () => {});
+    const destruir2 = vi.fn(async () => {});
+    let chamada = 0;
+    const carregar: CarregarSilero = vi.fn(async (_mic, _cb) => {
+      chamada++;
+      return { destruir: chamada === 1 ? destruir1 : destruir2 };
+    });
+    const mic = { contexto: { sampleRate: 48000 }, stream: {} } as unknown as Parameters<DetectorSelecionavel["iniciar"]>[0];
+    const d = new DetectorSelecionavel("silero", { limiar: .02, inicioMs: 150, fimMs: 100, tetoMs: 12000 }, carregar);
+    await d.iniciar(mic);
+    expect(destruir1).not.toHaveBeenCalled();
+    await d.iniciar(mic);
+    expect(destruir1).toHaveBeenCalledOnce();
+    expect(destruir2).not.toHaveBeenCalled();
+    d.fechar();
+    expect(destruir2).toHaveBeenCalledOnce();
+    expect(destruir1).toHaveBeenCalledOnce();
+  });
 });
 const livre = { falando: false, ocupado: false, mudo: false, reuniao: false, jogo: false, ptt: false, eco: false };
 describe("interrupção por voz", () => {
