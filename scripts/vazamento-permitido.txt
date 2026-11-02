@@ -37,3 +37,4 @@ nucleo/vard/sanitizacao.py	C:\Users\
 nucleo/vard/sanitizacao.py	C:\
 tests/montagem-segura.test.ts	C:/
 tests/montagem-segura.test.ts	C:\
+tests/montagem-segura.test.ts	D:/

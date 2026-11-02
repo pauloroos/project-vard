@@ -164,11 +164,29 @@ class TestPrazosInjetados:
         )
         banner = "Aviso: atualização disponível" if dialeto == "claude" else "aviso: nova versão"
         canal = CanalFalso([banner, nao_util], bloquear_no_fim=True)
-        adaptador = AdaptadorCli(canal, dialeto, prazo_evento=0.05, prazo_turno=60.0)
+        adaptador = AdaptadorCli(canal, dialeto, prazo_evento=0.05, prazo_turno=60.0, prazo_partida=0.05)
         with pytest.raises(ErroProvedor) as excinfo:
             await _coletar(adaptador, _mensagens(("user", "ola")))
         assert excinfo.value.codigo == "cli_tempo"
         assert "evento" in excinfo.value.detalhe
+
+    @pytest.mark.parametrize("dialeto", ["claude", "agy"])
+    async def test_partida_lenta_espera_o_prazo_de_partida(self, dialeto: str) -> None:
+        # CLI recém-aberta (MCPs subindo) demora mais que prazo_evento para o primeiro evento útil.
+        linhas = _linhas_fixture(f"{dialeto}_texto.ndjson") + _linhas_fixture(f"{dialeto}_fim.ndjson")
+        canal = CanalFalso([(linhas[0], 0.15), *linhas[1:]])
+        adaptador = AdaptadorCli(canal, dialeto, prazo_evento=0.05, prazo_turno=60.0, prazo_partida=2.0)
+        eventos = await _coletar(adaptador, _mensagens(("user", "ola")))
+        assert eventos[-1].tipo == "fim"
+
+    @pytest.mark.parametrize("dialeto", ["claude", "agy"])
+    async def test_silencio_depois_do_primeiro_evento_usa_prazo_evento(self, dialeto: str) -> None:
+        init = _linhas_fixture(f"{dialeto}_inicio.ndjson")[0]
+        canal = CanalFalso([init], bloquear_no_fim=True)
+        adaptador = AdaptadorCli(canal, dialeto, prazo_evento=0.05, prazo_turno=60.0, prazo_partida=30.0)
+        with pytest.raises(ErroProvedor) as excinfo:
+            await asyncio.wait_for(_coletar(adaptador, _mensagens(("user", "ola"))), timeout=5.0)
+        assert excinfo.value.codigo == "cli_tempo"
 
     @pytest.mark.parametrize("dialeto", ["claude", "agy"])
     async def test_turno_acima_de_180s_vira_cli_tempo(self, dialeto: str) -> None:

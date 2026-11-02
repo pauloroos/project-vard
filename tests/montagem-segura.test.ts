@@ -230,6 +230,23 @@ describe.skipIf(!disponivel)("montagem sem caminho da máquina (direct_url.json)
     }
   });
 
+  it("varredura falha com caminho da máquina escapado em JSON e passa com URL e caminho do CI de terceiros", () => {
+    const raiz = mkdtempSync(join(tmpdir(), "vard-json-"));
+    try {
+      const { scripts, distInfo } = montarRaizFicticia(raiz);
+      writeFileSync(join(distInfo, "RECORD"), "vard/__init__.py,sha256=abc,10\n");
+      // SBOM de terceiro: URL e caminho do CI dele não são desta máquina.
+      writeFileSync(join(distInfo, "sbom.json"), JSON.stringify({ ref: "path+file:///D:/a/pkg/wheelhouse", url: "https://exemplo.org/x" }));
+      expect(verificar(scripts).status).toBe(0);
+      writeFileSync(join(distInfo, "sbom.json"), JSON.stringify({ caminho: join(raiz, "build", "nucleo", "python") }));
+      const resultado = verificar(scripts);
+      expect(resultado.status).not.toBe(0);
+      expect(resultado.stderr + resultado.stdout).toMatch(/caminho absoluto/i);
+    } finally {
+      rmSync(raiz, { recursive: true, force: true });
+    }
+  });
+
   it("varredura passa com metadata sintética limpa (sem download)", () => {
     const raiz = mkdtempSync(join(tmpdir(), "vard-limpo-"));
     try {

@@ -95,15 +95,19 @@ function Validar-Caminhos-No-Destino([string]$dest) {
             continue
         }
         if ($null -eq $texto) { continue }
-        if ($texto -match 'file:///') {
-            throw "Caminho de maquina no destino: file:/// em $($f.FullName)."
+        # .pth (sys.path) e RECORD so levam caminho relativo. Nos demais, SBOMs e licencas de terceiros trazem
+        # URLs (https://) e caminhos do CI deles (file:///<unidade>/a/...); so o caminho desta maquina e recusado.
+        $estrito = $f.Extension -eq '.pth' -or $f.Name -eq 'RECORD'
+        if ($estrito -and ($texto -match 'file:///' -or $texto -match '(?<![A-Za-z0-9])[A-Za-z]:[\\/]')) {
+            throw "Caminho de maquina no destino: caminho absoluto em $($f.FullName)."
         }
-        if ($texto -match '[A-Za-z]:[\\/]') {
-            throw "Caminho de maquina no destino: letra de unidade em $($f.FullName)."
-        }
-        foreach ($m in @($dest, $raiz)) {
-            if ($m -and $texto.IndexOf($m, [System.StringComparison]::OrdinalIgnoreCase) -ge 0) {
-                throw "Caminho absoluto da maquina no destino: '$m' em $($f.FullName)."
+        foreach ($m in @($dest, $raiz, $env:USERPROFILE)) {
+            if (-not $m) { continue }
+            # bruto, com / e escapado em JSON/TOML (\\)
+            foreach ($forma in @($m, $m.Replace('\', '/'), $m.Replace('\', '\\'))) {
+                if ($texto.IndexOf($forma, [System.StringComparison]::OrdinalIgnoreCase) -ge 0) {
+                    throw "Caminho absoluto da maquina no destino: '$m' em $($f.FullName)."
+                }
             }
         }
     }

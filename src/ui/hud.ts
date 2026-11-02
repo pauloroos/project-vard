@@ -58,6 +58,7 @@ export class Hud {
   private botaoModo: HTMLButtonElement;
   private botaoTopoEl: HTMLButtonElement;
   private botaoTela: HTMLButtonElement;
+  private botaoTexto: HTMLButtonElement;
   private contadorAvisos: HTMLButtonElement;
   private chipReuniao: HTMLElement;
   private indicadorAndamento: HTMLElement;
@@ -70,6 +71,9 @@ export class Hud {
     this.botaoNaoFalar = this.botao(ICONES.fala, "", () => this.acoes.aoNaoFalar?.());
     this.botaoTela = this.botao(ICONES.tela, "Olhar a tela", () => this.acoes.aoTela?.());
     this.botaoTela.hidden = true; // aparece quando a ponte responde
+    // A conversa em texto é a interface web do OpenJarvis (gui_url): sem ele, o botão abriria página morta.
+    this.botaoTexto = this.botao(ICONES.texto, "Abrir a conversa em texto", () => { void invoke("abrir_url", { url: cfg.gui_url }); });
+    this.setTextoDisponivel(cfg.cerebro === "openjarvis" || cfg.usar_openjarvis);
     this.botaoModo = this.botao(ICONES.compacto, "Compacto", () => { void this.alternarCompacto(); });
     this.botaoTopoEl = this.botao(ICONES.topo, "", () => { void this.alternarTopo(); });
     this.rotuloTopo();
@@ -78,7 +82,7 @@ export class Hud {
       this.botaoNaoFalar,
       this.botao(ICONES.parar, "Interromper a fala", () => this.acoes.aoInterromper?.()),
       this.botaoTela,
-      this.botao(ICONES.texto, "Abrir a conversa em texto", () => { void invoke("abrir_url", { url: cfg.gui_url }); }),
+      this.botaoTexto,
       this.botaoTopoEl,
       this.botao(ICONES.config, "Configurações", () => this.acoes.aoConfig?.()),
       this.botaoModo,
@@ -179,6 +183,7 @@ export class Hud {
 
   /** Mostra ou esconde o botão Tela conforme a ponte do Vard responde. */
   setPonte(noAr: boolean) { this.botaoTela.hidden = !noAr; }
+  setTextoDisponivel(v: boolean) { this.botaoTexto.hidden = !v; }
 
   /** Reunião em andamento (a ponte avisa): chip discreto no HUD; no modo invisível ele some com o resto do #app. */
   setReuniao(ativa: boolean) { this.chipReuniao.hidden = !ativa; }

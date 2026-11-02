@@ -27,6 +27,8 @@ from .provedores import AdaptadorProvedor, ErroProvedor, EventoInferencia
 log = logging.getLogger(__name__)
 
 PRAZO_EVENTO_CLI = 15.0
+# Até o primeiro evento útil do turno: a CLI recém-aberta sobe os MCPs (uvx incluso) e passa de 15 s a frio.
+PRAZO_PARTIDA_CLI = 60.0
 PRAZO_TURNO_CLI = 180.0
 
 _EPSILON = 1e-6
@@ -252,6 +254,7 @@ class AdaptadorCli(AdaptadorProvedor):
         *,
         prazo_evento: float = PRAZO_EVENTO_CLI,
         prazo_turno: float = PRAZO_TURNO_CLI,
+        prazo_partida: float = PRAZO_PARTIDA_CLI,
     ) -> None:
         if isinstance(dialeto, str):
             if dialeto not in DIALETOS:
@@ -261,6 +264,7 @@ class AdaptadorCli(AdaptadorProvedor):
         self._dialeto = dialeto
         self._prazo_evento = float(prazo_evento)
         self._prazo_turno = float(prazo_turno)
+        self._prazo_partida = max(float(prazo_partida), self._prazo_evento)
 
     async def inferir(
         self,
@@ -307,15 +311,16 @@ class AdaptadorCli(AdaptadorProvedor):
     async def _ler_turno(self, aiter_linhas: AsyncIterator[str], cancelamento: Optional[asyncio.Event]) -> AsyncIterator[EventoInferencia]:
         inicio = time.monotonic()
         ultimo_util = inicio
+        prazo_util = self._prazo_partida  # vira prazo_evento depois do primeiro evento útil
         while True:
             agora = time.monotonic()
             idade_turno = agora - inicio
             if idade_turno >= self._prazo_turno - _EPSILON:
                 raise ErroProvedor("cli_tempo", True, "turno da CLI acima do prazo")
             idade_util = agora - ultimo_util
-            if idade_util >= self._prazo_evento - _EPSILON:
+            if idade_util >= prazo_util - _EPSILON:
                 raise ErroProvedor("cli_tempo", True, "sem evento util da CLI no prazo")
-            espera = min(self._prazo_turno - idade_turno, self._prazo_evento - idade_util)
+            espera = min(self._prazo_turno - idade_turno, prazo_util - idade_util)
             try:
                 linha = await self._esperar_linha(aiter_linhas, cancelamento, espera)
             except asyncio.TimeoutError:
@@ -325,6 +330,7 @@ class AdaptadorCli(AdaptadorProvedor):
             eventos = self._dialeto.interpretar(linha)
             if eventos or self._dialeto.ferramentas_iniciais(linha) is not None:
                 ultimo_util = time.monotonic()
+                prazo_util = self._prazo_evento
             for evento in eventos:
                 yield evento
                 if evento.tipo == "fim":

@@ -5,6 +5,20 @@ Os instaladores de cada versão ficam na página de [releases](https://github.co
 
 ## [Unreleased]
 
+### Corrigido
+
+- `npm run tauri:build` volta a gerar o instalador: a varredura de caminhos da máquina recusava URLs (`https://`)
+  e caminhos do CI de terceiros nos SBOMs. Agora `.pth` e `RECORD` são estritos e os demais arquivos só recusam
+  caminhos desta máquina (destino, repositório e perfil do usuário, também na forma escapada de JSON).
+- A primeira pergunta depois de ligar não falha mais com `cli_tempo`: a CLI recém-aberta tem até 60 s para o
+  primeiro evento (MCPs subindo); entre eventos continuam valendo 15 s.
+- O botão "Abrir a conversa em texto" só aparece quando o OpenJarvis está em uso; sem ele, abria uma página morta.
+
+### Alterado
+
+- Os MCPs locais do cérebro sobem no primeiro pedido de provedor de API, não na partida do núcleo. Com provedor
+  CLI eles não sobem (a CLI abre os dela): cerca de 430 MB a menos em repouso.
+
 ## [0.10.0] — 2026-11-02
 
 Revisão para uso diário: visual das três telas, medição de memória e núcleo no instalador.
