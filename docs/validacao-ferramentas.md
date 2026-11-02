@@ -195,7 +195,7 @@ Causa raiz: `nucleo/vard/vigia.py:11: import msvcrt` — módulo exclusivo do Wi
 
 ## Classificação das falhas (Linux) — 53 falhas
 
-### Só Windows — evidência de API exclusiva (48 falhas)
+### 48 falhas remanescentes — maioria dependente de Windows, classificação individual sob investigação
 
 | # | Arquivo::teste | Motivo observado | Evidência |
 | --- | --- | --- | --- |
@@ -241,7 +241,7 @@ Causa raiz: `nucleo/vard/vigia.py:11: import msvcrt` — módulo exclusivo do Wi
 | 47 | `test_cli_detectar.py::TestDetectarCodexOpenCode::test_detectar_codex_instalado` | `assert False is True` | idem |
 | 48 | `test_cli_detectar.py::TestDetectarCodexOpenCode::test_detectar_opencode_instalado` | `assert False is True` | idem |
 
-**Subtotal: 48 falhas só Windows.**
+**Subtotal: 48 falhas remanescentes — maioria dependente de Windows, classificação individual sob investigação.**
 
 ### Defeitos e correções (J2/J3) — 5 defeitos de código e endurecimento do harness
 
@@ -254,9 +254,9 @@ Consolidação única de todos os defeitos de código identificados no inventár
 | 3 | `test_entrada.py::test_porta_ocupada_sai_com_motivo_identificavel` | `getattr(errno, "WSAEADDRINUSE", None)` gerava tupla com `None`, fazendo `OSError(None)` ser classificado erroneamente como porta ocupada | `nucleo/vard/servidor.py` | `test_porta_ocupada_sai_com_motivo_identificavel` | `getattr(errno, "WSAEADDRINUSE", errno.EADDRINUSE)` mantém compatibilidade Windows e evita falso positivo em POSIX | PASSA em Linux e Windows |
 | 4 | `test_remoto.py::test_trava_impede_segunda_conversa` | `tarefas.trava()` não possuía implementação de bloqueio concorrente para POSIX (fallback vazio sem `msvcrt`) | `nucleo/vard/tarefas.py` | `test_remoto.py::test_trava_impede_segunda_conversa` | Trava POSIX real usando `fcntl.flock(LOCK_EX | LOCK_NB)` com timeout e polling | PASSA (bloqueio entre processos validado) |
 | 5 | `test_tarefas.py::test_trava_entre_processos` | Mesma ausência de trava POSIX do item #4 | `nucleo/vard/tarefas.py` | `test_tarefas.py::test_trava_entre_processos` | Mesma implementação `fcntl.flock` do item #4 | PASSA (`TimeoutError` ao disputar trava entre processos) |
-| 6 | Harness: vazamento de processos e cleanup | MCPs e núcleo podiam ficar órfãos se a execução falhasse no meio | `scripts/provas/prova-real-ferramentas.py` | `test_prova_real_ferramentas.py::TestHarnessSimulado` | Cleanup estrito em `try/finally` dentro do context manager, encerramento com SIGTERM/SIGKILL e checagem de PIDs via `psutil.pid_exists` | PASSA (zero processos sobreviventes) |
-| 7 | Harness: validação de evento e chamada real | Teste offline afirmava apenas encerramento, sem verificar despacho de ferramentas | `scripts/provas/prova-real-ferramentas.py`, `nucleo/tests/test_prova_real_ferramentas.py` | `test_prova_real_ferramentas.py::TestHarnessSimulado` | Gerenciador fake registra chamada real, valida evento SSE `ferramenta` com nome/argumentos e resposta integrada | PASSA (evento e execução afirmados) |
-| 8 | Harness: isolamento de variáveis e sanitização | Testes modificavam `os.environ` diretamente com risco de contaminação e truncamento invertido na sanitização | `scripts/provas/prova-real-ferramentas.py`, `nucleo/tests/test_prova_real_ferramentas.py` | `test_prova_real_ferramentas.py::TestSanitizacao` | Uso de `monkeypatch.setenv/delenv` e correção da ordem `sanitizar(str(exc))[:300]` | PASSA (isolamento garantido) |
+| 6 | Harness: rastreamento e cleanup | MCPs e núcleo podiam ficar órfãos se a execução falhasse no meio | `scripts/provas/prova-real-ferramentas.py` | `test_prova_persistencia.py::test_handshake_cancelado_encerra_subprocesso` e cenário `mcp_lento` | A prova rastreia subprocessos que cria e tenta encerrá-los; o gerenciador publica clientes somente após handshake | PASSA nos cenários simulados; não comprova todas as falhas possíveis nem descendentes |
+| 7 | Harness: validação de evento e chamada | Teste offline não verificava despacho de ferramentas | `scripts/provas/prova-real-ferramentas.py`, `nucleo/tests/test_prova_real_ferramentas.py` | `test_prova_real_ferramentas.py::TestHarnessSimulado` | Gerenciador simulado registra execução e evento | PASSA no teste simulado; não comprova integração real atual |
+| 8 | Harness: variáveis e relatório | Risco de contaminação e exposição de conteúdo | `scripts/provas/prova-real-ferramentas.py`, `nucleo/tests/test_prova_persistencia.py` | Cenários com canário fictício | Configuração em memória; relatório omite conteúdo livre | PASSA nos cenários testados; não garante ausência de vazamento em todos os caminhos |
 
 **Total de defeitos de código:** 5 corrigidos + 3 melhorias estruturais do harness.
 **Saldo de falhas da suíte núcleo:** 53 falhas iniciais - 5 defeitos corrigidos = 48 falhas restantes **sob investigação**. A maioria depende de APIs/binários Windows (`msvcrt`, `win32gui`, `os.startfile`), mas pelo menos `test_primeiro_uso_deteccao.py` (`FakeAmbiente` esgota iterador/`StopIteration`) e `test_mesa_mcp.py::test_abrir_url_com_navegador_real_barrado_pela_guarda` (caminho fixo no próprio teste) não se explicam apenas por API Windows. Não declare aprovação da suíte sem evidência individual.
@@ -265,17 +265,18 @@ Consolidação única de todos os defeitos de código identificados no inventár
 
 ## Prova real do cérebro e dos MCPs (J2) — 2026-11-02
 
+**Evidência histórica:** executada com uma versão anterior do harness; não valida o harness atual nem os controles adicionados depois. A prova atual não foi executada com credenciais reais.
 Executada em Linux aarch64 com modelo de prova via ambiente.
 Configuração isolada via `VARD_CONFIG`, `VARD_DADOS` e `VARD_HUD_CONFIG_DIR` apontando para diretórios temporários; `paineis.json` gerado com as quatro chaves de agente (`claude`, `codex`, `opencode`, `agy`) exigidas por `ajustes.validar_documento`.
 Saída sanitizada em `<saida>.json`. Nenhum segredo, endpoint ou nome de modelo no relatório.
 
 > **Histórico:** A primeira execução (pit stop 1) registrou `auth_401` porque o comando de prova exportou um modelo fictício (`provedor/modelo-de-teste`) em vez do modelo de prova real — falha do harness, não do produto. A reexecução com o ambiente correto passou; o resultado abaixo reflete essa execução bem-sucedida.
 >
-> **J3 pit stop 1 (2026-11-02):** Harness endurecido — cleanup em `try/finally` dentro do `with`, teste offline afirma evento `ferramenta` com nome/argumentos, PIDs dos MCPs confirmados encerrados via `psutil.pid_exists`. Prova real reexecutada com sucesso: evento `ver_configuracoes` + resposta textual + zero processos vivos após encerramento.
+> **J3 pit stop 1 (2026-11-02), histórico:** Foram verificados os PIDs registrados após handshake naquela execução; isso não comprova o encerramento de todos os processos nem valida a versão atual.
 >
 > **J3 pit stop 2 (2026-11-02):** Quatro achados de vistoria corrigidos: (1) `servidor.py` — `getattr(errno, "WSAEADDRINUSE", errno.EADDRINUSE)` evita falso positivo de porta ocupada quando `errno=None`; (2) teste do harness fortalecido com gerenciador fake que registra chamada e afirma execução real da ferramenta (não só evento); (3) três testes de sanitização migrados de `os.environ`/`del` para `monkeypatch.setenv/delenv`; (4) `prova-real-ferramentas.py:404` — ordem de sanitização/truncamento corrigida (`sanitizar(str(exc))[:300]`). Testes alvo verdes; sem nova prova real.
 >
-> **Correção de segurança (2026-11-02):** A prova real anterior gravou `OMNI_API_KEY` em um `segredos.toml` temporário, contrariando a restrição de nunca escrever credenciais em arquivo. Esta revisão remove a escrita e passa a usar injeção em memória via `segredos.definir_em_memoria()`, com teste de canário que verifica ausência de vazamento em disco e exige autorização real (401 sem cabeçalho correto). Nenhuma chave em arquivo.
+> **Segurança (2026-11-02):** A prova anterior gravou `OMNI_API_KEY` em um `segredos.toml` temporário. **O comando público está bloqueado por segurança**, inclusive com dados fictícios; a implementação interna é exercitada somente pelos testes. Neles, chave, URL, modelo, pedidos, histórico e diário do cérebro ficam em memória; o relatório omite conteúdo livre. A instância HTTP exige token efêmero e o provedor exige HTTPS, exceto IP de loopback, sem proxy herdado. Os testes interceptam `io.open` no processo principal; não monitoram `os.write`, bibliotecas nativas nem subprocessos reais de MCP. Não há garantia absoluta para reabilitar a prova com credencial real sem validar esses caminhos.
 
 ### MCPs diretos (stdio, sem modelo)
 
@@ -297,9 +298,9 @@ Saída sanitizada em `<saida>.json`. Nenhum segredo, endpoint ou nome de modelo 
 - **Erro:** nenhum
 - **Ferramenta chamada:** `ver_configuracoes` (argumento `reason`: consultar configurações atuais)
 - **Eventos SSE:** ferramenta → texto → fim (3 eventos, sanitizados)
-- **Resposta sanitizada:** "As configurações atuais definem o respondedor como \"omni-prova\", perfil versão 1 e o uso do OpenJarvis desligado no widget."
+- **Resposta sanitizada:** "As configurações atuais definem o respondedor como provedor de prova, perfil versão 1 e o uso do OpenJarvis desligado no widget."
 - **Duração:** 13,7 s
-- **Processo núcleo:** PID 98468, terminado graceful; nenhum processo restante
+- **Processo núcleo:** PID 98468, reportado como encerrado; a verificação histórica não cobriu todos os processos possíveis.
 
 ---
 
@@ -330,9 +331,9 @@ Para manter clareza sobre o escopo provado e evitar falsa impressão de entrega,
 
 - **Frontend (TypeScript):** 1126 testes passando; `npm run check` limpo. Sem pendências de código ou tipagem.
 - **Núcleo (Python):** 1597 testes passando em Linux (com 68 pulados); **48 falhas remanescentes sob investigação**, muitas dependentes de APIs exclusivas do Windows (`msvcrt`, `win32gui`, `os.startfile`), mas pelo menos `test_primeiro_uso_deteccao.py` (`FakeAmbiente`/`StopIteration`) e `test_mesa_mcp.py::test_abrir_url_com_navegador_real_barrado_pela_guarda` (caminho fixo no teste) não se explicam apenas por API Windows. Os 7 arquivos com erro de coleta falham pelo `import msvcrt` no nível do módulo em `vard/vigia.py`. Do total de 53 falhas iniciais, 5 defeitos de código foram corrigidos e permanecem verdes.
-- **Harness e Robustez:** Cleanup estrito implementado com `try/finally` no context manager do harness, asserção do evento SSE `ferramenta` no teste offline, verificação de término de processos via `psutil.pid_exists` e sanitização estrita sem vazamento de segredos/endpoints/tokens.
-- **Provas reais executadas com sucesso:**
-  - **Cérebro por HTTP/SSE:** 1 prova real ponta a ponta bem-sucedida registrada no J2 (status HTTP 202, 3 eventos SSE: ferramenta `ver_configuracoes` → texto sanitizado → fim, duração de 13,7 s, encerramento limpo sem processos órfãos).
+- **Harness e robustez:** Cenários simulados verificam rastreamento de subprocesso, autenticação local e proteção de canário; não demonstram ausência de vazamento nem encerramento de todos os processos em todas as falhas.
+- **Provas reais históricas (harness anterior, não validam o atual):**
+  - **Cérebro por HTTP/SSE:** 1 execução histórica J2 registrou HTTP 202 e eventos `ver_configuracoes` → texto → fim, duração de 13,7 s; cleanup completo não foi comprovado.
   - **MCPs diretos (stdio):** 6 ferramentas de leitura executadas diretamente via stdio (`ver_configuracoes`, `listar_provedores`, `listar_vozes`, `memoria_buscar`, `reuniao_status`, `hora_atual`), devolvendo payloads válidos.
 - **Voz, Reunião e Rust/Tauri:** Bloqueados em Linux por ausência de compiladores C/LLVM (`libclang`) e bibliotecas nativas de áudio do Windows (`pyaudiowpatch`). Provas desses subsistemas dependem de ambiente Windows real.
 - **Demais integrações:** As integrações externas permanecem documentadas como pendentes das respectivas contas, chaves ou hardware, com seus requisitos demarcados na tabela de pendências.

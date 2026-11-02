@@ -11,6 +11,7 @@ separadamente via scripts/provas/prova-real-ferramentas.py.
 from __future__ import annotations
 
 import asyncio
+import importlib.util
 import json
 import os
 import sys
@@ -85,6 +86,26 @@ class TestSanitizacao:
 
 class TestRecusaSemAmbiente:
     """Script deve recusar execução sem variáveis obrigatórias."""
+
+    @pytest.mark.parametrize("campo", ["OMNI_BASE_URL", "OMNI_MODELO"])
+    async def test_recusa_credencial_na_configuracao_antes_de_gravar(self, monkeypatch, tmp_path, campo):
+        spec = importlib.util.spec_from_file_location(
+            "prova_ferramentas", REPO_ROOT / "scripts/provas/prova-real-ferramentas.py"
+        )
+        modulo = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(modulo)
+        canario = uuid.uuid4().hex
+        monkeypatch.setenv("OMNI_API_KEY", canario)
+        monkeypatch.setenv("OMNI_BASE_URL", "http://127.0.0.1:9999")
+        monkeypatch.setenv("OMNI_MODELO", "modelo-ficticio")
+        monkeypatch.setenv(campo, f"http://127.0.0.1/{canario}")
+        def nao_criar_diretorio(*args, **kwargs):
+            pytest.fail("criou diretório antes de validar configuração")
+
+        monkeypatch.setattr(modulo.tempfile, "TemporaryDirectory", nao_criar_diretorio)
+        with pytest.raises(SystemExit):
+            await modulo._executar_prova(tmp_path / "relatorio.json")
+        assert not list(tmp_path.iterdir())
 
     def test_recusa_sem_omni_base_url(self, monkeypatch):
         monkeypatch.delenv("OMNI_BASE_URL", raising=False)

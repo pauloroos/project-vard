@@ -48,6 +48,55 @@ async def _coletar_lista(gm: GerenciadorFerramentas) -> list[dict[str, Any]]:
 # ---------------------------------------------------------------------------
 
 class TestStdio:
+    async def test_handshake_pendente_nao_publica_cliente(self, monkeypatch):
+        gm = GerenciadorFerramentas()
+        iniciado = asyncio.Event()
+        original = asyncio.create_subprocess_exec
+
+        async def criar(*args, **kwargs):
+            proc = await original(*args, **kwargs)
+            iniciado.set()
+            return proc
+
+        monkeypatch.setattr(asyncio, "create_subprocess_exec", criar)
+        tarefa = asyncio.create_task(gm.adicionar_stdio("pendente", sys.executable, ["-c", "import time; time.sleep(30)"]))
+        try:
+            await asyncio.wait_for(iniciado.wait(), 5)
+            with pytest.raises(ValueError, match="servidor desconhecido"):
+                await asyncio.wait_for(gm.chamar("pendente", "eco", {}), 1)
+            assert await gm.listar_todas() == []
+        finally:
+            tarefa.cancel()
+            await asyncio.gather(tarefa, return_exceptions=True)
+            await gm.fechar_tudo()
+
+    async def test_substituicao_pendente_e_falha_preserva_cliente_anterior(self, monkeypatch):
+        gm = GerenciadorFerramentas()
+        await gm.adicionar_stdio("servidor", sys.executable, [MCP_FALSO])
+        iniciado = asyncio.Event()
+        filhos = []
+        original = asyncio.create_subprocess_exec
+
+        async def criar(*args, **kwargs):
+            proc = await original(*args, **kwargs)
+            filhos.append(proc)
+            iniciado.set()
+            return proc
+
+        monkeypatch.setattr(asyncio, "create_subprocess_exec", criar)
+        tarefa = asyncio.create_task(gm.adicionar_stdio("servidor", sys.executable, ["-c", "import time; time.sleep(30)"]))
+        try:
+            await asyncio.wait_for(iniciado.wait(), 5)
+            assert await asyncio.wait_for(gm.chamar("servidor", "eco", {"texto": "antes"}), 1) == "antes"
+            filhos[0].terminate()
+            with pytest.raises(ServidorIndisponivelError):
+                await asyncio.wait_for(tarefa, 5)
+            assert await gm.chamar("servidor", "eco", {"texto": "depois"}) == "depois"
+        finally:
+            tarefa.cancel()
+            await asyncio.gather(tarefa, return_exceptions=True)
+            await gm.fechar_tudo()
+
     async def test_handshake_lista_chamada_stdio(self):
         """Handshake completo + lista + chamada via stdio com mcp_falso.py."""
         gm = GerenciadorFerramentas()
