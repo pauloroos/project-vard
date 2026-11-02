@@ -31,6 +31,14 @@ html, body {
   pointer-events: none;
 }
 
+#app.invisivel,
+#app.invisivel *,
+#app.invisivel::after,
+#app.invisivel *::before,
+#app.invisivel *::after {
+  animation-play-state: paused;
+}
+
 #nucleo {
   position: absolute;
   left: 0;
