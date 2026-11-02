@@ -12,8 +12,8 @@ Este diretório contém as capturas de tela das interfaces do Vard (HUD, Sala e 
 As capturas são geradas automaticamente por script Playwright em Python síncrono (`scripts/provas/capturas-visual.py`), executando Chromium headless.
 
 ```bash
-PLAYWRIGHT_BROWSERS_PATH=/home/orca/acc/ms-playwright \
-/home/orca/acc/venv/bin/python scripts/provas/capturas-visual.py
+PLAYWRIGHT_BROWSERS_PATH=<diretório de navegadores do Playwright> \
+python scripts/provas/capturas-visual.py
 ```
 
 ### Argumentos opcionais

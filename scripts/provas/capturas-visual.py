@@ -5,8 +5,8 @@ Executa no navegador Chromium headless via Playwright com mock do ambiente Tauri
 sem necessidade de WebView2 ou Windows.
 
 Uso:
-    PLAYWRIGHT_BROWSERS_PATH=/home/orca/acc/ms-playwright \\
-    /home/orca/acc/venv/bin/python scripts/provas/capturas-visual.py [--url URL] [--saida PASTA]
+    PLAYWRIGHT_BROWSERS_PATH=<diretório de navegadores do Playwright> \\
+    python scripts/provas/capturas-visual.py [--url URL] [--saida PASTA]
 """
 from __future__ import annotations
 
@@ -163,7 +163,7 @@ PAINEIS_CONFIG_FICTICIA: dict[str, Any] = {
             "nome": "Filesystem MCP Server",
             "habilitado": True,
             "command": "npx",
-            "args": ["-y", "@modelcontextprotocol/server-filesystem", "/home/user/projects"],
+            "args": ["-y", "@modelcontextprotocol/server-filesystem", "projetos"],
             "credencial_ref": "",
         },
         {
@@ -326,13 +326,41 @@ def verificar_arquivo_png(caminho: Path) -> None:
         )
 
 
+def configurar_rotas_mock(page: Any) -> None:
+    """Simula as rotas de saúde do OpenJarvis para evitar erros de conexão do proxy."""
+    page.route(
+        "**/oj/health",
+        lambda route: route.fulfill(
+            status=200,
+            content_type="application/json",
+            body=json.dumps({"status": "ok"}),
+        ),
+    )
+    page.route(
+        "**/oj/v1/speech/health",
+        lambda route: route.fulfill(
+            status=200,
+            content_type="application/json",
+            body=json.dumps({"available": True}),
+        ),
+    )
+
+
 def capturar_hud(page: Any, url_base: str, saida_dir: Path) -> None:
     """Captura a tela HUD (index.html) com viewport 320x360 e escala 2x."""
     page.on("pageerror", lambda err: print("[HUD PAGEERROR]:", err))
     page.on("console", lambda m: print(f"[HUD CONSOLE {m.type}]:", m.text) if m.type == "error" else None)
+    configurar_rotas_mock(page)
     page.set_viewport_size({"width": 320, "height": 360})
     page.goto(f"{url_base}/index.html")
     page.wait_for_selector("#nucleo", timeout=10000)
+
+    # Garante transição completa para estado de repouso ("pronto")
+    page.wait_for_function(
+        "() => document.getElementById('dica')?.textContent?.toLowerCase().includes('pronto') || "
+        "document.getElementById('app')?.dataset?.estado === 'repouso'",
+        timeout=5000,
+    )
 
     # Fundo sintético escuro neutro atrás do widget transparente para visualização nítida
     page.evaluate("document.body.style.backgroundColor = '#0b0f17';")
@@ -348,6 +376,7 @@ def capturar_hud(page: Any, url_base: str, saida_dir: Path) -> None:
 
 def capturar_sala(page: Any, url_base: str, saida_dir: Path) -> None:
     """Captura a tela da sala (sala.html) com viewport 1280x800 e escala 1x."""
+    configurar_rotas_mock(page)
     page.set_viewport_size({"width": 1280, "height": 800})
     page.goto(f"{url_base}/sala.html")
     page.wait_for_selector("#nucleo", timeout=10000)
@@ -385,6 +414,7 @@ def capturar_sala(page: Any, url_base: str, saida_dir: Path) -> None:
 
 def capturar_configuracoes(page: Any, url_base: str, saida_dir: Path) -> None:
     """Captura cada aba da tela de configurações (configuracoes.html) com viewport 960x640."""
+    configurar_rotas_mock(page)
     page.set_viewport_size({"width": 960, "height": 640})
     page.goto(f"{url_base}/configuracoes.html")
     page.wait_for_selector("#painel nav button", timeout=10000)
