@@ -401,7 +401,7 @@ async def main(saida: Path | None = None) -> dict:
             try:
                 relatorio["provas_mcps_diretos"] = await provar_mcps_diretos(config_dir, dados_dir)
             except Exception as exc:
-                relatorio["provas_mcps_diretos"] = [{"erro": sanitizar(str(exc)[:300])}]
+                relatorio["provas_mcps_diretos"] = [{"erro": sanitizar(str(exc))[:300]}]
 
             # --- Prova 2: Cérebro por HTTP/SSE ---
             print("→ Subindo núcleo para prova HTTP/SSE...")

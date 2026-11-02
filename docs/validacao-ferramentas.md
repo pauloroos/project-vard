@@ -154,7 +154,7 @@ Causa raiz: `nucleo/vard/vigia.py:11: import msvcrt` — módulo exclusivo do Wi
 | --- | --- | --- | --- | --- | --- | --- |
 | 49 | `test_config.py::test_nome_invalido_recusado[a\\b.toml]` | `\` é válido em nome Linux; validação só rejeitava `/` | `nucleo/vard/config.py` | `test_nome_invalido_recusado` | Rejeita `\` no nome em qualquer SO (`"\\" in nome`) | PASSA em Linux e Windows |
 | 50 | `test_delegada.py::test_preparar_pasta_remove_juncao_sem_seguir_o_alvo` | `cmd`/`mklink` inexistentes em Linux; teste falhava com `FileNotFoundError` | `nucleo/tests/test_delegada.py` | `test_preparar_pasta_remove_juncao_sem_seguir_o_alvo` | `pytest.skip` quando `cmd` não existe (`shutil.which("cmd") is None`) | SKIP documentado em Linux; PASSA em Windows |
-| 51 | `test_entrada.py::test_porta_ocupada_sai_com_motivo_identificavel` | `errno.WSAEADDRINUSE` avaliado ansiosamente levanta `AttributeError` em Linux | `nucleo/vard/servidor.py` | `test_porta_ocupada_sai_com_motivo_identificavel` | `getattr(errno, "WSAEADDRINUSE", None)` para avaliação segura | PASSA em Linux e Windows |
+| 51 | `test_entrada.py::test_porta_ocupada_sai_com_motivo_identificavel` | `getattr(errno, "WSAEADDRINUSE", None)` cria tupla `(EADDRINUSE, None)`; `OSError` com `errno=None` diz "porta ocupada" sem ser | `nucleo/vard/servidor.py` | `test_porta_ocupada_sai_com_motivo_identificavel` | `getattr(errno, "WSAEADDRINUSE", errno.EADDRINUSE)` mantém Windows e evita falso positivo em Linux | PASSA em Linux e Windows |
 | 52 | `test_remoto.py::test_trava_impede_segunda_conversa` | `tarefas.trava()` sem trava real quando `msvcrt` não existe (POSIX) | `nucleo/vard/tarefas.py` | `test_trava_impede_segunda_conversa` | Trava POSIX real com `fcntl.flock(LOCK_EX \| LOCK_NB)` + timeout | PASSA (trava entre processos funciona) |
 | 53 | `test_tarefas.py::test_trava_entre_processos` | Mesma causa do #52: fallback vazio em POSIX | `nucleo/vard/tarefas.py` | `test_trava_entre_processos` | Mesma correção do #52 | PASSA (subprocesso bloqueado, `TimeoutError` levantado) |
 
@@ -179,6 +179,8 @@ Saída sanitizada em `/tmp/opencode/vard-j2-final.json`. Nenhum segredo, endpoin
 > **Histórico:** A primeira execução (pit stop 1) registrou `auth_401` porque o comando de prova exportou um modelo fictício (`provedor/modelo-de-teste`) em vez do modelo de prova real — falha do harness, não do produto. A reexecução com o ambiente correto passou; o resultado abaixo reflete essa execução bem-sucedida.
 >
 > **J3 pit stop 1 (2026-11-02):** Harness endurecido — cleanup em `try/finally` dentro do `with`, teste offline afirma evento `ferramenta` com nome/argumentos, PIDs dos MCPs confirmados encerrados via `psutil.pid_exists`. Prova real reexecutada com sucesso: evento `ver_configuracoes` + resposta textual + zero processos vivos após encerramento.
+>
+> **J3 pit stop 2 (2026-11-02):** Quatro achados de vistoria corrigidos: (1) `servidor.py` — `getattr(errno, "WSAEADDRINUSE", errno.EADDRINUSE)` evita falso positivo de porta ocupada quando `errno=None`; (2) teste do harness fortalecido com gerenciador fake que registra chamada e afirma execução real da ferramenta (não só evento); (3) três testes de sanitização migrados de `os.environ`/`del` para `monkeypatch.setenv/delenv`; (4) `prova-real-ferramentas.py:404` — ordem de sanitização/truncamento corrigida (`sanitizar(str(exc))[:300]`). Testes alvo verdes; sem nova prova real.
 
 ### MCPs diretos (stdio, sem modelo)
 
@@ -230,7 +232,7 @@ Saída sanitizada em `/tmp/opencode/vard-j2-final.json`. Nenhum segredo, endpoin
 ## Resumo para próximos jobs
 
 - **Frontend (TypeScript):** 1126 testes passando; `npm run check` limpo. Sem pendências de código.
-- **Núcleo (Python):** 1582 testes passando em Linux; **53 falhas classificadas (48 só Windows, 5 defeitos a investigar)**. 7 arquivos nem coletam por `msvcrt`.
+- **Núcleo (Python):** 1582 testes passando em Linux; **53 falhas classificadas (48 só Windows, 4 defeitos a investigar)**. 7 arquivos nem coletam por `msvcrt`. Defeito #51 (falso positivo de porta ocupada) corrigido no pit stop 2.
 - **Voz e Reunião:** Não instalam em Linux (dependências C e pacotes Windows-only). Provas exigem ambiente Windows.
 - **Rust/Tauri:** Não compila em Linux sem `libclang-dev`. Provas de WebView2 exigem Windows.
 - **Provas reais:** Todas pendentes de infraestrutura, conta ou hardware. Scripts em `scripts/provas/` cobrem cérebro, oficina, reunião e delegada com servidores falsos.

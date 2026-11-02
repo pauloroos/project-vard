@@ -54,21 +54,15 @@ class TestSanitizacao:
         resultado = self._sanitizar('api_key="segredo-123"')
         assert "segredo-123" not in resultado
 
-    def test_remove_omni_base_url(self):
-        os.environ["OMNI_BASE_URL"] = "https://api.exemplo-privado.com/v1"
-        try:
-            resultado = self._sanitizar("url: https://api.exemplo-privado.com/v1/chat")
-            assert "exemplo-privado" not in resultado
-        finally:
-            del os.environ["OMNI_BASE_URL"]
+    def test_remove_omni_base_url(self, monkeypatch):
+        monkeypatch.setenv("OMNI_BASE_URL", "https://api.exemplo-privado.com/v1")
+        resultado = self._sanitizar("url: https://api.exemplo-privado.com/v1/chat")
+        assert "exemplo-privado" not in resultado
 
-    def test_remove_omni_modelo(self):
-        os.environ["OMNI_MODELO"] = "provedor/modelo-de-teste"
-        try:
-            resultado = self._sanitizar("modelo usado: provedor/modelo-de-teste ok")
-            assert "modelo-de-teste" not in resultado
-        finally:
-            del os.environ["OMNI_MODELO"]
+    def test_remove_omni_modelo(self, monkeypatch):
+        monkeypatch.setenv("OMNI_MODELO", "provedor/modelo-de-teste")
+        resultado = self._sanitizar("modelo usado: provedor/modelo-de-teste ok")
+        assert "modelo-de-teste" not in resultado
 
     def test_remove_caminho_absoluto_pessoal(self):
         # Simula caminho pessoal típico
@@ -79,13 +73,10 @@ class TestSanitizacao:
         texto = "Ferramenta hora_atual retornou 14:30"
         assert self._sanitizar(texto) == texto
 
-    def test_remove_omni_api_key_valor(self):
-        os.environ["OMNI_API_KEY"] = "chave-super-secreta-12345"
-        try:
-            resultado = self._sanitizar("usando chave-super-secreta-12345 para auth")
-            assert "chave-super-secreta-12345" not in resultado
-        finally:
-            del os.environ["OMNI_API_KEY"]
+    def test_remove_omni_api_key_valor(self, monkeypatch):
+        monkeypatch.setenv("OMNI_API_KEY", "chave-super-secreta-12345")
+        resultado = self._sanitizar("usando chave-super-secreta-12345 para auth")
+        assert "chave-super-secreta-12345" not in resultado
 
 
 # ---------------------------------------------------------------------------
@@ -270,30 +261,54 @@ class TestHarnessSimulado:
                 ):
                     from vard.cerebro import pedidos as modulo_pedidos
                     from vard.cerebro.contratos import EstadoPedido, Origem, Pedido
+                    import server as server_mod
                     from server import _executar_pedido_cerebro
 
-                    modulo_pedidos.definir_pasta(dados_dir / "pedidos")
-                    modulo_pedidos.limpar_tudo()
+                    # Fake tool manager: registra chamada e retorna resultado válido
+                    chamadas_fake: list[tuple[str, str, dict]] = []
 
-                    pedido_id = str(uuid.uuid4())
-                    pedido = Pedido(
-                        pedido_id=pedido_id,
-                        sessao_id="sess-j2-teste",
-                        origem=Origem.PAINEL,
-                        texto="quais são as configurações atuais?",
-                    )
+                    class FakeGerenciadorFerramentas:
+                        async def listar_todas(self):
+                            return [{
+                                "nome": "ver_configuracoes",
+                                "descricao": "Mostra configurações atuais",
+                                "schema": {"type": "object", "properties": {}},
+                                "identificador": "interno",
+                            }]
 
-                    eventos: list[dict] = []
+                        async def chamar(self, identificador, nome, argumentos):
+                            chamadas_fake.append((identificador, nome, argumentos))
+                            return '{"versao": "0.4-teste", "provedor": "j2-fake"}'
 
-                    def emitir(ev):
-                        eventos.append({
-                            "tipo": ev.tipo.value if hasattr(ev.tipo, "value") else str(ev.tipo),
-                            "dados": ev.dados or {},
-                        })
+                    fake_tools = FakeGerenciadorFerramentas()
+                    original_tools = server_mod._ferramentas_cerebro
+                    server_mod._ferramentas_cerebro = fake_tools
 
-                    # Admite o pedido antes de executar (contrato do executor)
-                    modulo_pedidos.admitir(pedido)
-                    await _executar_pedido_cerebro(pedido, emitir)
+                    try:
+                        modulo_pedidos.definir_pasta(dados_dir / "pedidos")
+                        modulo_pedidos.limpar_tudo()
+
+                        pedido_id = str(uuid.uuid4())
+                        pedido = Pedido(
+                            pedido_id=pedido_id,
+                            sessao_id="sess-j2-teste",
+                            origem=Origem.PAINEL,
+                            texto="quais são as configurações atuais?",
+                        )
+
+                        eventos: list[dict] = []
+
+                        def emitir(ev):
+                            eventos.append({
+                                "tipo": ev.tipo.value if hasattr(ev.tipo, "value") else str(ev.tipo),
+                                "dados": ev.dados or {},
+                            })
+
+                        # Admite o pedido antes de executar (contrato do executor)
+                        modulo_pedidos.admitir(pedido)
+                        await _executar_pedido_cerebro(pedido, emitir)
+                    finally:
+                        server_mod._ferramentas_cerebro = original_tools
 
                     # Verifica estado final
                     info = modulo_pedidos.consultar(pedido_id)
@@ -302,17 +317,29 @@ class TestHarnessSimulado:
                     assert len(eventos) > 0
                     assert "fim" in tipos_eventos or "erro" in tipos_eventos
 
-                    # Afirma evento de ferramenta com nome e argumentos
-                    eventos_ferramenta = [
-                        e for e in eventos if e["tipo"] == "ferramenta"
-                    ]
-                    assert len(eventos_ferramenta) > 0, (
-                        "esperado pelo menos um evento 'ferramenta'; "
-                        f"recebidos: {tipos_eventos}"
+                    # Afirma que a ferramenta foi EXECUTADA (não apenas anunciada):
+                    # 1) O gerenciador fake registrou a chamada com ver_configuracoes
+                    assert len(chamadas_fake) > 0, "gerenciador fake não registrou nenhuma chamada"
+                    assert chamadas_fake[0][1] == "ver_configuracoes", (
+                        f"esperado ver_configuracoes; recebido: {chamadas_fake[0][1]}"
                     )
-                    ev_ferr = eventos_ferramenta[0]
-                    dados_ferr = ev_ferr.get("dados", {})
-                    assert dados_ferr.get("nome") == "ver_configuracoes"
-                    assert "argumentos" in dados_ferr or "args" in dados_ferr
+
+                    # 2) O servidor falso recebeu duas chamadas (tool_call + tool_result)
+                    assert len(HandlerOpenAIFalsoComFerramenta.chamadas) >= 2, (
+                        "esperado >=2 chamadas ao provedor (tool_call + tool_result); "
+                        f"recebidas: {len(HandlerOpenAIFalsoComFerramenta.chamadas)}"
+                    )
+                    segunda_chamada = HandlerOpenAIFalsoComFerramenta.chamadas[1]["body"]
+                    assert "tool_call_id" in segunda_chamada, (
+                        "segunda chamada ao provedor deve conter tool_call_id (resultado da ferramenta)"
+                    )
+
+                    # 3) A resposta final menciona o resultado da ferramenta
+                    eventos_fim = [e for e in eventos if e["tipo"] == "fim"]
+                    assert len(eventos_fim) > 0, f"esperado evento 'fim'; recebidos: {tipos_eventos}"
+                    texto_final = str(eventos_fim[0].get("dados", {}))
+                    assert "configura" in texto_final.lower() or "consultadas" in texto_final.lower(), (
+                        f"resposta final deve mencionar o resultado da ferramenta; recebido: {texto_final[:200]}"
+                    )
         finally:
             srv.shutdown()
