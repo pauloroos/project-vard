@@ -32,3 +32,8 @@ nucleo/tests/test_recursos.py	C:/
 nucleo/tests/test_recursos.py	C:\
 nucleo/tests/test_server.py	192.0.2.10
 nucleo/tests/test_status_rapido.py	192.0.2.10
+nucleo/tests/test_prova_real_ferramentas.py	sk-live-abcdef1234567890
+nucleo/vard/sanitizacao.py	C:\Users\
+nucleo/vard/sanitizacao.py	C:\
+tests/montagem-segura.test.ts	C:/
+tests/montagem-segura.test.ts	C:\

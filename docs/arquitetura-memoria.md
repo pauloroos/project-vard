@@ -379,13 +379,13 @@ Para uma medição pontual comparável às da seção 4, execute os passos abaix
    node -e "
    const fs = require('fs');
    const path = require('path');
-   const baseline = parseInt(fs.readFileSync('/proc/self/status','utf8').match(/VmRSS:\s+(\d+)/)[1])/1024;
+   const baseline = parseInt(fs.readFileSync('/proc/self/status','utf8').match(/VmRSS:[ \t]+(\d+)/)[1])/1024;
    const ort = require('onnxruntime-web');
    (async () => {
      const pastaDist = path.join('node_modules', '@ricky0123', 'vad-web', 'dist');
      const arquivoModelo = fs.readdirSync(pastaDist).find(f => f.endsWith('.onnx'));
      await ort.InferenceSession.create(path.join(pastaDist, arquivoModelo));
-     const final = parseInt(fs.readFileSync('/proc/self/status','utf8').match(/VmRSS:\s+(\d+)/)[1])/1024;
+     const final = parseInt(fs.readFileSync('/proc/self/status','utf8').match(/VmRSS:[ \t]+(\d+)/)[1])/1024;
      console.log('Delta ONNX Silero:', (final - baseline).toFixed(1), 'MB');
    })();
    "
