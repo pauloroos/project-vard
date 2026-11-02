@@ -148,24 +148,25 @@ Causa raiz: `nucleo/vard/vigia.py:11: import msvcrt` — módulo exclusivo do Wi
 
 **Subtotal: 48 falhas só Windows.**
 
-### Defeito a investigar — falha lógica reproduzível em Linux (5 falhas)
+### Defeitos corrigidos (J3) — 5 falhas resolvidas
 
-| # | Arquivo::teste | Motivo observado | Evidência |
+| # | Defeito | Causa | Arquivo | Teste que prova | Correção | Resultado |
+| --- | --- | --- | --- | --- | --- | --- |
+| 49 | `test_config.py::test_nome_invalido_recusado[a\\b.toml]` | `\` é válido em nome Linux; validação só rejeitava `/` | `nucleo/vard/config.py` | `test_nome_invalido_recusado` | Rejeita `\` no nome em qualquer SO (`"\\" in nome`) | PASSA em Linux e Windows |
+| 50 | `test_delegada.py::test_preparar_pasta_remove_juncao_sem_seguir_o_alvo` | `cmd`/`mklink` inexistentes em Linux; teste falhava com `FileNotFoundError` | `nucleo/tests/test_delegada.py` | `test_preparar_pasta_remove_juncao_sem_seguir_o_alvo` | `pytest.skip` quando `cmd` não existe (`shutil.which("cmd") is None`) | SKIP documentado em Linux; PASSA em Windows |
+| 51 | `test_entrada.py::test_porta_ocupada_sai_com_motivo_identificavel` | `errno.WSAEADDRINUSE` avaliado ansiosamente levanta `AttributeError` em Linux | `nucleo/vard/servidor.py` | `test_porta_ocupada_sai_com_motivo_identificavel` | `getattr(errno, "WSAEADDRINUSE", None)` para avaliação segura | PASSA em Linux e Windows |
+| 52 | `test_remoto.py::test_trava_impede_segunda_conversa` | `tarefas.trava()` sem trava real quando `msvcrt` não existe (POSIX) | `nucleo/vard/tarefas.py` | `test_trava_impede_segunda_conversa` | Trava POSIX real com `fcntl.flock(LOCK_EX \| LOCK_NB)` + timeout | PASSA (trava entre processos funciona) |
+| 53 | `test_tarefas.py::test_trava_entre_processos` | Mesma causa do #52: fallback vazio em POSIX | `nucleo/vard/tarefas.py` | `test_trava_entre_processos` | Mesma correção do #52 | PASSA (subprocesso bloqueado, `TimeoutError` levantado) |
+
+**Subtotal: 5 defeitos corrigidos.** Caminho Windows (`msvcrt.locking`) preservado intacto.
+
+### Correção adicional na classificação
+
+| # | Arquivo::teste | Erro real (confirmado) | Classificação anterior |
 | --- | --- | --- | --- |
-| 49 | `test_config.py::test_nome_invalido_recusado[a\\b.toml]` | `Failed: DID NOT RAISE ValueError` | barra invertida é válida em nome de arquivo Linux; teste assume separador Windows |
-| 50 | `test_delegada.py::test_preparar_pasta_remove_juncao_sem_seguir_o_alvo` | `FileNotFoundError: [Errno 2] No such file or directory: 'cmd'` | teste exclusivo de Windows (junção NTFS); não é defeito de lógica Linux |
-| 51 | `test_entrada.py::test_porta_ocupada_sai_com_motivo_identificavel` | `AttributeError: module 'errno' has no attribute 'WSAEADDRINUSE'` | `servidor.py:57` usa `errno.WSAEADDRINUSE` (Windows); Linux usa `EADDRINUSE` |
-| 52 | `test_remoto.py::test_trava_impede_segunda_conversa` | `assert False` — `wait(3)` retorna False | trava entre threads com fallback `msvcrt` não funciona igual em Linux |
-| 53 | `test_tarefas.py::test_trava_entre_processos` | `Failed: DID NOT RAISE TimeoutError` | trava baseada em `msvcrt`; lógica difere em Linux |
+| 23 | `test_runtime_instalado.py::test_hash_incorreto_falha_antes_de_extrair` | `FileNotFoundError: 'powershell'` | `FileNotFoundError: 'cmd'` |
 
-**Subtotal: 5 falhas classificadas como defeito.**
-
-> **Nota sobre `test_delegada.py`:** falha por `FileNotFoundError: 'cmd'` (junção NTFS),
-> não por lógica cross-platform. Mantida como "defeito" porque o código deveria
-> detectar plataforma e pular junção em Linux, mas a classificação pode ser
-> revisada para "só Windows" se o comportamento for intencional.
-
-**Total: 48 + 5 = 53 falhas.** ✓
+**Total após J3: 48 só Windows + 0 defeitos pendentes = 48 falhas restantes (todas pendentes de Windows).**
 
 ---
 

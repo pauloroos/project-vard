@@ -118,11 +118,20 @@ async def provar_mcps_diretos(config_dir: Path, dados_dir: Path) -> list[dict]:
                     gm.adicionar_stdio(nome_mcp, sys.executable, [str(script)]),
                     timeout=15,
                 )
+                # Registra PID do processo MCP stdio para confirmação de encerramento
+                cliente = gm._clientes.get(nome_mcp)
+                mcp_pid = getattr(getattr(cliente, "_process", None), "pid", None)
+                if mcp_pid is not None:
+                    resultados.append({
+                        "mcp": nome_mcp,
+                        "status": "pid_registrado",
+                        "pid": mcp_pid,
+                    })
             except Exception as exc:
                 resultados.append({
                     "mcp": nome_mcp,
                     "status": "indisponivel",
-                    "detalhe": sanitizar(str(exc)[:300]),
+                    "detalhe": sanitizar(str(exc))[:300],
                 })
                 continue
 
@@ -141,7 +150,7 @@ async def provar_mcps_diretos(config_dir: Path, dados_dir: Path) -> list[dict]:
                         "mcp": nome_mcp,
                         "ferramenta": ferr,
                         "status": "executou",
-                        "resultado_sanitizado": sanitizar(resultado[:500]),
+                        "resultado_sanitizado": sanitizar(resultado)[:500],
                         "duracao_s": duracao,
                     })
                 except asyncio.TimeoutError:
@@ -165,7 +174,7 @@ async def provar_mcps_diretos(config_dir: Path, dados_dir: Path) -> list[dict]:
                         "mcp": nome_mcp,
                         "ferramenta": ferr,
                         "status": status,
-                        "detalhe": sanitizar(msg[:300]),
+                        "detalhe": sanitizar(msg)[:300],
                         "duracao_s": round(time.monotonic() - inicio, 3),
                     })
 
@@ -279,8 +288,8 @@ async def provar_cerebro_http(
                         if estado in ("concluido", "falhou", "cancelado"):
                             resultado["pedido_estado"] = estado
                             resultado["resposta_sanitizada"] = sanitizar(
-                                (dados.get("resposta") or "")[:500]
-                            )
+                                dados.get("resposta") or ""
+                            )[:500]
                             break
                 except Exception:
                     pass
@@ -294,12 +303,12 @@ async def provar_cerebro_http(
                     resultado["ferramenta_chamada"] = {
                         "nome": ev.get("dados", {}).get("nome") or ev.get("dados", {}).get("name", ""),
                         "argumentos_sanitizados": sanitizar(
-                            str(ev.get("dados", {}).get("argumentos", ""))[:200]
-                        ),
+                            str(ev.get("dados", {}).get("argumentos", ""))
+                        )[:200],
                     }
                 resultado["eventos"].append({
                     "tipo": tipo_ev,
-                    "dados_sanitizados": sanitizar(str(ev.get("dados", {}))[:300]),
+                    "dados_sanitizados": sanitizar(str(ev.get("dados", {})))[:300],
                 })
 
             tarefa_sse.cancel()
@@ -309,7 +318,7 @@ async def provar_cerebro_http(
                 pass
 
     except Exception as exc:
-        resultado["erro"] = sanitizar(str(exc)[:300])
+        resultado["erro"] = sanitizar(str(exc))[:300]
 
     resultado["duracao_s"] = round(time.monotonic() - inicio, 3)
     return resultado
@@ -403,8 +412,8 @@ async def main(saida: Path | None = None) -> dict:
              "--host", "127.0.0.1", "--port", str(porta_nucleo),
              "--log-level", "warning"],
             cwd=str(NUCLEO_DIR),
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
             env={**os.environ, "VARD_CONFIG": str(config_dir), "VARD_DADOS": str(dados_dir)},
         )
         processos.append(_ProcessoGerenciado("nucleo", proc_nucleo))
@@ -415,14 +424,14 @@ async def main(saida: Path | None = None) -> dict:
                 config_dir, dados_dir, porta_nucleo
             )
         except Exception as exc:
-            relatorio["prova_cerebro_http"] = {"erro": sanitizar(str(exc)[:300])}
+            relatorio["prova_cerebro_http"] = {"erro": sanitizar(str(exc))[:300]}
 
-    # Encerra todos os processos
-    print("→ Encerrando processos...")
-    for p in processos:
-        info = p.encerrar()
-        relatorio["processos"].append(info)
-        print(f"  {info['nome']} (PID {info['pid']}): {info['terminado']}")
+        # Encerra todos os processos DENTRO do with para garantir que o tmpdir existe
+        print("→ Encerrando processos...")
+        for p in processos:
+            info = p.encerrar()
+            relatorio["processos"].append(info)
+            print(f"  {info['nome']} (PID {info['pid']}): {info['terminado']}")
 
     # Escreve relatório
     destino = saida or Path(tempfile.gettempdir()) / f"vard-j2-prova-{int(time.time())}.json"
