@@ -148,6 +148,7 @@ window.addEventListener("DOMContentLoaded", async () => {
   // Modo invisível: o widget só aparece durante a conversa (ou revelado à mão). Nunca esconde a janela: o WebView2 estrangularia os timers do VAD.
   const atualizarVisibilidadeNucleo = () => {
     const oculto = !invisibilidade.visivel() || document.visibilityState === "hidden";
+    app.classList.toggle("animacoes-ocultas", oculto);
     nucleo.definirOculto?.(oculto);
   };
   const invisibilidade = new Invisibilidade((visivel) => {

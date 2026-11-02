@@ -45,6 +45,7 @@ window.addEventListener("DOMContentLoaded", async () => {
   };
   const atualizarVisibilidadeSala = () => {
     const oculto = document.visibilityState === "hidden";
+    document.body.classList.toggle("oculto", oculto);
     nucleo.definirOculto(oculto);
     if (oculto) {
       pararRelogio();

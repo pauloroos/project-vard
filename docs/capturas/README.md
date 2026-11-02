@@ -5,7 +5,7 @@ Este diretório contém as capturas de tela das interfaces do Vard (HUD, Sala e 
 ## Estrutura de diretórios
 
 - `antes/`: Capturas do estado visual de referência (antes do redesenho da versão 0.10.0), totalizando 14 imagens cobrindo o HUD, a Sala e todas as 12 seções de Configurações.
-- `depois/`: Capturas do novo sistema visual implementado na versão 0.10.0, com tokens unificados, profundidade em vidro fosco, escala tipográfica consistente e acessibilidade completa.
+- `depois/`: Capturas do novo sistema visual implementado na versão 0.10.0, com tokens unificados, profundidade em vidro fosco e escala tipográfica consistente.
 
 ## Comparação antes e depois
 
@@ -28,7 +28,7 @@ Este diretório contém as capturas de tela das interfaces do Vard (HUD, Sala e 
 
 ## Tabela de contraste de cores (WCAG AA)
 
-Todos os pares de texto e elementos interativos do sistema de tokens (`src/tokens.css`) foram projetados e validados para atender ou superar os requisitos de conformidade WCAG 2.1 nível AA (mínimo de 4,5:1 para texto normal e 3,0:1 para elementos de destaque/gráficos) contra os fundos reais da interface:
+Os valores abaixo ilustram pares de cores sólidos dos tokens (`src/tokens.css`). Os testes em `tests/tokens-contraste.test.ts` verificam alguns desses pares, não todos os componentes, estados, fundos reais ou combinações translúcidas. Esses cálculos não demonstram conformidade WCAG da interface nem acessibilidade completa:
 
 | Elemento / Token | Cor Hex | Fundo de Aplicação | Luminância Relativa | Razão de Contraste | Nível WCAG |
 | :--- | :--- | :--- | :--- | :--- | :--- |
@@ -43,7 +43,7 @@ Todos os pares de texto e elementos interativos do sistema de tokens (`src/token
 | `--vard-violeta` (transcrição) | `#b59cff` | `--vard-fundo` (`#060b11`) | 0,4082 vs 0,0032 | **8,6 : 1** | AAA (Passa) |
 | `--vard-erro` (erro/captura) | `#ff5555` | `--vard-fundo` (`#060b11`) | 0,2841 vs 0,0032 | **6,3 : 1** | AA (Passa) |
 
-*Nota: Para superfícies translúcidas (`--vard-vidro: rgba(8, 18, 28, 0.75)` ou `--vard-superficie: rgba(0, 240, 255, 0.05)` compostas sobre `--vard-fundo` ou `--vard-fundo-elevado`), a luminância do fundo resultante permanece abaixo de 0,0120, garantindo razão de contraste de `--vard-texto` e `--vard-ciano` acima de 12:1.*
+Superfícies translúcidas, fundos variáveis e estados interativos precisam de verificação no contexto real de renderização.
 
 ## Como reproduzir as capturas
 
@@ -51,17 +51,19 @@ As capturas são geradas automaticamente por script Playwright em Python síncro
 
 ```bash
 PLAYWRIGHT_BROWSERS_PATH=<diretório de navegadores do Playwright> \
-python scripts/provas/capturas-visual.py --saida docs/capturas/depois
+python scripts/provas/capturas-visual.py --saida <novo-diretório-de-capturas>
 ```
 
-### Argumentos opcionais
+### Argumentos
 
-- `--url <URL>`: Especifica uma instância do Vite já em execução (ex.: `http://127.0.0.1:5199`). Quando omitido, o script inicializa o próprio processo do Vite na porta 5199 com `--strictPort` e `VITE_PROVA=repouso`, encerrando-o de forma limpa ao final.
-- `--saida <PASTA>`: Diretório de destino dos arquivos PNG gerados (padrão: `docs/capturas/antes`).
+- `--url <URL>`: Usa explicitamente um servidor já em execução (ex.: `http://127.0.0.1:5199`). Quando omitido, o script inicia seu próprio Vite na porta 5199 com `--strictPort` e `VITE_PROVA=repouso`, aguardando o aviso desse processo e encerrando-o ao final. Se a porta estiver ocupada, falha sem usar o outro servidor.
+- `--saida <PASTA>`: Obrigatório. Informe um diretório que ainda não exista; o script se recusa a usar um diretório existente, preservando as capturas anteriores.
 
 ## Método e arquitetura de mock
 
 No ambiente Linux headless de CI/desenvolvimento, não há runtime WebView2 nem o subsistema gráfico do Windows. Para capturar as páginas exatamente como renderizadas pelo front-end em Vite:
+
+As requisições das páginas são limitadas à origem de prova escolhida: as rotas de saúde `/oj` são simuladas, demais rotas `/oj` e outras origens são bloqueadas. WebSockets e service workers também são bloqueados; não há acesso direto aos serviços locais de voz ou ponte.
 
 1. **Mock de IPC do Tauri v2**:
    - Injetado antes do carregamento de qualquer página (`page.add_init_script`), provendo `window.__TAURI__` e `window.__TAURI_INTERNALS__`.

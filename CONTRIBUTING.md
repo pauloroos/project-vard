@@ -18,6 +18,14 @@ npx tsc -p tsconfig.test.json   # tipos dos testes
 cargo test --manifest-path src-tauri/Cargo.toml
 ```
 
+Os testes de isolamento do script de capturas não fazem parte de `npm test`. Com o pacote Python `playwright` instalado, execute sem abrir navegador ou servidor:
+
+```bash
+python -m unittest discover -s tests -p test_capturas_visual.py
+```
+
+The screenshot isolation tests are separate from `npm test`; install the Python `playwright` package and run the command above. They do not open a browser or server.
+
 `HUD_REAL=1 HUD_REAL_WAV=<um WAV dizendo "Preflight"> npm run test:real` (PowerShell: `$env:HUD_REAL=1; $env:HUD_REAL_WAV="<wav>"; npm run test:real`) prova contra um OpenJarvis de verdade (transcrever, perguntar, sintetizar).
 
 O front tem três páginas, declaradas em vite.config.ts: index.html (widget), configuracoes.html (painel) e sala.html (tela cheia).

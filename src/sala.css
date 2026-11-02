@@ -122,6 +122,12 @@ body[data-estado="jogo"] {
   text-shadow: none;
 }
 
+body[data-estado="jogo"] :is(#relogio, #estado, #ouvido, #resposta) {
+  color: #b0b4ba;
+  opacity: 1;
+  text-shadow: none;
+}
+
 body[data-estado="erro"] #estado {
   color: var(--vard-erro);
   text-shadow: 0 0 1vmin var(--vard-erro);
@@ -130,6 +136,10 @@ body[data-estado="erro"] #estado {
 body[data-estado="pensando"] {
   color: var(--vard-ambar);
   text-shadow: 0 0 1vmin var(--vard-ambar);
+}
+
+body[data-estado="pensando"] :is(#relogio, #estado, #ouvido, #resposta) {
+  color: var(--vard-ambar);
 }
 
 body[data-estado="pensando"] #estado::after {
@@ -141,7 +151,21 @@ body[data-estado="transcrevendo"] {
   text-shadow: 0 0 1vmin var(--vard-violeta);
 }
 
+body[data-estado="transcrevendo"] :is(#relogio, #estado, #ouvido, #resposta) {
+  color: var(--vard-violeta);
+}
+
 body[data-estado="transcrevendo"] #estado::after {
   content: " ●";
   animation: piscar 0.7s infinite alternate;
+}
+
+/* Sala oculta: pausa de fato todas as animações (a cascata redefine `animation` depois). */
+body.oculto,
+body.oculto *,
+body.oculto::before,
+body.oculto::after,
+body.oculto *::before,
+body.oculto *::after {
+  animation-play-state: paused !important;
 }

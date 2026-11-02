@@ -71,4 +71,30 @@ describe("Cadência e visibilidade do Núcleo", () => {
     const quadro2 = vi.mocked(requestAnimationFrame).mock.calls.slice(-1)[0][0];
     expect(() => quadro2(200)).not.toThrow();
   });
+
+  it("movimento reduzido não altera a geometria em resposta ao áudio", () => {
+    function desenharComNivel(nivel: number, reduzido: boolean) {
+      const pontos: number[][] = [];
+      const ctx = new Proxy({
+        createRadialGradient: () => ({ addColorStop() {} }),
+        fillRect: (...args: number[]) => pontos.push(args),
+      }, { get: (obj, chave) => chave in obj ? obj[chave as keyof typeof obj] : vi.fn() });
+      const canvas = document.createElement("canvas");
+      vi.spyOn(canvas, "getContext").mockReturnValue(ctx as unknown as CanvasRenderingContext2D);
+      const nucleo = new Nucleo(canvas);
+      nucleo.definirMovimentoReduzido(reduzido);
+      const fonte = { frequencyBinCount: 128, fftSize: 256,
+        getByteFrequencyData: (dados: Uint8Array) => dados.fill(nivel * 255),
+        getFloatTimeDomainData: (dados: Float32Array) => dados.fill(nivel),
+      };
+      nucleo.setAnalisadores(fonte, fonte);
+      nucleo.setEstado("falando");
+      nucleo.iniciar();
+      for (let t = 100; t <= 500; t += 50) vi.mocked(requestAnimationFrame).mock.lastCall![0](t);
+      nucleo.parar();
+      return pontos;
+    }
+    expect(desenharComNivel(1, true)).toEqual(desenharComNivel(0, true));
+    expect(desenharComNivel(1, false)).not.toEqual(desenharComNivel(0, false));
+  });
 });

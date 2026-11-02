@@ -33,10 +33,17 @@ html, body {
 
 #app.invisivel,
 #app.invisivel *,
+#app.invisivel::before,
 #app.invisivel::after,
 #app.invisivel *::before,
-#app.invisivel *::after {
-  animation-play-state: paused;
+#app.invisivel *::after,
+#app.animacoes-ocultas,
+#app.animacoes-ocultas *,
+#app.animacoes-ocultas::before,
+#app.animacoes-ocultas::after,
+#app.animacoes-ocultas *::before,
+#app.animacoes-ocultas *::after {
+  animation-play-state: paused !important;
 }
 
 #nucleo {
@@ -299,7 +306,8 @@ html, body {
   pointer-events: none;
 }
 
-#app.compacto.revelado #botoes {
+#app.compacto.revelado #botoes,
+#app.compacto #botoes:focus-within {
   opacity: 1;
   pointer-events: auto;
 }

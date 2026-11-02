@@ -6,21 +6,22 @@ sem necessidade de WebView2 ou Windows.
 
 Uso:
     PLAYWRIGHT_BROWSERS_PATH=<diretório de navegadores do Playwright> \\
-    python scripts/provas/capturas-visual.py [--url URL] [--saida PASTA]
+    python scripts/provas/capturas-visual.py --saida PASTA [--url URL]
 """
 from __future__ import annotations
 
 import argparse
 import json
 import os
+import queue
 import shutil
 import subprocess
 import sys
+import threading
 import time
-import urllib.error
-import urllib.request
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
 
 from playwright.sync_api import sync_playwright
 
@@ -301,17 +302,27 @@ INIT_SCRIPT = f"""
 """
 
 
-def esperar_servidor(url: str, timeout: float = 15.0) -> None:
-    """Aguarda até que o servidor HTTP responda com sucesso."""
+def esperar_servidor(processo: subprocess.Popen[str], timeout: float = 15.0) -> None:
+    """Aceita somente o aviso de prontidão emitido pelo processo que iniciamos."""
+    linhas: queue.Queue[str | None] = queue.Queue()
+    def ler_saida() -> None:
+        assert processo.stdout is not None
+        for linha in processo.stdout:
+            linhas.put(linha)
+        linhas.put(None)
+    threading.Thread(target=ler_saida, daemon=True).start()
     limite = time.monotonic() + timeout
-    while time.monotonic() < limite:
+    while True:
         try:
-            with urllib.request.urlopen(url, timeout=1.0) as resposta:
-                if resposta.status < 500:
-                    return
-        except (urllib.error.URLError, OSError):
-            time.sleep(0.1)
-    raise TimeoutError(f"Servidor não respondeu em {url} após {timeout}s.")
+            linha = linhas.get(timeout=max(0, limite - time.monotonic()))
+        except queue.Empty:
+            raise TimeoutError("Vite não sinalizou prontidão no prazo.") from None
+        if linha is None:
+            raise RuntimeError("Vite encerrou antes de sinalizar prontidão.")
+        if "Local:" in linha and "http://127.0.0.1:5199/" in linha:
+            if processo.poll() is not None:
+                raise RuntimeError("Vite encerrou após sinalizar prontidão.")
+            return
 
 
 def verificar_arquivo_png(caminho: Path) -> None:
@@ -326,31 +337,33 @@ def verificar_arquivo_png(caminho: Path) -> None:
         )
 
 
-def configurar_rotas_mock(page: Any) -> None:
-    """Simula as rotas de saúde do OpenJarvis para evitar erros de conexão do proxy."""
-    page.route(
-        "**/oj/health",
-        lambda route: route.fulfill(
-            status=200,
-            content_type="application/json",
-            body=json.dumps({"status": "ok"}),
-        ),
-    )
-    page.route(
-        "**/oj/v1/speech/health",
-        lambda route: route.fulfill(
-            status=200,
-            content_type="application/json",
-            body=json.dumps({"available": True}),
-        ),
-    )
+def configurar_rotas_mock(contexto: Any, url_base: str) -> None:
+    """Isola serviços reais; somente os arquivos da origem de prova são acessíveis."""
+    base = urlsplit(url_base)
+    origem = (base.scheme, base.hostname, base.port)
+    if base.scheme not in ("http", "https") or not base.hostname:
+        raise ValueError("A URL de prova deve ser HTTP ou HTTPS.")
+
+    def rotear(rota: Any) -> None:
+        url = urlsplit(rota.request.url)
+        if (url.scheme, url.hostname, url.port) != origem:
+            rota.abort()
+        elif url.path in ("/oj/health", "/oj/v1/speech/health"):
+            corpo = {"status": "ok"} if url.path == "/oj/health" else {"available": True}
+            rota.fulfill(status=200, content_type="application/json", body=json.dumps(corpo))
+        elif url.path == "/oj" or url.path.startswith("/oj/"):
+            rota.abort()
+        else:
+            rota.continue_()
+
+    contexto.route("**/*", rotear)
+    contexto.route_web_socket("**/*", lambda websocket: websocket.close())
 
 
 def capturar_hud(page: Any, url_base: str, saida_dir: Path) -> None:
     """Captura a tela HUD (index.html) com viewport 320x360 e escala 2x."""
     page.on("pageerror", lambda err: print("[HUD PAGEERROR]:", err))
     page.on("console", lambda m: print(f"[HUD CONSOLE {m.type}]:", m.text) if m.type == "error" else None)
-    configurar_rotas_mock(page)
     page.set_viewport_size({"width": 320, "height": 360})
     page.goto(f"{url_base}/index.html")
     page.wait_for_selector("#nucleo", timeout=10000)
@@ -376,7 +389,6 @@ def capturar_hud(page: Any, url_base: str, saida_dir: Path) -> None:
 
 def capturar_sala(page: Any, url_base: str, saida_dir: Path) -> None:
     """Captura a tela da sala (sala.html) com viewport 1280x800 e escala 1x."""
-    configurar_rotas_mock(page)
     page.set_viewport_size({"width": 1280, "height": 800})
     page.goto(f"{url_base}/sala.html")
     page.wait_for_selector("#nucleo", timeout=10000)
@@ -414,7 +426,6 @@ def capturar_sala(page: Any, url_base: str, saida_dir: Path) -> None:
 
 def capturar_configuracoes(page: Any, url_base: str, saida_dir: Path) -> None:
     """Captura cada aba da tela de configurações (configuracoes.html) com viewport 960x640."""
-    configurar_rotas_mock(page)
     page.set_viewport_size({"width": 960, "height": 640})
     page.goto(f"{url_base}/configuracoes.html")
     page.wait_for_selector("#painel nav button", timeout=10000)
@@ -440,15 +451,15 @@ def main() -> None:
     )
     parser.add_argument(
         "--saida",
-        default="docs/capturas/antes",
-        help="Diretório onde salvar as capturas geradas (padrão: docs/capturas/antes).",
+        required=True,
+        help="Novo diretório onde salvar as capturas; não pode existir anteriormente.",
     )
     args = parser.parse_args()
 
     saida_dir = RAIZ / args.saida if not Path(args.saida).is_absolute() else Path(args.saida)
-    saida_dir.mkdir(parents=True, exist_ok=True)
+    saida_dir.mkdir(parents=True, exist_ok=False)
 
-    vite_proc: subprocess.Popen[bytes] | None = None
+    vite_proc: subprocess.Popen[str] | None = None
     url_base = args.url
 
     try:
@@ -474,24 +485,27 @@ def main() -> None:
                 comando,
                 cwd=str(RAIZ),
                 env=env,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
             )
-            esperar_servidor(f"{url_base}/")
+            esperar_servidor(vite_proc)
             print(f"[Vite] Servidor pronto em {url_base}.")
 
         with sync_playwright() as p:
             browser = p.chromium.launch(headless=True)
             try:
                 # 1. Contexto para HUD (device_scale_factor=2)
-                context_hud = browser.new_context(device_scale_factor=2)
+                context_hud = browser.new_context(device_scale_factor=2, service_workers="block")
+                configurar_rotas_mock(context_hud, url_base)
                 page_hud = context_hud.new_page()
                 page_hud.add_init_script(INIT_SCRIPT)
                 capturar_hud(page_hud, url_base, saida_dir)
                 context_hud.close()
 
                 # 2. Contexto para Sala e Configurações (device_scale_factor=1)
-                context_geral = browser.new_context(device_scale_factor=1)
+                context_geral = browser.new_context(device_scale_factor=1, service_workers="block")
+                configurar_rotas_mock(context_geral, url_base)
                 page_geral = context_geral.new_page()
                 page_geral.add_init_script(INIT_SCRIPT)
 

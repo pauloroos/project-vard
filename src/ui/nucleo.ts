@@ -280,9 +280,11 @@ export class Nucleo {
     const p = this.p;
 
     // níveis (medidores) e espectro
-    const linE = this.rmsEntrada(), linS = this.rmsSaida();
+    const linE = this.movimentoReduzido ? 0 : this.rmsEntrada();
+    const linS = this.movimentoReduzido ? 0 : this.rmsSaida();
 
-    const fonteFft = e === "falando" ? this.saida : e === "ouvindo" ? this.entrada : null;
+    const fonteFft = this.movimentoReduzido ? null : e === "falando" ? this.saida : e === "ouvindo" ? this.entrada : null;
+    if (this.movimentoReduzido) { this.fft.fill(0); this.energiaS = 0; this.ondaNasc.fill(-1); }
     if (fonteFft) this.lerFft(fonteFft); else this.fftAlvo.fill(0);
     const ks = fonteFft ? 0.4 : 0.15;
     let soma = 0;
