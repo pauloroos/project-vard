@@ -121,7 +121,7 @@ export class Nucleo {
     this.oculto = oculto;
     if (oculto) {
       this.parar();
-    } else if (this.iniciado && this.estado !== "jogo") {
+    } else if (this.iniciado) {
       this.iniciar();
     }
   }

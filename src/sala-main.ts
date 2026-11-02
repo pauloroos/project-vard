@@ -53,7 +53,7 @@ window.addEventListener("DOMContentLoaded", async () => {
     }
   };
   document.addEventListener("visibilitychange", atualizarVisibilidadeSala);
-  iniciarRelogio();
+  atualizarVisibilidadeSala();
   pintar();
 
   // Payloads vêm de outra janela: reduzir e EspectroRemoto.atualizar descartam o que não tem a forma esperada.

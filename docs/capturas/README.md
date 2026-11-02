@@ -32,18 +32,18 @@ Todos os pares de texto e elementos interativos do sistema de tokens (`src/token
 
 | Elemento / Token | Cor Hex | Fundo de Aplicação | Luminância Relativa | Razão de Contraste | Nível WCAG |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| `--vard-texto` | `#d8f4f8` | `--vard-fundo` (`#060b11`) | 0,8841 vs 0,0033 | **17,5 : 1** | AAA (Passa) |
-| `--vard-texto` | `#d8f4f8` | `--vard-fundo-elevado` (`#0a141e`) | 0,8841 vs 0,0055 | **16,8 : 1** | AAA (Passa) |
-| `--vard-texto-fraco` | `#92c5d1` | `--vard-fundo` (`#060b11`) | 0,5284 vs 0,0033 | **10,8 : 1** | AAA (Passa) |
-| `--vard-texto-fraco` | `#92c5d1` | `--vard-fundo-elevado` (`#0a141e`) | 0,5284 vs 0,0055 | **10,4 : 1** | AAA (Passa) |
-| `--vard-ciano` | `#00f0ff` | `--vard-fundo` (`#060b11`) | 0,6908 vs 0,0033 | **13,9 : 1** | AAA (Passa) |
-| `--vard-ciano` | `#00f0ff` | `--vard-fundo-elevado` (`#0a141e`) | 0,6908 vs 0,0055 | **13,3 : 1** | AAA (Passa) |
-| `--vard-ciano-forte` | `#3df3ff` | `--vard-fundo` (`#060b11`) | 0,8037 vs 0,0033 | **16,0 : 1** | AAA (Passa) |
-| `--vard-ambar` (pensando/aviso) | `#ffb020` | `--vard-fundo` (`#060b11`) | 0,5262 vs 0,0033 | **10,8 : 1** | AAA (Passa) |
-| `--vard-violeta` (transcrição) | `#b59cff` | `--vard-fundo` (`#060b11`) | 0,4079 vs 0,0033 | **8,6 : 1** | AAA (Passa) |
-| `--vard-erro` (erro/captura) | `#ff5555` | `--vard-fundo` (`#060b11`) | 0,2858 vs 0,0033 | **6,3 : 1** | AA (Passa) |
+| `--vard-texto` | `#d8f4f8` | `--vard-fundo` (`#060b11`) | 0,8608 vs 0,0032 | **17,1 : 1** | AAA (Passa) |
+| `--vard-texto` | `#d8f4f8` | `--vard-fundo-elevado` (`#0a141e`) | 0,8608 vs 0,0066 | **16,1 : 1** | AAA (Passa) |
+| `--vard-texto-fraco` | `#92c5d1` | `--vard-fundo` (`#060b11`) | 0,5065 vs 0,0032 | **10,5 : 1** | AAA (Passa) |
+| `--vard-texto-fraco` | `#92c5d1` | `--vard-fundo-elevado` (`#0a141e`) | 0,5065 vs 0,0066 | **9,8 : 1** | AAA (Passa) |
+| `--vard-ciano` | `#00f0ff` | `--vard-fundo` (`#060b11`) | 0,6954 vs 0,0032 | **14,0 : 1** | AAA (Passa) |
+| `--vard-ciano` | `#00f0ff` | `--vard-fundo-elevado` (`#0a141e`) | 0,6954 vs 0,0066 | **13,2 : 1** | AAA (Passa) |
+| `--vard-ciano-forte` | `#3df3ff` | `--vard-fundo` (`#060b11`) | 0,7231 vs 0,0032 | **14,5 : 1** | AAA (Passa) |
+| `--vard-ambar` (pensando/aviso) | `#ffb020` | `--vard-fundo` (`#060b11`) | 0,5241 vs 0,0032 | **10,8 : 1** | AAA (Passa) |
+| `--vard-violeta` (transcrição) | `#b59cff` | `--vard-fundo` (`#060b11`) | 0,4082 vs 0,0032 | **8,6 : 1** | AAA (Passa) |
+| `--vard-erro` (erro/captura) | `#ff5555` | `--vard-fundo` (`#060b11`) | 0,2841 vs 0,0032 | **6,3 : 1** | AA (Passa) |
 
-*Nota: Em fundos com superfícies translúcidas (`--vard-superficie` ou `--vard-vidro`), o contraste efetivo de `--vard-texto` e `--vard-ciano` permanece acima de 12:1.*
+*Nota: Para superfícies translúcidas (`--vard-vidro: rgba(8, 18, 28, 0.75)` ou `--vard-superficie: rgba(0, 240, 255, 0.05)` compostas sobre `--vard-fundo` ou `--vard-fundo-elevado`), a luminância do fundo resultante permanece abaixo de 0,0120, garantindo razão de contraste de `--vard-texto` e `--vard-ciano` acima de 12:1.*
 
 ## Como reproduzir as capturas
 

@@ -44,23 +44,31 @@ describe("Cadência e visibilidade do Núcleo", () => {
     expect(requestAnimationFrame).toHaveBeenCalled();
   });
 
-  it("em jogo, mesmo voltando a ficar visível não liga animação contínua", () => {
+  it("em jogo, voltar a ficar visível desenha quadro estático sem ligar animação contínua", () => {
     const nucleo = criarNucleo();
+    const desenharSpy = vi.spyOn(nucleo as unknown as { desenhar: (t: number) => void }, "desenhar");
     nucleo.iniciar();
     nucleo.setEstado("jogo");
     nucleo.definirOculto(true);
     vi.mocked(requestAnimationFrame).mockClear();
+    desenharSpy.mockClear();
 
     nucleo.definirOculto(false);
     expect(requestAnimationFrame).not.toHaveBeenCalled();
+    expect(desenharSpy).toHaveBeenCalledTimes(1);
   });
 
   it("movimento reduzido pode ser ativado e desativado", () => {
     const nucleo = criarNucleo();
     nucleo.definirMovimentoReduzido(true);
     nucleo.iniciar();
-    // Primeiro quadro desenha
-    const quadro = vi.mocked(requestAnimationFrame).mock.calls.slice(-1)[0][0];
-    expect(() => quadro(100)).not.toThrow();
+    // Primeiro quadro desenha com movimento reduzido
+    const quadro1 = vi.mocked(requestAnimationFrame).mock.calls.slice(-1)[0][0];
+    expect(() => quadro1(100)).not.toThrow();
+
+    // Desativa movimento reduzido e verifica próximo quadro no caminho de desenho
+    nucleo.definirMovimentoReduzido(false);
+    const quadro2 = vi.mocked(requestAnimationFrame).mock.calls.slice(-1)[0][0];
+    expect(() => quadro2(200)).not.toThrow();
   });
 });
