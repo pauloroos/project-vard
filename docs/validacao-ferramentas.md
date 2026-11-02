@@ -177,6 +177,8 @@ Configuração isolada via `VARD_CONFIG`, `VARD_DADOS` e `VARD_HUD_CONFIG_DIR` a
 Saída sanitizada em `/tmp/opencode/vard-j2-final.json`. Nenhum segredo, endpoint ou nome de modelo no relatório.
 
 > **Histórico:** A primeira execução (pit stop 1) registrou `auth_401` porque o comando de prova exportou um modelo fictício (`provedor/modelo-de-teste`) em vez do modelo de prova real — falha do harness, não do produto. A reexecução com o ambiente correto passou; o resultado abaixo reflete essa execução bem-sucedida.
+>
+> **J3 pit stop 1 (2026-11-02):** Harness endurecido — cleanup em `try/finally` dentro do `with`, teste offline afirma evento `ferramenta` com nome/argumentos, PIDs dos MCPs confirmados encerrados via `psutil.pid_exists`. Prova real reexecutada com sucesso: evento `ver_configuracoes` + resposta textual + zero processos vivos após encerramento.
 
 ### MCPs diretos (stdio, sem modelo)
 

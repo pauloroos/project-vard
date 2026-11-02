@@ -298,12 +298,21 @@ class TestHarnessSimulado:
                     # Verifica estado final
                     info = modulo_pedidos.consultar(pedido_id)
                     assert info is not None
-                    # O estado pode ser concluido ou falhou dependendo de como o
-                    # cérebro lida com ferramentas sem gerenciador configurado.
-                    # O importante é que o laço processou a tool_call.
                     tipos_eventos = [e["tipo"] for e in eventos]
-                    # Deve ter pelo menos um evento (fim ou erro)
                     assert len(eventos) > 0
                     assert "fim" in tipos_eventos or "erro" in tipos_eventos
+
+                    # Afirma evento de ferramenta com nome e argumentos
+                    eventos_ferramenta = [
+                        e for e in eventos if e["tipo"] == "ferramenta"
+                    ]
+                    assert len(eventos_ferramenta) > 0, (
+                        "esperado pelo menos um evento 'ferramenta'; "
+                        f"recebidos: {tipos_eventos}"
+                    )
+                    ev_ferr = eventos_ferramenta[0]
+                    dados_ferr = ev_ferr.get("dados", {})
+                    assert dados_ferr.get("nome") == "ver_configuracoes"
+                    assert "argumentos" in dados_ferr or "args" in dados_ferr
         finally:
             srv.shutdown()

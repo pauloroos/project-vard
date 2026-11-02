@@ -118,9 +118,8 @@ async def provar_mcps_diretos(config_dir: Path, dados_dir: Path) -> list[dict]:
                     gm.adicionar_stdio(nome_mcp, sys.executable, [str(script)]),
                     timeout=15,
                 )
-                # Registra PID do processo MCP stdio para confirmação de encerramento
-                cliente = gm._clientes.get(nome_mcp)
-                mcp_pid = getattr(getattr(cliente, "_process", None), "pid", None)
+                pids = gm.pids_mcp()
+                mcp_pid = pids.get(nome_mcp)
                 if mcp_pid is not None:
                     resultados.append({
                         "mcp": nome_mcp,
@@ -395,43 +394,59 @@ async def main(saida: Path | None = None) -> dict:
         segredos_path = config_dir.parent / "segredos.toml"
         segredos_path.write_text(segredos_toml, encoding="utf-8")
 
-        # --- Prova 1: MCPs diretos ---
-        print("→ Provando MCPs diretamente (sem modelo)...")
+        mcp_pids_antes: dict[str, int] = {}
         try:
-            relatorio["provas_mcps_diretos"] = await provar_mcps_diretos(config_dir, dados_dir)
-        except Exception as exc:
-            relatorio["provas_mcps_diretos"] = [{"erro": sanitizar(str(exc)[:300])}]
+            # --- Prova 1: MCPs diretos ---
+            print("→ Provando MCPs diretamente (sem modelo)...")
+            try:
+                relatorio["provas_mcps_diretos"] = await provar_mcps_diretos(config_dir, dados_dir)
+            except Exception as exc:
+                relatorio["provas_mcps_diretos"] = [{"erro": sanitizar(str(exc)[:300])}]
 
-        # --- Prova 2: Cérebro por HTTP/SSE ---
-        print("→ Subindo núcleo para prova HTTP/SSE...")
-        porta_nucleo = _porta_livre()
+            # --- Prova 2: Cérebro por HTTP/SSE ---
+            print("→ Subindo núcleo para prova HTTP/SSE...")
+            porta_nucleo = _porta_livre()
 
-        # Inicia núcleo como subprocesso
-        proc_nucleo = subprocess.Popen(
-            [sys.executable, "-m", "uvicorn", "server:app",
-             "--host", "127.0.0.1", "--port", str(porta_nucleo),
-             "--log-level", "warning"],
-            cwd=str(NUCLEO_DIR),
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            env={**os.environ, "VARD_CONFIG": str(config_dir), "VARD_DADOS": str(dados_dir)},
-        )
-        processos.append(_ProcessoGerenciado("nucleo", proc_nucleo))
-
-        print(f"→ Provando cérebro via HTTP/SSE (porta {porta_nucleo})...")
-        try:
-            relatorio["prova_cerebro_http"] = await provar_cerebro_http(
-                config_dir, dados_dir, porta_nucleo
+            proc_nucleo = subprocess.Popen(
+                [sys.executable, "-m", "uvicorn", "server:app",
+                 "--host", "127.0.0.1", "--port", str(porta_nucleo),
+                 "--log-level", "warning"],
+                cwd=str(NUCLEO_DIR),
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                env={**os.environ, "VARD_CONFIG": str(config_dir), "VARD_DADOS": str(dados_dir)},
             )
-        except Exception as exc:
-            relatorio["prova_cerebro_http"] = {"erro": sanitizar(str(exc))[:300]}
+            processos.append(_ProcessoGerenciado("nucleo", proc_nucleo))
 
-        # Encerra todos os processos DENTRO do with para garantir que o tmpdir existe
-        print("→ Encerrando processos...")
-        for p in processos:
-            info = p.encerrar()
-            relatorio["processos"].append(info)
-            print(f"  {info['nome']} (PID {info['pid']}): {info['terminado']}")
+            print(f"→ Provando cérebro via HTTP/SSE (porta {porta_nucleo})...")
+            try:
+                relatorio["prova_cerebro_http"] = await provar_cerebro_http(
+                    config_dir, dados_dir, porta_nucleo
+                )
+            except Exception as exc:
+                relatorio["prova_cerebro_http"] = {"erro": sanitizar(str(exc))[:300]}
+        finally:
+            # Encerra todos os processos DENTRO do with para garantir que o tmpdir existe
+            print("→ Encerrando processos...")
+            for p in processos:
+                info = p.encerrar()
+                relatorio["processos"].append(info)
+                print(f"  {info['nome']} (PID {info['pid']}): {info['terminado']}")
+
+            # Confirma que nenhum MCP stdio sobreviveu (verificação por PID)
+            import psutil
+            mcp_encerrados: list[dict] = []
+            for item in relatorio.get("provas_mcps_diretos", []):
+                if item.get("status") == "pid_registrado" and "pid" in item:
+                    pid = item["pid"]
+                    vivo = psutil.pid_exists(pid)
+                    mcp_encerrados.append({
+                        "mcp": item["mcp"],
+                        "pid": pid,
+                        "terminado": not vivo,
+                    })
+            if mcp_encerrados:
+                relatorio["mcp_terminados"] = mcp_encerrados
 
     # Escreve relatório
     destino = saida or Path(tempfile.gettempdir()) / f"vard-j2-prova-{int(time.time())}.json"
