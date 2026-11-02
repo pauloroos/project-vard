@@ -157,7 +157,12 @@ class AdaptadorOpenAICompat(AdaptadorProvedor):
         url = f"{self._base}/v1/chat/completions"
         corpo: Dict[str, Any] = {"model": self._modelo, "messages": mensagens, "stream": True}
         if ferramentas:
-            corpo["tools"] = ferramentas
+            # O laço manda {name, description, parameters}; a API OpenAI exige {"type":"function","function":{...}}
+            # (sem isso o LM Studio responde 400 a todo pedido com ferramentas).
+            corpo["tools"] = [
+                t if t.get("type") == "function" else {"type": "function", "function": t}
+                for t in ferramentas
+            ]
 
         cabecalhos: Dict[str, str] = {"Content-Type": "application/json"}
         if self._chave:
