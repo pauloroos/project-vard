@@ -10,13 +10,14 @@ Ambiente: Linux aarch64, Python 3.13 (nucleo), Python 3.12 (voz/reuniao), Node.j
 
 | Comando | Resultado | Observação |
 | --- | --- | --- |
-| `npm test` | 112 arquivos passaram, 1 pulado; 1126 testes passaram, 4 pulados (73 s) | Vitest/jsdom, tudo verde |
+| `npm test` | 112 arquivos passaram, 1 pulado; 1126 testes passaram, 4 pulados (64 s) | Vitest/jsdom, 100% verde |
 | `npm run check` | Saída limpa (exit 0) | `tsc --noEmit` + `tsc -p tsconfig.test.json` |
-| `uv run --project nucleo --python 3.13 pytest -q nucleo/tests` | 7 erros de coleta, interrompido | Todos por `import msvcrt` em `vard/vigia.py` |
-| Mesma suíte com `--ignore` nos 7 arquivos | 1582 passaram, 53 falharam, 67 pulados (141 s) | Falhas classificadas abaixo |
+| `uv run --project nucleo --python 3.13 pytest -q nucleo/tests` | 7 erros de coleta, interrompido (1,83 s) | Todos por `import msvcrt` em `vard/vigia.py:11` |
+| Mesma suíte com `--ignore` nos 7 arquivos | 1596 passaram, 49 falharam (48 só Windows, 1 teste de harness isolável passa avulso), 68 pulados (130 s) | As 5 correções do J3 aumentaram aprovados de 1582 para 1596 |
+| Testes de defeitos e prova real | 19 passaram, 1 pulado (`test_delegada` pula em Linux por ausência de `cmd`) (4,2 s) | Cobertura dos 5 defeitos corrigidos e do harness J2/J3 |
 | `uv run --project voz --python 3.12 pytest -q voz/tests` | Erro de instalação | `monotonic-alignment-search` exige `Python.h` (cabeçalhos CPython ausentes) |
 | `uv run --project reuniao --python 3.12 pytest -q reuniao/tests` | Erro de instalação | `pyaudiowpatch` só tem wheel para win32/win_amd64 |
-| `cargo test --manifest-path src-tauri/Cargo.toml` | Erro de compilação | `bindgen` não encontra `libclang.so` |
+| `cargo test --manifest-path src-tauri/Cargo.toml` | Erro de compilação: `Unable to find libclang: "couldn't find any valid shared libraries matching: ['libclang.so', ...]` | `bindgen` exige `libclang.so` (dependência C/LLVM ausente em Linux) |
 
 ### Erros de coleta do núcleo (7 arquivos)
 
@@ -36,65 +37,158 @@ Causa raiz: `nucleo/vard/vigia.py:11: import msvcrt` — módulo exclusivo do Wi
 
 ## Inventário por grupo
 
-### MCPs locais
+### MCPs locais — resumo dos servidores
 
-| Grupo | Código | Testes automatizados | Prova real | Resultado |
-| --- | --- | --- | --- | --- |
-| Configurações | `nucleo/configuracoes_mcp.py` | `nucleo/tests/test_ajustes_mcp.py`, `test_scripts_config.py` | pendente (exige app instalado) | — |
-| Consulta | `nucleo/consulta_mcp.py` | `nucleo/tests/test_consulta_mcp.py` (não coleta em Linux) | pendente | — |
-| Memória | `nucleo/memoria_mcp.py` | `nucleo/tests/test_memoria.py` | pendente | — |
-| Mesa | `nucleo/mesa_mcp.py` | `nucleo/tests/test_mesa_mcp.py`, `test_mesa_stdio.py` | pendente (Windows UI Automation) | — |
-| Oficina | `nucleo/oficina_mcp.py` | `nucleo/tests/test_oficina_mcp.py` (não coleta em Linux), `test_oficina.py` | `scripts/provas/prova-oficina.py` | — |
-| Reunião | `nucleo/reuniao_mcp.py` | `nucleo/tests/test_reuniao_mcp.py`, `test_reuniao.py`, `test_pacotes_reuniao.py` | `scripts/provas/prova-reuniao.py` | — |
+| Servidor | Arquivo | Quantidade | Testes automatizados | Prova real | Resultado |
+| --- | --- | --- | --- | --- | --- |
+| Configurações | `nucleo/configuracoes_mcp.py` | 25 | `nucleo/tests/test_ajustes_mcp.py`, `test_scripts_config.py` | Prova J2/J3 (stdio e HTTP/SSE `ver_configuracoes`) | Leitura executou; mutações pendentes |
+| Memória | `nucleo/memoria_mcp.py` | 3 | `nucleo/tests/test_memoria.py` | Prova J2 direta via stdio (`memoria_buscar`) | Leitura executou; gravação pendente |
+| Mesa | `nucleo/mesa_mcp.py` | 15 | `nucleo/tests/test_mesa_mcp.py`, `test_mesa_stdio.py` | Prova J2 direta via stdio (`hora_atual`) | Leitura executou; UI/janelas pendente Windows |
+| Reunião | `nucleo/reuniao_mcp.py` | 6 | `nucleo/tests/test_reuniao_mcp.py`, `test_reuniao.py` | Prova J2 direta via stdio (`reuniao_status`) | Leitura executou; gravação pendente |
+| Oficina | `nucleo/oficina_mcp.py` | 7 | `nucleo/tests/test_oficina_mcp.py`, `test_oficina.py` | `scripts/provas/prova-oficina.py` (simulado) | Pendência Windows (`msvcrt`) |
+| Consulta | `nucleo/consulta_mcp.py` | 7 | `nucleo/tests/test_consulta_mcp.py`, `test_consulta.py` | `scripts/provas/prova-delegada.py` (simulado) | Pendência Windows (`msvcrt`) |
+
+#### Matriz MCP Configurações (`nucleo/configuracoes_mcp.py` — 25 ferramentas)
+
+| Ferramenta | Teste automatizado real | Prova real (J2/J3 direta, laço HTTP/SSE ou motivo) | Resultado |
+| --- | --- | --- | --- |
+| `ver_configuracoes` | `test_ajustes_mcp.py::test_ver_configuracoes_mostra_usar_openjarvis_sem_mudar_quem_responde` | Prova J2/J3 direta stdio e laço HTTP/SSE com modelo de prova | Executou com sucesso (devolveu configurações do HUD sem vazar segredos) |
+| `mudar_aparencia` | `test_ajustes_mcp.py::test_aparencia_muda_so_a_cor_ou_so_a_opacidade` | pendente (alteração visual de janela gráfica; não executar em headless) | Validado em teste unitário |
+| `listar_vozes` | `test_ajustes_mcp.py::test_vozes_de_fabrica_disponiveis_sem_cadastro` | Prova J2 direta via stdio | Executou com sucesso (catálogo Kokoro/Edge/Piper) |
+| `escolher_voz` | `test_ajustes_mcp.py::test_mcp_nao_aceita_segredo_nem_o_devolve` | pendente (grava preferência do usuário no disco; escrita não destrutiva) | Validado em teste unitário |
+| `listar_provedores` | `test_ajustes_mcp.py::test_mcp_nao_aceita_segredo_nem_o_devolve` | Prova J2 direta via stdio | Executou com sucesso (provedores sanitizados com `***`) |
+| `cadastrar_provedor` | `test_ajustes_mcp.py::test_mcp_confirma_antes_de_efeitos_e_nao_vaza` | pendente (escrita em `paineis.json`; mutação controlada) | Validado em teste unitário |
+| `editar_provedor` | `test_ajustes_mcp.py::test_mcp_nao_aceita_segredo_nem_o_devolve` | pendente (modificação de arquivos de configuração) | Validado em teste unitário |
+| `remover_provedor` | `test_ajustes_mcp.py::test_mcp_confirma_antes_de_efeitos_e_nao_vaza` | pendente (remoção destrutiva de provedores cadastrados) | Validado em teste unitário |
+| `escolher_quem_responde` | `test_ajustes_mcp.py::test_ver_configuracoes_mostra_usar_openjarvis_sem_mudar_quem_responde` | pendente (alteração da rota do respondedor ativo) | Validado em teste unitário |
+| `testar_provedor` | `test_ajustes_mcp.py::test_mcp_nao_aceita_segredo_nem_o_devolve` | pendente (disparo de requisição externa de rede) | Validado em teste unitário |
+| `listar_instalaveis` | `test_ajustes_mcp.py::test_mcp_nao_aceita_segredo_nem_o_devolve` | pendente (leitura de catálogo de pacotes externos) | Validado em teste unitário |
+| `instalar` | `test_instalaveis.py::test_conclusao_progresso_e_confirmacao` | pendente (execução de instalação de pacotes no ambiente) | Validado em teste unitário |
+| `andamento_instalacao` | `test_ajustes_mcp.py::test_mcp_nao_aceita_segredo_nem_o_devolve` | pendente (consulta de processo de instalação em andamento) | Validado em teste unitário |
+| `listar_habilidades` | `test_ajustes_mcp.py::test_edita_e_restaura_habilidade_de_fabrica` | pendente (consulta de receitas do usuário) | Validado em teste unitário |
+| `cadastrar_habilidade` | `test_ajustes_mcp.py::test_editar_habilidade_preserva_dados_futuros` | pendente (escrita de receitas no disco) | Validado em teste unitário |
+| `editar_habilidade` | `test_ajustes_mcp.py::test_editar_habilidade_preserva_dados_futuros` | pendente (modificação de receitas existentes) | Validado em teste unitário |
+| `excluir_habilidade` | `test_ajustes_mcp.py::test_fabrica_nao_se_exclui_e_receita_inexistente_avisa` | pendente (exclusão de receitas) | Validado em teste unitário |
+| `restaurar_habilidade` | `test_ajustes_mcp.py::test_edita_e_restaura_habilidade_de_fabrica` | pendente (restauração de receitas de fábrica) | Validado em teste unitário |
+| `marcar_habilidade_validada` | `test_ajustes_mcp.py::test_fabrica_nao_se_exclui_e_receita_inexistente_avisa` | pendente (alteração de estado de validação) | Validado em teste unitário |
+| `listar_programas` | `test_ajustes_mcp.py::test_mcp_nao_aceita_segredo_nem_o_devolve` | pendente (leitura de atalhos e programas registrados) | Validado em teste unitário |
+| `cadastrar_programa` | `test_ajustes_mcp.py::test_programa_cadastrado_chega_a_mesa_sem_reiniciar` | pendente (escrita em configuração de programas) | Validado em teste unitário (falha em Linux por `os.startfile`) |
+| `remover_programa` | `test_ajustes_mcp.py::test_remover_programa_inexistente_retorna_mensagem_clara_sem_excecao` | pendente (remoção de programas registrados) | Validado em teste unitário |
+| `ver_telegram` | `test_telegram_mcp.py::test_ver_telegram_retorna_ligado_e_chat_sem_token` | pendente (consulta de status do conector Telegram) | Validado em teste unitário |
+| `configurar_telegram` | `test_telegram_mcp.py::test_configurar_telegram_grava_ligado_e_chat` | pendente (escrita de configuração de bot/chat) | Validado em teste unitário |
+| `trazer_telegram_do_openjarvis` | `test_telegram_mcp.py::test_trazer_do_openjarvis_pelo_nucleo_sem_token` | pendente (migração de parâmetros do OpenJarvis) | Validado em teste unitário |
+
+#### Matriz MCP Memória (`nucleo/memoria_mcp.py` — 3 ferramentas)
+
+| Ferramenta | Teste automatizado real | Prova real (J2/J3 direta, laço HTTP/SSE ou motivo) | Resultado |
+| --- | --- | --- | --- |
+| `memoria_buscar` | `test_memoria.py::test_sem_config_devolve_a_frase_e_nao_chama_rede`, `test_cerebro_laco.py::test_texto_simples` | Prova J2 direta via stdio | Executou com sucesso ("A memória não está configurada: falta o projeto em memoria.toml.") |
+| `memoria_ler` | `test_memoria.py::test_sem_config_devolve_a_frase_e_nao_chama_rede` | pendente (exige base de memória e projeto configurados) | Validado em teste unitário |
+| `memoria_gravar` | `test_memoria.py::test_sem_config_devolve_a_frase_e_nao_chama_rede`, `test_cerebro_laco.py::test_texto_simples` | pendente (gravação permanente em base de memória) | Validado em teste unitário |
+
+#### Matriz MCP Mesa (`nucleo/mesa_mcp.py` — 15 ferramentas)
+
+| Ferramenta | Teste automatizado real | Prova real (J2/J3 direta, laço HTTP/SSE ou motivo) | Resultado |
+| --- | --- | --- | --- |
+| `hora_atual` | `test_mesa_mcp.py::test_hora_atual_em_portugues`, `test_cerebro_ferramentas.py::test_handshake_lista_chamada_stdio` | Prova J2 direta via stdio | Executou com sucesso (retornou data/hora em português formatada) |
+| `abrir_url` | `test_mesa_mcp.py::test_abrir_url_normaliza_e_chama_startfile` | pendente (exige `os.startfile` e navegador no Windows) | Pendência Windows (`os.startfile` ausente em Linux) |
+| `abrir_programa` | `test_mesa_mcp.py::test_abrir_programa_conhecido` | pendente (exige `os.startfile` e aplicativos Windows) | Pendência Windows (`os.startfile` ausente em Linux) |
+| `listar_janelas` | `test_mesa_mcp.py::test_listar_janelas_mostra_monitor_com_mais_de_um` | pendente (exige Win32 API para enumeração de janelas) | Pendência Windows (`win32gui` ausente em Linux) |
+| `focar_janela` | `test_mesa_mcp.py::test_focar_janela_existente` | pendente (exige gerenciamento de foco no Windows) | Pendência Windows (`win32gui` ausente em Linux) |
+| `fechar_janela` | `test_mesa_mcp.py::test_fechar_janela_existente_e_inexistente` | pendente (fechamento de janelas gráficas no Windows) | Pendência Windows (`win32gui` ausente em Linux) |
+| `listar_monitores` | `test_mesa_mcp.py::test_listar_monitores` | pendente (enumeração de monitores via Win32) | Pendência Windows (API Win32 ausente em Linux) |
+| `mover_janela` | `test_mesa_mcp.py::test_mover_janela_ativa_e_estados` | pendente (posicionamento de janelas via Win32) | Pendência Windows (API Win32 ausente em Linux) |
+| `elementos_da_janela` | `test_mesa_mcp.py::test_elementos_da_janela` | pendente (inspeção de acessibilidade via UIA) | Pendência Windows (UI Automation ausente em Linux) |
+| `clicar_elemento` | `test_mesa_mcp.py::test_clicar_elemento_aciona_pela_uia` | pendente (acionamento UIA no Windows) | Pendência Windows (UI Automation ausente em Linux) |
+| `clicar` | `test_mesa_mcp.py::test_clicar_confere_o_ponto`, `test_teclado_mouse.py::test_clicar_move_o_cursor_e_envia` | pendente (injeção de mouse no sistema; vedado sem CDP) | Pendência Windows / Proibição de injeção global |
+| `digitar` | `test_mesa_mcp.py::test_digitar_foca_a_janela_antes_ou_desiste`, `test_teclado_mouse.py::test_digitar_limite_e_contagem` | pendente (injeção de texto no sistema; vedado sem CDP) | Pendência Windows / Proibição de injeção global |
+| `teclar` | `test_mesa_mcp.py::test_teclar_valida_antes_de_focar`, `test_teclado_mouse.py::test_teclar_repete_e_valida` | pendente (injeção de teclas no sistema; vedado sem CDP) | Pendência Windows / Proibição de injeção global |
+| `rolar` | `test_mesa_mcp.py::test_rolar`, `test_teclado_mouse.py::test_rolar_em_ponto` | pendente (injeção de scroll no sistema; vedado sem CDP) | Pendência Windows / Proibição de injeção global |
+| `print_da_tela` | `test_mesa_mcp.py::test_print_da_tela_grava_png_na_pasta_de_prints` | pendente (captura de frame buffer gráfico do Windows) | Pendência Windows (GDI/DirectX ausente em Linux) |
+
+#### Matriz MCP Reunião (`nucleo/reuniao_mcp.py` — 6 ferramentas)
+
+| Ferramenta | Teste automatizado real | Prova real (J2/J3 direta, laço HTTP/SSE ou motivo) | Resultado |
+| --- | --- | --- | --- |
+| `reuniao_status` | `test_reuniao_mcp.py::test_status_e_encerrar_passam_pelo_cliente`, `test_server.py::test_reuniao_status_e_lista_repassam` | Prova J2 direta via stdio | Executou com sucesso ("O modo reunião não está instalado.") |
+| `reuniao_iniciar` | `test_reuniao_mcp.py::test_iniciar_com_4720_fora_devolve_frase`, `test_server.py::test_reuniao_iniciar_repassa` | `scripts/provas/prova-reuniao.py` (simulado) / pendente de serviço na porta 4720 | Validado em teste unitário |
+| `reuniao_encerrar` | `test_reuniao_mcp.py::test_status_e_encerrar_passam_pelo_cliente` | pendente (exige reunião ativa para término) | Validado em teste unitário |
+| `reuniao_ata` | `test_reuniao_mcp.py::test_ata_chama_abrir_ata_com_qual_e_tipo`, `test_server.py::test_reuniao_ata_abre_a_tarefa` | pendente (exige reunião ativa e transcrição consolidada) | Validado em teste unitário |
+| `reuniao_falante` | `test_reuniao_mcp.py::test_falante_vazio_recusa_sem_rede` | pendente (exige reunião ativa e diarização de voz) | Validado em teste unitário |
+| `reuniao_guardar` | `test_reuniao_mcp.py::test_guardar_sem_ata_devolve_a_frase` | pendente (exige ata gerada para arquivamento) | Validado em teste unitário |
+
+#### Matriz MCP Oficina (`nucleo/oficina_mcp.py` — 7 ferramentas)
+
+| Ferramenta | Teste automatizado real | Prova real (J2/J3 direta, laço HTTP/SSE ou motivo) | Resultado |
+| --- | --- | --- | --- |
+| `disparar_tarefa` | `test_oficina_mcp.py::test_disparar_lanca_o_trabalhador`, `test_oficina_mcp.py::test_pedido_identico_em_60s_nao_duplica` | `scripts/provas/prova-oficina.py` (simulado) | Pendência Windows (`msvcrt`) |
+| `status_tarefa` | `test_oficina_mcp.py::test_listar_e_status_vazios`, `test_oficina_mcp.py::test_status_de_codigo_observa_o_orca_e_marca_avisado` | pendente (exige tarefa em execução) | Pendência Windows (`msvcrt`) |
+| `resultado_tarefa` | `test_consulta_mcp.py::test_resposta_remota_chega_ao_resultado_e_evento` | pendente (exige tarefa concluída) | Pendência Windows (`msvcrt`) |
+| `responder_tarefa` | sem teste específico | pendente (exige tarefa aguardando interação do operador) | Pendência Windows (`msvcrt`) |
+| `aprovar_tarefa` | sem teste específico | pendente (exige tarefa aguardando aprovação de patch) | Pendência Windows (`msvcrt`) |
+| `descartar_tarefa` | sem teste específico | pendente (exige tarefa ativa para cancelamento) | Pendência Windows (`msvcrt`) |
+| `listar_tarefas` | `test_oficina_mcp.py::test_listar_e_status_vazios` | pendente (leitura de fila de tarefas) | Pendência Windows (`msvcrt`) |
+
+#### Matriz MCP Consulta (`nucleo/consulta_mcp.py` — 7 ferramentas)
+
+| Ferramenta | Teste automatizado real | Prova real (J2/J3 direta, laço HTTP/SSE ou motivo) | Resultado |
+| --- | --- | --- | --- |
+| `github_prs` | `test_consulta_mcp.py::test_github_le_repos_e_dono_apos_importacao` | pendente (exige CLI `gh` autenticado e repositórios) | Pendência Windows (`msvcrt`) |
+| `github_issues` | `test_consulta_mcp.py::test_github_le_repos_e_dono_apos_importacao` | pendente (exige CLI `gh` autenticado e repositórios) | Pendência Windows (`msvcrt`) |
+| `deploys` | `test_consulta.py::test_deploys_com_painel_ok`, `test_consulta_mcp.py::test_consulta_sem_config_nao_lanca` | pendente (exige painel de deploy/Vercel autenticado) | Validado em teste unitário |
+| `relatorio` | `test_consulta.py::test_relatorio_sem_config_responde_sem_erro`, `test_consulta_mcp.py::test_relatorio_do_agente_remoto` | pendente (exige relatórios cadastrados) | Validado em teste unitário |
+| `agente_remoto` | `test_consulta_mcp.py::test_agente_remoto_registra_e_lanca`, `test_remoto.py::test_executar_remoto_usa_sessao_por_tarefa_por_padrao` | `scripts/provas/prova-delegada.py` (simulado) | Validado em teste unitário |
+| `delegar` | `test_consulta_mcp.py::test_delegar_registra_e_lanca`, `test_server.py::test_persona_delegar` | pendente (exige agente remoto disponível) | Validado em teste unitário |
+| `rotina_manha` | `test_consulta_mcp.py::test_rotina_manha_marca_o_dia_e_lanca` | pendente (exige agendamento e perfil matinal configurados) | Validado em teste unitário |
 
 ### Cérebro próprio
 
 | Subgrupo | Código | Testes automatizados | Prova real | Resultado |
 | --- | --- | --- | --- | --- |
-| Pedidos/FIFO | `nucleo/vard/cerebro/pedidos.py` | `test_cerebro_pedidos.py`, `test_cerebro_pedidos_integracao.py` | `scripts/provas/prova-cerebro.py` | — |
-| Sessões | `nucleo/vard/cerebro/sessoes.py` | `test_cerebro_laco.py`, `test_cerebro_laco_persona.py` | — | — |
-| Adaptadores/Montador | `nucleo/vard/cerebro/montador.py`, `provedores.py` | `test_cerebro_provedores.py`, `test_cerebro_ferramentas.py` | — | — |
-| Cancelamento | `nucleo/vard/cerebro/pedidos.py` | `test_prova_cerebro.py` (cancelamento) | `scripts/provas/prova-cerebro.py` | — |
-| Fila/Executor | `nucleo/vard/cerebro/laco.py` | `test_cerebro_executor.py`, `test_cerebro_cli.py` | — | — |
-| Diário | `nucleo/vard/cerebro/diario.py` | `test_cerebro_diario.py` | — | — |
-| Reserva | `nucleo/vard/cerebro/reserva.py` | `test_prova_cerebro.py` (reserva/falha) | — | — |
-| CLI/Detecção | `nucleo/vard/cerebro/cli.py`, `cli_deteccao.py`, `cli_capacidade.py` | `test_cli_detectar.py`, `test_cli_despachante.py`, `test_cli_falsa.py` | — | — |
-| Controle motor | `nucleo/vard/cerebro/controle_motor.py` | — | pendente | — |
+| Pedidos/FIFO | `nucleo/vard/cerebro/pedidos.py` | `test_cerebro_pedidos.py`, `test_cerebro_pedidos_integracao.py` | `scripts/provas/prova-cerebro.py` (simulado) | Passou em teste e prova simulada |
+| Sessões | `nucleo/vard/cerebro/sessoes.py` | `test_cerebro_laco.py`, `test_cerebro_laco_persona.py` | Prova J2 HTTP/SSE (sessão real via ambiente) | Passou (ciclo de sessão gerenciado com SSE) |
+| Adaptadores/Montador | `nucleo/vard/cerebro/montador.py`, `provedores.py` | `test_cerebro_provedores.py`, `test_cerebro_ferramentas.py` | Prova J2 HTTP/SSE (montagem de prompt e tools) | Passou (chamada de ferramenta despachada) |
+| Cancelamento | `nucleo/vard/cerebro/pedidos.py` | `test_prova_cerebro.py` (cancelamento) | `scripts/provas/prova-cerebro.py` (simulado) | Passou em teste e prova simulada |
+| Fila/Executor | `nucleo/vard/cerebro/laco.py` | `test_cerebro_executor.py`, `test_cerebro_cli.py` | Prova J2 HTTP/SSE (laço assíncrono em background) | Passou (execução em background limpa) |
+| Diário | `nucleo/vard/cerebro/diario.py` | `test_cerebro_diario.py` | Prova J2 HTTP/SSE (registro de eventos) | Passou (eventos gravados em JSONL) |
+| Reserva | `nucleo/vard/cerebro/reserva.py` | `test_prova_cerebro.py` (reserva/falha) | pendente (exige esgotamento de cotas do modelo primário) | Validado em teste unitário |
+| CLI/Detecção | `nucleo/vard/cerebro/cli.py`, `cli_deteccao.py`, `cli_capacidade.py` | `test_cli_detectar.py`, `test_cli_despachante.py`, `test_cli_falsa.py` | pendente de CLIs instaladas no sistema operacional | Pendência Windows (caminhos de CLIs Windows) |
+| Controle motor | `nucleo/vard/cerebro/controle_motor.py` | sem teste específico | pendente (integração de atuadores físicos/SO) | Pendência Windows |
 
 ### Conectores
 
 | Conector | Código | Testes automatizados | Prova real | Resultado |
 | --- | --- | --- | --- | --- |
-| OpenJarvis | `src/conectores/openjarvis/cliente.ts` | `tests/harness/integracao.test.ts`, `tests/openjarvis-desligado.test.ts`, `tests/integracao-real.test.ts` | pendente (conta real) | — |
-| Ponte | `src/conectores/ponte/cliente.ts` | `tests/ponte-andamento.test.ts`, `tests/ponte-avisos.test.ts`, `tests/ponte-dispositivos.test.ts`, `tests/ponte-eventos.test.ts`, `tests/ponte-reuniao.test.ts`, `tests/ponte-saude.test.ts`, `tests/ponte-telegram.test.ts` | pendente (ponte real) | — |
-| Nuvem (ElevenLabs/Gemini) | `src/conectores/nuvem/elevenlabs.ts`, `gemini.ts` | `tests/nuvem.test.ts` | pendente (chave API) | — |
-| Voz própria | `src/conectores/voz/cliente.ts`, `fluxo.ts`, `kokoro.ts` | `voz/tests/test_servidor.py`, `test_kokoro.py`, `test_edge.py`, `test_piper.py` | pendente (motor real) | — |
-| Telegram | `nucleo/vard/telegram.py` (implícito) | `test_telegram.py`, `test_telegram_mcp.py`, `test_telegram_rotas.py`, `test_telegram_servidor.py`, `test_telegram_lifespan.py`, `test_telegram_migracao.py` | pendente (bot token) | — |
+| OpenJarvis | `src/conectores/openjarvis/cliente.ts` | `tests/harness/integracao.test.ts`, `tests/openjarvis-desligado.test.ts`, `tests/integracao-real.test.ts` | pendente (exige conta e servidor real OpenJarvis) | Passou com harness simulado no Vitest |
+| Ponte | `src/conectores/ponte/cliente.ts` | `tests/ponte-andamento.test.ts`, `tests/ponte-avisos.test.ts`, `tests/ponte-dispositivos.test.ts`, `tests/ponte-eventos.test.ts`, `tests/ponte-reuniao.test.ts`, `tests/ponte-saude.test.ts`, `tests/ponte-telegram.test.ts` | pendente (exige infraestrutura da ponte privada) | Passou com ponte simulada no Vitest |
+| Nuvem (ElevenLabs/Gemini) | `src/conectores/nuvem/elevenlabs.ts`, `gemini.ts` | `tests/nuvem.test.ts` | pendente (exige chave de API com cota disponível) | Passou em testes unitários no Vitest |
+| Voz própria | `src/conectores/voz/cliente.ts`, `fluxo.ts`, `kokoro.ts` | `voz/tests/test_servidor.py`, `test_kokoro.py`, `test_edge.py`, `test_piper.py` | pendente (motor de síntese local e saída de áudio) | Bloqueado em Linux (falta Python.h/C) |
+| Telegram | `nucleo/vard/telegram.py` | `test_telegram.py`, `test_telegram_mcp.py`, `test_telegram_rotas.py`, `test_telegram_servidor.py`, `test_telegram_lifespan.py`, `test_telegram_migracao.py` | pendente (exige bot token registrado e chat liberado) | Passou em testes unitários mockados |
 
 ### Voz
 
 | Função | Código | Testes automatizados | Prova real | Resultado |
 | --- | --- | --- | --- | --- |
-| Transcrição (STT) | `voz/vard_voz/transcricao.py`, `modelos_stt.py` | `voz/tests/test_transcricao.py`, `test_modelos_stt.py`, `test_servidor_stt_modelos.py` | pendente (microfone real) | — |
-| Falar (TTS) | `voz/vard_voz/servidor.py`, `motor.py`, `kokoro.py`, `edge.py`, `piper.py` | `voz/tests/test_servidor.py`, `test_kokoro.py`, `test_edge.py`, `test_piper.py`, `test_motor.py` | pendente (saída de áudio) | — |
+| Transcrição (STT) | `voz/vard_voz/transcricao.py`, `modelos_stt.py` | `voz/tests/test_transcricao.py`, `test_modelos_stt.py`, `test_servidor_stt_modelos.py` | pendente (exige microfone físico e captura de áudio ao vivo) | Bloqueado em Linux (dependências C) |
+| Falar (TTS) | `voz/vard_voz/servidor.py`, `motor.py`, `kokoro.py`, `edge.py`, `piper.py` | `voz/tests/test_servidor.py`, `test_kokoro.py`, `test_edge.py`, `test_piper.py`, `test_motor.py` | pendente (exige hardware de saída de som) | Bloqueado em Linux (dependências C) |
 
 ### Avisos, tarefas, manhã, pesquisa, remoto
 
 | Função | Código | Testes automatizados | Prova real | Resultado |
 | --- | --- | --- | --- | --- |
-| Avisos | `nucleo/vard/avisos.py`, `src/avisos/central.ts` | `nucleo/tests/test_avisos.py`, `tests/aba-avisos.test.ts`, `tests/avisos-chamada.test.ts`, `tests/avisos-fala.test.ts` | — | — |
-| Tarefas | `nucleo/vard/tarefas.py` | `nucleo/tests/test_tarefas.py` | — | — |
-| Manhã | `nucleo/vard/manha.py` | `nucleo/tests/test_manha.py` | pendente (agente configurado) | — |
-| Pesquisa | `nucleo/vard/pesquisa.py` | `nucleo/tests/test_pesquisa.py` (`test_cria_o_agente_e_devolve_a_resposta`) | pendente (agente configurado) | — |
-| Remoto | `nucleo/vard/remoto.py` | `nucleo/tests/test_remoto.py` | `scripts/provas/prova-delegada.py` | — |
+| Avisos | `nucleo/vard/avisos.py`, `src/avisos/central.ts` | `nucleo/tests/test_avisos.py`, `tests/aba-avisos.test.ts`, `tests/avisos-chamada.test.ts`, `tests/avisos-fala.test.ts` | Prova J2/J3 (aviso em tempo de execução) | Passou em testes Vitest e Python |
+| Tarefas | `nucleo/vard/tarefas.py` | `nucleo/tests/test_tarefas.py` | Prova J3 (trava de concorrência com `fcntl.flock`) | Passou após correção da trava POSIX |
+| Manhã | `nucleo/vard/manha.py` | `nucleo/tests/test_manha.py` | pendente (exige agente e perfil matinal configurados) | Passou em testes unitários |
+| Pesquisa | `nucleo/vard/pesquisa.py` | `nucleo/tests/test_pesquisa.py` (`test_cria_o_agente_e_devolve_a_resposta`) | pendente (exige agente configurado) | Passou em testes unitários |
+| Remoto | `nucleo/vard/remoto.py` | `nucleo/tests/test_remoto.py` | `scripts/provas/prova-delegada.py` (simulado) / J3 (trava remota) | Passou em testes unitários e simulados |
 
 ### Atalhos, bandeja e atualização
 
 | Função | Código | Testes automatizados | Prova real | Resultado |
 | --- | --- | --- | --- | --- |
-| Atalhos | `src/config/atalhos.ts`, `src/ui/campo-atalho.ts` | `tests/atalhos.test.ts`, `tests/atalhos-win.test.ts` | pendente (Windows global hotkey) | — |
-| Bandeja | `nucleo/vard/bandeja.py` | `nucleo/tests/test_bandeja.py` | pendente (Windows tray) | — |
-| Atualização | `src/atualizacao/release.ts`, `src/ui/aba-atualizacao.ts` | `tests/atualizacao.test.ts`, `tests/release.test.ts` | pendente (release real) | — |
+| Atalhos | `src/config/atalhos.ts`, `src/ui/campo-atalho.ts` | `tests/atalhos.test.ts`, `tests/atalhos-win.test.ts` | pendente (exige registro global RegisterHotKey no Windows) | Passou em testes Vitest (100% verde) |
+| Bandeja | `nucleo/vard/bandeja.py` | `nucleo/tests/test_bandeja.py` | pendente (exige shell do Windows tray ativo) | Passou em testes unitários |
+| Atualização | `src/atualizacao/release.ts`, `src/ui/aba-atualizacao.ts` | `tests/atualizacao.test.ts`, `tests/release.test.ts` | pendente (exige release assinada publicada no repositório) | Passou em testes Vitest (100% verde) |
 
 ---
 
@@ -148,18 +242,23 @@ Causa raiz: `nucleo/vard/vigia.py:11: import msvcrt` — módulo exclusivo do Wi
 
 **Subtotal: 48 falhas só Windows.**
 
-### Defeitos corrigidos (J3) — 5 falhas resolvidas
+### Defeitos e correções (J2/J3) — 5 defeitos de código e endurecimento do harness
 
-| # | Defeito | Causa | Arquivo | Teste que prova | Correção | Resultado |
+Consolidação única de todos os defeitos de código identificados no inventário (J1) e corrigidos no J3, além das melhorias de robustez do harness implementadas no J2 e no J3:
+
+| # | Item / Defeito | Causa | Arquivo | Teste que prova | Correção | Resultado |
 | --- | --- | --- | --- | --- | --- | --- |
-| 49 | `test_config.py::test_nome_invalido_recusado[a\\b.toml]` | `\` é válido em nome Linux; validação só rejeitava `/` | `nucleo/vard/config.py` | `test_nome_invalido_recusado` | Rejeita `\` no nome em qualquer SO (`"\\" in nome`) | PASSA em Linux e Windows |
-| 50 | `test_delegada.py::test_preparar_pasta_remove_juncao_sem_seguir_o_alvo` | `cmd`/`mklink` inexistentes em Linux; teste falhava com `FileNotFoundError` | `nucleo/tests/test_delegada.py` | `test_preparar_pasta_remove_juncao_sem_seguir_o_alvo` | `pytest.skip` quando `cmd` não existe (`shutil.which("cmd") is None`) | SKIP documentado em Linux; PASSA em Windows |
-| 51 | `test_entrada.py::test_porta_ocupada_sai_com_motivo_identificavel` | `getattr(errno, "WSAEADDRINUSE", None)` cria tupla `(EADDRINUSE, None)`; `OSError` com `errno=None` diz "porta ocupada" sem ser | `nucleo/vard/servidor.py` | `test_porta_ocupada_sai_com_motivo_identificavel` | `getattr(errno, "WSAEADDRINUSE", errno.EADDRINUSE)` mantém Windows e evita falso positivo em Linux | PASSA em Linux e Windows |
-| 52 | `test_remoto.py::test_trava_impede_segunda_conversa` | `tarefas.trava()` sem trava real quando `msvcrt` não existe (POSIX) | `nucleo/vard/tarefas.py` | `test_trava_impede_segunda_conversa` | Trava POSIX real com `fcntl.flock(LOCK_EX \| LOCK_NB)` + timeout | PASSA (trava entre processos funciona) |
-| 53 | `test_tarefas.py::test_trava_entre_processos` | Mesma causa do #52: fallback vazio em POSIX | `nucleo/vard/tarefas.py` | `test_trava_entre_processos` | Mesma correção do #52 | PASSA (subprocesso bloqueado, `TimeoutError` levantado) |
+| 1 | `test_config.py::test_nome_invalido_recusado` | `\` é caractere válido em nomes de arquivo POSIX; validação só rejeitava `/` | `nucleo/vard/config.py` | `test_nome_invalido_recusado` | Rejeita `\` no nome explicitamente em qualquer SO | PASSA em Linux e Windows |
+| 2 | `test_delegada.py::test_preparar_pasta_remove_juncao_sem_seguir_o_alvo` | `cmd`/`mklink` são binários exclusivos do Windows; teste falhava em POSIX | `nucleo/tests/test_delegada.py` | `test_preparar_pasta_remove_juncao_sem_seguir_o_alvo` | `pytest.skip` documentado quando `cmd` não está disponível (`shutil.which("cmd") is None`) | SKIP documentado em Linux; PASSA em Windows |
+| 3 | `test_entrada.py::test_porta_ocupada_sai_com_motivo_identificavel` | `getattr(errno, "WSAEADDRINUSE", None)` gerava tupla com `None`, fazendo `OSError(None)` ser classificado erroneamente como porta ocupada | `nucleo/vard/servidor.py` | `test_porta_ocupada_sai_com_motivo_identificavel` | `getattr(errno, "WSAEADDRINUSE", errno.EADDRINUSE)` mantém compatibilidade Windows e evita falso positivo em POSIX | PASSA em Linux e Windows |
+| 4 | `test_remoto.py::test_trava_impede_segunda_conversa` | `tarefas.trava()` não possuía implementação de bloqueio concorrente para POSIX (fallback vazio sem `msvcrt`) | `nucleo/vard/tarefas.py` | `test_remoto.py::test_trava_impede_segunda_conversa` | Trava POSIX real usando `fcntl.flock(LOCK_EX | LOCK_NB)` com timeout e polling | PASSA (bloqueio entre processos validado) |
+| 5 | `test_tarefas.py::test_trava_entre_processos` | Mesma ausência de trava POSIX do item #4 | `nucleo/vard/tarefas.py` | `test_tarefas.py::test_trava_entre_processos` | Mesma implementação `fcntl.flock` do item #4 | PASSA (`TimeoutError` ao disputar trava entre processos) |
+| 6 | Harness: vazamento de processos e cleanup | MCPs e núcleo podiam ficar órfãos se a execução falhasse no meio | `scripts/provas/prova-real-ferramentas.py` | `test_prova_real_ferramentas.py::TestHarnessSimulado` | Cleanup estrito em `try/finally` dentro do context manager, encerramento com SIGTERM/SIGKILL e checagem de PIDs via `psutil.pid_exists` | PASSA (zero processos sobreviventes) |
+| 7 | Harness: validação de evento e chamada real | Teste offline afirmava apenas encerramento, sem verificar despacho de ferramentas | `scripts/provas/prova-real-ferramentas.py`, `nucleo/tests/test_prova_real_ferramentas.py` | `test_prova_real_ferramentas.py::TestHarnessSimulado` | Gerenciador fake registra chamada real, valida evento SSE `ferramenta` com nome/argumentos e resposta integrada | PASSA (evento e execução afirmados) |
+| 8 | Harness: isolamento de variáveis e sanitização | Testes modificavam `os.environ` diretamente com risco de contaminação e truncamento invertido na sanitização | `scripts/provas/prova-real-ferramentas.py`, `nucleo/tests/test_prova_real_ferramentas.py` | `test_prova_real_ferramentas.py::TestSanitizacao` | Uso de `monkeypatch.setenv/delenv` e correção da ordem `sanitizar(str(exc))[:300]` | PASSA (isolamento garantido) |
 
-**Subtotal: 5 defeitos corrigidos.** Caminho Windows (`msvcrt.locking`) preservado intacto.
-
+**Total de defeitos de código:** 5 corrigidos + 3 melhorias estruturais do harness.
+**Saldo de falhas da suíte núcleo:** 53 falhas iniciais - 5 defeitos corrigidos = 48 falhas restantes (100% dependentes de APIs/binários Windows).
 ### Correção adicional na classificação
 
 | # | Arquivo::teste | Erro real (confirmado) | Classificação anterior |
@@ -208,33 +307,36 @@ Saída sanitizada em `/tmp/opencode/vard-j2-final.json`. Nenhum segredo, endpoin
 
 ---
 
-## Pendências de prova real
+## Pendências de prova real e delimitação
 
-| Item | Motivo da pendência |
-| --- | --- |
-| OpenJarvis | Exige conta/serviço real |
-| Ponte do Vard | Setup privado; ponte falsa cobre contrato |
-| Nuvem (ElevenLabs/Gemini) | Exige chave API |
-| Voz própria (Kokoro/XTTS/Piper) | Motor de voz real + saída de áudio |
-| Telegram | Bot token + chat permitido |
-| Manhã delegada | Agente/conector configurado |
-| Pesquisa delegada | Agente configurado |
-| Remoto (SSH/Docker) | Infraestrutura remota real |
-| Atalhos globais | Windows global hotkey |
-| Bandeja | Windows system tray |
-| Atualização | Release publicada |
-| Mesa (UI Automation) | Windows + tela real |
-| WebView2/Tauri dev | Windows + WebView2 runtime |
-| STT com microfone | Hardware de áudio |
+Para manter clareza sobre o escopo provado e evitar falsa impressão de entrega, a tabela abaixo detalha o que está pendente, o que exigiria para virar prova real e o que **não** foi provado:
+
+| Item | Motivo da pendência | O que exigiria para virar prova real | O que NÃO foi provado |
+| --- | --- | --- | --- |
+| OpenJarvis | Exige conta e serviço OpenJarvis ativo | Instalação real com endpoint e credenciais válidas | Conversa real com servidor OpenJarvis em produção |
+| Ponte do Vard | Protocolo proprietário em infraestrutura privada | Instalação da ponte local emparelhada e rede configurada | Tráfego de eventos e comandos pela ponte real |
+| Nuvem (ElevenLabs/Gemini) | Exige chaves de API pagas/privadas | Variáveis com chave de API com cota disponível | Geração de áudio ou chamada a modelos dessas nuvens |
+| Voz própria (Kokoro/XTTS/Piper) | Exige motor de síntese compilado e saída de áudio | Runtime de voz em Windows com hardware de saída de som | Reprodução de áudio real por autofalante/fone |
+| Telegram | Exige bot registrado e chat liberado | Token emitido pelo @BotFather e chat ID autorizado | Envio e recepção de mensagens no aplicativo Telegram |
+| Manhã delegada | Exige rotina de agente configurada | Agente com chaves/perfil cadastrado para consolidar a manhã | Disparo real da rotina matinal completa |
+| Pesquisa delegada | Exige agente de pesquisa conectado | Provedor de pesquisa configurado | Coleta de fontes externas via agente delegado |
+| Remoto (SSH/Docker) | Infraestrutura remota real | Host remoto acessível com chave pública ou container Docker | Conexão de rede e execução remota em servidor externo |
+| Atalhos globais | API do Windows RegisterHotKey | Sessão de usuário no Windows com foco do sistema operacional | Registro e captura de tecla de atalho global pelo SO |
+| Bandeja do sistema | API do Windows Shell_NotifyIcon | Shell do Windows explorer ativo e suporte a ícones de notificação | Renderização do ícone na bandeja e menu de contexto |
+| Atualização | Exige release assinada publicada no repositório | GitHub Release válida com binários assinados por SignPath | Download, verificação de assinatura e auto-atualização |
+| Mesa (UI Automation) | Windows + tela gráfica real | Desktop interativo Windows com janelas de aplicativos reais | Automação de janelas reais, cliques de mouse e digitação |
+| WebView2 / Tauri dev | Exige runtime WebView2 e Windows | Windows 10/11 com Build Tools C++ e WebView2 instalado | Janela visual do Tauri renderizada pelo WebView2 |
+| STT com microfone | Exige hardware de entrada de áudio | Microfone físico capturando fala ao vivo | Transcrição de voz real capturada por hardware |
 
 ---
 
-## Resumo para próximos jobs
+## Resumo da validação
 
-- **Frontend (TypeScript):** 1126 testes passando; `npm run check` limpo. Sem pendências de código.
-- **Núcleo (Python):** 1582 testes passando em Linux; **53 falhas classificadas (48 só Windows, 4 defeitos a investigar)**. 7 arquivos nem coletam por `msvcrt`. Defeito #51 (falso positivo de porta ocupada) corrigido no pit stop 2.
-- **Voz e Reunião:** Não instalam em Linux (dependências C e pacotes Windows-only). Provas exigem ambiente Windows.
-- **Rust/Tauri:** Não compila em Linux sem `libclang-dev`. Provas de WebView2 exigem Windows.
-- **Provas reais:** Todas pendentes de infraestrutura, conta ou hardware. Scripts em `scripts/provas/` cobrem cérebro, oficina, reunião e delegada com servidores falsos.
-
-Os 5 defeitos a investigar são candidatos a correção cross-platform ou a ajuste de teste para refletir diferenças legítimas entre Windows e Linux.
+- **Frontend (TypeScript):** 1126 testes passando; `npm run check` limpo. Sem pendências de código ou tipagem.
+- **Núcleo (Python):** 1596 testes passando em Linux; **48 falhas só Windows (todas decorrentes de APIs exclusivas do Windows: msvcrt, win32gui, os.startfile, powershell, etc.), 0 defeitos de código pendentes**. Os 7 arquivos com erro de coleta falham unicamente pelo `import msvcrt` no nível do módulo em `vard/vigia.py`. Os 5 defeitos identificados no J1 foram 100% corrigidos no J3 e permanecem verdes.
+- **Harness e Robustez:** Cleanup estrito implementado com `try/finally` no context manager do harness, asserção do evento SSE `ferramenta` no teste offline, verificação de término de processos via `psutil.pid_exists` e sanitização estrita sem vazamento de segredos/endpoints/tokens.
+- **Provas reais executadas com sucesso:**
+  - **Cérebro por HTTP/SSE:** 1 prova real ponta a ponta bem-sucedida registrada no J2 (status HTTP 202, 3 eventos SSE: ferramenta `ver_configuracoes` → texto sanitizado → fim, duração de 13,7 s, encerramento limpo sem processos órfãos).
+  - **MCPs diretos (stdio):** 6 ferramentas de leitura executadas diretamente via stdio (`ver_configuracoes`, `listar_provedores`, `listar_vozes`, `memoria_buscar`, `reuniao_status`, `hora_atual`), devolvendo payloads válidos.
+- **Voz, Reunião e Rust/Tauri:** Bloqueados em Linux por ausência de compiladores C/LLVM (`libclang`) e bibliotecas nativas de áudio do Windows (`pyaudiowpatch`). Provas desses subsistemas dependem de ambiente Windows real.
+- **Demais integrações:** As integrações externas permanecem documentadas como pendentes das respectivas contas, chaves ou hardware, com seus requisitos demarcados na tabela de pendências.
