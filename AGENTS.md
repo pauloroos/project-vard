@@ -71,16 +71,10 @@ Textos antigos podem ter outra sequência; confirme o plano vigente e não trate
 Publique somente documentação do produto: instalação genérica, contratos, testes e decisões técnicas.
 
 <!-- BEGIN:agent-crew-chief -->
-This project uses the `crew-chief` skill for every non-trivial task: code,
-tests, refactors, design, docs and research.
-
-You are the coordinator: split the request into pieces, dispatch them to the
-other executor CLIs without asking first, have the result reviewed, then show
-the user what changed and the output of `close` at the end.
-
-Read `.agents/skills/crew-chief/SKILL.md` (or
-`.claude/skills/crew-chief/SKILL.md` when that is the one that exists) before
-you start.
-
-If the superpowers skills are also installed, use them to discuss and design; use crew-chief to execute the plan.
+When the user asks to have agents do the work ("ACC", "crew chief", "load
+ACC, do X"), use the `crew-chief` skill: read
+`.agents/skills/crew-chief/SKILL.md` (or `.claude/skills/crew-chief/SKILL.md`)
+first. It writes a short spec when the request is not small, runs the work in
+parallel lanes (through Orca when it is running, plain git worktrees
+otherwise) and scores every model.
 <!-- END:agent-crew-chief -->
