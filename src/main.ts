@@ -886,7 +886,7 @@ async function transcreverFala(wav: ArrayBuffer, sinal?: AbortSignal): Promise<s
     if (!novo) { console.warn("config-salva ignorada: payload inválido"); return; }
     const antes = { tamanho: cfg.tamanho, tamanho_px: cfg.tamanho_px };
     const mudou = aplicarAoVivo(cfg, novo);
-    if (mudou.includes("cerebro") || mudou.includes("usar_openjarvis")) oj = deveUsarOj() ? clienteOj : null;
+    if (mudou.includes("cerebro") || mudou.includes("usar_openjarvis")) { oj = deveUsarOj() ? clienteOj : null; hud.setTextoDisponivel(deveUsarOj()); }
     if (aplicarVozAoVivo(cfg, recebido)) { voz = criarFonteDeVoz(cfg); vozReserva = criarReserva(); }
     if (ladoMudou(antes, cfg)) await aplicarTamanho(); // só quando o lado de fato mudou
     if (mudou.includes("compacto")) hud.setCompacto(cfg.compacto);
