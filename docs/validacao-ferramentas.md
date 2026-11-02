@@ -162,7 +162,7 @@ Causa raiz: `nucleo/vard/vigia.py:11: import msvcrt` — módulo exclusivo do Wi
 | --- | --- | --- | --- | --- |
 | OpenJarvis | `src/conectores/openjarvis/cliente.ts` | `tests/harness/integracao.test.ts`, `tests/openjarvis-desligado.test.ts`, `tests/integracao-real.test.ts` | pendente (exige conta e servidor real OpenJarvis) | Passou com harness simulado no Vitest |
 | Ponte | `src/conectores/ponte/cliente.ts` | `tests/ponte-andamento.test.ts`, `tests/ponte-avisos.test.ts`, `tests/ponte-dispositivos.test.ts`, `tests/ponte-eventos.test.ts`, `tests/ponte-reuniao.test.ts`, `tests/ponte-saude.test.ts`, `tests/ponte-telegram.test.ts` | pendente (exige infraestrutura da ponte privada) | Passou com ponte simulada no Vitest |
-| Nuvem (ElevenLabs/Gemini) | `src/conectores/nuvem/elevenlabs.ts`, `src/conectores/nuvem/` (TTS) | `tests/nuvem.test.ts` | pendente (exige chave de API com cota disponível) | Passou em testes unitários no Vitest |
+| Nuvem (ElevenLabs/Gemini) | `src/conectores/nuvem/elevenlabs.ts`, `src/conectores/nuvem/gemini.ts` | `tests/nuvem.test.ts` | pendente (exige chave de API com cota disponível) | Passou em testes unitários no Vitest |
 | Voz própria | `src/conectores/voz/cliente.ts`, `fluxo.ts`, `kokoro.ts` | `voz/tests/test_servidor.py`, `test_kokoro.py`, `test_edge.py`, `test_piper.py` | pendente (motor de síntese local e saída de áudio) | Bloqueado em Linux (falta Python.h/C) |
 | Telegram | `nucleo/vard/telegram.py` | `test_telegram.py`, `test_telegram_mcp.py`, `test_telegram_rotas.py`, `test_telegram_servidor.py`, `test_telegram_lifespan.py`, `test_telegram_migracao.py` | pendente (exige bot token registrado e chat liberado) | Passou em testes unitários mockados |
 
