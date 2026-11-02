@@ -16,7 +16,12 @@ self-contained and names:
 - **Acceptance** - the check that must pass.
 - **Working rules** - the block from SKILL.md, word for word.
 - **Finish** - commit the work on the current branch with a clear message; do
-  not push, merge or open a pull request; send `worker_done` (plain: exit).
+  not push, merge or open a pull request; never run `git config`; send
+  `worker_done` (plain: exit). When commits need a set author, start the
+  driver with `GIT_AUTHOR_NAME`, `GIT_AUTHOR_EMAIL`, `GIT_COMMITTER_NAME` and
+  `GIT_COMMITTER_EMAIL` in its environment: some CLIs refuse `git -c ...`.
+- When the job changes the CLI and docs are another lane's job, say in the
+  spec which docs tests may fail until the lanes merge.
 
 When the driver is done (Orca: `worker_done`; plain: its process ended):
 
@@ -69,9 +74,9 @@ check is not yet accepted.
 
 1. Pick two scrutineers: `ACC pick --kind review --exclude <driver>`, then
    `--exclude <first-scrutineer>` too, in the `agent:model` form (e.g.
-   `--exclude opencode:provider/model-a`). Prefer a different model family
-   (`models.toml` notes say which). They run in parallel in the lane worktree,
-   read-only.
+   `--exclude opencode:provider/model-a`). Neither may share the driver's
+   model family (`models.toml` notes say which): when the pick does, exclude
+   it and pick again. They run in parallel in the lane worktree, read-only.
 2. Fill `templates/scrutineer.md` with the diff range `<start>..HEAD`, the job
    spec path and the output file, and save it per scrutineer.
    - Plain mode: prompt file `../<repo>-acc-logs/<lane>-<job>-scrutineer-<n>-prompt.md`,
@@ -83,13 +88,37 @@ check is not yet accepted.
    own pass over the risky path: a "pass" with no findings is not proof.
 4. Confirmed findings go back to the **same driver model** in a fresh session
    (a **pit stop**). It fixes on top of its work: no reset here. At most 2 pit
-   stops, then pass or Relay.
+   stops, then pass or Relay. Record each pit stop as its own grade, with
+   "(pit stop <n>)" in the job title.
 5. Score each scrutineer as `--kind review`: confirmed findings count for it;
    false alarms and real problems it missed (found by you, the other
    scrutineer or the crew chief) count against it.
 
 Fewer than two eligible scrutineers (by pace, `models.toml` or missing CLIs):
 use the one available plus your own review, and say so in the lane report.
+
+## Edge cases
+
+- **Names.** `<job>` in file names is a short slug of the job title. A pit
+  stop's spec is `<lane>-<job>-pitstop-<n>.md`.
+- **Partly done, tests green.** If the work is usable but the spec is not
+  fully met, the job goes to Scrutineering (when it applies) and a pit stop
+  for what is missing. Relay with Fresh tyres is for work that is wrong or
+  broken.
+- **After a pit stop.** Review the pit-stop diff yourself. Run the
+  scrutineers again only when the pit stop changed risky code they did not
+  see.
+- **A stalled scrutineer.** If a scrutineer writes nothing for 15 minutes,
+  kill its tree, score it as a fail and go on with the other scrutineer plus
+  your own pass.
+- **Picking scrutineers.** Use the pace's `--max-cost`. On a high-risk job or
+  at pace `push`, at least one scrutineer must have a `review` score of 70 or
+  more. If none has one yet, take a model that scored well in the job's kind.
+- **Docs jobs.** A scrutineer checks every claim against the code, the skill
+  and the CLI's `--help`, and checks that each translation says the same.
+- **Cross-lane checks.** A version bump or a CLI change in one lane can break
+  another lane's tests until the lanes merge. Name those tests in the job
+  spec.
 
 ## Starting and watching drivers
 
@@ -130,7 +159,8 @@ $p = Start-Process cmd -ArgumentList '/c <cmd>' -WorkingDirectory <worktree> -Pa
 taskkill /PID <pid> /T /F
 ```
 
-Monitor, each wait under 2 minutes: process alive, new commits (`git -C
+Monitor, each wait under 2 minutes (a harness that blocks long sleeps
+takes a background wait that ends when the driver's process exits): process alive, new commits (`git -C
 <worktree> log --oneline <start>..`), changed files (`git -C <worktree> status
 --porcelain`, newest mtime) and log growth (`<log>` and `<log>.err`, where
 opencode writes its progress; `claude -p` prints only at the end). Process
