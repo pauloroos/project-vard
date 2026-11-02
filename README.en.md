@@ -44,7 +44,7 @@ Download the installer from the releases page and run one of them:
 - `Vard_0.9.6_x64-setup.exe` (NSIS): per-user, no administrator needed. Silent: `Vard_0.9.6_x64-setup.exe /S`. Installs to `%LOCALAPPDATA%\Vard\`.
 - `Vard_0.9.6_x64_en-US.msi` (WiX): per-machine, needs administrator. Silent: `msiexec /i Vard_0.9.6_x64_en-US.msi /qn`.
 
-To build it yourself: `npm install` and `npm run tauri build` (installers land in `src-tauri/target/release/bundle/`).
+To build it yourself: `npm install` and `npm run tauri:build` (installers land in `src-tauri/target/release/bundle/`).
 
 ## Use
 

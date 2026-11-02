@@ -42,7 +42,7 @@ Baixe o instalador na página de releases e rode um dos dois:
 - `Vard_0.9.6_x64-setup.exe` (NSIS): instala só para o seu usuário, sem pedir administrador. Silencioso: `Vard_0.9.6_x64-setup.exe /S`. Fica em `%LOCALAPPDATA%\Vard\`.
 - `Vard_0.9.6_x64_en-US.msi` (WiX): instala para a máquina toda e exige administrador. Silencioso: `msiexec /i Vard_0.9.6_x64_en-US.msi /qn`.
 
-Para gerar você mesmo: `npm install` e `npm run tauri build` (os instaladores saem em `src-tauri/target/release/bundle/`).
+Para gerar você mesmo: `npm install` e `npm run tauri:build` (os instaladores saem em `src-tauri/target/release/bundle/`).
 
 ## Usar
 

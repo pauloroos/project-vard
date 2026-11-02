@@ -7,7 +7,7 @@
   "build": {
     "beforeDevCommand": "npm run dev",
     "devUrl": "http://localhost:1420",
-    "beforeBuildCommand": "npm run nucleo && npm run build",
+    "beforeBuildCommand": "node scripts/exigir-nucleo-build.mjs",
     "frontendDist": "../dist"
   },
   "app": {
@@ -36,9 +36,6 @@
     "copyright": "Copyright (c) 2026 Project Vard",
     "targets": ["msi", "nsis"],
     "icon": ["icons/32x32.png", "icons/128x128.png", "icons/128x128@2x.png", "icons/icon.icns", "icons/icon.ico"],
-    "resources": {
-      "../build/nucleo/": "nucleo/"
-    },
     "windows": {
       "nsis": { "installerHooks": "installer-hooks.nsh" }
     }
