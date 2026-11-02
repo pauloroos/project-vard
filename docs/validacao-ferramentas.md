@@ -211,7 +211,7 @@ Causa raiz: `nucleo/vard/vigia.py:11: import msvcrt` — módulo exclusivo do Wi
 | 10 | `test_mesa_mcp.py::test_abrir_programa_conhecido` | `AttributeError: ... 'startfile'` | idem |
 | 11 | `test_mesa_mcp.py::test_apelidos_e_sites_vem_da_config_do_usuario` | `AttributeError: ... 'startfile'` | idem |
 | 12 | `test_mesa_mcp.py::test_abrir_url_no_navegador_pedido` | `AttributeError: ... 'startfile'` | idem |
-| 13 | `test_mesa_mcp.py::test_abrir_url_com_navegador_real_barrado_pela_guarda` | `FileNotFoundError: [Errno 2] No such file or directory: 'X:\\Apps\\brave.exe'` | caminho Windows hardcoded no teste |
+| 13 | `test_mesa_mcp.py::test_abrir_url_com_navegador_real_barrado_pela_guarda` | `FileNotFoundError: [Errno 2] No such file or directory: '<caminho>\\brave.exe'` | caminho fixo no próprio teste (não é API Windows exclusiva) |
 | 14 | `test_mesa_stdio.py::test_acento_e_emoji_atravessam_o_stdio_com_utf8` | `AssertionError: assert ('ÁREA' in '...falta o pacote win32gui...')` | `win32gui` ausente em Linux |
 | 15 | `test_mesa_stdio.py::test_sem_utf8_o_leitor_cp1252_quebra` | `Failed: DID NOT RAISE UnicodeDecodeError` | comportamento cp1252 é específico do Windows |
 | 16 | `test_modo.py::test_disparar_lanca_intermediario_sem_janela` | `AttributeError: module 'subprocess' has no attribute 'DETACHED_PROCESS'` | flag Windows-only |
@@ -259,7 +259,7 @@ Consolidação única de todos os defeitos de código identificados no inventár
 | 8 | Harness: isolamento de variáveis e sanitização | Testes modificavam `os.environ` diretamente com risco de contaminação e truncamento invertido na sanitização | `scripts/provas/prova-real-ferramentas.py`, `nucleo/tests/test_prova_real_ferramentas.py` | `test_prova_real_ferramentas.py::TestSanitizacao` | Uso de `monkeypatch.setenv/delenv` e correção da ordem `sanitizar(str(exc))[:300]` | PASSA (isolamento garantido) |
 
 **Total de defeitos de código:** 5 corrigidos + 3 melhorias estruturais do harness.
-**Saldo de falhas da suíte núcleo:** 53 falhas iniciais - 5 defeitos corrigidos = 48 falhas restantes (100% dependentes de APIs/binários Windows, 0 defeitos de código pendentes).
+**Saldo de falhas da suíte núcleo:** 53 falhas iniciais - 5 defeitos corrigidos = 48 falhas restantes **sob investigação**. A maioria depende de APIs/binários Windows (`msvcrt`, `win32gui`, `os.startfile`), mas pelo menos `test_primeiro_uso_deteccao.py` (`FakeAmbiente` esgota iterador/`StopIteration`) e `test_mesa_mcp.py::test_abrir_url_com_navegador_real_barrado_pela_guarda` (caminho fixo no próprio teste) não se explicam apenas por API Windows. Não declare aprovação da suíte sem evidência individual.
 
 ---
 
@@ -267,13 +267,15 @@ Consolidação única de todos os defeitos de código identificados no inventár
 
 Executada em Linux aarch64 com modelo de prova via ambiente.
 Configuração isolada via `VARD_CONFIG`, `VARD_DADOS` e `VARD_HUD_CONFIG_DIR` apontando para diretórios temporários; `paineis.json` gerado com as quatro chaves de agente (`claude`, `codex`, `opencode`, `agy`) exigidas por `ajustes.validar_documento`.
-Saída sanitizada em `/tmp/opencode/vard-j2-final.json`. Nenhum segredo, endpoint ou nome de modelo no relatório.
+Saída sanitizada em `<saida>.json`. Nenhum segredo, endpoint ou nome de modelo no relatório.
 
 > **Histórico:** A primeira execução (pit stop 1) registrou `auth_401` porque o comando de prova exportou um modelo fictício (`provedor/modelo-de-teste`) em vez do modelo de prova real — falha do harness, não do produto. A reexecução com o ambiente correto passou; o resultado abaixo reflete essa execução bem-sucedida.
 >
 > **J3 pit stop 1 (2026-11-02):** Harness endurecido — cleanup em `try/finally` dentro do `with`, teste offline afirma evento `ferramenta` com nome/argumentos, PIDs dos MCPs confirmados encerrados via `psutil.pid_exists`. Prova real reexecutada com sucesso: evento `ver_configuracoes` + resposta textual + zero processos vivos após encerramento.
 >
 > **J3 pit stop 2 (2026-11-02):** Quatro achados de vistoria corrigidos: (1) `servidor.py` — `getattr(errno, "WSAEADDRINUSE", errno.EADDRINUSE)` evita falso positivo de porta ocupada quando `errno=None`; (2) teste do harness fortalecido com gerenciador fake que registra chamada e afirma execução real da ferramenta (não só evento); (3) três testes de sanitização migrados de `os.environ`/`del` para `monkeypatch.setenv/delenv`; (4) `prova-real-ferramentas.py:404` — ordem de sanitização/truncamento corrigida (`sanitizar(str(exc))[:300]`). Testes alvo verdes; sem nova prova real.
+>
+> **Correção de segurança (2026-11-02):** A prova real anterior gravou `OMNI_API_KEY` em um `segredos.toml` temporário, contrariando a restrição de nunca escrever credenciais em arquivo. Esta revisão remove a escrita e passa a usar injeção em memória via `segredos.definir_em_memoria()`, com teste de canário que verifica ausência de vazamento em disco e exige autorização real (401 sem cabeçalho correto). Nenhuma chave em arquivo.
 
 ### MCPs diretos (stdio, sem modelo)
 
@@ -327,7 +329,7 @@ Para manter clareza sobre o escopo provado e evitar falsa impressão de entrega,
 ## Resumo da validação
 
 - **Frontend (TypeScript):** 1126 testes passando; `npm run check` limpo. Sem pendências de código ou tipagem.
-- **Núcleo (Python):** 1597 testes passando em Linux (com 68 pulados); **48 falhas só Windows (todas decorrentes de APIs exclusivas do Windows: msvcrt, win32gui, os.startfile, powershell, etc.), 0 defeitos de código pendentes**. Os 7 arquivos com erro de coleta falham unicamente pelo `import msvcrt` no nível do módulo em `vard/vigia.py`. Do total de 53 falhas iniciais, os 5 defeitos de código identificados foram 100% corrigidos e permanecem verdes (53 = 48 restantes só Windows + 5 corrigidas).
+- **Núcleo (Python):** 1597 testes passando em Linux (com 68 pulados); **48 falhas remanescentes sob investigação**, muitas dependentes de APIs exclusivas do Windows (`msvcrt`, `win32gui`, `os.startfile`), mas pelo menos `test_primeiro_uso_deteccao.py` (`FakeAmbiente`/`StopIteration`) e `test_mesa_mcp.py::test_abrir_url_com_navegador_real_barrado_pela_guarda` (caminho fixo no teste) não se explicam apenas por API Windows. Os 7 arquivos com erro de coleta falham pelo `import msvcrt` no nível do módulo em `vard/vigia.py`. Do total de 53 falhas iniciais, 5 defeitos de código foram corrigidos e permanecem verdes.
 - **Harness e Robustez:** Cleanup estrito implementado com `try/finally` no context manager do harness, asserção do evento SSE `ferramenta` no teste offline, verificação de término de processos via `psutil.pid_exists` e sanitização estrita sem vazamento de segredos/endpoints/tokens.
 - **Provas reais executadas com sucesso:**
   - **Cérebro por HTTP/SSE:** 1 prova real ponta a ponta bem-sucedida registrada no J2 (status HTTP 202, 3 eventos SSE: ferramenta `ver_configuracoes` → texto sanitizado → fim, duração de 13,7 s, encerramento limpo sem processos órfãos).

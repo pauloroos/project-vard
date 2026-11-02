@@ -361,3 +361,301 @@ class TestHarnessSimulado:
                     )
         finally:
             srv.shutdown()
+
+
+# ---------------------------------------------------------------------------
+# Teste de canário: credencial nunca toca disco e autorização é exigida
+# ---------------------------------------------------------------------------
+
+class HandlerCanario(BaseHTTPRequestHandler):
+    """Provedor falso que exige Authorization: Bearer <canário>.
+
+    Registra todas as autorizações recebidas. Responde 401 quando o
+    cabeçalho falta ou diverge; caso contrário emite tool_call + texto final.
+    """
+
+    autorizacoes_recebidas: list[str] = []
+    canario_esperado: str = ""
+
+    def log_message(self, format, *args):  # noqa: A002
+        pass
+
+    def do_POST(self):  # noqa: N802
+        auth = self.headers.get("Authorization", "")
+        HandlerCanario.autorizacoes_recebidas.append(auth)
+
+        if not auth.startswith("Bearer ") or auth[7:] != self.canario_esperado:
+            self.send_response(401)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            self.wfile.write(b'{"error":"unauthorized"}')
+            return
+
+        content_length = int(self.headers.get("Content-Length", 0))
+        body = self.rfile.read(content_length) if content_length > 0 else b""
+        tem_tool_result = b'"tool"' in body and b'"tool_call_id"' in body
+
+        self.send_response(200)
+        self.send_header("Content-Type", "text/event-stream")
+        self.send_header("Cache-Control", "no-cache")
+        self.end_headers()
+
+        if not tem_tool_result:
+            chunk_tool = {
+                "id": "chatcmpl-canario",
+                "object": "chat.completion.chunk",
+                "choices": [{"delta": {
+                    "tool_calls": [{
+                        "index": 0,
+                        "id": "call_canario",
+                        "type": "function",
+                        "function": {"name": "ver_configuracoes", "arguments": "{}"},
+                    }]
+                }, "index": 0}],
+            }
+            self.wfile.write(f"data: {json.dumps(chunk_tool)}\n".encode())
+            fim = {
+                "id": "chatcmpl-canario",
+                "object": "chat.completion.chunk",
+                "choices": [{"delta": {}, "finish_reason": "tool_calls", "index": 0}],
+            }
+            self.wfile.write(f"data: {json.dumps(fim)}\n".encode())
+        else:
+            chunk_texto = {
+                "id": "chatcmpl-canario",
+                "object": "chat.completion.chunk",
+                "choices": [{"delta": {"content": "Configurações consultadas com sucesso."}, "index": 0}],
+            }
+            self.wfile.write(f"data: {json.dumps(chunk_texto)}\n".encode())
+            fim = {
+                "id": "chatcmpl-canario",
+                "object": "chat.completion.chunk",
+                "choices": [{"delta": {}, "finish_reason": "stop", "index": 0}],
+            }
+            self.wfile.write(f"data: {json.dumps(fim)}\n".encode())
+
+        self.wfile.write(b"data: [DONE]\n")
+        self.wfile.flush()
+
+
+class TestCanarioCredencialEmMemoria:
+    """Garante que a credencial nunca toca disco e que a autorização é exercitada."""
+
+    async def test_canario_nao_vaza_e_autorizacao_exigida(self):
+        canario = f"CANARIO-{uuid.uuid4().hex}"
+        HandlerCanario.autorizacoes_recebidas.clear()
+        HandlerCanario.canario_esperado = canario
+
+        porta = _porta_livre()
+        srv = HTTPServer(("127.0.0.1", porta), HandlerCanario)
+        thread = threading.Thread(target=srv.serve_forever, daemon=True)
+        thread.start()
+
+        try:
+            with tempfile.TemporaryDirectory(prefix="vard-canario-") as tmp_dir:
+                tmp_path = Path(tmp_dir)
+                config_dir = tmp_path / "config"
+                config_dir.mkdir()
+                dados_dir = tmp_path / "dados"
+                dados_dir.mkdir()
+
+                paineis = {
+                    "versao": 1,
+                    "provedores": [{
+                        "id": "canario-fake",
+                        "nome": "Canario Fake",
+                        "tipo": "openai_compat",
+                        "url_base": f"http://127.0.0.1:{porta}",
+                        "modelo": "m-canario-teste",
+                    }],
+                    "ativo": "canario-fake",
+                    "reserva": None,
+                    "agentes": {
+                        "claude": {"padrao": "", "modelos": []},
+                        "codex": {"padrao": "", "modelos": []},
+                        "opencode": {"padrao": "", "modelos": []},
+                        "agy": {"padrao": "", "modelos": []},
+                    },
+                    "mcps": [],
+                }
+                (config_dir / "paineis.json").write_text(
+                    json.dumps(paineis, ensure_ascii=False), encoding="utf-8"
+                )
+
+                from vard import config, segredos as modulo_segredos
+                original_arquivo = config.arquivo_config
+                original_pasta_dados = config.pasta_dados
+                original_arquivo_segredos = config.arquivo_segredos
+
+                def _fake_arquivo(nome: str) -> Path:
+                    return config_dir / nome
+
+                def _fake_pasta_dados() -> Path:
+                    return dados_dir
+
+                def _fake_segredos() -> Path:
+                    return config_dir / "segredos.toml"
+
+                # Injeta credencial EM MEMÓRIA — nenhum arquivo é criado
+                modulo_segredos.definir_em_memoria({"lmstudio": {"chave": canario}})
+
+                with (
+                    patch.object(config, "arquivo_config", side_effect=_fake_arquivo),
+                    patch.object(config, "pasta_dados", side_effect=_fake_pasta_dados),
+                    patch.object(config, "arquivo_segredos", side_effect=_fake_segredos),
+                ):
+                    from vard.cerebro import pedidos as modulo_pedidos
+                    from vard.cerebro.contratos import Origem, Pedido
+                    import server as server_mod
+                    from server import _executar_pedido_cerebro
+
+                    # Patcha _resolver_credencial_cofre para devolver o canário em memória
+                    def _fake_resolver(credencial_ref: str, tipo: str) -> str:
+                        return canario
+
+                    original_resolver = server_mod._resolver_credencial_cofre
+                    server_mod._resolver_credencial_cofre = _fake_resolver
+
+                    chamadas_fake: list[tuple[str, str, dict]] = []
+
+                    class FakeGerenciadorFerramentas:
+                        async def listar_todas(self):
+                            return [{
+                                "nome": "ver_configuracoes",
+                                "descricao": "Mostra configurações atuais",
+                                "schema": {"type": "object", "properties": {}},
+                                "identificador": "interno",
+                            }]
+
+                        async def chamar(self, identificador, nome, argumentos):
+                            chamadas_fake.append((identificador, nome, argumentos))
+                            return '{"versao": "0.4-canario", "provedor": "canario-fake"}'
+
+                    fake_tools = FakeGerenciadorFerramentas()
+                    original_tools = server_mod._ferramentas_cerebro
+                    server_mod._ferramentas_cerebro = fake_tools
+
+                    rodar_fn_original = modulo_pedidos._rodar_fn
+                    modulo_pedidos.configurar_executor(None)
+                    try:
+                        modulo_pedidos.definir_pasta(dados_dir / "pedidos")
+                        modulo_pedidos.limpar_tudo()
+
+                        pedido_id = str(uuid.uuid4())
+                        sessao_id = "sess-canario-teste"
+                        pedido = Pedido(
+                            pedido_id=pedido_id,
+                            sessao_id=sessao_id,
+                            origem=Origem.PAINEL,
+                            texto="quais são as configurações atuais?",
+                        )
+
+                        eventos: list[dict] = []
+
+                        def emitir(ev):
+                            eventos.append({
+                                "tipo": ev.tipo.value if hasattr(ev.tipo, "value") else str(ev.tipo),
+                                "dados": ev.dados or {},
+                            })
+
+                        modulo_pedidos.admitir(pedido)
+                        tarefa_laco = modulo_pedidos._lacos_ativos.get(sessao_id)
+                        if tarefa_laco is not None:
+                            try:
+                                await asyncio.wait_for(tarefa_laco, timeout=2.0)
+                            except Exception:
+                                pass
+
+                        await _executar_pedido_cerebro(pedido, emitir)
+                    finally:
+                        modulo_pedidos.configurar_executor(rodar_fn_original)
+                        server_mod._ferramentas_cerebro = original_tools
+                        server_mod._resolver_credencial_cofre = original_resolver
+                        modulo_segredos.definir_em_memoria(None)
+
+                    # --- Afirmações de segurança ---
+
+                    # 1) Nenhum segredos.toml foi criado no diretório temporário
+                    segredos_path = config_dir / "segredos.toml"
+                    assert not segredos_path.exists(), (
+                        "segredos.toml NÃO deve existir no diretório temporário"
+                    )
+
+                    # 2) Varredura recursiva: canário aparece ZERO vezes em qualquer arquivo
+                    for arquivo in tmp_path.rglob("*"):
+                        if arquivo.is_file():
+                            conteudo = arquivo.read_text(encoding="utf-8", errors="replace")
+                            assert canario not in conteudo, (
+                                f"canário encontrado em {arquivo.relative_to(tmp_path)}"
+                            )
+
+                    # 3) Canário não apareceu em stdout/stderr capturado (handler não loga)
+                    # O handler registra autorizações; verificamos que só recebeu o canário correto
+                    assert len(HandlerCanario.autorizacoes_recebidas) >= 2, (
+                        "esperado >=2 requisições ao provedor (tool_call + tool_result)"
+                    )
+                    for auth in HandlerCanario.autorizacoes_recebidas:
+                        assert auth == f"Bearer {canario}", (
+                            f"autorização inesperada: {auth[:20]}..."
+                        )
+
+                    # 4) Ferramenta foi executada e resposta final chegou
+                    assert len(chamadas_fake) > 0, "ferramenta não foi executada"
+                    tipos_eventos = [e["tipo"] for e in eventos]
+                    assert "fim" in tipos_eventos, f"evento 'fim' ausente; recebidos: {tipos_eventos}"
+
+                    # 5) Prova de autorização: credencial errada deve falhar com auth_401
+                    HandlerCanario.autorizacoes_recebidas.clear()
+                    HandlerCanario.canario_esperado = canario
+
+                    def _fake_resolver_errado(credencial_ref: str, tipo: str) -> str:
+                        return "CREDENCIAL-ERRADA"
+
+                    server_mod._resolver_credencial_cofre = _fake_resolver_errado
+
+                    with (
+                        patch.object(config, "arquivo_config", side_effect=_fake_arquivo),
+                        patch.object(config, "pasta_dados", side_effect=_fake_pasta_dados),
+                        patch.object(config, "arquivo_segredos", side_effect=_fake_segredos),
+                    ):
+                        modulo_pedidos.configurar_executor(None)
+                        try:
+                            modulo_pedidos.limpar_tudo()
+                            pedido_id_2 = str(uuid.uuid4())
+                            pedido_2 = Pedido(
+                                pedido_id=pedido_id_2,
+                                sessao_id="sess-canario-falha",
+                                origem=Origem.PAINEL,
+                                texto="teste de falha de auth",
+                            )
+                            eventos_2: list[dict] = []
+
+                            def emitir_2(ev):
+                                eventos_2.append({
+                                    "tipo": ev.tipo.value if hasattr(ev.tipo, "value") else str(ev.tipo),
+                                    "dados": ev.dados or {},
+                                })
+
+                            modulo_pedidos.admitir(pedido_2)
+                            tarefa_laco_2 = modulo_pedidos._lacos_ativos.get("sess-canario-falha")
+                            if tarefa_laco_2 is not None:
+                                try:
+                                    await asyncio.wait_for(tarefa_laco_2, timeout=2.0)
+                                except Exception:
+                                    pass
+
+                            await _executar_pedido_cerebro(pedido_2, emitir_2)
+                        finally:
+                            modulo_pedidos.configurar_executor(rodar_fn_original)
+                            server_mod._resolver_credencial_cofre = original_resolver
+                            modulo_segredos.definir_em_memoria(None)
+
+                        info_falha = modulo_pedidos.consultar(pedido_id_2)
+                        assert info_falha is not None
+                        estado_falha = info_falha.estado.value if hasattr(info_falha.estado, "value") else str(info_falha.estado)
+                        erro_falha = str(info_falha.erro or "")
+                        assert estado_falha == "falhou" or "auth_401" in erro_falha, (
+                            f"esperado falha por auth_401; estado={estado_falha}, erro={erro_falha[:200]}"
+                        )
+        finally:
+            srv.shutdown()

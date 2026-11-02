@@ -388,11 +388,10 @@ async def main(saida: Path | None = None) -> dict:
             json.dumps(paineis, ensure_ascii=False), encoding="utf-8"
         )
 
-        # Cria segredos.toml no caminho que o núcleo lê (parent de VARD_CONFIG)
+        # Injeta credencial em memória — NENHUM arquivo segredos.toml é criado.
         omni_key = os.environ["OMNI_API_KEY"]
-        segredos_toml = f"[lmstudio]\nchave = \"{omni_key}\"\n"
-        segredos_path = config_dir.parent / "segredos.toml"
-        segredos_path.write_text(segredos_toml, encoding="utf-8")
+        from vard import segredos as modulo_segredos
+        modulo_segredos.definir_em_memoria({"lmstudio": {"chave": omni_key}})
 
         mcp_pids_antes: dict[str, int] = {}
         try:
@@ -403,20 +402,23 @@ async def main(saida: Path | None = None) -> dict:
             except Exception as exc:
                 relatorio["provas_mcps_diretos"] = [{"erro": sanitizar(str(exc))[:300]}]
 
-            # --- Prova 2: Cérebro por HTTP/SSE ---
-            print("→ Subindo núcleo para prova HTTP/SSE...")
+            # --- Prova 2: Cérebro por HTTP/SSE (in-process, sem subprocesso) ---
+            print("→ Subindo núcleo para prova HTTP/SSE (in-process)...")
             porta_nucleo = _porta_livre()
 
-            proc_nucleo = subprocess.Popen(
-                [sys.executable, "-m", "uvicorn", "server:app",
-                 "--host", "127.0.0.1", "--port", str(porta_nucleo),
-                 "--log-level", "warning"],
-                cwd=str(NUCLEO_DIR),
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                env={**os.environ, "VARD_CONFIG": str(config_dir), "VARD_DADOS": str(dados_dir)},
+            import uvicorn
+            from server import app as app_nucleo
+
+            config_uvicorn = uvicorn.Config(
+                app_nucleo, host="127.0.0.1", port=porta_nucleo, log_level="warning"
             )
-            processos.append(_ProcessoGerenciado("nucleo", proc_nucleo))
+            servidor_uvicorn = uvicorn.Server(config_uvicorn)
+            tarefa_servidor = asyncio.create_task(servidor_uvicorn.serve())
+            # Aguarda o servidor iniciar
+            for _ in range(30):
+                if servidor_uvicorn.started:
+                    break
+                await asyncio.sleep(0.5)
 
             print(f"→ Provando cérebro via HTTP/SSE (porta {porta_nucleo})...")
             try:
@@ -426,8 +428,25 @@ async def main(saida: Path | None = None) -> dict:
             except Exception as exc:
                 relatorio["prova_cerebro_http"] = {"erro": sanitizar(str(exc))[:300]}
         finally:
-            # Encerra todos os processos DENTRO do with para garantir que o tmpdir existe
-            print("→ Encerrando processos...")
+            # Encerra servidor in-process e limpa credencial em memória
+            print("→ Encerrando servidor e limpando credencial...")
+            try:
+                servidor_uvicorn.should_exit = True
+                await asyncio.wait_for(tarefa_servidor, timeout=5)
+                relatorio["processos"].append({
+                    "nome": "nucleo_in_process",
+                    "pid": os.getpid(),
+                    "terminado": "graceful",
+                })
+            except Exception as exc:
+                relatorio["processos"].append({
+                    "nome": "nucleo_in_process",
+                    "pid": os.getpid(),
+                    "terminado": f"erro: {exc}",
+                })
+            modulo_segredos.definir_em_memoria(None)
+
+            # Encerra processos restantes (MCPs stdio)
             for p in processos:
                 info = p.encerrar()
                 relatorio["processos"].append(info)
