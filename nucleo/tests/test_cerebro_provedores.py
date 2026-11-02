@@ -172,6 +172,19 @@ class TestOpenAICompat:
         assert chamadas[0].dados["id"] == "c1"
 
     @respx.mock
+    async def test_tool_call_com_argumentos_vazios_no_primeiro_pedaco(self):
+        """Formato do LM Studio: 1º pedaço traz o nome e arguments "", o resto chega depois."""
+        c1 = {"choices": [{"delta": {"tool_calls": [{"index": 0, "id": "c1", "function": {"name": "abrir_url", "arguments": ""}}]}}]}
+        c2 = {"choices": [{"delta": {"tool_calls": [{"index": 0, "function": {"arguments": '{"url": "https://youtube.com"}'}}]}}]}
+        respx.post("http://lm.local/v1/chat/completions").mock(
+            return_value=Response(200, text=_sse_linhas(c1, c2), headers={"content-type": "text/event-stream"})
+        )
+        adp = AdaptadorOpenAICompat("http://lm.local", "m")
+        eventos = await _coletar(adp.inferir([{"role": "user", "content": "oi"}]))
+        chamadas = [e.dados for e in eventos if e.tipo == "chamada"]
+        assert chamadas == [{"id": "c1", "nome": "abrir_url", "argumentos": {"url": "https://youtube.com"}}]
+
+    @respx.mock
     async def test_tools_parciais_nao_sao_emitidos(self):
         """Tool call com argumentos JSON inválidos NÃO é emitida."""
         chunk_inv = '{"choices": [{"delta": {"tool_calls": [{"index": 0, "id": "c1", "function": {"name": "eco", "arguments": "{inv"}}}]}}]}'
