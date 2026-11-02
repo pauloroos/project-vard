@@ -326,13 +326,13 @@ Para reproduzir os testes empíricos documentados na seção 4, execute os segui
        filhos = pai.children(recursive=True)
        rss_pai = pai.memory_info().rss / (1024 * 1024)
        print(f"Processo Pai (Uvicorn - PID {pai.pid}): {rss_pai:.1f} MB")
-       
+
        total = rss_pai
        for f in filhos:
            rss_f = f.memory_info().rss / (1024 * 1024)
            total += rss_f
            print(f"  Filho MCP (PID {f.pid} - {f.name()}): {rss_f:.1f} MB")
-       
+
        print(f"Árvore Total: {total:.1f} MB")
    finally:
        os.killpg(proc.pid, signal.SIGTERM)
@@ -392,50 +392,29 @@ Para reproduzir os testes empíricos documentados na seção 4, execute os segui
 
 ### 8.2. Roteiro do Script de Medição no Windows (`scripts/windows/medir-ram.ps1`)
 
-Para a validação subsequente no Windows com contadores nativos, o script PowerShell deverá inspecionar os processos por PID registrado e por árvore hierárquica, utilizando contadores nativos de performance:
+O medidor real entregue em `scripts/windows/medir-ram.ps1` é um script PowerShell somente leitura que inspeciona a árvore completa de processos a partir de um ou mais PIDs raiz, utilizando `Win32_Process` (CIM/WMI) e `Get-Process`. Ele calcula Working Set (`WorkingSet64`) e Private Bytes (`PrivateMemorySize64`) por processo, agrega por componente do Vard e produz um resumo estatístico multi-amostra.
+
+**Parâmetros:**
+
+- `-PidsRaiz` (obrigatório em modo de medição): um ou mais PIDs raiz da árvore a ser medida.
+- `-Estado` (obrigatório em modo de medição): rótulo do cenário operacional — `repouso`, `conversa`, `sala` ou `configuracoes`.
+- `-Amostras`: número de amostras consecutivas a coletar (padrão: 3).
+- `-IntervaloSeg`: intervalo em segundos entre amostras (padrão: 2.0).
+- `-SaidaJson`: caminho opcional para gravação do resultado estruturado em JSON; se omitido, o script emite tabelas formatadas no console.
+- `-AutoTeste`: executa verificação lógica interna com dados sintéticos (classificação, agregação, herança, deduplicação, mediana/faixa e compatibilidade de StartTime) e sai com código 0 ou 1, sem tocar em processos reais.
+
+**Exemplo de invocação:**
 
 ```powershell
-# Exemplo de comando PowerShell para medição por PID e árvore de processos no Windows
-param([string]$Cenario = "repouso")
-
-# 1. Localiza a raiz do Vard (vard.exe ou processos registrados em pids/)
-$PidsDir = Join-Path $env:LOCALAPPDATA "rdl-vard\pids"
-Write-Host "=== Medição de Memória do Project Vard — Cenário: $Cenario ==="
-
-function Obter-MetricasProcesso($ProcessId) {
-    $proc = Get-Process -Id $ProcessId -ErrorAction SilentlyContinue
-    if (-not $proc) { return $null }
-    
-    # Working Set e Private Bytes em MB
-    $wsMb = [Math]::Round($proc.WorkingSet64 / 1MB, 1)
-    $pbMb = [Math]::Round($proc.PrivateMemorySize64 / 1MB, 1)
-    
-    return [PSCustomObject]@{
-        PID          = $proc.Id
-        Nome         = $proc.ProcessName
-        WorkingSetMB = $wsMb
-        PrivateBytesMB = $pbMb
-    }
-}
-
-# Coleta de todos os processos filhos da árvore
-$vardProc = Get-Process -Name "vard" -ErrorAction SilentlyContinue | Select-Object -First 1
-if ($vardProc) {
-    Write-Host "Processo principal: PID $($vardProc.Id)"
-    Obter-MetricasProcesso $vardProc.Id | Format-Table -AutoSize
-}
-
-# Varredura dos PIDs registrados em pids/ (ponte, voz, reuniao, etc.)
-if (Test-Path $PidsDir) {
-    Get-ChildItem -Path $PidsDir -Filter "*.pid" | ForEach-Object {
-        $conteudo = (Get-Content $_.FullName -Raw).Trim().Split("|")
-        $pidNum = [int]$conteudo[0]
-        $metrica = Obter-MetricasProcesso $pidNum
-        if ($metrica) {
-            Write-Host "Serviço ($($_.BaseName)): PID $pidNum"
-            $metrica | Format-Table -AutoSize
-        }
-    }
-}
+.\scripts\windows\medir-ram.ps1 -PidsRaiz 1234,5678 -Estado repouso -Amostras 5 -IntervaloSeg 3 -SaidaJson .\medicao-repouso.json
 ```
-Este script permite correlacionar diretamente os limites de Working Set e Private Bytes com as metas descritas na seção 5 deste documento durante as provas de homologação em ambiente Windows.
+
+**Conteúdo do JSON de saída:**
+
+- `estado`, `iniciado_em` e metadados da máquina (`windows`, `arquitetura`).
+- `amostras[]`: cada amostra contém `arvores[]` (com `processos[]` classificados por componente), `componentes[]` agregados e `total` (working set e private bytes somados).
+- `resumo`: estatísticas de dispersão (mediana, mínimo e máximo) para o total geral, para cada componente e para cada processo ativo ao longo de todas as amostras.
+
+Os componentes reconhecidos são: Widget, Núcleo, Cérebro (CLI), MCPs, Voz, Reunião, Bandeja e Outros, seguindo a convenção de classificação de `nucleo/vard/recursos.py`. Processos sob um pai classificado como Cérebro (CLI) herdam essa categoria obrigatoriamente.
+
+**Pendência explícita:** executar e validar o modo `-AutoTeste` em ambiente Windows/PowerShell, pois este repositório é desenvolvido em Linux e não dispõe de PowerShell nativo para prova automatizada. A validação real dos cenários operacionais (`repouso`, `conversa`, `sala`, `configuracoes`) também requer execução manual no Windows com o aplicativo Vard em cada estado.
