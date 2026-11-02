@@ -68,12 +68,12 @@ Causa raiz: `nucleo/vard/vigia.py:11: import msvcrt` — módulo exclusivo do Wi
 | `andamento_instalacao` | sem teste específico (exposição coberta por `test_servidor_mcp_real_expoe_todas_as_ferramentas_e_grava_aparencia`) | pendente (consulta de processo de instalação em andamento) | Validado em teste unitário |
 | `listar_habilidades` | sem teste específico (exposição coberta por `test_servidor_mcp_real_expoe_todas_as_ferramentas_e_grava_aparencia`) | pendente (consulta de receitas do usuário) | Validado em teste unitário |
 | `cadastrar_habilidade` | sem teste específico (exposição coberta por `test_servidor_mcp_real_expoe_todas_as_ferramentas_e_grava_aparencia`) | pendente (escrita de receitas no disco) | Validado em teste unitário |
-| `editar_habilidade` | `test_ajustes_mcp.py::test_fabrica_nao_se_exclui_e_receita_inexistente_avisa` | pendente (modificação de receitas existentes) | Validado em teste unitário |
+| `editar_habilidade` | `test_ajustes_mcp.py::test_editar_habilidade_preserva_dados_futuros`, `test_ajustes_mcp.py::test_edita_e_restaura_habilidade_de_fabrica` | pendente (modificação de receitas existentes) | Validado em teste unitário |
 | `excluir_habilidade` | `test_ajustes_mcp.py::test_fabrica_nao_se_exclui_e_receita_inexistente_avisa` | pendente (exclusão de receitas) | Validado em teste unitário |
 | `restaurar_habilidade` | `test_ajustes_mcp.py::test_fabrica_nao_se_exclui_e_receita_inexistente_avisa` | pendente (restauração de receitas de fábrica) | Validado em teste unitário |
 | `marcar_habilidade_validada` | `test_ajustes_mcp.py::test_fabrica_nao_se_exclui_e_receita_inexistente_avisa` | pendente (alteração de estado de validação) | Validado em teste unitário |
 | `listar_programas` | sem teste específico (exposição coberta por `test_servidor_mcp_real_expoe_todas_as_ferramentas_e_grava_aparencia`) | pendente (leitura de atalhos e programas registrados) | Validado em teste unitário |
-| `cadastrar_programa` | sem teste específico (exposição coberta por `test_servidor_mcp_real_expoe_todas_as_ferramentas_e_grava_aparencia`) | pendente (escrita em configuração de programas) | Validado em teste unitário |
+| `cadastrar_programa` | `test_ajustes_mcp.py::test_programa_cadastrado_chega_a_mesa_sem_reiniciar` | pendente (escrita em configuração de programas) | Validado em teste unitário (falha em Linux por `os.startfile`) |
 | `remover_programa` | `test_ajustes_mcp.py::test_remover_programa_inexistente_retorna_mensagem_clara_sem_excecao` | pendente (remoção de programas registrados) | Validado em teste unitário |
 | `ver_telegram` | `test_telegram_mcp.py::test_ver_telegram_retorna_ligado_e_chat_sem_token` | pendente (consulta de status do conector Telegram) | Validado em teste unitário |
 | `configurar_telegram` | `test_telegram_mcp.py::test_configurar_telegram_grava_ligado_e_chat` | pendente (escrita de configuração de bot/chat) | Validado em teste unitário |
@@ -83,7 +83,7 @@ Causa raiz: `nucleo/vard/vigia.py:11: import msvcrt` — módulo exclusivo do Wi
 
 | Ferramenta | Teste automatizado real | Prova real (J2/J3 direta, laço HTTP/SSE ou motivo) | Resultado |
 | --- | --- | --- | --- |
-| `memoria_buscar` | `test_memoria.py::test_sem_config_devolve_a_frase_e_nao_chama_rede`, `test_memoria.py::test_buscar_e_global_e_le_global_hits` | Prova J2 direta via stdio | Executou com sucesso ("A memória não está configurada: falta o projeto em memoria.toml.") |
+| `memoria_buscar` | `test_memoria.py::test_sem_config_devolve_a_frase_e_nao_chama_rede`, `test_memoria.py::test_buscar_e_global_e_le_global_hits` | Prova J2 direta via stdio | Executou; ausência declarada ("A memória não está configurada: falta o projeto em memoria.toml.") |
 | `memoria_ler` | `test_memoria.py::test_sem_config_devolve_a_frase_e_nao_chama_rede`, `test_memoria.py::test_ler_usa_o_projeto_da_configuracao_quando_nao_vem_projeto` | pendente (exige base de memória e projeto configurados) | Validado em teste unitário |
 | `memoria_gravar` | `test_memoria.py::test_sem_config_devolve_a_frase_e_nao_chama_rede`, `test_memoria.py::test_gravar_usa_o_projeto_da_configuracao` | pendente (gravação permanente em base de memória) | Validado em teste unitário |
 
@@ -111,7 +111,7 @@ Causa raiz: `nucleo/vard/vigia.py:11: import msvcrt` — módulo exclusivo do Wi
 
 | Ferramenta | Teste automatizado real | Prova real (J2/J3 direta, laço HTTP/SSE ou motivo) | Resultado |
 | --- | --- | --- | --- |
-| `reuniao_status` | `test_reuniao_mcp.py::test_status_e_encerrar_passam_pelo_cliente`, `test_server.py::test_reuniao_status_e_lista_repassam` | Prova J2 direta via stdio | Executou com sucesso ("O modo reunião não está instalado.") |
+| `reuniao_status` | `test_reuniao_mcp.py::test_status_e_encerrar_passam_pelo_cliente`, `test_server.py::test_reuniao_status_e_lista_repassam` | Prova J2 direta via stdio | Executou; ausência declarada ("O modo reunião não está instalado.") |
 | `reuniao_iniciar` | `test_reuniao_mcp.py::test_iniciar_com_4720_fora_devolve_frase`, `test_server.py::test_reuniao_iniciar_repassa` | `scripts/provas/prova-reuniao.py` (simulado) / pendente de serviço na porta 4720 | Validado em teste unitário |
 | `reuniao_encerrar` | `test_reuniao_mcp.py::test_status_e_encerrar_passam_pelo_cliente` | pendente (exige reunião ativa para término) | Validado em teste unitário |
 | `reuniao_ata` | `test_reuniao_mcp.py::test_ata_chama_abrir_ata_com_qual_e_tipo`, `test_server.py::test_reuniao_ata_abre_a_tarefa` | pendente (exige reunião ativa e transcrição consolidada) | Validado em teste unitário |
