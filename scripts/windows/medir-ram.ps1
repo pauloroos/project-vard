@@ -74,9 +74,8 @@
        A medição reflete o estado instantâneo do heap no momento da coleta,
        sujeito a rotinas de coleta de lixo (GC) e alocações dinâmicas.
     6. Validação de PID reutilizado:
-       Processos são validados comparando StartTime antes de cada amostragem.
-       PIDs reutilizados ou finalizados no meio do teste são descartados ou
-       marcados como encerrados.
+       A data do snapshot é comparada ao StartTime, quando ambos estão disponíveis.
+       Datas ausentes e trocas entre consultas limitam essa detecção.
     7. Permissões de leitura:
        Requer permissão de usuário padrão para inspecionar processos próprios
        ou privilégios administrativos para processos de contas de serviço.
@@ -179,40 +178,55 @@ function Testar-InicioCompativel {
     <#
     .SYNOPSIS
         Verifica se o StartTime atual de um processo é compatível com o esperado.
-        Se qualquer um dos lados for nulo ou DateTime.MinValue (sem início conhecido),
-        considera compatível para medição normal. Se ambos forem válidos, tolera
-        diferença de até $ToleranciaSegundos (padrão: 5s); se exceder, indica
-        que o PID foi encerrado ou reutilizado pelo sistema operacional.
+        Se qualquer lado for nulo ou DateTime.MinValue, não considera compatível.
+        Compara em UTC no mesmo microssegundo, precisão do formato CIM_DATETIME.
     #>
     param(
         [object]$InicioEsperado,
-        [object]$InicioAtual,
-        [double]$ToleranciaSegundos = 5.0
+        [object]$InicioAtual
     )
 
     if ($null -eq $InicioEsperado -or $null -eq $InicioAtual) {
-        return $true
+        return $false
     }
 
     # Trata caso de coerção para DateTime.MinValue
     if ($InicioEsperado -is [datetime] -and $InicioEsperado -eq [datetime]::MinValue) {
-        return $true
+        return $false
     }
     if ($InicioAtual -is [datetime] -and $InicioAtual -eq [datetime]::MinValue) {
-        return $true
+        return $false
     }
 
     try {
         $dtEsp = [datetime]$InicioEsperado
         $dtAtu = [datetime]$InicioAtual
         if ($dtEsp -eq [datetime]::MinValue -or $dtAtu -eq [datetime]::MinValue) {
-            return $true
+            return $false
         }
-        $diferenca = [Math]::Abs(($dtAtu - $dtEsp).TotalSeconds)
-        return ($diferenca -le $ToleranciaSegundos)
+        $ticksEsp = $dtEsp.ToUniversalTime().Ticks
+        $ticksAtu = $dtAtu.ToUniversalTime().Ticks
+        return (($ticksEsp - ($ticksEsp % 10)) -eq ($ticksAtu - ($ticksAtu % 10)))
     } catch {
-        # Se não puder converter para datetime, assume compatível
-        return $true
+        return $false
+    }
+}
+
+function Converter-InicioWmi {
+    param([object]$Inicio)
+    if ($Inicio -is [datetime]) { return $Inicio }
+    if (-not $Inicio) { return $null }
+    try { return [System.Management.ManagementDateTimeConverter]::ToDateTime([string]$Inicio) }
+    catch { return $null }
+}
+
+function Obter-Arquitetura {
+    param([string]$Nome)
+    switch ($Nome.ToUpperInvariant()) {
+        "AMD64" { return "x64" }
+        "ARM64" { return "arm64" }
+        "X86" { return "x86" }
+        default { return "desconhecida" }
     }
 }
 
@@ -260,21 +274,33 @@ function Resolver-ArvorePura {
 
     foreach ($p in $TabelaProcessos) {
         if ($null -eq $p) { continue }
-        $pId = [int]$p.ProcessId
+        $processoId = [int]$p.ProcessId
         $paiId = [int]$p.ParentProcessId
 
-        $tabelaPorPid[$pId] = $p
+        $tabelaPorPid[$processoId] = $p
 
         if (-not $filhosPorPai.ContainsKey($paiId)) {
             $filhosPorPai[$paiId] = New-Object System.Collections.Generic.List[int]
         }
-        $filhosPorPai[$paiId].Add($pId)
+        $filhosPorPai[$paiId].Add($processoId)
     }
 
     $vistos = New-Object 'System.Collections.Generic.HashSet[int]'
     $resultadoArvores = @()
 
-    foreach ($raizId in $PidsRaiz) {
+    # Ancestrais primeiro preservam a classificação herdada em raízes sobrepostas.
+    $raizesOrdenadas = @($PidsRaiz | Sort-Object -Unique | Sort-Object {
+        $atual = $_
+        $visitados = @{}
+        $profundidade = 0
+        while ($tabelaPorPid.ContainsKey($atual) -and -not $visitados.ContainsKey($atual)) {
+            $visitados[$atual] = $true
+            $atual = [int]$tabelaPorPid[$atual].ParentProcessId
+            $profundidade++
+        }
+        $profundidade
+    })
+    foreach ($raizId in $raizesOrdenadas) {
         if ($vistos.Contains($raizId)) {
             continue
         }
@@ -299,17 +325,18 @@ function Resolver-ArvorePura {
             Pai = [int]$raizInfo.ParentProcessId
             Nome = [string]$raizInfo.Name
             Comando = [string]$raizInfo.CommandLine
+            Inicio = $raizInfo.CreationDate
             Categoria = $catRaiz
         })
         [void]$vistos.Add($raizId)
 
         while ($fila.Count -gt 0) {
             $item = $fila.Dequeue()
-            $pId = [int]$item.Pid
+            $processoId = [int]$item.Pid
             $processosDaArvore += $item
 
-            if ($filhosPorPai.ContainsKey($pId)) {
-                foreach ($filhoId in $filhosPorPai[$pId]) {
+            if ($filhosPorPai.ContainsKey($processoId)) {
+                foreach ($filhoId in $filhosPorPai[$processoId]) {
                     if ($vistos.Contains($filhoId)) {
                         continue
                     }
@@ -317,6 +344,11 @@ function Resolver-ArvorePura {
                         continue
                     }
                     $fInfo = $tabelaPorPid[$filhoId]
+                    $inicioPai = Converter-InicioWmi $tabelaPorPid[$processoId].CreationDate
+                    $inicioFilho = Converter-InicioWmi $fInfo.CreationDate
+                    if ($null -ne $inicioPai -and $null -ne $inicioFilho -and $inicioFilho -lt $inicioPai) {
+                        continue
+                    }
                     $catPropria = Classificar-Processo -Nome $fInfo.Name -Comando $fInfo.CommandLine
                     # Se pai for Cérebro (CLI), filhos herdam a categoria obrigatoriamente
                     # conforme nucleo/vard/recursos.py (_categoria: debaixo de CLI tudo conta para ela)
@@ -331,9 +363,10 @@ function Resolver-ArvorePura {
                     [void]$vistos.Add($filhoId)
                     $fila.Enqueue(@{
                         Pid = $filhoId
-                        Pai = $pId
+                        Pai = $processoId
                         Nome = [string]$fInfo.Name
                         Comando = [string]$fInfo.CommandLine
+                        Inicio = $fInfo.CreationDate
                         Categoria = $catFinal
                     })
                 }
@@ -384,8 +417,8 @@ function Consolidar-AmostraPura {
     foreach ($arv in $Arvores) {
         $procsFormatados = @()
         foreach ($p in $arv.processos) {
-            $pId = [int]$p.Pid
-            $leitura = if ($MapaMemoria.ContainsKey($pId)) { $MapaMemoria[$pId] } else { $null }
+            $processoId = [int]$p.Pid
+            $leitura = if ($MapaMemoria.ContainsKey($processoId)) { $MapaMemoria[$processoId] } else { $null }
 
             $wsMb = 0.0
             $pbMb = 0.0
@@ -404,7 +437,7 @@ function Consolidar-AmostraPura {
                 $compMap[$cat].working_set_mb += $wsMb
                 $compMap[$cat].private_mb += $pbMb
                 $compMap[$cat].processos += 1
-                $compMap[$cat].pids.Add($pId)
+                $compMap[$cat].pids.Add($processoId)
 
                 $totalWs += $wsMb
                 $totalPb += $pbMb
@@ -412,7 +445,7 @@ function Consolidar-AmostraPura {
             }
 
             $procObj = [ordered]@{
-                pid = $pId
+                pid = $processoId
                 pai = [int]$p.Pai
                 nome = [string]$p.Nome
                 componente = $cat
@@ -421,6 +454,9 @@ function Consolidar-AmostraPura {
             }
             if ($encerrado) {
                 $procObj["encerrado"] = $true
+            }
+            if ($null -ne $leitura -and $leitura.ContainsKey("nao_verificavel")) {
+                $procObj["nao_verificavel"] = $true
             }
             $procsFormatados += $procObj
         }
@@ -494,18 +530,18 @@ function Gerar-ResumoSeries {
 
         foreach ($arv in $amostra.arvores) {
             foreach ($p in $arv.processos) {
-                $pId = [int]$p.pid
-                if (-not $seriesProc.ContainsKey($pId)) {
-                    $seriesProc[$pId] = @{
+                $processoId = [int]$p.pid
+                if (-not $seriesProc.ContainsKey($processoId)) {
+                    $seriesProc[$processoId] = @{
                         nome = [string]$p.nome
                         componente = [string]$p.componente
                         ws = New-Object System.Collections.Generic.List[double]
                         pb = New-Object System.Collections.Generic.List[double]
                     }
                 }
-                if (-not $p.encerrado) {
-                    $seriesProc[$pId].ws.Add([double]$p.working_set_mb)
-                    $seriesProc[$pId].pb.Add([double]$p.private_mb)
+                if (-not $p.Contains("encerrado") -or -not $p.encerrado) {
+                    $seriesProc[$processoId].ws.Add([double]$p.working_set_mb)
+                    $seriesProc[$processoId].pb.Add([double]$p.private_mb)
                 }
             }
         }
@@ -524,13 +560,13 @@ function Gerar-ResumoSeries {
     }
 
     $resumoProc = @()
-    foreach ($pId in ($seriesProc.Keys | Sort-Object)) {
-        $pInfo = $seriesProc[$pId]
+    foreach ($processoId in ($seriesProc.Keys | Sort-Object)) {
+        $pInfo = $seriesProc[$processoId]
         $wsArr = @($pInfo.ws)
         $pbArr = @($pInfo.pb)
         if ($wsArr.Count -gt 0) {
             $resumoProc += [ordered]@{
-                pid            = $pId
+                pid            = $processoId
                 nome           = $pInfo.nome
                 componente     = $pInfo.componente
                 working_set_mb = Calcular-EstatisticaFaixa $wsArr
@@ -678,7 +714,8 @@ function Executar-AutoTeste {
 
     # Teste 6: Compatibilidade de StartTime e reutilização de PID
     $dtBase = [datetime]::Parse("2026-11-02T10:00:00Z").ToUniversalTime()
-    $dtPerto = $dtBase.AddSeconds(2)
+    $dtPerto = $dtBase.AddTicks(9)
+    $dtReutilizadoRapido = $dtBase.AddTicks(10)
     $dtLonge = $dtBase.AddSeconds(30)
     $dtMin = [datetime]::MinValue
 
@@ -686,25 +723,28 @@ function Executar-AutoTeste {
     if (-not (Testar-InicioCompativel -InicioEsperado $dtBase -InicioAtual $dtBase)) {
         throw "Falha Teste 6a: Mesmo início deveria ser compatível"
     }
-    # (b) Variação dentro da tolerância (2s <= 5s): compatível
+    # (b) O formato CIM limita a precisão a microssegundos (10 ticks de 100 ns).
     if (-not (Testar-InicioCompativel -InicioEsperado $dtBase -InicioAtual $dtPerto)) {
-        throw "Falha Teste 6b: Variação pequena deveria ser compatível"
+        throw "Falha Teste 6b: mesmo microssegundo deveria ser compatível"
+    }
+    if (Testar-InicioCompativel -InicioEsperado $dtBase -InicioAtual $dtReutilizadoRapido) {
+        throw "Falha Teste 6b: um microssegundo diferente não deve ser compatível"
     }
     # (c) Diferença grande (30s > 5s): PID reutilizado, deve ser incompatível ($false)
     if (Testar-InicioCompativel -InicioEsperado $dtBase -InicioAtual $dtLonge) {
         throw "Falha Teste 6c: Início diferente além da tolerância deveria ser incompatível (reutilizado)"
     }
-    # (d) Sem início conhecido ($null ou DateTime.MinValue): deve medir normalmente ($true)
-    if (-not (Testar-InicioCompativel -InicioEsperado $null -InicioAtual $dtBase)) {
-        throw "Falha Teste 6d: Esperado $null deve ser compatível para medir"
+    # (d) Sem início conhecido: não é possível verificar a identidade.
+    if (Testar-InicioCompativel -InicioEsperado $null -InicioAtual $dtBase) {
+        throw "Falha Teste 6d: início ausente não deve ser compatível"
     }
-    if (-not (Testar-InicioCompativel -InicioEsperado $dtBase -InicioAtual $null)) {
-        throw "Falha Teste 6d: Atual $null deve ser compatível para medir"
+    if (Testar-InicioCompativel -InicioEsperado $dtBase -InicioAtual $null) {
+        throw "Falha Teste 6d: início atual ausente não deve ser compatível"
     }
-    if (-not (Testar-InicioCompativel -InicioEsperado $dtMin -InicioAtual $dtBase)) {
-        throw "Falha Teste 6d: DateTime.MinValue esperado deve ser compatível para medir (não encerrar)"
+    if (Testar-InicioCompativel -InicioEsperado $dtMin -InicioAtual $dtBase) {
+        throw "Falha Teste 6d: DateTime.MinValue não deve ser compatível"
     }
-    Write-Host "  [OK] Detecção de reutilização de PID e preservação de processos sem StartTime."
+    Write-Host "  [OK] Detecção de reutilização de PID e rejeição de identidade desconhecida."
 
     # Teste 7: Resumo estruturado com séries e agregação por componente e processo
     $amostra1 = $consolidado
@@ -732,6 +772,18 @@ function Executar-AutoTeste {
         throw "Falha Teste 7: Mediana do componente Widget esperada 136.5, obteve $($resumoMultiplo.componentes['Widget'].working_set_mb.mediana)"
     }
     Write-Host "  [OK] Estruturação do resumo estatístico por componente e processo."
+
+    $invertida = Resolver-ArvorePura -PidsRaiz @(401, 100) -TabelaProcessos $tabelaFicticia
+    $categoriasInvertidas = @{}
+    foreach ($arvore in $invertida.arvores) {
+        foreach ($processo in $arvore.processos) { $categoriasInvertidas[$processo.Pid] = $processo.Categoria }
+    }
+    if ($categoriasInvertidas[401] -ne "Cérebro (CLI)" -or $categoriasInvertidas[402] -ne "Cérebro (CLI)") {
+        throw "Falha: raízes sobrepostas mudaram a classificação"
+    }
+    if ((Obter-Arquitetura "ARM64") -ne "arm64" -or (Obter-Arquitetura "AMD64") -ne "x64") {
+        throw "Falha: arquitetura incorreta"
+    }
 
     Write-Host "[AutoTeste] Todos os testes passaram com sucesso (código 0)."
     return $true
@@ -775,10 +827,14 @@ function Ler-MemoriaProcessoWindows {
         $inicioAtual = $null
     }
 
+    if ($null -eq $InicioEsperado -or $null -eq $inicioAtual) {
+        return @{ encerrado = $true; nao_verificavel = $true; working_set_mb = 0.0; private_mb = 0.0; inicio_atual = $inicioAtual }
+    }
+
     # Valida reutilização de PID através da função pura Testar-InicioCompativel
     if (-not (Testar-InicioCompativel -InicioEsperado $InicioEsperado -InicioAtual $inicioAtual)) {
         # PID reutilizado pelo sistema operacional
-        return @{ encerrado = $true; working_set_mb = 0.0; private_mb = 0.0; inicio_atual = $inicioAtual }
+        return @{ encerrado = $true; nao_verificavel = $true; working_set_mb = 0.0; private_mb = 0.0; inicio_atual = $inicioAtual }
     }
 
     try {
@@ -820,64 +876,84 @@ if ($Amostras -lt 1) {
 }
 
 # 1. Conferência preliminar dos PIDs raiz
+$inicioRaizes = @{}
 foreach ($rId in $PidsRaiz) {
     $p = Get-Process -Id $rId -ErrorAction SilentlyContinue
     if (-not $p) {
         [Console]::Error.WriteLine("Erro: Processo raiz PID $rId não foi encontrado.")
         exit 1
     }
+    try { $inicioRaizes[$rId] = $p.StartTime } catch { $inicioRaizes[$rId] = $null }
 }
 
-# 2. Resolução da árvore hierárquica completa
-$processosWmi = Obter-ProcessosWmi
-$arvoreResolvida = Resolver-ArvorePura -PidsRaiz $PidsRaiz -TabelaProcessos $processosWmi
-
-# 3. Mapeia StartTime conhecido de TODOS os processos presentes na árvore resolvida
+# Mantém identidades entre amostras para não fundir séries de PIDs reutilizados.
 $inicioProcessosConhecido = @{}
-foreach ($arv in $arvoreResolvida.arvores) {
-    foreach ($proc in $arv.processos) {
-        $pId = [int]$proc.Pid
-        if (-not $inicioProcessosConhecido.ContainsKey($pId)) {
-            $pObj = Get-Process -Id $pId -ErrorAction SilentlyContinue
-            if ($pObj) {
-                try {
-                    $inicioProcessosConhecido[$pId] = $pObj.StartTime
-                } catch {
-                    $inicioProcessosConhecido[$pId] = $null
-                }
-            } else {
-                $inicioProcessosConhecido[$pId] = $null
-            }
-        }
-    }
-}
 
 # Metadados do host
 $windowsVer = [System.Environment]::OSVersion.VersionString
-$arquitetura = if ([System.Environment]::Is64BitOperatingSystem) { "x64" } else { "x86" }
+$nomeArquitetura = if ($env:PROCESSOR_ARCHITEW6432) { $env:PROCESSOR_ARCHITEW6432 } else { $env:PROCESSOR_ARCHITECTURE }
+$arquitetura = Obter-Arquitetura $nomeArquitetura
 $inicioUtc = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
 
 # 4. Coleta de amostras temporais
 $amostrasColetadas = @()
 
 for ($i = 1; $i -le $Amostras; $i++) {
+    $processosWmi = @(Obter-ProcessosWmi)
+    $raizesValidas = @()
+    $raizesNaoVerificaveis = @()
+    foreach ($rId in $PidsRaiz) {
+        $entrada = $processosWmi | Where-Object { $_.ProcessId -eq $rId } | Select-Object -First 1
+        $inicioRaizSnapshot = if ($null -ne $entrada) { Converter-InicioWmi $entrada.CreationDate } else { $null }
+        if ($null -ne $inicioRaizSnapshot -and $null -ne $inicioRaizes[$rId] -and (Testar-InicioCompativel -InicioEsperado $inicioRaizes[$rId] -InicioAtual $inicioRaizSnapshot)) {
+            $raizAtual = Ler-MemoriaProcessoWindows -ProcessId $rId -InicioEsperado $inicioRaizes[$rId]
+            if (-not $raizAtual.encerrado) { $raizesValidas += $rId } else { $raizesNaoVerificaveis += $rId }
+        } else {
+            $raizesNaoVerificaveis += $rId
+        }
+    }
+    $porPid = @{}
+    foreach ($processo in $processosWmi) { $porPid[[int]$processo.ProcessId] = $processo }
+    $raizesFiltradas = @()
+    foreach ($rId in $raizesValidas) {
+        $ancestral = [int]$porPid[$rId].ParentProcessId
+        $vistosAncestrais = @{}
+        $bloqueada = $false
+        while ($porPid.ContainsKey($ancestral) -and -not $vistosAncestrais.ContainsKey($ancestral)) {
+            if ($ancestral -in $raizesNaoVerificaveis) { $bloqueada = $true; break }
+            $vistosAncestrais[$ancestral] = $true
+            $ancestral = [int]$porPid[$ancestral].ParentProcessId
+        }
+        if ($bloqueada) { $raizesNaoVerificaveis += $rId } else { $raizesFiltradas += $rId }
+    }
+    $raizesValidas = $raizesFiltradas
+    $arvoreResolvida = Resolver-ArvorePura -PidsRaiz $raizesValidas -TabelaProcessos $processosWmi
     $mapaAmostra = @{}
+    $ramosRejeitados = @{}
 
     foreach ($arv in $arvoreResolvida.arvores) {
         foreach ($proc in $arv.processos) {
-            $pId = [int]$proc.Pid
-            $inicioEsp = if ($inicioProcessosConhecido.ContainsKey($pId)) { $inicioProcessosConhecido[$pId] } else { $null }
-            $leitura = Ler-MemoriaProcessoWindows -ProcessId $pId -InicioEsperado $inicioEsp
-            $mapaAmostra[$pId] = $leitura
+            $processoId = [int]$proc.Pid
+            $inicioSnapshot = Converter-InicioWmi $proc.Inicio
+            $inicioEsp = if ($inicioProcessosConhecido.ContainsKey($processoId)) { $inicioProcessosConhecido[$processoId] } else { $inicioSnapshot }
+            if ($ramosRejeitados.ContainsKey([int]$proc.Pai) -or $null -eq $inicioSnapshot -or $null -eq $inicioEsp -or -not (Testar-InicioCompativel -InicioEsperado $inicioEsp -InicioAtual $inicioSnapshot)) {
+                $ramosRejeitados[$processoId] = $true
+                $mapaAmostra[$processoId] = @{ encerrado = $true; nao_verificavel = $true; working_set_mb = 0; private_mb = 0; inicio_atual = $null }
+                continue
+            }
+            $leitura = Ler-MemoriaProcessoWindows -ProcessId $processoId -InicioEsperado $inicioEsp
+            $mapaAmostra[$processoId] = $leitura
+            if ($leitura.encerrado) { $ramosRejeitados[$processoId] = $true }
 
-            # Se o processo foi lido pela primeira vez com StartTime válido, memoriza
-            if ($null -eq $inicioEsp -and $null -ne $leitura.inicio_atual) {
-                $inicioProcessosConhecido[$pId] = $leitura.inicio_atual
+            # Conserva a identidade para não juntar PIDs reutilizados nas séries.
+            if (-not $leitura.encerrado -and -not $inicioProcessosConhecido.ContainsKey($processoId) -and $null -ne $leitura.inicio_atual) {
+                $inicioProcessosConhecido[$processoId] = $leitura.inicio_atual
             }
         }
     }
 
     $consolidadoAmostra = Consolidar-AmostraPura -Arvores $arvoreResolvida.arvores -MapaMemoria $mapaAmostra
+    $consolidadoAmostra["raizes_nao_verificaveis"] = $raizesNaoVerificaveis
     $amostrasColetadas += $consolidadoAmostra
 
     if ($i -lt $Amostras -and $IntervaloSeg -gt 0) {
@@ -919,6 +995,18 @@ if ($SaidaJson) {
     Write-Host "  Início: $inicioUtc | Amostras: $Amostras (intervalo: ${IntervaloSeg}s)"
     Write-Host "================================================================================"
     Write-Host ""
+    $incompleta = $false
+    foreach ($amostra in $amostrasColetadas) {
+        if ($amostra.raizes_nao_verificaveis.Count -gt 0) { $incompleta = $true }
+        foreach ($arv in $amostra.arvores) {
+            foreach ($processo in $arv.processos) {
+                if ($processo.Contains("nao_verificavel")) { $incompleta = $true }
+            }
+        }
+    }
+    if ($incompleta) {
+        Write-Host "AVISO: Resultado incompleto; raiz ou processo não verificável foi excluído em pelo menos uma amostra."
+    }
     Write-Host "--- Componentes Agregados (Última Amostra) ---"
     $tabelaComps = @()
     foreach ($c in $ultimaAmostra.componentes) {

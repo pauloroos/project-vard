@@ -276,7 +276,7 @@ Esta seção consolida o baseline atual, a meta projetada para a versão 0.10.0,
 
 ### 8.1. Reprodução das Medições no Linux
 
-Para reproduzir os testes empíricos documentados na seção 4, execute os seguintes passos a partir da raiz do repositório:
+Para uma medição pontual comparável às da seção 4, execute os passos abaixo na raiz do repositório. Cada receita coleta uma amostra; para obter três, repita a coleta após a estabilização com intervalos de três segundos.
 
 1. **Verificação de portas livres**:
    ```bash
@@ -287,18 +287,20 @@ Para reproduzir os testes empíricos documentados na seção 4, execute os segui
 2. **Execução do script de medição individual e de árvore**:
    Execute o script Python autocontido abaixo a partir da raiz do repositório (com isolamento via `setsid`, `cwd` em `nucleo/` e diretórios limpos em `/tmp`):
    ```bash
-   cat << 'EOF' > /tmp/medir_memoria.py
+   ./nucleo/.venv/bin/python - << 'EOF'
    import os
    import signal
    import subprocess
    import time
+   import tempfile
    import psutil
 
    env = os.environ.copy()
-   env["VARD_DADOS"] = "/tmp/vard-med-repro/dados"
-   env["VARD_CONFIG"] = "/tmp/vard-med-repro/config"
-   os.makedirs(env["VARD_DADOS"], exist_ok=True)
-   os.makedirs(env["VARD_CONFIG"], exist_ok=True)
+   temporario = tempfile.TemporaryDirectory(prefix="vard-med-repro-")
+   env["VARD_DADOS"] = os.path.join(temporario.name, "dados")
+   env["VARD_CONFIG"] = os.path.join(temporario.name, "config")
+   os.makedirs(env["VARD_DADOS"])
+   os.makedirs(env["VARD_CONFIG"])
 
    # O módulo server:app exige execução com cwd em nucleo/
    proc = subprocess.Popen(
@@ -337,11 +339,9 @@ Para reproduzir os testes empíricos documentados na seção 4, execute os segui
    finally:
        os.killpg(proc.pid, signal.SIGTERM)
        proc.wait(timeout=5)
+       temporario.cleanup()
        print("Processos encerrados com sucesso.")
    EOF
-   ./nucleo/.venv/bin/python /tmp/medir_memoria.py
-   rm -f /tmp/medir_memoria.py
-   rm -rf /tmp/vard-med-repro
    ```
 
 3. **Comando manual para medição direta de um MCP (ex.: Mesa)**:
@@ -349,12 +349,13 @@ Para reproduzir os testes empíricos documentados na seção 4, execute os segui
    mede após estabilização e encerra todo o grupo de processos ao final.
    ```bash
    ./nucleo/.venv/bin/python - << 'PY'
-   import os, signal, subprocess, time, psutil
+   import os, signal, subprocess, tempfile, time, psutil
    env = os.environ.copy()
-   env["VARD_DADOS"] = "/tmp/vard-med-repro/dados"
-   env["VARD_CONFIG"] = "/tmp/vard-med-repro/config"
-   os.makedirs(env["VARD_DADOS"], exist_ok=True)
-   os.makedirs(env["VARD_CONFIG"], exist_ok=True)
+   temporario = tempfile.TemporaryDirectory(prefix="vard-med-repro-")
+   env["VARD_DADOS"] = os.path.join(temporario.name, "dados")
+   env["VARD_CONFIG"] = os.path.join(temporario.name, "config")
+   os.makedirs(env["VARD_DADOS"])
+   os.makedirs(env["VARD_CONFIG"])
    proc = subprocess.Popen(
        ["./nucleo/.venv/bin/python", "nucleo/mesa_mcp.py"],
        env=env, stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
@@ -369,8 +370,8 @@ Para reproduzir os testes empíricos documentados na seção 4, execute os segui
        except ProcessLookupError: pass
        proc.wait(timeout=5)
        if proc.stdin: proc.stdin.close()
+       temporario.cleanup()
    PY
-   rm -rf /tmp/vard-med-repro
    ```
 
 4. **Medição do runtime WebAssembly ONNX e modelo Silero VAD em Node.js**:
@@ -392,7 +393,9 @@ Para reproduzir os testes empíricos documentados na seção 4, execute os segui
 
 ### 8.2. Roteiro do Script de Medição no Windows (`scripts/windows/medir-ram.ps1`)
 
-O medidor real entregue em `scripts/windows/medir-ram.ps1` é um script PowerShell somente leitura que inspeciona a árvore completa de processos a partir de um ou mais PIDs raiz, utilizando `Win32_Process` (CIM/WMI) e `Get-Process`. Ele calcula Working Set (`WorkingSet64`) e Private Bytes (`PrivateMemorySize64`) por processo, agrega por componente do Vard e produz um resumo estatístico multi-amostra.
+O medidor entregue em `scripts/windows/medir-ram.ps1` é um script PowerShell somente leitura que inspeciona a árvore de processos a partir de um ou mais PIDs raiz, utilizando `Win32_Process` (CIM/WMI) e `Get-Process`. A árvore é refeita em cada amostra; processos que surgem e terminam entre duas coletas não são observados. Ele calcula Working Set (`WorkingSet64`) e Private Bytes (`PrivateMemorySize64`) por processo, agrega por componente do Vard e produz um resumo estatístico multi-amostra. Se a data de criação ou o início estiver indisponível, inválido ou divergente, o processo e seu ramo não são somados; uma raiz rejeitada aparece em `raizes_nao_verificaveis` e um processo rejeitado na árvore recebe `nao_verificavel`. Relações pai–filho incompatíveis com a ordem de criação são descartadas. As consultas não são atômicas: ainda existem corridas entre leituras, e PID e horário não garantem identidade absoluta.
+
+Os horários são comparados em UTC no mesmo microssegundo, sem margem de 100 ms: o formato [CIM_DATETIME](https://learn.microsoft.com/windows/win32/wmisdk/cim-datetime) tem seis casas de microssegundos, enquanto [GetProcessTimes](https://learn.microsoft.com/windows/win32/api/processthreadsapi/nf-processthreadsapi-getprocesstimes) retorna FILETIME em unidades de 100 ns. Isso descreve os formatos, não garante a resolução efetiva do provedor nem prova que os dois registros identificam o mesmo processo. Precisão menor ou arredondamento diferente pode excluir um processo legítimo; reutilização indistinguível no mesmo microssegundo pode passar. O console avisa quando alguma amostra exclui raiz ou processo não verificável.
 
 **Parâmetros:**
 
@@ -417,4 +420,4 @@ O medidor real entregue em `scripts/windows/medir-ram.ps1` é um script PowerShe
 
 Os componentes reconhecidos são: Widget, Núcleo, Cérebro (CLI), MCPs, Voz, Reunião, Bandeja e Outros, seguindo a convenção de classificação de `nucleo/vard/recursos.py`. Processos sob um pai classificado como Cérebro (CLI) herdam essa categoria obrigatoriamente.
 
-**Pendência explícita:** executar e validar o modo `-AutoTeste` em ambiente Windows/PowerShell, pois este repositório é desenvolvido em Linux e não dispõe de PowerShell nativo para prova automatizada. A validação real dos cenários operacionais (`repouso`, `conversa`, `sala`, `configuracoes`) também requer execução manual no Windows com o aplicativo Vard em cada estado.
+**Pendência explícita:** validar o modo `-AutoTeste` no Windows e executar os cenários operacionais (`repouso`, `conversa`, `sala`, `configuracoes`) no Windows com o aplicativo Vard em cada estado. O autoteste com PowerShell 7 no Linux usa dados sintéticos e não comprova as medições Windows.
