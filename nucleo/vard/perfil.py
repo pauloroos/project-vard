@@ -20,7 +20,10 @@ from .habilidades import ler_habilidades, tem_ligadas
 log = logging.getLogger(__name__)
 
 VERSAO = 1
-EXEMPLO_PERSONA = Path(__file__).resolve().parents[2] / "config" / "examples" / "persona.example.md"
+# Instalado, vem dentro do pacote (sem "persona" no nome: a montagem barra persona*.md, que é do usuário).
+EXEMPLO_PERSONA = Path(__file__).with_name("instrucoes_produto.md")
+if not EXEMPLO_PERSONA.is_file():
+    EXEMPLO_PERSONA = Path(__file__).resolve().parents[2] / "config" / "examples" / "persona.example.md"
 IDENTIDADE_EXEMPLO = "Você é o Vard, assistente de Fulano."
 
 
