@@ -344,12 +344,16 @@ async def main(saida: Path | None = None) -> dict:
         dados_dir = tmp_path / "dados"
         dados_dir.mkdir()
 
-        # Exporta VARD_CONFIG e VARD_DADOS para isolar da config do usuário
+        # Exporta VARD_CONFIG, VARD_DADOS e VARD_HUD_CONFIG_DIR para isolar da config do usuário
         os.environ["VARD_CONFIG"] = str(config_dir)
         os.environ["VARD_DADOS"] = str(dados_dir)
+        hud_config_dir = tmp_path / "hud"
+        hud_config_dir.mkdir()
+        os.environ["VARD_HUD_CONFIG_DIR"] = str(hud_config_dir)
 
         # Cria paineis.json apontando para provedor do ambiente
         # Usa tipo "local" para mapear para AdaptadorOpenAICompat e aceitar chave de [lmstudio]
+        # Inclui as quatro chaves de agente exigidas por ajustes.validar_documento
         omni_base = os.environ["OMNI_BASE_URL"]
         omni_modelo = os.environ["OMNI_MODELO"]
         paineis = {
@@ -364,7 +368,12 @@ async def main(saida: Path | None = None) -> dict:
             }],
             "ativo": "omni-prova",
             "reserva": None,
-            "agentes": {},
+            "agentes": {
+                "claude": {"padrao": "", "modelos": []},
+                "codex": {"padrao": "", "modelos": []},
+                "opencode": {"padrao": "", "modelos": []},
+                "agy": {"padrao": "", "modelos": []},
+            },
             "mcps": [],
         }
         (config_dir / "paineis.json").write_text(

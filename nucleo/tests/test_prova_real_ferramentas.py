@@ -63,10 +63,10 @@ class TestSanitizacao:
             del os.environ["OMNI_BASE_URL"]
 
     def test_remove_omni_modelo(self):
-        os.environ["OMNI_MODELO"] = "agy/gemini-3.8-flash-tiered"
+        os.environ["OMNI_MODELO"] = "provedor/modelo-de-teste"
         try:
-            resultado = self._sanitizar("modelo usado: agy/gemini-3.8-flash-tiered ok")
-            assert "gemini-3.8-flash-tiered" not in resultado
+            resultado = self._sanitizar("modelo usado: provedor/modelo-de-teste ok")
+            assert "modelo-de-teste" not in resultado
         finally:
             del os.environ["OMNI_MODELO"]
 
@@ -221,6 +221,7 @@ class TestHarnessSimulado:
                 dados_dir.mkdir()
 
                 # Cria paineis.json apontando para o servidor falso
+                # Inclui as quatro chaves de agente exigidas por ajustes.validar_documento
                 paineis = {
                     "versao": 1,
                     "provedores": [{
@@ -232,7 +233,12 @@ class TestHarnessSimulado:
                     }],
                     "ativo": "j2-fake",
                     "reserva": None,
-                    "agentes": {},
+                    "agentes": {
+                        "claude": {"padrao": "", "modelos": []},
+                        "codex": {"padrao": "", "modelos": []},
+                        "opencode": {"padrao": "", "modelos": []},
+                        "agy": {"padrao": "", "modelos": []},
+                    },
                     "mcps": [],
                 }
                 (config_dir / "paineis.json").write_text(

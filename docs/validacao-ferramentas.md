@@ -137,7 +137,7 @@ Causa raiz: `nucleo/vard/vigia.py:11: import msvcrt` — módulo exclusivo do Wi
 | 38 | `test_trabalhador.py::test_lancar_usa_intermediario_que_sai_para_nao_ser_descendente_do_mcp` | `AssertionError: assert (0 & 0)` — `CREATE_NEW_PROCESS_GROUP` é 0 em Linux | flag Windows-only |
 | 39 | `test_instalaveis.py::test_npm_no_windows_usa_node_sem_cmd` | `AssertionError: assert ['npm', 'inst...'] == ['/tmp/.../node.exe', ...]` | teste verifica comando Windows-specific |
 | 40 | `test_instalaveis.py::test_terminal_real_visivel_so_com_comando_fixo` | `AttributeError: module 'subprocess' has no attribute 'CREATE_NEW_CONSOLE'` | flag Windows-only |
-| 41 | `test_cli_detectar.py::TestDetectar::test_modelos_do_agy_guardam_so_o_id` | `AssertionError: assert [] == ['gemini-3.8-...']` | detecção de CLIs depende de binários Windows |
+| 41 | `test_cli_detectar.py::TestDetectar::test_modelos_do_agy_guardam_so_o_id` | `AssertionError: assert [] == ['modelo-...']` | detecção de CLIs depende de binários Windows |
 | 42 | `test_cli_detectar.py::TestDetectar::test_detectar_com_claude_e_agy_falsos_no_path` | `assert False is True` | idem |
 | 43 | `test_cli_detectar.py::TestDetectar::test_detectar_nao_roda_prompt` | `FileNotFoundError: ... 'execucoes.txt'` | arquivo não criado porque CLI não roda |
 | 44 | `test_cli_detectar.py::TestDetectar::test_detectar_ignora_cli_que_nao_responde` | `assert False is True` | detecção falha sem binário |
@@ -169,36 +169,36 @@ Causa raiz: `nucleo/vard/vigia.py:11: import msvcrt` — módulo exclusivo do Wi
 
 ---
 
-## Prova real do cérebro e dos MCPs (J2) — 2026-11-02
+## Prova real do cérebro e dos MCPs (J2) — 2026-11-02 (pit stop 1)
 
 Executada em Linux aarch64 com modelo remoto via adaptador OpenAI-compatível.
-Saída sanitizada em `/tmp/opencode/vard-j2-prova-resultado.json`. Nenhum segredo, endpoint ou nome de modelo no relatório.
+Configuração isolada via `VARD_CONFIG`, `VARD_DADOS` e `VARD_HUD_CONFIG_DIR` apontando para diretórios temporários; `paineis.json` gerado com as quatro chaves de agente (`claude`, `codex`, `opencode`, `agy`) exigidas por `ajustes.validar_documento`.
+Saída sanitizada em `/tmp/opencode/vard-j2-pitstop-prova.json`. Nenhum segredo, endpoint ou nome de modelo no relatório.
 
 ### MCPs diretos (stdio, sem modelo)
 
 | MCP | Ferramenta | Status | Resultado sanitizado |
 | --- | --- | --- | --- |
-| configuracoes | ver_configuracoes | executou | "A configuração deve ser um objeto" |
-| configuracoes | listar_provedores | executou | "A configuração deve ser um objeto" |
-| configuracoes | listar_vozes | executou | "A configuração deve ser um objeto" |
+| configuracoes | ver_configuracoes | executou | Configurações atuais com widget, perfil e provedor ativo (sanitizado) |
+| configuracoes | listar_provedores | executou | Provedores com id, nome, tipo e modelo sanitizados (`***`) |
+| configuracoes | listar_vozes | executou | Catálogo de vozes Kokoro/Edge/Piper com IDs e rótulos |
 | memoria | memoria_buscar | executou | "A memória não está configurada: falta o projeto em memoria.toml." |
 | reuniao | reuniao_status | executou | "O modo reunião não está instalado." |
-| mesa | hora_atual | executou | "Agora são 6h19 de segunda-feira, 2 de novembro de 2026 (UTC+00:00)." |
+| mesa | hora_atual | executou | Hora atual formatada em português (UTC+00:00) |
 | oficina | — | pendencia_windows | MCP depende de msvcrt/Windows; não aplicável em Linux |
 | consulta | — | pendencia_windows | MCP depende de msvcrt/Windows; não aplicável em Linux |
 
 ### Cérebro por HTTP/SSE (modelo real + ferramenta real)
 
-- **Estado do pedido:** concluido
+- **Estado do pedido:** falhou
 - **HTTP status:** 202
-- **Ferramenta chamada:** ver_configuracoes
-- **Argumentos sanitizados:** `{'reason': 'Consultar as configurações atuais do sistema a pedido do usuário.'}`
-- **Resposta sanitizada:** "Não foi possível carregar as configurações do sistema no momento, pois o serviço retornou que a configuração deve ser um objeto. Se precisar de algum ajuste específico, me avise."
-- **Eventos SSE:** ferramenta → texto → fim (3 eventos, todos sanitizados)
-- **Duração:** 19,9 s
-- **Processo núcleo:** PID 84131, terminado graceful
+- **Erro:** `auth_401` (credencial recusada pelo provedor remoto)
+- **Ferramenta chamada:** nenhuma (erro antes da chamada)
+- **Eventos SSE:** erro → fim (2 eventos, sanitizados)
+- **Duração:** 10,9 s
+- **Processo núcleo:** PID 93146, terminado graceful
 
-> **Nota:** A resposta indica que a configuração temporária da prova não tinha estrutura completa para `ver_configuracoes`; o importante é que o laço cérebro→ferramenta→resposta funcionou end-to-end com modelo real.
+> **Pendência:** O provedor remoto recusou a credencial (`auth_401`) apesar de `segredos.toml` temporário com `[lmstudio] chave` e `VARD_CONFIG` isolado. A resolução de credenciais foi verificada offline (chave lida corretamente); a causa provável é incompatibilidade entre o formato da chave e o esperado pelo endpoint remoto. Requer investigação do contrato de autenticação do provedor antes de nova tentativa.
 
 ---
 
