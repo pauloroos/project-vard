@@ -48,6 +48,13 @@ class MotorSTT:
 
     def carregar(self) -> None:
         """Carrega o modelo faster-whisper. Falha se o pacote não estiver instalado."""
+        from .modelos_stt import OPENWHISPR, openwhispr_no_ar, url_openwhispr
+        if self.modelo_nome == OPENWHISPR:
+            with self._trava:
+                if not openwhispr_no_ar():
+                    raise RuntimeError("OpenWhispr fechado: abra o OpenWhispr para transcrever por ele")
+                self._modelo = _ClienteSherpa(url_openwhispr())
+            return
         try:
             from faster_whisper import WhisperModel  # type: ignore[import-untyped]
         except ImportError as exc:
@@ -96,6 +103,10 @@ class MotorSTT:
         duracao_s = len(pcm) / TAXA
         if duracao_s > LIMITE_SEGUNDOS:
             raise ValueError(f"áudio excede {LIMITE_SEGUNDOS}s ({duracao_s:.1f}s)")
+        if isinstance(self._modelo, _ClienteSherpa):
+            # O Parakeet detecta o idioma sozinho e não devolve confiança: texto não vazio conta como certo.
+            texto = self._modelo.transcrever(pcm)
+            return texto, (1.0 if texto else 0.0)
         lang = idioma or self.idioma
         segmentos, info = self._modelo.transcribe(
             pcm.astype(np.float32) / 32768.0,
@@ -114,6 +125,33 @@ class MotorSTT:
         # avg_logprob não é confiança direta; normalizamos para escala 0-1 aproximada
         confianca = _logprob_para_confianca(confs) if confs else 0.0
         return texto_final, confianca
+
+
+class _ClienteSherpa:
+    """Servidor offline do sherpa-onnx (o do OpenWhispr): int32 taxa, int32 bytes, float32 mono; responde JSON."""
+
+    def __init__(self, url: str, prazo: float = 30.0) -> None:
+        self.url = url
+        self.prazo = prazo
+
+    def transcrever(self, pcm: np.ndarray) -> str:
+        import json
+        import struct
+        from websockets.sync.client import connect
+        dados = (pcm.astype(np.float32) / 32768.0).tobytes()
+        try:
+            with connect(self.url, max_size=None, open_timeout=3, close_timeout=1) as ws:
+                ws.send(struct.pack("<ii", TAXA, len(dados)) + dados)
+                resposta = ws.recv(timeout=self.prazo)
+                ws.send("Done")
+        except (OSError, TimeoutError) as exc:
+            raise RuntimeError(f"OpenWhispr não respondeu: {exc}") from exc
+        except Exception as exc:  # websockets.exceptions.*
+            raise RuntimeError(f"OpenWhispr falhou: {type(exc).__name__}") from exc
+        try:
+            return str(json.loads(resposta).get("text", "")).strip()
+        except (ValueError, AttributeError):
+            return str(resposta).strip()  # versões antigas do servidor devolvem texto puro
 
 
 def _logprob_para_confianca(logprobs: list[float]) -> float:
