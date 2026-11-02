@@ -53,7 +53,30 @@ CATALOGO: tuple[ModeloSTT, ...] = (
     ModeloSTT("distil-large-v3", "Systran/faster-distil-whisper-large-v3", "Distil Large v3", 1510, "ingles", 4, 4,
               "Versão destilada e rápida, mas só entende inglês."),
 )
+
+# Motor externo: o servidor do sherpa-onnx que o OpenWhispr deixa aberto (Parakeet). Nada é baixado nem apagado
+# aqui; "baixado" quer dizer "servidor no ar". Assim o Vard não carrega um segundo modelo de transcrição.
+OPENWHISPR = "openwhispr"
+CATALOGO += (
+    ModeloSTT(OPENWHISPR, "", "OpenWhispr (Parakeet)", 0, "multilingue", 5, 5,
+              "Usa o OpenWhispr aberto no PC; o Vard não carrega modelo próprio. Abra o OpenWhispr para usar."),
+)
 POR_ID = {m.id: m for m in CATALOGO}
+
+
+def url_openwhispr() -> str:
+    return os.environ.get("VARD_STT_OPENWHISPR_URL", "").strip() or "ws://127.0.0.1:6006"
+
+
+def openwhispr_no_ar(prazo: float = 0.3) -> bool:
+    import socket
+    from urllib.parse import urlparse
+    u = urlparse(url_openwhispr())
+    try:
+        with socket.create_connection((u.hostname or "127.0.0.1", u.port or 6006), timeout=prazo):
+            return True
+    except OSError:
+        return False
 # Apelidos aceitos pelo faster-whisper que caem num modelo do catálogo.
 APELIDOS = {"turbo": "large-v3-turbo", "large": "large-v3"}
 
@@ -111,6 +134,8 @@ class GerenciadorModelos:
         return self.cache / ("models--" + self._modelo(id_).repo.replace("/", "--"))
 
     def baixado(self, id_: str) -> bool:
+        if self._modelo(id_).id == OPENWHISPR:
+            return openwhispr_no_ar()
         snaps = self.pasta(id_) / "snapshots"
         return snaps.is_dir() and any((s / "model.bin").is_file() for s in snaps.iterdir())
 
@@ -155,6 +180,8 @@ class GerenciadorModelos:
     def baixar(self, id_: str) -> dict:
         """Começa o download (uma vez só por modelo) e devolve o progresso."""
         m = self._modelo(id_)
+        if m.id == OPENWHISPR:
+            return self.progresso(m.id)  # externo: não há o que baixar
         iniciar = False
         with self._trava:
             if (self._estados.get(m.id) or {}).get("estado") != "baixando":
@@ -188,6 +215,8 @@ class GerenciadorModelos:
 
     def apagar(self, id_: str) -> None:
         m = self._modelo(id_)
+        if m.id == OPENWHISPR:
+            return  # externo: os arquivos são do OpenWhispr
         with self._trava:
             if (self._estados.get(m.id) or {}).get("estado") == "baixando":
                 raise RuntimeError("modelo ainda baixando")

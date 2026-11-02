@@ -141,8 +141,9 @@ export class AbaTranscricao {
     else if (p.estado === "baixando") selos.push({ texto: `Baixando ${p.porcentagem}%`, tom: "aviso" });
     else if (m.baixado) selos.push({ texto: "Baixado", tom: "ok" });
     else if (p.estado === "falhou") selos.push({ texto: "Falhou", tom: "aviso" });
+    const externo = m.tamanho_mb === 0; // motor de outro programa (OpenWhispr): nada a baixar nem apagar
     const detalhes = [
-      `≈ ${tamanhoAproximado(m.tamanho_mb)}`,
+      ...(externo ? [] : [`≈ ${tamanhoAproximado(m.tamanho_mb)}`]),
       `Velocidade ${barras(m.velocidade)} · Precisão ${barras(m.precisao)}`,
       m.descricao,
     ];
@@ -151,8 +152,8 @@ export class AbaTranscricao {
     if (p.estado !== "baixando" && !m.ativo) {
       if (m.baixado) {
         acoes.push({ rotulo: "Usar", primaria: true, aoClicar: () => void this.usar(m) });
-        acoes.push({ rotulo: "Excluir", perigo: true, aoClicar: () => this.confirmarExclusao(m) });
-      } else {
+        if (!externo) acoes.push({ rotulo: "Excluir", perigo: true, aoClicar: () => this.confirmarExclusao(m) });
+      } else if (!externo) {
         acoes.push({ rotulo: p.estado === "falhou" ? "Tentar de novo" : "Baixar", primaria: true, aoClicar: () => void this.baixar(m) });
       }
     }

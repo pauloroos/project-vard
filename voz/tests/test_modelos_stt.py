@@ -39,6 +39,9 @@ def test_catalogo_tem_os_modelos_conhecidos_com_metadados():
     for esperado in ("tiny", "base", "small", "medium", "large-v3", "large-v3-turbo", "distil-large-v3"):
         assert esperado in ids
     for m in CATALOGO:
+        if m.id == "openwhispr":  # motor externo: sem repo nem download
+            assert m.repo == "" and m.tamanho_mb == 0
+            continue
         assert m.repo and "/" in m.repo
         assert m.tamanho_mb > 0
         assert m.idioma in ("multilingue", "ingles")
@@ -48,7 +51,8 @@ def test_catalogo_tem_os_modelos_conhecidos_com_metadados():
     assert distil.idioma == "ingles"
 
 
-def test_cache_vazio_nada_baixado(tmp_path):
+def test_cache_vazio_nada_baixado(tmp_path, monkeypatch):
+    monkeypatch.setenv("VARD_STT_OPENWHISPR_URL", "ws://127.0.0.1:1")  # OpenWhispr fechado neste teste
     g = GerenciadorModelos(cache=tmp_path, em_thread=False)
     assert g.baixado("small") is False
     lista = g.listar()
