@@ -18,23 +18,57 @@ function lerVersao(caminhoRelativo: string): string {
   return match[1];
 }
 
-describe("Versões alinhadas na 0.7", () => {
+const VERSAO_ALVO = "0.10.0";
+
+function lerVersaoLock(caminhoRelativo: string): string {
+  const caminho = resolve(raiz, caminhoRelativo);
+  const texto = readFileSync(caminho, "utf8");
+  if (caminho.endsWith("package-lock.json")) {
+    const json = JSON.parse(texto);
+    const root = json.version;
+    const pacoteRaiz = json.packages?.[""]?.version;
+    if (!root || !pacoteRaiz) throw new Error(`versão ausente em ${caminhoRelativo}`);
+    if (root !== pacoteRaiz) throw new Error(`versões divergentes em ${caminhoRelativo}: ${root} vs ${pacoteRaiz}`);
+    return root;
+  }
+  if (caminho.endsWith("uv.lock")) {
+    const match = texto.match(/name\s*=\s*"vard-nucleo"\s*\nversion\s*=\s*"([^"]+)"/);
+    if (!match) throw new Error(`entrada vard-nucleo não encontrada em ${caminhoRelativo}`);
+    return match[1];
+  }
+  throw new Error(`formato não suportado: ${caminhoRelativo}`);
+}
+
+describe("Versões alinhadas na 0.10.0", () => {
   it("package.json, Cargo.toml e tauri.conf.json têm a mesma versão", () => {
     const pkg = lerVersao("package.json");
     const cargo = lerVersao("src-tauri/Cargo.toml");
     const tauri = lerVersao("src-tauri/tauri.conf.json");
-    expect(pkg).toBe(cargo);
-    expect(pkg).toBe(tauri);
+    expect(pkg).toBe(VERSAO_ALVO);
+    expect(cargo).toBe(VERSAO_ALVO);
+    expect(tauri).toBe(VERSAO_ALVO);
   });
 
-  it("nucleo/pyproject.toml tem versão compatível com o app", () => {
-    const app = lerVersao("package.json");
+  it("nucleo/pyproject.toml tem exatamente a versão alvo", () => {
     const nucleo = lerVersao("nucleo/pyproject.toml");
-    // Núcleo pode ter versão própria, mas deve ser >= app para garantir compatibilidade
-    const [appMaior, appMenor] = app.split(".").map(Number);
-    const [nucMaior, nucMenor] = nucleo.split(".").map(Number);
-    expect(nucMaior).toBe(appMaior);
-    expect(nucMenor).toBeGreaterThanOrEqual(appMenor);
+    expect(nucleo).toBe(VERSAO_ALVO);
+  });
+
+  it("package-lock.json (root e packages['']) tem a versão alvo", () => {
+    const lock = lerVersaoLock("package-lock.json");
+    expect(lock).toBe(VERSAO_ALVO);
+  });
+
+  it("Cargo.lock (pacote vard) tem a versão alvo", () => {
+    const texto = readFileSync(resolve(raiz, "src-tauri/Cargo.lock"), "utf8");
+    const match = texto.match(/name\s*=\s*"vard"\s*\nversion\s*=\s*"([^"]+)"/);
+    expect(match).toBeTruthy();
+    expect(match![1]).toBe(VERSAO_ALVO);
+  });
+
+  it("nucleo/uv.lock (vard-nucleo) tem a versão alvo", () => {
+    const lock = lerVersaoLock("nucleo/uv.lock");
+    expect(lock).toBe(VERSAO_ALVO);
   });
 
   it("instalador do Tauri aponta para a versão do package.json", () => {
@@ -44,8 +78,6 @@ describe("Versões alinhadas na 0.7", () => {
   });
 
   it("npm run build produz artefatos sem erro de versão", () => {
-    // Smoke test: apenas verifica que o build do Vite não falha por versão
-    // O build completo é rodado no CI/CD e no passo de release
     expect(() => {
       execFileSync(process.execPath, [resolve(raiz, "node_modules/typescript/bin/tsc"), "--noEmit"], { cwd: raiz, stdio: "pipe", timeout: 60_000 });
     }).not.toThrow();

@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { compararVersoes, interpretarRelease, URL_RELEASE } from "../src/atualizacao/release";
 import { existsSync, readFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
 import { join, resolve } from "node:path";
 
 const release = {
@@ -84,6 +85,23 @@ describe("release T2 — runtime Python 3.13 embutido", () => {
     expect(pkg.scripts?.nucleo).toContain("montar-nucleo.ps1");
   });
 
+  it("package.json tem tauri:build aplicando o overlay do núcleo", () => {
+    const pkg = JSON.parse(readFileSync(join(RAIZ, "package.json"), "utf8"));
+    expect(pkg.scripts?.["tauri:build"]).toContain("tauri.nucleo.conf.json");
+  });
+
+  it("overlay do núcleo encadeia a montagem antes do front", () => {
+    const overlay = JSON.parse(
+      readFileSync(join(RAIZ, "src-tauri", "tauri.nucleo.conf.json"), "utf8"),
+    );
+    const cmd: string = overlay.build?.beforeBuildCommand ?? "";
+    expect(cmd).toContain("&&");
+    const partes = cmd.split("&&").map((s: string) => s.trim());
+    const idxNucleo = partes.findIndex((p: string) => p.includes("nucleo"));
+    const idxBuild = partes.findIndex((p: string) => /(^|\s)(npm run build|vite build)($|\s)/.test(p));
+    expect(idxNucleo).toBeGreaterThanOrEqual(0);
+    expect(idxBuild).toBeGreaterThan(idxNucleo);
+  });
   it.skipIf(!existsSync(BUILD_NUCLEO) || !existsSync(PYTHON_EMBUTIDO))("bundle montado existe com python.exe e medidas validas", () => {
     expect(existsSync(PYTHON_EMBUTIDO)).toBe(true);
     expect(existsSync(MEDIDAS)).toBe(true);
@@ -92,5 +110,35 @@ describe("release T2 — runtime Python 3.13 embutido", () => {
     expect(dados.bytes_total).toBeGreaterThan(0);
     expect(dados.arquivos).toBeGreaterThan(0);
     expect(dados.maior_caminho_len).toBeLessThanOrEqual(160);
+  });
+});
+
+// --- Checkout limpo: base compila sem o núcleo; só o release exige ---
+
+const lerBase = () => JSON.parse(readFileSync(join(RAIZ, "src-tauri", "tauri.conf.json"), "utf8"));
+const lerDev = () => JSON.parse(readFileSync(join(RAIZ, "src-tauri", "tauri.dev.conf.json"), "utf8"));
+
+describe("checkout limpo — base sem recurso obrigatório", () => {
+  it("base não declara bundle.resources (cargo test e tauri dev compilam sem build/nucleo)", () => {
+    expect(lerBase().bundle?.resources ?? {}).toEqual({});
+  });
+
+  it("config efetivo do dev não referencia nada dentro de build/", () => {
+    const efetivo = { ...(lerBase().bundle?.resources ?? {}), ...(lerDev().bundle?.resources ?? {}) };
+    expect(Object.keys(efetivo).filter((k) => k.includes("build/"))).toEqual([]);
+  });
+
+  it("beforeBuildCommand base não monta núcleo; chama a guarda que falha claramente", () => {
+    const cmd: string = lerBase().build?.beforeBuildCommand ?? "";
+    expect(cmd).not.toContain("npm run nucleo");
+    expect(cmd).toContain("exigir-nucleo-build");
+  });
+
+  it("guarda do build padrão falha claramente orientando para tauri:build", () => {
+    const guarda = join(RAIZ, "scripts", "exigir-nucleo-build.mjs");
+    expect(existsSync(guarda)).toBe(true);
+    const r = spawnSync(process.execPath, [guarda], { encoding: "utf8" });
+    expect(r.status).not.toBe(0);
+    expect(`${r.stderr}${r.stdout}`).toMatch(/tauri:build/);
   });
 });

@@ -1,4 +1,7 @@
 {
+  "build": {
+    "beforeBuildCommand": "npm run nucleo && npm run build"
+  },
   "bundle": {
     "resources": {
       "../build/nucleo/": "nucleo/"

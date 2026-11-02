@@ -63,7 +63,10 @@ Prove behaviour through tests, the harness and `window.__vardPergunta`, never by
 
 ## Instaladores / Installers
 
-`npm run tauri build` gera o `.msi` e o `.exe` (NSIS) em `src-tauri/target/release/bundle/`.
+`npm run tauri:build` gera o `.msi` e o `.exe` (NSIS) em `src-tauri/target/release/bundle/`.
+O build monta o núcleo com PowerShell e `uv` antes de gerar o instalador. Se `build/nucleo`, `build/requisitos.txt` ou `build/nucleo-medidas.json` já existir, ele falha sem alterá-los: examine o conteúdo e mova ou remova esses itens conscientemente antes de montar novamente. Um arquivo de cache com hash incorreto também é preservado. Links e junções nos caminhos de montagem e cache são recusados. `npm run tauri build`, sem o overlay, falha de propósito para não gerar um pacote sem núcleo.
+
+The build assembles the core with PowerShell and `uv` before creating the installer. If `build/nucleo`, `build/requisitos.txt` or `build/nucleo-medidas.json` already exists, it fails without changing them: inspect the contents and deliberately move or remove those items before rebuilding. A cache file with an incorrect hash is also preserved. Links and junctions in the assembly and cache paths are rejected. `npm run tauri build`, without the overlay, fails on purpose so it cannot produce a package without the core.
 
 ## Convenções / Conventions
 
