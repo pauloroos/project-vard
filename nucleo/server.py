@@ -44,7 +44,7 @@ _instalaveis = GerenciadorInstalaveis()
 # leem o mesmo arquivo). Sem o arquivo, o exemplo do repositório serve de base.
 # Reescreva lá, nunca aqui.
 RAIZ = Path(__file__).resolve().parent
-EXEMPLO_PERSONA = RAIZ.parent / "config" / "examples" / "persona.example.md"
+EXEMPLO_PERSONA = perfil.EXEMPLO_PERSONA
 
 
 def _persona() -> str:

@@ -17,7 +17,7 @@ def registro(monkeypatch):
 
 
 @pytest.mark.parametrize("falado,chave", [
-    ("Brave", "brave"), ("o navegador Brave", "brave"), ("em breve", "brave"), ("Google Chrome", "chrome"), ("microsoft edge", "edge"),
+    ("Brave", "brave"), ("o navegador Brave", "brave"), ("Google Chrome", "chrome"), ("microsoft edge", "edge"),
     ("msedge.exe", "edge"), ("Mozilla Firefox", "firefox"), ("Opera GX", "opera gx"), ("no Vivaldi", "vivaldi"),
 ])
 def test_normalizar_nome(falado, chave):

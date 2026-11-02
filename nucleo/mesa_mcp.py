@@ -121,7 +121,7 @@ def abrir_url(url: str, navegador: Annotated[str, Field(
         outros = navegadores.instalados()
         dica = f" Navegadores encontrados: {', '.join(outros)}." if outros else ""
         return (f"Não encontrei o navegador '{navegador}' instalado neste PC.{dica} "
-                "Não abra em outro navegador sem o usuário confirmar.")
+                "Pergunte à pessoa qual ela quis dizer; não abra em outro navegador por conta própria.")
     nome, exe = achado
     try:
         # Sem herdar o stdio do MCP: o navegador vive sozinho, desligado deste processo.

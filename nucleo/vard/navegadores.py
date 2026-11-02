@@ -51,9 +51,8 @@ CONHECIDOS = (
 )
 
 APELIDOS = {"google chrome": "chrome", "google": "chrome", "microsoft edge": "edge", "msedge": "edge",
-            "mozilla firefox": "firefox", "mozilla": "firefox", "brave browser": "brave", "operagx": "opera gx",
-            "breve": "brave", "brevi": "brave", "breiv": "brave"}  # como a transcrição costuma ouvir "Brave"
-_PALAVRAS_SOLTAS = ("o navegador", "navegador", "browser", "no ", "em ", "o ")
+            "mozilla firefox": "firefox", "mozilla": "firefox", "brave browser": "brave", "operagx": "opera gx"}
+_PALAVRAS_SOLTAS = ("o navegador", "navegador", "browser", "no ", "o ")
 
 APP_PATHS = r"SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths"
 START_MENU = (r"SOFTWARE\Clients\StartMenuInternet", r"SOFTWARE\WOW6432Node\Clients\StartMenuInternet")
