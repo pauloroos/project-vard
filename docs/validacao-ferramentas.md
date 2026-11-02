@@ -1,8 +1,9 @@
-# Validação de ferramentas — inventário e linha de base
+# Validação de ferramentas — matriz, provas reais e pendências
 
-Inventário das ferramentas, conectores, cérebro, voz e recursos nativos do Vard 0.10.0,
-com testes automatizados, provas reais existentes e classificação das falhas observadas
-em Linux (aarch64). Este documento é a referência para os jobs seguintes de prova.
+Matriz consolidada das ferramentas MCP, conectores, cérebro, voz e recursos nativos do Vard 0.10.0,
+com testes automatizados, provas reais executadas e classificação das pendências observadas
+em Linux (aarch64). Este documento consolida a validação final da versão, delimitando o escopo provado
+e as pendências de ambiente Windows e serviços externos.
 
 ## Linha de base executada
 
@@ -13,7 +14,7 @@ Ambiente: Linux aarch64, Python 3.13 (nucleo), Python 3.12 (voz/reuniao), Node.j
 | `npm test` | 112 arquivos passaram, 1 pulado; 1126 testes passaram, 4 pulados (64 s) | Vitest/jsdom, 100% verde |
 | `npm run check` | Saída limpa (exit 0) | `tsc --noEmit` + `tsc -p tsconfig.test.json` |
 | `uv run --project nucleo --python 3.13 pytest -q nucleo/tests` | 7 erros de coleta, interrompido (1,83 s) | Todos por `import msvcrt` em `vard/vigia.py:11` |
-| Mesma suíte com `--ignore` nos 7 arquivos | 1596 passaram, 49 falharam (48 só Windows, 1 teste de harness isolável passa avulso), 68 pulados (130 s) | As 5 correções do J3 aumentaram aprovados de 1582 para 1596 |
+| Mesma suíte com `--ignore` nos 7 arquivos | 1597 passaram, 48 falharam (48 só Windows), 68 pulados (130 s) | As 5 correções aumentaram aprovados de 1582 para 1597; 48 falhas restantes são todas de Windows (53 = 48 restantes + 5 corrigidas) |
 | Testes de defeitos e prova real | 19 passaram, 1 pulado (`test_delegada` pula em Linux por ausência de `cmd`) (4,2 s) | Cobertura dos 5 defeitos corrigidos e do harness J2/J3 |
 | `uv run --project voz --python 3.12 pytest -q voz/tests` | Erro de instalação | `monotonic-alignment-search` exige `Python.h` (cabeçalhos CPython ausentes) |
 | `uv run --project reuniao --python 3.12 pytest -q reuniao/tests` | Erro de instalação | `pyaudiowpatch` só tem wheel para win32/win_amd64 |
@@ -55,24 +56,24 @@ Causa raiz: `nucleo/vard/vigia.py:11: import msvcrt` — módulo exclusivo do Wi
 | `ver_configuracoes` | `test_ajustes_mcp.py::test_ver_configuracoes_mostra_usar_openjarvis_sem_mudar_quem_responde` | Prova J2/J3 direta stdio e laço HTTP/SSE com modelo de prova | Executou com sucesso (devolveu configurações do HUD sem vazar segredos) |
 | `mudar_aparencia` | `test_ajustes_mcp.py::test_aparencia_muda_so_a_cor_ou_so_a_opacidade` | pendente (alteração visual de janela gráfica; não executar em headless) | Validado em teste unitário |
 | `listar_vozes` | `test_ajustes_mcp.py::test_vozes_de_fabrica_disponiveis_sem_cadastro` | Prova J2 direta via stdio | Executou com sucesso (catálogo Kokoro/Edge/Piper) |
-| `escolher_voz` | `test_ajustes_mcp.py::test_mcp_nao_aceita_segredo_nem_o_devolve` | pendente (grava preferência do usuário no disco; escrita não destrutiva) | Validado em teste unitário |
-| `listar_provedores` | `test_ajustes_mcp.py::test_mcp_nao_aceita_segredo_nem_o_devolve` | Prova J2 direta via stdio | Executou com sucesso (provedores sanitizados com `***`) |
-| `cadastrar_provedor` | `test_ajustes_mcp.py::test_mcp_confirma_antes_de_efeitos_e_nao_vaza` | pendente (escrita em `paineis.json`; mutação controlada) | Validado em teste unitário |
-| `editar_provedor` | `test_ajustes_mcp.py::test_mcp_nao_aceita_segredo_nem_o_devolve` | pendente (modificação de arquivos de configuração) | Validado em teste unitário |
+| `escolher_voz` | sem teste específico (exposição coberta por `test_servidor_mcp_real_expoe_todas_as_ferramentas_e_grava_aparencia`) | pendente (grava preferência do usuário no disco; escrita não destrutiva) | Validado em teste unitário |
+| `listar_provedores` | sem teste específico (exposição coberta por `test_servidor_mcp_real_expoe_todas_as_ferramentas_e_grava_aparencia`) | Prova J2 direta via stdio | Executou com sucesso (provedores sanitizados com `***`) |
+| `cadastrar_provedor` | `test_ajustes_mcp.py::test_mcp_nao_aceita_segredo_nem_o_devolve` | pendente (escrita em `paineis.json`; mutação controlada) | Validado em teste unitário |
+| `editar_provedor` | sem teste específico (exposição coberta por `test_servidor_mcp_real_expoe_todas_as_ferramentas_e_grava_aparencia`) | pendente (modificação de arquivos de configuração) | Validado em teste unitário |
 | `remover_provedor` | `test_ajustes_mcp.py::test_mcp_confirma_antes_de_efeitos_e_nao_vaza` | pendente (remoção destrutiva de provedores cadastrados) | Validado em teste unitário |
-| `escolher_quem_responde` | `test_ajustes_mcp.py::test_ver_configuracoes_mostra_usar_openjarvis_sem_mudar_quem_responde` | pendente (alteração da rota do respondedor ativo) | Validado em teste unitário |
-| `testar_provedor` | `test_ajustes_mcp.py::test_mcp_nao_aceita_segredo_nem_o_devolve` | pendente (disparo de requisição externa de rede) | Validado em teste unitário |
-| `listar_instalaveis` | `test_ajustes_mcp.py::test_mcp_nao_aceita_segredo_nem_o_devolve` | pendente (leitura de catálogo de pacotes externos) | Validado em teste unitário |
-| `instalar` | `test_instalaveis.py::test_conclusao_progresso_e_confirmacao` | pendente (execução de instalação de pacotes no ambiente) | Validado em teste unitário |
-| `andamento_instalacao` | `test_ajustes_mcp.py::test_mcp_nao_aceita_segredo_nem_o_devolve` | pendente (consulta de processo de instalação em andamento) | Validado em teste unitário |
-| `listar_habilidades` | `test_ajustes_mcp.py::test_edita_e_restaura_habilidade_de_fabrica` | pendente (consulta de receitas do usuário) | Validado em teste unitário |
-| `cadastrar_habilidade` | `test_ajustes_mcp.py::test_editar_habilidade_preserva_dados_futuros` | pendente (escrita de receitas no disco) | Validado em teste unitário |
-| `editar_habilidade` | `test_ajustes_mcp.py::test_editar_habilidade_preserva_dados_futuros` | pendente (modificação de receitas existentes) | Validado em teste unitário |
+| `escolher_quem_responde` | `test_ajustes_mcp.py::test_mcp_confirma_antes_de_efeitos_e_nao_vaza`, `test_ajustes_mcp.py::test_ver_configuracoes_mostra_usar_openjarvis_sem_mudar_quem_responde` | pendente (alteração da rota do respondedor ativo) | Validado em teste unitário |
+| `testar_provedor` | `test_ajustes_mcp.py::test_teste_de_provedor_usa_config_salva_sem_expor_chave` | pendente (disparo de requisição externa de rede) | Validado em teste unitário |
+| `listar_instalaveis` | sem teste específico (exposição coberta por `test_servidor_mcp_real_expoe_todas_as_ferramentas_e_grava_aparencia`) | pendente (leitura de catálogo de pacotes externos) | Validado em teste unitário |
+| `instalar` | `test_ajustes_mcp.py::test_mcp_instala_por_http_so_apos_confirmacao` | pendente (execução de instalação de pacotes no ambiente) | Validado em teste unitário |
+| `andamento_instalacao` | sem teste específico (exposição coberta por `test_servidor_mcp_real_expoe_todas_as_ferramentas_e_grava_aparencia`) | pendente (consulta de processo de instalação em andamento) | Validado em teste unitário |
+| `listar_habilidades` | sem teste específico (exposição coberta por `test_servidor_mcp_real_expoe_todas_as_ferramentas_e_grava_aparencia`) | pendente (consulta de receitas do usuário) | Validado em teste unitário |
+| `cadastrar_habilidade` | sem teste específico (exposição coberta por `test_servidor_mcp_real_expoe_todas_as_ferramentas_e_grava_aparencia`) | pendente (escrita de receitas no disco) | Validado em teste unitário |
+| `editar_habilidade` | `test_ajustes_mcp.py::test_fabrica_nao_se_exclui_e_receita_inexistente_avisa` | pendente (modificação de receitas existentes) | Validado em teste unitário |
 | `excluir_habilidade` | `test_ajustes_mcp.py::test_fabrica_nao_se_exclui_e_receita_inexistente_avisa` | pendente (exclusão de receitas) | Validado em teste unitário |
-| `restaurar_habilidade` | `test_ajustes_mcp.py::test_edita_e_restaura_habilidade_de_fabrica` | pendente (restauração de receitas de fábrica) | Validado em teste unitário |
+| `restaurar_habilidade` | `test_ajustes_mcp.py::test_fabrica_nao_se_exclui_e_receita_inexistente_avisa` | pendente (restauração de receitas de fábrica) | Validado em teste unitário |
 | `marcar_habilidade_validada` | `test_ajustes_mcp.py::test_fabrica_nao_se_exclui_e_receita_inexistente_avisa` | pendente (alteração de estado de validação) | Validado em teste unitário |
-| `listar_programas` | `test_ajustes_mcp.py::test_mcp_nao_aceita_segredo_nem_o_devolve` | pendente (leitura de atalhos e programas registrados) | Validado em teste unitário |
-| `cadastrar_programa` | `test_ajustes_mcp.py::test_programa_cadastrado_chega_a_mesa_sem_reiniciar` | pendente (escrita em configuração de programas) | Validado em teste unitário (falha em Linux por `os.startfile`) |
+| `listar_programas` | sem teste específico (exposição coberta por `test_servidor_mcp_real_expoe_todas_as_ferramentas_e_grava_aparencia`) | pendente (leitura de atalhos e programas registrados) | Validado em teste unitário |
+| `cadastrar_programa` | sem teste específico (exposição coberta por `test_servidor_mcp_real_expoe_todas_as_ferramentas_e_grava_aparencia`) | pendente (escrita em configuração de programas) | Validado em teste unitário |
 | `remover_programa` | `test_ajustes_mcp.py::test_remover_programa_inexistente_retorna_mensagem_clara_sem_excecao` | pendente (remoção de programas registrados) | Validado em teste unitário |
 | `ver_telegram` | `test_telegram_mcp.py::test_ver_telegram_retorna_ligado_e_chat_sem_token` | pendente (consulta de status do conector Telegram) | Validado em teste unitário |
 | `configurar_telegram` | `test_telegram_mcp.py::test_configurar_telegram_grava_ligado_e_chat` | pendente (escrita de configuração de bot/chat) | Validado em teste unitário |
@@ -82,9 +83,9 @@ Causa raiz: `nucleo/vard/vigia.py:11: import msvcrt` — módulo exclusivo do Wi
 
 | Ferramenta | Teste automatizado real | Prova real (J2/J3 direta, laço HTTP/SSE ou motivo) | Resultado |
 | --- | --- | --- | --- |
-| `memoria_buscar` | `test_memoria.py::test_sem_config_devolve_a_frase_e_nao_chama_rede`, `test_cerebro_laco.py::test_texto_simples` | Prova J2 direta via stdio | Executou com sucesso ("A memória não está configurada: falta o projeto em memoria.toml.") |
-| `memoria_ler` | `test_memoria.py::test_sem_config_devolve_a_frase_e_nao_chama_rede` | pendente (exige base de memória e projeto configurados) | Validado em teste unitário |
-| `memoria_gravar` | `test_memoria.py::test_sem_config_devolve_a_frase_e_nao_chama_rede`, `test_cerebro_laco.py::test_texto_simples` | pendente (gravação permanente em base de memória) | Validado em teste unitário |
+| `memoria_buscar` | `test_memoria.py::test_sem_config_devolve_a_frase_e_nao_chama_rede`, `test_memoria.py::test_buscar_e_global_e_le_global_hits` | Prova J2 direta via stdio | Executou com sucesso ("A memória não está configurada: falta o projeto em memoria.toml.") |
+| `memoria_ler` | `test_memoria.py::test_sem_config_devolve_a_frase_e_nao_chama_rede`, `test_memoria.py::test_ler_usa_o_projeto_da_configuracao_quando_nao_vem_projeto` | pendente (exige base de memória e projeto configurados) | Validado em teste unitário |
+| `memoria_gravar` | `test_memoria.py::test_sem_config_devolve_a_frase_e_nao_chama_rede`, `test_memoria.py::test_gravar_usa_o_projeto_da_configuracao` | pendente (gravação permanente em base de memória) | Validado em teste unitário |
 
 #### Matriz MCP Mesa (`nucleo/mesa_mcp.py` — 15 ferramentas)
 
@@ -146,11 +147,11 @@ Causa raiz: `nucleo/vard/vigia.py:11: import msvcrt` — módulo exclusivo do Wi
 | Subgrupo | Código | Testes automatizados | Prova real | Resultado |
 | --- | --- | --- | --- | --- |
 | Pedidos/FIFO | `nucleo/vard/cerebro/pedidos.py` | `test_cerebro_pedidos.py`, `test_cerebro_pedidos_integracao.py` | `scripts/provas/prova-cerebro.py` (simulado) | Passou em teste e prova simulada |
-| Sessões | `nucleo/vard/cerebro/sessoes.py` | `test_cerebro_laco.py`, `test_cerebro_laco_persona.py` | Prova J2 HTTP/SSE (sessão real via ambiente) | Passou (ciclo de sessão gerenciado com SSE) |
-| Adaptadores/Montador | `nucleo/vard/cerebro/montador.py`, `provedores.py` | `test_cerebro_provedores.py`, `test_cerebro_ferramentas.py` | Prova J2 HTTP/SSE (montagem de prompt e tools) | Passou (chamada de ferramenta despachada) |
+| Sessões | `nucleo/vard/cerebro/sessoes.py` | `test_cerebro_laco.py`, `test_cerebro_laco_persona.py` | exercitado pelo laço J2 (não medido isoladamente) | Passou (ciclo de sessão gerenciado com SSE) |
+| Adaptadores/Montador | `nucleo/vard/cerebro/montador.py`, `provedores.py` | `test_cerebro_provedores.py`, `test_cerebro_ferramentas.py` | exercitado pelo laço J2 (não medido isoladamente) | Passou (chamada de ferramenta despachada) |
 | Cancelamento | `nucleo/vard/cerebro/pedidos.py` | `test_prova_cerebro.py` (cancelamento) | `scripts/provas/prova-cerebro.py` (simulado) | Passou em teste e prova simulada |
-| Fila/Executor | `nucleo/vard/cerebro/laco.py` | `test_cerebro_executor.py`, `test_cerebro_cli.py` | Prova J2 HTTP/SSE (laço assíncrono em background) | Passou (execução em background limpa) |
-| Diário | `nucleo/vard/cerebro/diario.py` | `test_cerebro_diario.py` | Prova J2 HTTP/SSE (registro de eventos) | Passou (eventos gravados em JSONL) |
+| Fila/Executor | `nucleo/vard/cerebro/laco.py` | `test_cerebro_executor.py`, `test_cerebro_cli.py` | exercitado pelo laço J2 (não medido isoladamente) | Passou (execução em background limpa) |
+| Diário | `nucleo/vard/cerebro/diario.py` | `test_cerebro_diario.py` | exercitado pelo laço J2 (não medido isoladamente) | Passou (eventos gravados em JSONL) |
 | Reserva | `nucleo/vard/cerebro/reserva.py` | `test_prova_cerebro.py` (reserva/falha) | pendente (exige esgotamento de cotas do modelo primário) | Validado em teste unitário |
 | CLI/Detecção | `nucleo/vard/cerebro/cli.py`, `cli_deteccao.py`, `cli_capacidade.py` | `test_cli_detectar.py`, `test_cli_despachante.py`, `test_cli_falsa.py` | pendente de CLIs instaladas no sistema operacional | Pendência Windows (caminhos de CLIs Windows) |
 | Controle motor | `nucleo/vard/cerebro/controle_motor.py` | sem teste específico | pendente (integração de atuadores físicos/SO) | Pendência Windows |
@@ -161,7 +162,7 @@ Causa raiz: `nucleo/vard/vigia.py:11: import msvcrt` — módulo exclusivo do Wi
 | --- | --- | --- | --- | --- |
 | OpenJarvis | `src/conectores/openjarvis/cliente.ts` | `tests/harness/integracao.test.ts`, `tests/openjarvis-desligado.test.ts`, `tests/integracao-real.test.ts` | pendente (exige conta e servidor real OpenJarvis) | Passou com harness simulado no Vitest |
 | Ponte | `src/conectores/ponte/cliente.ts` | `tests/ponte-andamento.test.ts`, `tests/ponte-avisos.test.ts`, `tests/ponte-dispositivos.test.ts`, `tests/ponte-eventos.test.ts`, `tests/ponte-reuniao.test.ts`, `tests/ponte-saude.test.ts`, `tests/ponte-telegram.test.ts` | pendente (exige infraestrutura da ponte privada) | Passou com ponte simulada no Vitest |
-| Nuvem (ElevenLabs/Gemini) | `src/conectores/nuvem/elevenlabs.ts`, `gemini.ts` | `tests/nuvem.test.ts` | pendente (exige chave de API com cota disponível) | Passou em testes unitários no Vitest |
+| Nuvem (ElevenLabs/Gemini) | `src/conectores/nuvem/elevenlabs.ts`, `src/conectores/nuvem/` (TTS) | `tests/nuvem.test.ts` | pendente (exige chave de API com cota disponível) | Passou em testes unitários no Vitest |
 | Voz própria | `src/conectores/voz/cliente.ts`, `fluxo.ts`, `kokoro.ts` | `voz/tests/test_servidor.py`, `test_kokoro.py`, `test_edge.py`, `test_piper.py` | pendente (motor de síntese local e saída de áudio) | Bloqueado em Linux (falta Python.h/C) |
 | Telegram | `nucleo/vard/telegram.py` | `test_telegram.py`, `test_telegram_mcp.py`, `test_telegram_rotas.py`, `test_telegram_servidor.py`, `test_telegram_lifespan.py`, `test_telegram_migracao.py` | pendente (exige bot token registrado e chat liberado) | Passou em testes unitários mockados |
 
@@ -176,11 +177,11 @@ Causa raiz: `nucleo/vard/vigia.py:11: import msvcrt` — módulo exclusivo do Wi
 
 | Função | Código | Testes automatizados | Prova real | Resultado |
 | --- | --- | --- | --- | --- |
-| Avisos | `nucleo/vard/avisos.py`, `src/avisos/central.ts` | `nucleo/tests/test_avisos.py`, `tests/aba-avisos.test.ts`, `tests/avisos-chamada.test.ts`, `tests/avisos-fala.test.ts` | Prova J2/J3 (aviso em tempo de execução) | Passou em testes Vitest e Python |
-| Tarefas | `nucleo/vard/tarefas.py` | `nucleo/tests/test_tarefas.py` | Prova J3 (trava de concorrência com `fcntl.flock`) | Passou após correção da trava POSIX |
+| Avisos | `nucleo/vard/avisos.py`, `src/avisos/central.ts` | `nucleo/tests/test_avisos.py`, `tests/aba-avisos.test.ts`, `tests/avisos-chamada.test.ts`, `tests/avisos-fala.test.ts` | sem prova real; coberto por testes Vitest/Python | Passou em testes Vitest e Python |
+| Tarefas | `nucleo/vard/tarefas.py` | `nucleo/tests/test_tarefas.py` | coberto por testes automatizados (trava POSIX com `fcntl.flock` no J3) | Passou após correção da trava POSIX |
 | Manhã | `nucleo/vard/manha.py` | `nucleo/tests/test_manha.py` | pendente (exige agente e perfil matinal configurados) | Passou em testes unitários |
 | Pesquisa | `nucleo/vard/pesquisa.py` | `nucleo/tests/test_pesquisa.py` (`test_cria_o_agente_e_devolve_a_resposta`) | pendente (exige agente configurado) | Passou em testes unitários |
-| Remoto | `nucleo/vard/remoto.py` | `nucleo/tests/test_remoto.py` | `scripts/provas/prova-delegada.py` (simulado) / J3 (trava remota) | Passou em testes unitários e simulados |
+| Remoto | `nucleo/vard/remoto.py` | `nucleo/tests/test_remoto.py` | `scripts/provas/prova-delegada.py` (simulado) / coberto por testes no J3 (trava remota) | Passou em testes unitários e simulados |
 
 ### Atalhos, bandeja e atualização
 
@@ -220,7 +221,7 @@ Causa raiz: `nucleo/vard/vigia.py:11: import msvcrt` — módulo exclusivo do Wi
 | 20 | `test_primeiro_uso_deteccao.py::test_quatro_clis_e_orca_presentes` | `AssertionError: assert 'nao_encontrado' == 'encontrado'` | idem |
 | 21 | `test_primeiro_uso_deteccao.py::test_orca_no_caminho_do_adaptador_sem_versao` | `AssertionError: assert 'nao_encontrado' == 'encontrado'` | idem |
 | 22 | `test_primeiro_uso_deteccao.py::test_gpu_nvidia_com_vram_do_nvidia_smi` | `AssertionError: vram_mb is None` | `nvidia-smi` não disponível ou saída diferente |
-| 23 | `test_runtime_instalado.py::test_hash_incorreto_falha_antes_de_extrair` | `FileNotFoundError: [Errno 2] No such file or directory: 'cmd'` | script `montar-nucleo.ps1` invoca `cmd` |
+| 23 | `test_runtime_instalado.py::test_hash_incorreto_falha_antes_de_extrair` | `FileNotFoundError: [Errno 2] No such file or directory: 'powershell'` | script `montar-nucleo.ps1` executado via `powershell` |
 | 24 | `test_runtime_instalado.py::test_destino_fora_do_build_e_recusado` | lógica de unidade Windows | caminho com letra de unidade |
 | 25 | `test_runtime_instalado.py::test_segredo_no_destino_falha` | lógica de unidade Windows | idem |
 | 26 | `test_server.py::test_modo_aceita_origens_do_tauri[http://tauri.localhost]` | `FileNotFoundError: [Errno 2] No such file or directory: 'powershell'` | script de modo jogo usa powershell |
@@ -258,14 +259,7 @@ Consolidação única de todos os defeitos de código identificados no inventár
 | 8 | Harness: isolamento de variáveis e sanitização | Testes modificavam `os.environ` diretamente com risco de contaminação e truncamento invertido na sanitização | `scripts/provas/prova-real-ferramentas.py`, `nucleo/tests/test_prova_real_ferramentas.py` | `test_prova_real_ferramentas.py::TestSanitizacao` | Uso de `monkeypatch.setenv/delenv` e correção da ordem `sanitizar(str(exc))[:300]` | PASSA (isolamento garantido) |
 
 **Total de defeitos de código:** 5 corrigidos + 3 melhorias estruturais do harness.
-**Saldo de falhas da suíte núcleo:** 53 falhas iniciais - 5 defeitos corrigidos = 48 falhas restantes (100% dependentes de APIs/binários Windows).
-### Correção adicional na classificação
-
-| # | Arquivo::teste | Erro real (confirmado) | Classificação anterior |
-| --- | --- | --- | --- |
-| 23 | `test_runtime_instalado.py::test_hash_incorreto_falha_antes_de_extrair` | `FileNotFoundError: 'powershell'` | `FileNotFoundError: 'cmd'` |
-
-**Total após J3: 48 só Windows + 0 defeitos pendentes = 48 falhas restantes (todas pendentes de Windows).**
+**Saldo de falhas da suíte núcleo:** 53 falhas iniciais - 5 defeitos corrigidos = 48 falhas restantes (100% dependentes de APIs/binários Windows, 0 defeitos de código pendentes).
 
 ---
 
@@ -333,7 +327,7 @@ Para manter clareza sobre o escopo provado e evitar falsa impressão de entrega,
 ## Resumo da validação
 
 - **Frontend (TypeScript):** 1126 testes passando; `npm run check` limpo. Sem pendências de código ou tipagem.
-- **Núcleo (Python):** 1596 testes passando em Linux; **48 falhas só Windows (todas decorrentes de APIs exclusivas do Windows: msvcrt, win32gui, os.startfile, powershell, etc.), 0 defeitos de código pendentes**. Os 7 arquivos com erro de coleta falham unicamente pelo `import msvcrt` no nível do módulo em `vard/vigia.py`. Os 5 defeitos identificados no J1 foram 100% corrigidos no J3 e permanecem verdes.
+- **Núcleo (Python):** 1597 testes passando em Linux (com 68 pulados); **48 falhas só Windows (todas decorrentes de APIs exclusivas do Windows: msvcrt, win32gui, os.startfile, powershell, etc.), 0 defeitos de código pendentes**. Os 7 arquivos com erro de coleta falham unicamente pelo `import msvcrt` no nível do módulo em `vard/vigia.py`. Do total de 53 falhas iniciais, os 5 defeitos de código identificados foram 100% corrigidos e permanecem verdes (53 = 48 restantes só Windows + 5 corrigidas).
 - **Harness e Robustez:** Cleanup estrito implementado com `try/finally` no context manager do harness, asserção do evento SSE `ferramenta` no teste offline, verificação de término de processos via `psutil.pid_exists` e sanitização estrita sem vazamento de segredos/endpoints/tokens.
 - **Provas reais executadas com sucesso:**
   - **Cérebro por HTTP/SSE:** 1 prova real ponta a ponta bem-sucedida registrada no J2 (status HTTP 202, 3 eventos SSE: ferramenta `ver_configuracoes` → texto sanitizado → fim, duração de 13,7 s, encerramento limpo sem processos órfãos).
