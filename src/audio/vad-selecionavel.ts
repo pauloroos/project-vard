@@ -25,8 +25,7 @@ export class DetectorSelecionavel {
         this.probabilidade = p; this.atualizado = performance.now();
       });
       if (g !== this.geracao) { await modelo.destruir(); return; }
-      const anterior = this.modelo; this.modelo = modelo; this.reset();
-      void anterior?.destruir().catch(() => {});
+      this.modelo = modelo; this.reset();
     } catch {
       if (g === this.geracao) console.warn("Silero indisponível; usando detector de energia.");
     }

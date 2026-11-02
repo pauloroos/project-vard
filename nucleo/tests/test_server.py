@@ -310,7 +310,7 @@ def test_modo_origin_estranha(cliente, monkeypatch):
 @pytest.mark.parametrize("origem", ["http://tauri.localhost", "http://localhost:1420"])
 def test_modo_aceita_origens_do_tauri(cliente, monkeypatch, origem):
     monkeypatch.setattr(server.modo, "disparar", lambda verbo: 5)
-    r = cliente.post("/modo", json={"modo": "recarregar"}, headers={"Origin": origem})
+    r = cliente.post("/modo", json={"modo": "jogo"}, headers={"Origin": origem})
     assert r.status_code == 200 and r.json() == {"ok": True, "pid": 5}
     assert r.headers["access-control-allow-origin"] == origem   # sem isso o webview não lê a resposta
     pre = cliente.options("/modo", headers={"Origin": origem, "Access-Control-Request-Method": "POST",
@@ -319,25 +319,9 @@ def test_modo_aceita_origens_do_tauri(cliente, monkeypatch, origem):
 
 
 def test_modo_dispara_script(cliente, monkeypatch):
-    monkeypatch.setattr(server.modo, "disparar", lambda verbo: 777 if verbo == "recarregar" else 0)
-    r = cliente.post("/modo", json={"modo": "recarregar"}, headers={"Origin": "http://127.0.0.1:4700"})
+    monkeypatch.setattr(server.modo, "disparar", lambda verbo: 777 if verbo == "jogo" else 0)
+    r = cliente.post("/modo", json={"modo": "jogo"}, headers={"Origin": "http://127.0.0.1:4700"})
     assert r.status_code == 200 and r.json() == {"ok": True, "pid": 777}
-
-
-def test_modo_jogo_indisponivel_sem_disparar(cliente, monkeypatch):
-    chamados = []
-    monkeypatch.setattr(server.modo, "disparar", lambda verbo: chamados.append(verbo))
-    r = cliente.post("/modo", json={"modo": "jogo"})
-    assert r.status_code == 503 and r.json() == {"ok": False, "erro": "modo jogo indisponível nesta versão"}
-    assert chamados == []
-
-
-def test_modo_voltar_responde_sem_disparar(cliente, monkeypatch):
-    chamados = []
-    monkeypatch.setattr(server.modo, "disparar", lambda verbo: chamados.append(verbo))
-    r = cliente.post("/modo", json={"modo": "voltar"})
-    assert r.status_code == 200 and r.json() == {"ok": True, "mensagem": "restauração pendente para próxima versão"}
-    assert chamados == []
 
 
 def test_modo_verbo_invalido(cliente):
@@ -349,7 +333,7 @@ def test_modo_script_ausente_vira_503(cliente, monkeypatch):
     def _falha(verbo):
         raise FileNotFoundError("sem script")
     monkeypatch.setattr(server.modo, "disparar", _falha)
-    r = cliente.post("/modo", json={"modo": "recarregar"})
+    r = cliente.post("/modo", json={"modo": "voltar"})
     assert r.status_code == 503 and r.json()["erro"] == "modo_script"
 
 

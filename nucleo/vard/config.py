@@ -27,7 +27,7 @@ def pasta_dados() -> Path:
 
 def arquivo_config(nome: str) -> Path:
     """Caminho de um arquivo de configuração do usuário; só o nome, sem subir de pasta."""
-    if not nome or Path(nome).name != nome or nome in {".", ".."} or "\\" in nome:
+    if not nome or Path(nome).name != nome or nome in {".", ".."}:
         raise ValueError(f"nome de configuração inválido: {nome!r}")
     return pasta_config() / nome
 

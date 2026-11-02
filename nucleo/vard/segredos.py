@@ -17,24 +17,8 @@ from vard import config as _config
 
 PASTA = _config.pasta_dados()
 ARQUIVO: Path | None = None  # Sobrescrita explícita; padrão resolvido na chamada.
-_EM_MEMORIA: dict | None = None  # Quando definido, carregar() devolve este dict sem ler arquivo.
-
-
-def definir_em_memoria(dados: dict | None) -> None:
-    """Define ou limpa o dicionário de segredos em memória.
-
-    Quando definido, ``carregar()`` devolve uma cópia deste dict e ignora o
-    arquivo no disco. Útil para provas e testes que não podem escrever a
-    credencial em arquivo. Em produção permanece ``None`` e o comportamento
-    é idêntico ao anterior.
-    """
-    global _EM_MEMORIA
-    _EM_MEMORIA = dict(dados) if dados is not None else None
-
 
 def carregar(caminho: Path | None = None) -> dict:
-    if _EM_MEMORIA is not None and caminho is None:
-        return copy.deepcopy(_EM_MEMORIA)
     arq = caminho or ARQUIVO or _config.arquivo_segredos()
     if not arq.exists():
         raise FileNotFoundError(

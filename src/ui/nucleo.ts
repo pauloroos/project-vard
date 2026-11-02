@@ -1,6 +1,7 @@
 import { Aneis, R_INT } from "./aneis";
 import { simplex2 } from "./ruido";
 import type { FonteDeEspectro } from "../sala/espectro";
+import { cadenciaFps, deveDesenharQuadro, intervaloMinimoMs, prefereMovimentoReduzido } from "./movimento";
 
 export type Estado = "repouso" | "ouvindo" | "transcrevendo" | "pensando" | "falando" | "jogo" | "erro" | "fora";
 
@@ -58,6 +59,9 @@ export class Nucleo {
   private raf = 0;
   private rodando = false;
   private iniciado = false;
+  private oculto = false;
+  private movimentoReduzido = false;
+  private ultimoDesenho = 0;
   private ctx: CanvasRenderingContext2D;
   private aneis = new Aneis();
   private corEscolhida: { c: [number, number, number]; g: [number, number, number] } | null = null;
@@ -85,6 +89,15 @@ export class Nucleo {
   constructor(private canvas: HTMLCanvasElement, lado = LADO_BASE) {
     this.ctx = canvas.getContext("2d")!;
     this.redimensionar(lado);
+    this.movimentoReduzido = prefereMovimentoReduzido();
+    if (typeof window !== "undefined" && typeof window.matchMedia === "function") {
+      try {
+        const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
+        mq.addEventListener?.("change", (ev) => {
+          this.movimentoReduzido = ev.matches;
+        });
+      } catch { /* navegadores antigos */ }
+    }
     const ouro = Math.PI * (3 - Math.sqrt(5));
     for (let i = 0; i < PARTICULAS; i++) {
       const y = 1 - (i / (PARTICULAS - 1)) * 2;
@@ -101,7 +114,20 @@ export class Nucleo {
     this.canvas.width = Math.round(lado * dpr); this.canvas.height = Math.round(lado * dpr);
     this.canvas.style.width = `${lado}px`; this.canvas.style.height = `${lado}px`;
     this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    if (this.iniciado && !this.rodando) this.desenhar(performance.now()); // parado (jogo): redesenha uma vez
+    if (this.iniciado && !this.rodando && !this.oculto) this.desenhar(performance.now()); // parado (jogo): redesenha uma vez
+  }
+
+  definirOculto(oculto: boolean) {
+    this.oculto = oculto;
+    if (oculto) {
+      this.parar();
+    } else if (this.iniciado) {
+      this.iniciar();
+    }
+  }
+
+  definirMovimentoReduzido(reduzido: boolean) {
+    this.movimentoReduzido = reduzido;
   }
 
   setEstado(e: Estado) {
@@ -110,8 +136,8 @@ export class Nucleo {
     if (e === "jogo") {
       this.parar();
       this.p = { ...ALVOS.jogo }; this.fixarCor(e);
-      this.desenhar(performance.now());
-    } else if (!this.rodando) {
+      if (!this.oculto) this.desenhar(performance.now());
+    } else if (!this.rodando && !this.oculto) {
       this.iniciar();
     }
   }
@@ -135,19 +161,38 @@ export class Nucleo {
 
   iniciar() {
     this.iniciado = true;
-    if (this.rodando) return;
+    if (this.oculto || this.rodando) return;
     this.ultimoT = 0;
-    if (this.estado === "jogo") { this.p = { ...ALVOS.jogo }; this.fixarCor("jogo"); this.desenhar(performance.now()); return; }
+    this.ultimoDesenho = 0;
+    if (this.estado === "jogo") {
+      this.p = { ...ALVOS.jogo };
+      this.fixarCor("jogo");
+      this.desenhar(performance.now());
+      return;
+    }
     this.rodando = true;
     const laco = (t: number) => {
       if (!this.rodando) return;
-      this.desenhar(t);
+      const fps = cadenciaFps({
+        estado: this.estado,
+        movimentoReduzido: this.movimentoReduzido,
+        oculto: this.oculto,
+      });
+      const intervalo = intervaloMinimoMs(fps);
+      if (deveDesenharQuadro(t, this.ultimoDesenho, intervalo)) {
+        this.desenhar(t);
+        this.ultimoDesenho = t;
+      }
       this.raf = requestAnimationFrame(laco);
     };
     this.raf = requestAnimationFrame(laco);
   }
 
-  parar() { this.rodando = false; cancelAnimationFrame(this.raf); this.raf = 0; }
+  parar() {
+    this.rodando = false;
+    cancelAnimationFrame(this.raf);
+    this.raf = 0;
+  }
 
   private fixarCor(e: Estado) {
     const pal = this.paleta(e);
@@ -235,9 +280,11 @@ export class Nucleo {
     const p = this.p;
 
     // níveis (medidores) e espectro
-    const linE = this.rmsEntrada(), linS = this.rmsSaida();
+    const linE = this.movimentoReduzido ? 0 : this.rmsEntrada();
+    const linS = this.movimentoReduzido ? 0 : this.rmsSaida();
 
-    const fonteFft = e === "falando" ? this.saida : e === "ouvindo" ? this.entrada : null;
+    const fonteFft = this.movimentoReduzido ? null : e === "falando" ? this.saida : e === "ouvindo" ? this.entrada : null;
+    if (this.movimentoReduzido) { this.fft.fill(0); this.energiaS = 0; this.ondaNasc.fill(-1); }
     if (fonteFft) this.lerFft(fonteFft); else this.fftAlvo.fill(0);
     const ks = fonteFft ? 0.4 : 0.15;
     let soma = 0;
@@ -249,10 +296,13 @@ export class Nucleo {
     const alvoE = e === "falando" ? Math.min(1, linS * 4) : e === "ouvindo" ? Math.min(1, linE * 4) : 0;
     this.energiaS += (alvoE - this.energiaS) * (alvoE > this.energiaS ? 0.5 : 0.15);
 
-    this.aneis.avancar(dt, p.velExt, p.velResto, reacao);
-    this.tRuido += dt * (0.25 + 0.55 * p.agita);
-    this.fase += dt * (0.25 + 0.5 * p.agita);
-    this.tResp += dt;
+    const dtAvanco = this.movimentoReduzido ? 0 : dt;
+    this.aneis.avancar(dtAvanco, p.velExt, p.velResto, reacao);
+    if (!this.movimentoReduzido) {
+      this.tRuido += dt * (0.25 + 0.55 * p.agita);
+      this.fase += dt * (0.25 + 0.5 * p.agita);
+      this.tResp += dt;
+    }
 
     const alfa = this.cor[6];
     ctx.clearRect(0, 0, this.lado, this.lado);
@@ -271,7 +321,7 @@ export class Nucleo {
 
     this.aneis.desenhar(ctx, { cor: this.css(0, 1), brilho: this.css(3, 0.9), escala: p.escala, alfa, reacao });
     this.desenharFft(ctx, alfa, p.escala);
-    this.desenharOndas(ctx, t, alfa, e === "falando");
+    this.desenharOndas(ctx, t, alfa, e === "falando" && !this.movimentoReduzido);
     this.desenharEsfera(ctx, alfa);
     ctx.restore();
   }
@@ -323,7 +373,7 @@ export class Nucleo {
 
   private desenharEsfera(ctx: CanvasRenderingContext2D, alfa: number) {
     const p = this.p;
-    const respira = 1 + 0.05 * p.respira * Math.sin(2 * Math.PI * 0.8 * this.tResp);
+    const respira = this.movimentoReduzido ? 1 : 1 + 0.05 * p.respira * Math.sin(2 * Math.PI * 0.8 * this.tResp);
     const pulso = 1 + p.pulso * this.energiaS * 0.35;
     const raio = R_ESFERA * respira * pulso;
     const amp = 0.22 + 0.2 * p.agita + this.energiaS * 0.3;

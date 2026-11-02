@@ -19,8 +19,6 @@ Modernizar as três telas com uma linguagem futurista leve, validar as ferrament
 - Ausência de conta, hardware ou serviço para uma ferramenta deve ser registrada como pendente, nunca como prova real aprovada. Testes automatizados e simulados são identificados separadamente.
 - Configuração e dados de prova ficam em diretórios temporários externos ao repositório; cada processo iniciado nas provas deve ser encerrado pelo responsável.
 - Uma falha na suíte exigida ou conflito de integração impede o merge. Limitações intrínsecas do ambiente são descritas com o comando e erro exatos e encaminhadas para validação no PC.
-- A validação real do aplicativo instalado, incluindo hardware e WebView2, será feita em sessão posterior no Windows. O merge depende das verificações aplicáveis na VPS; casos exclusivos do Windows são explicitamente identificados e ficam pendentes.
-- O build Windows padrão deve montar e incluir o núcleo Python no instalador, ou falhar de forma clara antes de produzir um pacote incompleto.
 
 ## Aceitação
 

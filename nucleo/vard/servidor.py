@@ -54,7 +54,7 @@ def servir(porta: int = 4700, host: str = "127.0.0.1") -> int:
     try:
         _verificar_porta(host, porta)
     except OSError as exc:
-        if exc.errno in (errno.EADDRINUSE, getattr(errno, "WSAEADDRINUSE", errno.EADDRINUSE)):
+        if exc.errno in (errno.EADDRINUSE, errno.WSAEADDRINUSE):  # type: ignore[attr-defined]
             print(f"porta {porta} ocupada", file=sys.stderr)
             return SAIDA_PORTA_OCUPADA
         print(f"não consegui abrir a porta {porta}: {exc}", file=sys.stderr)
