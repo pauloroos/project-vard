@@ -14,7 +14,7 @@ def test_normalizar_url_dominio_sem_esquema():
 
 def test_sites_embutidos_sao_publicos():
     # Guarda contra dado pessoal voltando para o código: só sites públicos, conhecidos.
-    assert set(programas.SITES) == {"youtube", "gmail", "github", "whatsapp", "chatgpt", "claude"}
+    assert set(programas.SITES) == {"youtube", "twitch", "gmail", "github", "whatsapp", "chatgpt", "claude"}
 
 
 def test_sites_do_usuario_sobrescrevem_e_estendem(tmp_path: Path):
