@@ -10,6 +10,7 @@ from urllib.parse import quote_plus
 
 SITES = {
     "youtube": "https://youtube.com",
+    "twitch": "https://twitch.tv",
     "gmail": "https://mail.google.com",
     "github": "https://github.com",
     "whatsapp": "https://web.whatsapp.com",

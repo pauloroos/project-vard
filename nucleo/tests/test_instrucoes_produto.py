@@ -13,4 +13,5 @@ def test_pacote_leva_as_instrucoes_de_produto() -> None:
 
 def test_instrucoes_pedem_para_perguntar_quando_nao_entender() -> None:
     from vard import perfil
-    assert "pergunte o que a pessoa quis dizer" in perfil._bloco_produto()
+    bloco = perfil._bloco_produto()
+    assert "pergunte o que a pessoa quis dizer" in bloco and "nunca peça link" in bloco
