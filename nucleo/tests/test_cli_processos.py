@@ -513,3 +513,33 @@ class TestNomeDoWidgetNoPerfil:
         texto = (pasta / "perfil.md").read_text(encoding="utf-8")
         assert "Nome do assistente: Aurora" in texto
         assert "Como chamar a pessoa: Beltrano" in texto
+
+
+class TestAquecido:
+    @pytest.mark.asyncio
+    async def test_primeira_conversa_usa_o_processo_aquecido_e_repoe(self, supervisor: SupervisorCli) -> None:
+        prov = _provedor("cli-claude")
+        await supervisor.aquecer(prov)
+        aquecido = supervisor.pids()
+        assert len(aquecido) == 1
+        await supervisor.canal(prov, "sess-1")
+        assert supervisor._processos["cli_claude:sess-1"].pid == aquecido[0]  # adotou, não abriu outro
+        for _ in range(50):  # a reposição roda em segundo plano
+            if len(supervisor.pids()) == 2:
+                break
+            await asyncio.sleep(0.1)
+        assert len(set(supervisor.pids())) == 2
+        await supervisor.encerrar_tudo()
+        assert supervisor.pids() == []
+
+    @pytest.mark.asyncio
+    async def test_cadastro_mudou_descarta_o_aquecido(self, supervisor: SupervisorCli) -> None:
+        await supervisor.aquecer(_provedor("cli-claude", modelo="a"))
+        velho = supervisor.pids()[0]
+        await supervisor.canal(_provedor("cli-claude", modelo="b"), "sess-1")
+        assert supervisor._processos["cli_claude:sess-1"].pid != velho
+
+    @pytest.mark.asyncio
+    async def test_enxuto_nao_aquece(self, supervisor: SupervisorCli) -> None:
+        await supervisor.aquecer(_provedor("cli-claude", enxuto=True))
+        assert supervisor.pids() == []

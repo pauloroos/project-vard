@@ -178,6 +178,14 @@ def _resolver_credencial_cofre(credencial_ref: str, tipo: str) -> str:
     return ""
 
 
+def _provedor_cli(prov: dict):
+    """Cadastro cli-* do paineis.json → ProvedorCli (igual no arranque e no pedido: o aquecido só é adotado se bater)."""
+    from vard.cerebro.cli_processos import ProvedorCli
+    tipo = prov["tipo"]
+    return ProvedorCli(id=tipo.replace("-", "_"), tipo=tipo, modelo=prov.get("modelo", ""),
+                       yolo=prov.get("yolo", True), enxuto=prov.get("enxuto", False))
+
+
 async def _executar_pedido_cerebro(pedido, emitir):
     """Executor do cérebro próprio: seleciona adaptador conforme provedor ativo.
 
@@ -187,7 +195,6 @@ async def _executar_pedido_cerebro(pedido, emitir):
     """
     from vard.cerebro import laco as cerebro_laco
     from vard.cerebro.cli import AdaptadorCli
-    from vard.cerebro.cli_processos import ProvedorCli
     from vard.cerebro.montador import montar_adaptador
 
     prov = _ler_provedor_ativo()
@@ -198,13 +205,7 @@ async def _executar_pedido_cerebro(pedido, emitir):
 
     if tipo_provedor in ("cli-claude", "cli-agy"):
         supervisor = _obter_supervisor_cli()
-        provedor_cli = ProvedorCli(
-            id=tipo_provedor.replace("-", "_"),
-            tipo=tipo_provedor,
-            modelo=prov.get("modelo", ""),
-            yolo=prov.get("yolo", True),
-            enxuto=prov.get("enxuto", False),
-        )
+        provedor_cli = _provedor_cli(prov)
         canal = await supervisor.canal(provedor_cli, pedido.sessao_id)
         dialeto = "claude" if tipo_provedor == "cli-claude" else "agy"
         adaptador = AdaptadorCli(canal, dialeto)
@@ -328,6 +329,10 @@ async def lifespan(app):
 
     # Telegram próprio: sobe com o núcleo pelo telegram.toml + cofre, sem depender do OpenJarvis.
     await _sincronizar_telegram()
+    # CLI como cérebro ativo: já abre um processo, para a 1ª fala não esperar a partida.
+    prov = _ler_provedor_ativo()
+    if prov.get("tipo") in ("cli-claude", "cli-agy"):
+        asyncio.get_running_loop().create_task(_obter_supervisor_cli().aquecer(_provedor_cli(prov)))
     try:
         yield
     finally:

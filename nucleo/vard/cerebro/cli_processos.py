@@ -28,6 +28,7 @@ import signal
 import subprocess
 import sys
 import time
+import uuid
 from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any, AsyncIterator, Dict, List, Optional
@@ -320,6 +321,44 @@ class SupervisorCli:
         self._enxuto: Dict[str, bool] = {}
         self._trava = asyncio.Lock()
         self._limpeza_task: Optional[asyncio.Task] = None
+        # Um processo já aberto por provedor, à espera da próxima conversa: a 1ª fala não paga a partida
+        # da CLI e dos MCPs (~15 s). shortcut: guarda o perfil de quando abriu; perfil editado vale na seguinte.
+        self._aquecidos: Dict[str, tuple] = {}
+        self._manter_aquecido: set = set()  # provedores com aquecimento ligado (só repõe esses)
+
+    async def aquecer(self, provedor: ProvedorCli) -> None:
+        """Abre um processo de reserva para o provedor (no arranque e depois de cada conversa nova)."""
+        if provedor.enxuto:
+            return  # o enxuto confere as ferramentas na abertura de cada sessão
+        self._manter_aquecido.add(provedor.id)
+        async with self._trava:
+            velho = self._aquecidos.pop(provedor.id, None)
+            if velho is not None and velho[0] == provedor and velho[2].returncode is None:
+                self._aquecidos[provedor.id] = velho
+                return
+            if velho is not None and velho[2].returncode is None:
+                await asyncio.get_running_loop().run_in_executor(None, _encerrar_arvore, velho[2].pid)
+            tmp = f"{provedor.id}:_aquecido"
+            canal = await self._abrir(provedor, f"_aquecido-{uuid.uuid4().hex[:8]}", tmp)
+            proc = self._processos.pop(tmp)
+            self._ultimo_uso.pop(tmp, None)
+            self._canais.pop(tmp, None)
+            self._aquecidos[provedor.id] = (provedor, canal, proc)
+
+    def _adotar_aquecido(self, provedor: ProvedorCli, chave: str) -> Optional[CanalCli]:
+        item = self._aquecidos.pop(provedor.id, None)
+        if item is None:
+            return None
+        prov, canal, proc = item
+        if prov != provedor or proc.returncode is not None:
+            if proc.returncode is None:
+                _encerrar_arvore(proc.pid)
+            return None
+        self._processos[chave] = proc
+        self._canais[chave] = canal
+        self._ultimo_uso[chave] = time.monotonic()
+        self._garantir_limpeza()
+        return canal
 
     async def canal(self, provedor: ProvedorCli, sessao_id: str) -> CanalCli:
         """Retorna um canal para a sessão, abrindo/reabrindo o processo se necessário."""
@@ -332,7 +371,10 @@ class SupervisorCli:
             if provedor.enxuto:
                 return await self._abrir_enxuto(provedor, sessao_id, chave)
             self._enxuto[chave] = False
-            return await self._abrir(provedor, sessao_id, chave)
+            canal = self._adotar_aquecido(provedor, chave) or await self._abrir(provedor, sessao_id, chave)
+        if provedor.id in self._manter_aquecido:
+            asyncio.get_running_loop().create_task(self.aquecer(provedor))  # repõe para a próxima conversa
+        return canal
 
     async def _abrir(self, provedor: ProvedorCli, sessao_id: str, chave: str) -> CanalCli:
         """Abre processo novo para a chave e devolve o canal (T16)."""
@@ -439,6 +481,10 @@ class SupervisorCli:
                 if proc.returncode is None:
                     pid = proc.pid
                     await asyncio.get_running_loop().run_in_executor(None, _encerrar_arvore, pid)
+            for _prov, _canal, proc in self._aquecidos.values():
+                if proc.returncode is None:
+                    await asyncio.get_running_loop().run_in_executor(None, _encerrar_arvore, proc.pid)
+            self._aquecidos.clear()
             self._processos.clear()
             self._ultimo_uso.clear()
             self._enxuto.clear()
@@ -446,7 +492,7 @@ class SupervisorCli:
     def pids(self) -> List[int]:
         """Lista PIDs vivos (para prova e diagnóstico)."""
         resultado: List[int] = []
-        for proc in self._processos.values():
+        for proc in [*self._processos.values(), *(item[2] for item in self._aquecidos.values())]:
             if proc.returncode is None:
                 resultado.append(proc.pid)
         return resultado
